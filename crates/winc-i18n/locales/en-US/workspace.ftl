@@ -290,7 +290,9 @@ workspace-status-lsp = { $language } LSP: { $state }
 workspace-status-lsp-connected = connected
 workspace-status-lsp-connecting = connecting…
 workspace-status-lsp-error = error
+workspace-status-lsp-no-auto = no automatic server
 workspace-status-lsp-off = not configured
+workspace-status-diagnostic-location = Line { $line }, column { $column }: { $message }
 workspace-status-diagnostics = { $errors } errors · { $warnings } warnings
 workspace-status-selections = { $count ->
         [one] { $count } selection

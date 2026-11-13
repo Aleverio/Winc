@@ -742,8 +742,11 @@ impl App {
             .config
             .lsp_servers
             .keys()
+            .chain(self.config.lsp_auto.iter())
             .filter_map(|id| winc_syntax::find(id).map(|language| language.id))
             .collect();
+        languages.sort_unstable();
+        languages.dedup();
         if let Some(id) = self
             .editor
             .active()
@@ -766,7 +769,13 @@ impl App {
             .map(|doc| doc.highlighter.language().id);
         self.settings.selected = active
             .filter(|id| self.settings.languages.lsp.contains(id))
-            .map(Setting::LspServer)
+            .map(|id| {
+                if self.config.lsp_auto.iter().any(|auto| auto == id) {
+                    Setting::LspAuto(id)
+                } else {
+                    Setting::LspServer(id)
+                }
+            })
             .or_else(|| {
                 self.settings
                     .languages
@@ -797,6 +806,7 @@ impl App {
     /// 开关 `setting` 当前是否开启。
     pub(crate) fn switch_on(&self, setting: Setting) -> bool {
         match setting {
+            Setting::LspAuto(language) => self.config.lsp_auto.contains(&language.to_owned()),
             Setting::FormatOnSave => self.config.format_on_save == Some(true),
             Setting::FixOnSave => self.config.fix_on_save == Some(true),
             Setting::AutoSave => self.config.auto_save == Some(true),
@@ -847,6 +857,24 @@ impl App {
         }
         self.vim_forget_option(setting);
         match setting {
+            Setting::LspAuto(language) => {
+                if on {
+                    if !self.config.lsp_auto.iter().any(|id| id == language) {
+                        self.config.lsp_auto.push(language.to_owned());
+                        self.config.lsp_auto.sort_unstable();
+                    }
+                } else {
+                    self.config.lsp_auto.retain(|id| id != language);
+                }
+                self.save_config();
+                self.reset_lsp_server(language);
+                self.settings.switch_slide = self
+                    .clock(super::animation::SWITCH_SLIDE)
+                    .filter(|_| self.settings.open)
+                    .map(|clock| (setting, clock));
+                self.request_redraw();
+                return;
+            }
             Setting::FormatOnSave => self.config.format_on_save = Some(on),
             Setting::FixOnSave => self.config.fix_on_save = Some(on),
             Setting::AutoSave => self.config.auto_save = Some(on),

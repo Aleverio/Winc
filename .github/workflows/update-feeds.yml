@@ -1,0 +1,71 @@
+name: Publish update feeds
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Published release tag to publish to the update feed"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-update-feeds
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      (github.event_name == 'release' &&
+       startsWith(github.event.release.tag_name, 'v') &&
+       !github.event.release.draft) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Publish signed appcasts to the channel release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Expected a semantic version tag beginning with v"
+            exit 1
+          fi
+          draft="$(gh release view "$RELEASE_TAG" --repo "$GH_REPO" --json isDraft --jq '.isDraft')"
+          if [[ "$draft" != false ]]; then
+            echo "::error::The release must be published before its update feed can be updated"
+            exit 1
+          fi
+
+          channel=stable
+          if [[ "$RELEASE_TAG" == *-* ]]; then channel=beta; fi
+          feed_tag="winc-update-feed-$channel"
+          feed_dir="$(mktemp -d)"
+          trap 'rm -rf "$feed_dir"' EXIT
+          gh release download "$RELEASE_TAG" --repo "$GH_REPO" --pattern 'appcast-*.xml' --dir "$feed_dir"
+          for name in appcast-macos-arm64.xml appcast-macos-x86_64.xml appcast-linux.xml appcast-windows.xml; do
+            if [[ ! -s "$feed_dir/$name" ]]; then
+              echo "::error::Missing signed update feed: $name"
+              exit 1
+            fi
+          done
+
+          if ! gh release view "$feed_tag" --repo "$GH_REPO" >/dev/null 2>&1; then
+            gh release create "$feed_tag" \
+              --repo "$GH_REPO" \
+              --title "Winc $channel update feeds" \
+              --notes "Automated, signed update feeds. Do not edit this release manually." \
+              --prerelease
+          fi
+          gh release upload "$feed_tag" "$feed_dir"/*.xml --repo "$GH_REPO" --clobber
+          echo "Published the $channel update feeds from $RELEASE_TAG."
+          if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+            echo "Published the **$channel** in-app update feeds from \`$RELEASE_TAG\`." >> "$GITHUB_STEP_SUMMARY"
+          fi

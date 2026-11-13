@@ -19,24 +19,46 @@ export function msiVersion(version) {
   return `${core}.${revision}`;
 }
 
-// The update channel served by winc.si. Packages and appcasts are deployed under its URL; a
-// prerelease version (with "-", such as 1.2.0-beta.1) goes to the beta channel.
+// Each channel points at a fixed, published GitHub Release containing its latest appcasts.
+// Prerelease versions (with "-", such as 1.2.0-beta.1) use the beta channel.
 export const channelOf = (version) => version.includes("-") ? "beta" : "stable";
-export const channelBase = (version) => `https://winc.si/releases${channelOf(version) === "beta" ? "/beta" : ""}`;
+export const updateFeedTag = (version) => `winc-update-feed-${channelOf(version)}`;
 
-function releaseConfig({ version, thumbprint, key }) {
+function repositoryName(repository = process.env.WINC_UPDATE_REPOSITORY ?? process.env.GITHUB_REPOSITORY) {
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository ?? "")) {
+    throw new Error("GITHUB_REPOSITORY or WINC_UPDATE_REPOSITORY must be owner/repository");
+  }
+  return repository;
+}
+
+export function channelBase(version, repository) {
+  const repo = repositoryName(repository);
+  return `https://github.com/${repo}/releases/download/${updateFeedTag(version)}`;
+}
+
+export function releaseAssetUrl(version, name, repository) {
+  const repo = repositoryName(repository);
+  return `https://github.com/${repo}/releases/download/v${encodeURIComponent(version)}/${encodeURIComponent(name)}`;
+}
+
+export function releaseConfig({ version, thumbprint, key, repository }) {
   if (thumbprint && !/^[0-9A-Fa-f]{40}$/.test(thumbprint)) throw new Error("--thumbprint must be a 40-digit SHA-1 certificate thumbprint");
   return {
     version, channel: channelOf(version), productName: "winc", identifier: "com.deeix.winc",
     msiVersion: msiVersion(version), certificateThumbprint: thumbprint?.toUpperCase() ?? "",
-    updateChannels: `${channelOf(version)}=${channelBase(version)}`, updatePublicKey: publicKey(key),
+    updateChannels: `${channelOf(version)}=${channelBase(version, repository)}`, updatePublicKey: publicKey(key),
   };
 }
 
 function main() {
   const args = process.argv.slice(2);
   const value = (flag) => args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined;
-  const config = releaseConfig({ version: version(), thumbprint: value("--thumbprint"), key: signingKey() });
+  const config = releaseConfig({
+    version: version(),
+    thumbprint: value("--thumbprint"),
+    key: signingKey(),
+    repository: process.env.WINC_UPDATE_REPOSITORY ?? process.env.GITHUB_REPOSITORY,
+  });
   if (value("--output")) writeFileSync(value("--output"), `${JSON.stringify(config)}\n`);
   else process.stdout.write(`${JSON.stringify(config)}\n`);
   if (process.env.GITHUB_ENV) {

@@ -3,12 +3,12 @@ import { mkdirSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { releaseAssets, requireFile } from "./collect-assets.mjs";
-import { channelBase, version as currentVersion } from "./config.mjs";
+import { releaseAssetUrl, version as currentVersion } from "./config.mjs";
 import { signingKey, signBytes, signFeed, verifyFeed, verificationKey, publicKey } from "./update-signing.mjs";
 
 const escape = (value) => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
-// Download URLs point at the update channel on winc.si, which serves each version's files.
+// Payload URLs point at immutable assets on this version's GitHub Release.
 function signUpdates({ platform, version, bundle, key }) {
   const specs = releaseAssets(platform, version);
   const packages = specs.filter((spec) => spec.update);
@@ -20,7 +20,7 @@ function signUpdates({ platform, version, bundle, key }) {
     const os = platform.startsWith("macos") ? "macos" : platform.split("-")[0];
     const arch = platform === "macos-arm64" ? "arm64" : "x86_64";
     const installer = os === "windows" ? ` installer="${spec.directory}"` : "";
-    const url = `${channelBase(version)}/${encodeURIComponent(spec.name)}`;
+    const url = releaseAssetUrl(version, spec.name);
     items.push(`    <item>\n      <title>${escape(version)}</title>\n      <sparkle:version>${escape(version)}</sparkle:version>\n      <sparkle:shortVersionString>${escape(version)}</sparkle:shortVersionString>\n${os === "macos" ? "      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>\n" : ""}      <enclosure url="${escape(url)}" length="${statSync(file).size}" type="application/octet-stream" sparkle:os="${os}" arch="${arch}"${installer} sparkle:edSignature="${signature}"/>\n    </item>\n`);
   }
   const xml = `<?xml version="1.0" encoding="utf-8"?>\n<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">\n  <channel>\n    <title>winc</title>\n${items.join("")}  </channel>\n</rss>\n`;

@@ -34,7 +34,10 @@ fn reads_every_field() {
                     "onSaveExclude": ["Markdown"],
                     "commands": { "JSON": "jq --indent 4 .", "c++": " clang-format ", "rust": "" }
                 },
-                "lsp": { "servers": { "Rust": ["rust-analyzer"], "python": ["pyright-langserver", "--stdio"] } },
+                "lsp": {
+                    "auto": ["Go"],
+                    "servers": { "Rust": ["rust-analyzer"], "python": ["pyright-langserver", "--stdio"] }
+                },
                 "theme": "light"
             }"#,
     );
@@ -71,9 +74,18 @@ fn reads_every_field() {
             ("rust".to_string(), vec!["rust-analyzer".to_string()]),
         ])
     );
+    assert_eq!(config.lsp_auto, ["go"]);
     let (round_trip, problems) = Config::parse(&config.to_json());
     assert!(problems.is_empty(), "{problems:?}");
     assert_eq!(round_trip.lsp_servers, config.lsp_servers);
+    assert_eq!(round_trip.lsp_auto, config.lsp_auto);
+}
+
+#[test]
+fn invalid_automatic_lsp_languages_are_reported_and_ignored() {
+    let (config, problems) = Config::parse(r#"{"lsp": {"auto": ["Rust", "unknown", 1]}}"#);
+    assert_eq!(config.lsp_auto, ["rust"]);
+    assert_eq!(problems.len(), 2, "{problems:?}");
 }
 
 #[test]
@@ -318,6 +330,7 @@ fn round_trips_through_json() {
             "rust".to_string(),
             vec!["rust-analyzer".to_string(), "--stdio".to_string()],
         )]),
+        lsp_auto: vec!["python".to_string()],
     };
 
     let (parsed, problems) = Config::parse(&config.to_json());

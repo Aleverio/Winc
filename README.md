@@ -75,22 +75,25 @@ folder to keep them in the user profile instead.
 
 ## Language Servers
 
-Install a language server separately, then configure its executable and arguments by language id
-in the user configuration file:
+Install a language server separately. In **Settings → Language Servers**, enable automatic
+selection for a built-in default (Rust, Python, Go, or JSON), or enter a custom executable and
+arguments for the language. Servers must already be installed and available on `PATH`. The same
+choices can be stored in the user configuration file:
 
 ```json
 {
   "lsp": {
+    "auto": ["rust"],
     "servers": {
-      "rust": ["rust-analyzer", "--stdio"]
+      "python": ["pyright-langserver", "--stdio"]
     }
   }
 }
 ```
 
-Winc sends opened and edited files to the configured server. Use **Show Hover** (Ctrl/Cmd+K,
-Ctrl/Cmd+I) to request hover information. The existing lightweight navigation remains available
-when no server is configured.
+Winc sends opened and edited files to the selected server, underlines reported diagnostics, and
+shows their line and column when you click the diagnostic count in the status bar. Use **Show
+Hover** (Ctrl/Cmd+K, Ctrl/Cmd+I) to request hover information.
 
 winc is developed and tested mainly on macOS. Download it from
 [winc.si](https://winc.si/#download); all versions are on

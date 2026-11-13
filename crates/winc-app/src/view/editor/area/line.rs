@@ -172,8 +172,58 @@ impl Screen<'_> {
         }
         self.draw_whitespace(frame, &row);
         let cells = self.draw_content(frame, &row, tokens);
+        self.draw_diagnostic_underlines(frame, &row);
         self.draw_tail(frame, &row, cells, (folded_hits, long_hits));
         self.draw_carets(frame, &row, ime_cursor);
+    }
+
+    fn draw_diagnostic_underlines(&self, frame: &mut Frame<'_>, row: &Row<'_>) {
+        let Some(path) = self.doc.path.as_ref() else {
+            return;
+        };
+        let Some(diagnostics) = self.app.lsp_diagnostics.get(path) else {
+            return;
+        };
+        let Some(rope) = self.doc.text().rope() else {
+            return;
+        };
+        let line = row.line;
+        if line >= rope.len_lines() {
+            return;
+        }
+        let text = self.doc.text().line_content(line).slice().to_string();
+        let line_start = rope.line_to_char(line);
+        let visible = row.shown_cols();
+        let visible_start = row.line_start + visible.start;
+        let visible_end = row.line_start + visible.end;
+
+        for diagnostic in diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.range.start.line as usize == line)
+        {
+            let start = line_start
+                + Self::utf16_column_to_char(&text, diagnostic.range.start.character)
+                    .max(visible_start.saturating_sub(line_start));
+            let end = if diagnostic.range.end.line as usize == line {
+                line_start
+                    + Self::utf16_column_to_char(&text, diagnostic.range.end.character)
+                        .min(visible_end.saturating_sub(line_start))
+            } else {
+                visible_end
+            };
+            let start = start.max(row.line_start).min(visible_end);
+            let end = end.max(start).min(visible_end);
+            let color = match diagnostic.severity {
+                Some(lsp_types::DiagnosticSeverity::ERROR) => self.app.palette.error,
+                Some(lsp_types::DiagnosticSeverity::WARNING) => self.app.palette.warning,
+                _ => self.app.palette.accent,
+            };
+            self.spans(row, start, end, &mut |top, x0, x1| {
+                let width = (x1 - x0).max(3.0);
+                let underline = Rect::new(x0, top + self.lh - 2.0, width, 1.5);
+                frame.rect_clipped(underline, color, 0.75, self.text_rect);
+            });
+        }
     }
 
     /// 返回位置 `pos` 在本行中的段号（从 0 起）和 x 坐标。
@@ -202,6 +252,20 @@ impl Screen<'_> {
             })[col],
         };
         (0, row.x0 + cells as f32 * cell)
+    }
+
+    fn utf16_column_to_char(text: &str, column: u32) -> usize {
+        let mut units = 0u32;
+        for (index, character) in text.chars().enumerate() {
+            if units >= column {
+                return index;
+            }
+            units += character.len_utf16() as u32;
+            if units >= column {
+                return index + 1;
+            }
+        }
+        text.chars().count()
     }
 
     /// 对文本范围 `start..end` 在屏幕上占据的每一块调用 `f(y, x0, x1)`；跨段时每段一块。

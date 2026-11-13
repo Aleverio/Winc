@@ -80,7 +80,13 @@ impl App {
                 return;
             };
             let line = diagnostic.range.start.line.saturating_add(1);
-            self.flash(format!("Line {line}: {}", diagnostic.message));
+            let column = diagnostic.range.start.character.saturating_add(1);
+            self.flash(t!(
+                "workspace-status-diagnostic-location",
+                line = line,
+                column = column,
+                message = diagnostic.message.clone()
+            ));
             return;
         }
         if item == StatusItem::Update {

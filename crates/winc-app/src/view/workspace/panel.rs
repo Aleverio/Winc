@@ -874,7 +874,26 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
         }
         Hover::Status(item @ crate::app::StatusItem::Lsp) => {
             let rect = app.hits.status.iter().find(|(_, i)| *i == item)?.0;
-            Some((rect, t!("settings-lsp-status-tooltip").to_owned()))
+            let detail = app
+                .editor
+                .active()
+                .and_then(|doc| {
+                    let path = doc.path.as_ref()?;
+                    let language = doc.highlighter.language().id;
+                    let root = app
+                        .editor
+                        .root()
+                        .filter(|root| path.starts_with(root))
+                        .or_else(|| path.parent())
+                        .unwrap_or(path);
+                    app.lsp_status
+                        .get(&(language.to_owned(), root.to_path_buf()))
+                })
+                .and_then(|status| status.as_ref().err())
+                .filter(|error| error.as_str() != "connecting")
+                .cloned();
+            let label = detail.unwrap_or_else(|| t!("settings-lsp-status-tooltip").to_owned());
+            Some((rect, label))
         }
         Hover::Status(item @ crate::app::StatusItem::Diagnostics) => {
             let rect = app.hits.status.iter().find(|(_, i)| *i == item)?.0;

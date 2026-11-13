@@ -3,6 +3,7 @@
 // 格式化设置页的测试用 sh 脚本冒充格式化工具。
 #[cfg(unix)]
 mod format;
+mod lsp;
 mod search;
 mod terminal;
 

@@ -635,56 +635,83 @@ pub(super) const FORMAT: &[Field] = &[
 ];
 
 /// `lsp` 一节。
-const LSP: &[Field] = &[Field {
-    key: "servers",
-    read: |config, value, name, problems| {
-        config.lsp_servers.clear();
-        let Some(servers) = value.as_object() else {
-            problems.push(t!("config-not-object", name = name));
-            return;
-        };
-        for (language, command) in servers {
-            let Some(args) = command.as_array() else {
-                problems.push(t!("config-not-array", name = format!("{name}.{language}")));
-                continue;
+const LSP: &[Field] = &[
+    Field {
+        key: "auto",
+        read: |config, value, name, problems| {
+            config.lsp_auto.clear();
+            let Some(languages) = value.as_array() else {
+                problems.push(t!("config-not-array", name = name));
+                return;
             };
-            let Some(args) = args
-                .iter()
-                .map(|arg| {
-                    arg.as_str()
-                        .filter(|arg| !arg.is_empty())
-                        .map(str::to_owned)
-                })
-                .collect::<Option<Vec<_>>>()
-                .filter(|args| !args.is_empty())
-            else {
-                problems.push(t!(
-                    "config-item-not-string",
-                    name = format!("{name}.{language}")
-                ));
-                continue;
-            };
-            let id = language.trim().to_lowercase();
-            if config.lsp_servers.insert(id, args).is_some() {
-                problems.push(t!(
-                    "config-duplicate-language",
-                    name = name,
-                    language = language
-                ));
+            for language in languages {
+                let Some(language) = language.as_str() else {
+                    problems.push(t!("config-item-not-string", name = name));
+                    continue;
+                };
+                if let Some(id) = language_id(language, name, problems)
+                    && !config.lsp_auto.contains(&id)
+                {
+                    config.lsp_auto.push(id);
+                }
             }
-        }
+        },
+        write: |config| {
+            (!config.lsp_auto.is_empty())
+                .then(|| Json::Array(config.lsp_auto.iter().cloned().map(Json::String).collect()))
+        },
     },
-    write: |config| {
-        (!config.lsp_servers.is_empty()).then(|| {
-            Json::object(config.lsp_servers.iter().map(|(language, args)| {
-                (
-                    language.clone(),
-                    Json::Array(args.iter().cloned().map(Json::String).collect()),
-                )
-            }))
-        })
+    Field {
+        key: "servers",
+        read: |config, value, name, problems| {
+            config.lsp_servers.clear();
+            let Some(servers) = value.as_object() else {
+                problems.push(t!("config-not-object", name = name));
+                return;
+            };
+            for (language, command) in servers {
+                let Some(args) = command.as_array() else {
+                    problems.push(t!("config-not-array", name = format!("{name}.{language}")));
+                    continue;
+                };
+                let Some(args) = args
+                    .iter()
+                    .map(|arg| {
+                        arg.as_str()
+                            .filter(|arg| !arg.is_empty())
+                            .map(str::to_owned)
+                    })
+                    .collect::<Option<Vec<_>>>()
+                    .filter(|args| !args.is_empty())
+                else {
+                    problems.push(t!(
+                        "config-item-not-string",
+                        name = format!("{name}.{language}")
+                    ));
+                    continue;
+                };
+                let id = language.trim().to_lowercase();
+                if config.lsp_servers.insert(id, args).is_some() {
+                    problems.push(t!(
+                        "config-duplicate-language",
+                        name = name,
+                        language = language
+                    ));
+                }
+            }
+        },
+        write: |config| {
+            (!config.lsp_servers.is_empty()).then(|| {
+                Json::object(config.lsp_servers.iter().map(|(language, args)| {
+                    (
+                        language.clone(),
+                        Json::Array(args.iter().cloned().map(Json::String).collect()),
+                    )
+                }))
+            })
+        },
     },
-}];
+];
 
 /// 在 `fields` 中找键名为 `key` 的一项。
 pub(super) fn find<'a>(fields: &'a [Field], key: &str) -> Option<&'a Field> {

@@ -529,7 +529,14 @@ pub(super) fn draw_status(app: &mut App, frame: &mut Frame<'_>) {
                             t!("workspace-status-lsp-connecting")
                         }
                         Some(Err(_)) => t!("workspace-status-lsp-error"),
-                        None if app.config.lsp_servers.contains_key(language.id) => {
+                        None if app.config.lsp_auto.iter().any(|id| id == language.id)
+                            && crate::app::lsp::auto_server_command(language.id).is_none() =>
+                        {
+                            t!("workspace-status-lsp-no-auto")
+                        }
+                        None if app.config.lsp_servers.contains_key(language.id)
+                            || app.config.lsp_auto.iter().any(|id| id == language.id) =>
+                        {
                             t!("workspace-status-lsp-connecting")
                         }
                         None => t!("workspace-status-lsp-off"),

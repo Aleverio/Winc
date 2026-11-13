@@ -378,9 +378,12 @@ impl App {
                 continue;
             }
             let language = doc.highlighter.language().id;
-            let Some(command) = self.config.lsp_servers.get(language) else {
-                continue;
+            let command = if self.config.lsp_auto.iter().any(|id| id == language) {
+                auto_server_command(language)
+            } else {
+                self.config.lsp_servers.get(language).cloned()
             };
+            let Some(command) = command else { continue };
             let Some(rope) = doc.text().rope() else {
                 continue;
             };
@@ -408,7 +411,7 @@ impl App {
                 path.clone(),
                 doc.revision,
                 language.to_owned(),
-                command.clone(),
+                command,
                 root,
                 rope.to_string(),
                 opened,
@@ -464,7 +467,12 @@ impl App {
             self.flash("Hover requires an open text file".to_owned());
             return;
         };
-        let Some(command) = self.config.lsp_servers.get(&language).cloned() else {
+        let command = if self.config.lsp_auto.iter().any(|id| id == &language) {
+            auto_server_command(&language)
+        } else {
+            self.config.lsp_servers.get(&language).cloned()
+        };
+        let Some(command) = command else {
             self.flash(format!("No LSP server is configured for {language}"));
             return;
         };
@@ -513,6 +521,21 @@ impl App {
             Err(error) => self.flash(error),
         }
     }
+}
+
+pub(crate) fn auto_server_command(language: &str) -> Option<Vec<String>> {
+    let (program, args): (&str, &[&str]) = match language {
+        "rust" => ("rust-analyzer", &[]),
+        "python" => ("pyright-langserver", &["--stdio"]),
+        "go" => ("gopls", &[]),
+        "json" => ("vscode-json-language-server", &["--stdio"]),
+        _ => return None,
+    };
+    Some(
+        std::iter::once(program.to_owned())
+            .chain(args.iter().map(|arg| (*arg).to_owned()))
+            .collect(),
+    )
 }
 
 #[cfg(test)]
@@ -565,6 +588,19 @@ mod command_tests {
         assert_eq!(received_path, path);
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].message, "expected a value");
+    }
+
+    #[test]
+    fn automatic_servers_are_known_for_the_supported_defaults() {
+        assert_eq!(
+            auto_server_command("rust"),
+            Some(vec!["rust-analyzer".to_owned()])
+        );
+        assert_eq!(
+            auto_server_command("python"),
+            Some(vec!["pyright-langserver".to_owned(), "--stdio".to_owned()])
+        );
+        assert!(auto_server_command("unknown").is_none());
     }
 }
 

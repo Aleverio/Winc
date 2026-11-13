@@ -16,6 +16,7 @@ of releasing it again. To retry a failed build, rerun the Release workflow on th
 | `.github/workflows/release-tag.yml` | Tags each merge into `main` and starts the Release workflow |
 | `.github/workflows/release.yml` | Entry point: prepare, the four platform builds, and the draft |
 | `.github/workflows/release-arch-repo.yml` | Stages the signed Arch repository after a stable release is published |
+| `.github/workflows/update-feeds.yml` | Publishes signed appcasts to the stable/beta update-feed releases |
 | `.github/workflows/release-{prepare,macos,linux,windows}.yml` | Reusable jobs called by `release.yml` |
 | `.github/actions/build-setup/` | Shared toolchain and cache setup; pins the release Rust version |
 | `release/macos/` | `package.sh` (app, dmg, appcast), `verify.sh`, and Apple signing setup |
@@ -63,8 +64,15 @@ certificate, installers are unsigned. Updater signatures remain mandatory on eve
 it in this repository's Secrets; it is never shared with other projects. With the pinned Sparkle
 tools, generate a dedicated Winc key and export it using
 `generate_keys --account com.deeix.winc`, followed by
-`generate_keys --account com.deeix.winc -x <private-key-file>`. Use the exported file's contents as
-the Secret; do not commit it. Older 96-byte Sparkle exports are rejected.
+`generate_keys --account com.deeix.winc -x <private-key-file>`. Alternatively, Node.js can generate
+the required random 32-byte seed on any platform:
+
+```powershell
+node -p "require('node:crypto').randomBytes(32).toString('base64')"
+```
+
+Use the output as the Secret; save a secure backup and never commit or log it. Older 96-byte
+Sparkle exports are rejected.
 Keep this key across releases: an installed application trusts the public key embedded in its build.
 
 The build derives `WINC_UPDATE_PUBLIC_KEY` from that seed and `WINC_UPDATE_CHANNELS` from the
@@ -90,20 +98,27 @@ Each release also has four signed appcasts for the in-app updater: `appcast-maco
 AppImage, and the NSIS and MSI installers, each with its EdDSA signature; the deb and the portable
 zip are downloads only. `SHA256SUMS` covers the assets assembled before publication.
 
-### Update channel (winc.si)
+### In-app update channels (GitHub Releases)
 
-The workflows only produce these files; winc.si deploys them and serves the update channel. The
-contract between the two:
+The release workflow creates a draft. After a maintainer publishes it, `update-feeds.yml` copies its
+four signed appcasts to a fixed GitHub Release for that channel:
 
 | Version | Channel URL built into the app |
 | --- | --- |
-| Release, such as `1.2.0` | `https://winc.si/releases` |
-| Prerelease, such as `1.2.0-beta.1` | `https://winc.si/releases/beta` |
+| Release, such as `1.2.0` | `https://github.com/<owner>/<repo>/releases/download/winc-update-feed-stable` |
+| Prerelease, such as `1.2.0-beta.1` | `https://github.com/<owner>/<repo>/releases/download/winc-update-feed-beta` |
 
-The app reads `<channel URL>/appcast-<platform>.xml`, and each appcast's download URLs are
-`<channel URL>/<file name>`. To ship a version, deploy its appcasts and the files they list to that
-URL. Appcasts are signed, so winc.si must serve them unchanged. The channel URL is defined once,
-in `channelBase` in `release/common/config.mjs`.
+The app reads `<channel URL>/appcast-<platform>.xml`. Each signed appcast points to the immutable,
+versioned installer asset in the published `v<version>` release. The feed workflow updates the
+stable or beta feed only after the release is public. Re-run it manually with a published
+`release_tag` to retry a failed feed publication. Repositories distributing public app builds must
+be public so the app can download releases without GitHub authentication.
+
+The update key is required. Add `WINC_UPDATE_PRIVATE_KEY` under **Settings → Secrets and variables
+→ Actions**; keep the same key across versions because installed builds trust its derived public
+key. `release/common/config.mjs` embeds that public key and the matching GitHub update-channel URL
+into each release build. Builds without both values do not check for updates. Portable Windows,
+deb, and Arch installations are not self-updating.
 
 Windows NSIS installations are per-user; MSI installations are per-machine and use the fixed
 UpgradeCode `00FDC6A5-D527-59AE-B4A5-E051B25222F3`. Do not change it between releases. Each installer
@@ -112,11 +127,11 @@ enclosure, verifies its signature, waits for the app to exit, installs silently,
 when requested. MSI updates request elevation when required. Portable Windows and deb installations
 continue to use manual or package-manager updates.
 
-### Arch repository (winc.si)
+### Arch repository
 
 The **Release · Sign Arch repository** workflow stages `deeix-ai-winc` after a stable GitHub
-Release is published. In the repository's **Settings → Secrets and variables → Actions**, add the
-following repository secrets.
+Release is published. The Arch repository itself is still deployed under `https://winc.si`. In the
+repository's **Settings → Secrets and variables → Actions**, add the following repository secrets.
 
 | Name | Value |
 | --- | --- |

@@ -72,20 +72,23 @@ Ctrl/⌘ 加 `+`、`-`、`0`，缩放时鼠标所指的位置保持不动。放�
 
 ## 语言服务器
 
-请先单独安装语言服务器，再在用户配置文件中按语言 id 设置程序和参数：
+请先单独安装语言服务器。在「设置 → 语言服务器」中，可为内置默认服务器（Rust、Python、Go、
+JSON）开启自动选择，或为语言输入自定义程序和参数。服务器必须预先安装并可从 `PATH` 找到。
+也可以在用户配置文件中设置：
 
 ```json
 {
   "lsp": {
+    "auto": ["rust"],
     "servers": {
-      "rust": ["rust-analyzer", "--stdio"]
+      "python": ["pyright-langserver", "--stdio"]
     }
   }
 }
 ```
 
-Winc 会把打开和编辑的文件同步给对应服务器。使用「显示悬停信息」（Ctrl/Cmd+K，
-Ctrl/Cmd+I）请求悬停内容。未配置服务器时，原有的轻量导航仍可使用。
+Winc 会把打开和编辑的文件同步给对应服务器，并为诊断范围添加下划线；点击状态栏的诊断数量可查看
+行号、列号和错误信息。使用「显示悬停信息」（Ctrl/Cmd+K，Ctrl/Cmd+I）请求悬停内容。
 
 主要在 macOS 上开发和测试。可从 [winc.si](https://winc.si/#download) 下载，所有版本见
 [GitHub Releases](https://github.com/DEEIX-AI/Winc/releases)。

@@ -79,7 +79,7 @@ ${arch ? `| Arch Linux · x86_64 | \`${arch.name}\` |\n` : ""}| Windows · x86_6
 | Windows · x86_64 · MSI | \`${stem}-windows-x64.msi\` |
 | Windows · x86_64 · Portable | \`${stem}-windows-x64-portable.zip\` |
 
-Checksums are in \`SHA256SUMS\`. The signed \`appcast-*.xml\` files are the in-app update feeds deployed to winc.si.
+Checksums are in \`SHA256SUMS\`. Publishing this release updates the signed in-app feeds for its stable or beta channel.
 `;
 }
 

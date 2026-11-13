@@ -175,7 +175,7 @@ impl SettingsPage {
                 items: languages
                     .lsp
                     .iter()
-                    .map(|&id| Setting::LspServer(id))
+                    .flat_map(|&id| [Setting::LspServer(id), Setting::LspAuto(id)])
                     .chain([Setting::AddLspLanguage])
                     .collect(),
             }],
@@ -354,6 +354,8 @@ pub enum Setting {
     FixCommand(&'static str),
     /// 某种语言（语言 id）的 LSP server command.
     LspServer(&'static str),
+    /// Automatically select the built-in server for a language.
+    LspAuto(&'static str),
     /// 为当前文档的语言添加或修改 LSP server.
     AddLspLanguage,
     /// 格式化工具一组下面的「添加语言…」。
@@ -475,7 +477,9 @@ impl Setting {
             | Setting::FixCommand(_)
             | Setting::AddLanguage
             | Setting::AddFixLanguage => SettingsPage::Format,
-            Setting::LspServer(_) | Setting::AddLspLanguage => SettingsPage::Lsp,
+            Setting::LspServer(_) | Setting::LspAuto(_) | Setting::AddLspLanguage => {
+                SettingsPage::Lsp
+            }
             Setting::TerminalShell
             | Setting::TerminalPosition
             | Setting::TerminalFont
@@ -544,6 +548,7 @@ impl Setting {
                 winc_syntax::find(id).map_or(id, |l| l.name)
             }
             Setting::LspServer(id) => winc_syntax::find(id).map_or(id, |l| l.name),
+            Setting::LspAuto(_) => t!("settings-lsp-auto"),
             Setting::AddLspLanguage => t!("settings-lsp-add-current"),
             Setting::AddLanguage | Setting::AddFixLanguage => t!("settings-add-language"),
             Setting::TerminalShell => t!("settings-terminal-shell"),
@@ -605,6 +610,7 @@ impl Setting {
             Setting::FormatOnSave => Some(t!("settings-format-on-save-desc")),
             Setting::FixOnSave => Some(t!("settings-fix-on-save-desc")),
             Setting::SkipOnSave => Some(t!("settings-skip-on-save-desc")),
+            Setting::LspAuto(_) => Some(t!("settings-lsp-auto-desc")),
             Setting::GitModule => Some(t!("settings-git-module-desc")),
             Setting::GitConfirmPush => Some(t!("settings-git-confirm-push-desc")),
             Setting::TerminalCopyOnSelect => Some(t!("settings-terminal-copy-on-select-desc")),
@@ -665,6 +671,7 @@ impl Setting {
             | Setting::FixCommand(_)
             | Setting::LspServer(_)
             | Setting::TerminalShell => SettingControl::Command,
+            Setting::LspAuto(_) => SettingControl::Switch,
             Setting::SkipOnSave
             | Setting::Language
             | Setting::BackgroundImage

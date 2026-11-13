@@ -5,6 +5,15 @@ use winc_editor::{Document, DocumentId};
 use super::*;
 
 #[test]
+fn diagnostic_utf16_columns_map_to_character_boundaries() {
+    assert_eq!(Screen::utf16_column_to_char("a🦀é", 0), 0);
+    assert_eq!(Screen::utf16_column_to_char("a🦀é", 1), 1);
+    assert_eq!(Screen::utf16_column_to_char("a🦀é", 3), 2);
+    assert_eq!(Screen::utf16_column_to_char("a🦀é", 4), 3);
+    assert_eq!(Screen::utf16_column_to_char("a🦀é", 99), 3);
+}
+
+#[test]
 fn the_active_guide_is_the_block_around_the_caret() {
     let code = "fn a() {\n    if x {\n        one();\n\n        two();\n    }\n    three();\n}\n";
     let doc = Document::from_text(DocumentId(1), code);
