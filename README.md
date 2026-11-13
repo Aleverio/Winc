@@ -2,10 +2,10 @@
   <img src="./crates/winc-app/assets/icon.svg" alt="winc" width="128" />
 </p>
 
-<h1 align="center">Winc</h1>
+<h1 align="center">Winc - Alverion's Fork</h1>
 
 <p align="center">
-  A lighter, faster, more comfortable desktop editor.
+  An Alverion-maintained fork of Winc, with independent features and customizations.
 </p>
 
 <p align="center">
@@ -13,21 +13,26 @@
 </p>
 
 <p align="center">
-  <a href="https://winc.si"><img alt="Website" src="https://img.shields.io/badge/Website-winc.si-black" /></a>
+  <a href="https://github.com/DEEIX-AI/Winc"><img alt="Upstream project" src="https://img.shields.io/badge/Upstream-DEEIX--AI%2FWinc-black" /></a>
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue" /></a>
   <img alt="Rust" src="https://img.shields.io/badge/Rust-2024-b7410e" />
   <img alt="Platforms" src="https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux%20%7C%20Windows-555" />
 </p>
 
 <p align="center">
-  <a href="https://winc.si/#download"><img alt="Download Winc" src="./.github/assets/download-en.svg" /></a>
+  <a href="https://github.com/Aleverio/Winc/releases"><img alt="Download Alverion's Winc builds" src="./.github/assets/download-en.svg" /></a>
 </p>
+
+> **About this fork:** This is Alverion's independent fork of the original
+> [Winc project by DEEIX-AI](https://github.com/DEEIX-AI/Winc). The upstream authors and project
+> remain credited; this fork focuses on Alverion's additions and customizations.
 
 ## Overview
 
-winc is built with Rust and its own rendering engine: it starts in 0.1 seconds and uses just 52 MB
-of memory with 100,000 lines open. Multiple cursors, find and replace, and side-by-side diffs are
-all there, and every keystroke and scroll responds instantly.
+Based on Winc's Rust editor and rendering engine, this fork keeps the upstream editing experience
+while developing additional features independently. The upstream project reports a 0.1-second
+startup and 52 MB of memory with 100,000 lines open; those figures are upstream measurements, not
+benchmarks of Alverion's changes.
 
 | Measure | Result |
 | --- | --- |
@@ -37,19 +42,29 @@ all there, and every keystroke and scroll responds instantly.
 
 Measured on macOS; results vary with hardware and system load.
 
+## Alverion's additions
+
+This fork adds a more configurable language-server workflow:
+
+- Choose automatic or custom language-server commands per language.
+- See LSP connection status in the status bar.
+- View server diagnostics as underlines on the affected text, with line, column, and message details.
+
+These are Alverion's fork changes; the original Winc project and its authors are credited above.
+
 ## Features
 
 | Area | Capabilities |
 | --- | --- |
 | Editing | Multiple cursors, find and replace, native input methods, and smooth scrolling in gigabyte-sized files |
-| Syntax | Highlighting for common programming, markup, data, and configuration languages, optional LSP hover, plus lightweight go-to-definition and usages |
+| Syntax | Highlighting for common programming, markup, data, and configuration languages, LSP hover and diagnostics, plus lightweight go-to-definition and usages |
 | Formatting | Whole-file formatting with external tools such as rustfmt, Prettier, Black, Ruff, and gofmt |
 | Preview | Markdown, images, SVG, and spreadsheets (xlsx, csv), with the source one click away |
 | Git | Side-by-side diffs with word-level highlights, staging by hunk, commit and push, a commit graph, and blame |
 | Project | A file tree, quick open, and project search that follows `.gitignore` |
 | Terminal | An integrated terminal at the bottom of the window |
 | Interface | Light and dark themes, and a complete interface in English and Simplified Chinese |
-| Updates | Signed in-app updates on all three platforms |
+| Updates | Signed in-app updates for release builds configured with the update key; portable and package-manager installs use their usual update process |
 
 Touchscreens support tapping buttons and placing the caret, double-tapping to select a word,
 swiping to scroll, and dragging scrollbars and panel dividers. Hold for 500 ms to open the context
@@ -95,9 +110,10 @@ Winc sends opened and edited files to the selected server, underlines reported d
 shows their line and column when you click the diagnostic count in the status bar. Use **Show
 Hover** (Ctrl/Cmd+K, Ctrl/Cmd+I) to request hover information.
 
-winc is developed and tested mainly on macOS. Download it from
-[winc.si](https://winc.si/#download); all versions are on
-[GitHub Releases](https://github.com/DEEIX-AI/Winc/releases).
+Alverion's builds and releases for this fork are published on
+[this repository's GitHub Releases page](https://github.com/Aleverio/Winc/releases) when available.
+For the original project, visit [DEEIX-AI/Winc](https://github.com/DEEIX-AI/Winc) or
+[winc.si](https://winc.si).
 
 ## Command Line
 
@@ -160,18 +176,15 @@ pull request, and open it against the `dev` branch. All contributors sign the [C
 Agreement](.github/CLA.md) and follow the [Code of Conduct](.github/CODE_OF_CONDUCT.md). To report a
 vulnerability, see [SECURITY.md](.github/SECURITY.md).
 
-## Contact
+## Maintainer and upstream
 
-- Website: [winc.si](https://winc.si)
-- Email: [support@deeix.com](mailto:support@deeix.com)
-- Telegram: [t.me/deeix_chat](https://t.me/deeix_chat)
-- X: [@DEEIX_AI](https://x.com/DEEIX_AI)
+- Fork maintainer: **Alverion** ([GitHub repository](https://github.com/Aleverio/Winc))
+- Original project: [DEEIX-AI/Winc](https://github.com/DEEIX-AI/Winc)
 
 ## Links
 
 - [Rust](https://www.rust-lang.org)
-- [DEEIX AI](https://deeix.com)
-- [LINUX DO](https://linux.do)
+- [Original Winc website](https://winc.si)
 
 ## License
 
