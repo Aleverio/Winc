@@ -201,18 +201,23 @@ fn draw_content(
     let fade = |c: Color| c.alpha(c.a * alpha);
     let hovered = app.hover == Hover::Status(StatusItem::Update);
     let ink = match key {
-        StatusKey::Diagnostics => app
-            .editor
-            .active()
-            .and_then(|doc| doc.path.as_ref())
-            .and_then(|path| app.lsp_diagnostics.get(path))
-            .is_some_and(|diagnostics| {
-                diagnostics
-                    .iter()
-                    .any(|d| d.severity == Some(lsp_types::DiagnosticSeverity::ERROR))
-            })
-            .then_some(p.error)
-            .unwrap_or(p.warning),
+        StatusKey::Diagnostics => {
+            if app
+                .editor
+                .active()
+                .and_then(|doc| doc.path.as_ref())
+                .and_then(|path| app.lsp_diagnostics.get(path))
+                .is_some_and(|diagnostics| {
+                    diagnostics
+                        .iter()
+                        .any(|d| d.severity == Some(lsp_types::DiagnosticSeverity::ERROR))
+                })
+            {
+                p.error
+            } else {
+                p.warning
+            }
+        }
         StatusKey::Lsp => p.accent,
         _ => match update_button(app).filter(|_| key == StatusKey::Update) {
             Some(button) => button.colors(p, hovered).1,
