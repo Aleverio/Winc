@@ -1,9 +1,8 @@
 name: Release Tag
 
-# Every merge into main is a release: tag the version in the VERSION file as
-# `v<version>` and start the Release workflow, which opens a draft release. Publishing the draft is
-# still a human step. A push whose version is already tagged fails, because the version was not
-# raised; the "Release version" check on pull requests into main stops that before the merge.
+# Every version change on dev is a release: tag the version in the VERSION file as `v<version>`
+# and start the Release workflow, which opens a draft release. Publishing the draft is still a
+# human step. A push whose version is already tagged fails, because the version was not raised.
 # A manual run with the version already tagged does nothing, so a failed release can be retried by
 # running the Release workflow on the existing tag.
 #
@@ -13,7 +12,8 @@ name: Release Tag
 
 on:
   push:
-    branches: [main]
+    branches: [dev]
+    paths: [VERSION]
   workflow_dispatch:
 
 permissions:

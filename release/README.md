@@ -1,19 +1,19 @@
 # Releasing winc
 
-Every merge into `main` is a release. It creates the annotated tag `v<version>`, explicitly
-dispatches the Release workflow on that tag, builds four native targets, and assembles one
-**draft** GitHub Release. A maintainer reviews and publishes the draft. No platform job uploads
-directly to a Release.
+Changing `VERSION` on `dev` creates the annotated tag `v<version>` and explicitly dispatches the
+Release workflow on that tag. It builds four native targets and assembles one **draft** GitHub
+Release. A maintainer reviews and publishes the draft. No platform job uploads directly to a
+Release. Ordinary pushes that do not change `VERSION` do not start a release.
 
-Raise the version on `dev` before opening the pull request into `main`: its "Release version" check
-fails while the version is already tagged, and a push to `main` with such a version fails instead
-of releasing it again. To retry a failed build, rerun the Release workflow on the existing tag.
+Raise `VERSION` when the changes are ready to release. A push with an already-tagged version fails
+instead of releasing it again. To retry a failed build, rerun the Release workflow on the existing
+tag.
 
 ## Layout
 
 | Path | Contents |
 | --- | --- |
-| `.github/workflows/release-tag.yml` | Tags each merge into `main` and starts the Release workflow |
+| `.github/workflows/release-tag.yml` | Tags each `VERSION` change on `dev` and starts the Release workflow |
 | `.github/workflows/release.yml` | Entry point: prepare, the four platform builds, and the draft |
 | `.github/workflows/release-arch-repo.yml` | Stages the signed Arch repository after a stable release is published |
 | `.github/workflows/update-feeds.yml` | Publishes signed appcasts to the stable/beta update-feed releases |
