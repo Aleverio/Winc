@@ -32,7 +32,7 @@ pub struct NameHint {
 
 impl App {
     /// 在光标所在的名字上方弹出提示 `text`；没有打开文档时改为写在状态栏。
-    pub(super) fn hint_at_name(&mut self, text: impl Into<String>) {
+    pub(in crate::app) fn hint_at_name(&mut self, text: impl Into<String>) {
         let text = text.into();
         let Some(doc) = self.editor.active() else {
             self.flash(text);

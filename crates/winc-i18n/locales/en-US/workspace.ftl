@@ -286,6 +286,12 @@ workspace-status-update-restart = Restart
 workspace-status-update-retry = Retry
 workspace-status-not-shown = Not shown: { $features }
 workspace-status-position-selected = { $position } ({ $count } selected)
+workspace-status-lsp = { $language } LSP: { $state }
+workspace-status-lsp-connected = connected
+workspace-status-lsp-connecting = connecting…
+workspace-status-lsp-error = error
+workspace-status-lsp-off = not configured
+workspace-status-diagnostics = { $errors } errors · { $warnings } warnings
 workspace-status-selections = { $count ->
         [one] { $count } selection
        *[other] { $count } selections

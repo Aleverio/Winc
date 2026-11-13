@@ -146,7 +146,9 @@ impl App {
                     // 已经在编辑这一项时：点击定位光标，拖动选择文字。
                     self.focus = Focus::Setting;
                     self.click_field(x, y);
-                } else if setting.control() == SettingControl::Command {
+                } else if setting.control() == SettingControl::Command
+                    && !matches!(setting, crate::layout::Setting::LspServer(_))
+                {
                     self.settings_open_menu(setting);
                 } else {
                     self.settings_start_editing(setting);
@@ -176,6 +178,9 @@ impl App {
             Some(SettingsPart::Switch(setting)) => {
                 self.settings.selected = setting;
                 self.settings_toggle(setting);
+            }
+            Some(SettingsPart::Action(crate::layout::Setting::AddLspLanguage)) => {
+                self.settings_add_lsp_language()
             }
             Some(SettingsPart::Action(setting)) => self.settings_open_menu(setting),
             Some(SettingsPart::Record) => self.toggle_recording(),

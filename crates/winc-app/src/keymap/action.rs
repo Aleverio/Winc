@@ -14,6 +14,7 @@ pub enum Action {
     GoToSymbol,
     GoToLine,
     GoToDefinition,
+    ShowHover,
     FindReferences,
     GoBack,
     GoForward,
@@ -262,6 +263,7 @@ impl Action {
             GoToSymbol => t!("cmd-go-to-symbol"),
             GoToLine => t!("cmd-go-to-line"),
             GoToDefinition => t!("cmd-go-to-definition"),
+            ShowHover => t!("cmd-show-hover"),
             FindReferences => t!("cmd-find-references"),
             GoBack => t!("cmd-go-back"),
             GoForward => t!("cmd-go-forward"),
@@ -473,6 +475,7 @@ impl Action {
             GoToSymbol => "Go to Symbol in Editor",
             GoToLine => "Go to Line",
             GoToDefinition => "Go to Definition",
+            ShowHover => "Show Hover",
             FindReferences => "Find All References",
             GoBack => "Go Back",
             GoForward => "Go Forward",
@@ -678,6 +681,7 @@ impl Action {
             | GoToSymbol
             | GoToLine
             | GoToDefinition
+            | ShowHover
             | FindReferences
             | GoBack
             | GoForward
@@ -993,6 +997,7 @@ pub const ACTIONS: &[Action] = {
         GoToSymbol,
         GoToLine,
         GoToDefinition,
+        ShowHover,
         FindReferences,
         GoBack,
         GoForward,

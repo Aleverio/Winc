@@ -12,6 +12,7 @@ pub(crate) mod git;
 pub(crate) mod hits;
 mod input;
 mod lifecycle;
+pub(crate) mod lsp;
 pub(crate) mod preview;
 mod settings;
 #[cfg(test)]
@@ -82,7 +83,7 @@ pub use workspace::tree::{NameInput, TreeMotion};
 pub use workspace::tree_drag::TreeDrag;
 pub use workspace::tree_label::{LabelCause, LabelView, TreeLabels};
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -244,6 +245,14 @@ pub enum UserEvent {
     GitUndoCommit,
     /// 后台已取得某个文件在 `HEAD` 中的内容（行号栏改动标记的基准）。
     GitBase,
+    /// LSP hover 请求的结果。
+    LspHover(DocumentId, u64, usize, Result<Option<String>, String>),
+    /// LSP 服务器连接状态变化。
+    LspState(String, PathBuf, Option<Result<(), String>>),
+    /// LSP 推送的文档诊断。
+    LspDiagnostics(PathBuf, Vec<lsp_types::Diagnostic>),
+    /// LSP worker 或服务器启动、通信失败。
+    LspError(String),
     /// 后台的分支操作（获取、拉取、推送、签出等）已完成。
     GitOperated,
     /// 后台的 Git 操作发来了输入请求。
@@ -511,7 +520,12 @@ impl Hover {
                         | terminal::HeaderHit::Hide
                         | terminal::HeaderHit::Run(_),
                 )
-                | Hover::Status(StatusItem::Terminal | StatusItem::Settings)
+                | Hover::Status(
+                    StatusItem::Terminal
+                        | StatusItem::Settings
+                        | StatusItem::Lsp
+                        | StatusItem::Diagnostics
+                )
                 | Hover::TreeMore
                 | Hover::SidebarButton
                 | Hover::LogDiffLayout
@@ -730,6 +744,14 @@ pub struct App {
     pub(crate) terminal: terminal::TerminalPanel,
     /// 当前目录的运行配置。
     pub(crate) run: terminal::run::RunConfigs,
+    /// 后台 language server 的通信桥；仅在配置了 LSP 服务后创建。
+    pub(crate) lsp: Option<lsp::LspBridge>,
+    /// 已发送给 LSP 的文档路径和版本。
+    pub(crate) lsp_sent: HashMap<DocumentId, (PathBuf, u64)>,
+    /// 已连接的语言服务状态，按语言和工作区根目录区分。
+    pub(crate) lsp_status: HashMap<(String, PathBuf), Result<(), String>>,
+    /// 最近收到的 LSP 诊断，按文档路径区分。
+    pub(crate) lsp_diagnostics: HashMap<PathBuf, Vec<lsp_types::Diagnostic>>,
     /// 当前生效的配置。
     pub config: Config,
     /// 配置文件当前的内容，即上次读入或写出时的配置。

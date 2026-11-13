@@ -29,6 +29,8 @@ const DOCUMENT: &[StatusKey] = &[
     StatusKey::Encoding,
     StatusKey::Indent,
     StatusKey::Language,
+    StatusKey::Lsp,
+    StatusKey::Diagnostics,
 ];
 
 /// 图片预览组的项，按从左到右的顺序。
@@ -198,9 +200,24 @@ fn draw_content(
     let p = app.palette;
     let fade = |c: Color| c.alpha(c.a * alpha);
     let hovered = app.hover == Hover::Status(StatusItem::Update);
-    let ink = match update_button(app).filter(|_| key == StatusKey::Update) {
-        Some(button) => button.colors(p, hovered).1,
-        None => p.text_muted,
+    let ink = match key {
+        StatusKey::Diagnostics => app
+            .editor
+            .active()
+            .and_then(|doc| doc.path.as_ref())
+            .and_then(|path| app.lsp_diagnostics.get(path))
+            .is_some_and(|diagnostics| {
+                diagnostics
+                    .iter()
+                    .any(|d| d.severity == Some(lsp_types::DiagnosticSeverity::ERROR))
+            })
+            .then_some(p.error)
+            .unwrap_or(p.warning),
+        StatusKey::Lsp => p.accent,
+        _ => match update_button(app).filter(|_| key == StatusKey::Update) {
+            Some(button) => button.colors(p, hovered).1,
+            None => p.text_muted,
+        },
     };
     let picker = matches!(key, StatusKey::Branch | StatusKey::Worktree);
     let icon = match key {
@@ -493,6 +510,64 @@ pub(super) fn draw_status(app: &mut App, frame: &mut Frame<'_>) {
                 clickable(StatusItem::Language),
             ),
         ];
+        if doc.title.is_none() {
+            let lsp_text = match doc.path.as_ref() {
+                None => t!("workspace-status-lsp-off").to_owned(),
+                Some(path) => {
+                    let root = app
+                        .editor
+                        .root()
+                        .filter(|root| path.starts_with(root))
+                        .or_else(|| path.parent())
+                        .unwrap_or(path);
+                    let state = match app
+                        .lsp_status
+                        .get(&(language.id.to_owned(), root.to_path_buf()))
+                    {
+                        Some(Ok(())) => t!("workspace-status-lsp-connected"),
+                        Some(Err(error)) if error == "connecting" => {
+                            t!("workspace-status-lsp-connecting")
+                        }
+                        Some(Err(_)) => t!("workspace-status-lsp-error"),
+                        None if app.config.lsp_servers.contains_key(language.id) => {
+                            t!("workspace-status-lsp-connecting")
+                        }
+                        None => t!("workspace-status-lsp-off"),
+                    };
+                    t!(
+                        "workspace-status-lsp",
+                        language = language.name,
+                        state = state
+                    )
+                }
+            };
+            items.push((StatusKey::Lsp, lsp_text, Some(StatusItem::Lsp)));
+            if let Some(diagnostics) = doc
+                .path
+                .as_ref()
+                .and_then(|path| app.lsp_diagnostics.get(path))
+            {
+                let errors = diagnostics
+                    .iter()
+                    .filter(|d| d.severity == Some(lsp_types::DiagnosticSeverity::ERROR))
+                    .count();
+                let warnings = diagnostics
+                    .iter()
+                    .filter(|d| d.severity == Some(lsp_types::DiagnosticSeverity::WARNING))
+                    .count();
+                if errors + warnings > 0 {
+                    items.push((
+                        StatusKey::Diagnostics,
+                        t!(
+                            "workspace-status-diagnostics",
+                            errors = errors,
+                            warnings = warnings
+                        ),
+                        Some(StatusItem::Diagnostics),
+                    ));
+                }
+            }
+        }
     }
     draw_group(
         frame,

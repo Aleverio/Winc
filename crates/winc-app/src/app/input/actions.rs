@@ -94,6 +94,7 @@ impl App {
             GoToSymbol => self.open_symbols(),
             GoToLine => self.open_goto(),
             GoToDefinition => self.go_to_definition(),
+            ShowHover => self.request_lsp_hover(),
             FindReferences => self.find_references(),
             // 有日志标签且可以后退时先在日志里后退；日志里已经找不到的提交（例如被跳过的
             // 父提交）直接跳过，继续找回更早的记录。

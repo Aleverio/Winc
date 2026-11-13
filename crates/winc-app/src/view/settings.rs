@@ -208,6 +208,7 @@ fn draw_nav_row(
         SettingsPage::Editor => icons::code(frame, icon, p.text_muted, layout.nav),
         SettingsPage::Format => icons::format(frame, icon, p.text_muted, layout.nav),
         SettingsPage::Git => icons::git(frame, icon, 1.0, p.text_muted, layout.nav),
+        SettingsPage::Lsp => icons::code(frame, icon, p.text_muted, layout.nav),
         SettingsPage::Terminal => icons::console(frame, icon, p.text_muted, layout.nav),
         SettingsPage::Modules => icons::modules(frame, icon, p.text_muted, layout.nav),
         SettingsPage::Keys => icons::keyboard(frame, icon, p.text_muted, layout.nav),
@@ -360,8 +361,24 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
                     let hint = ellipsize(frame, hint, app.fonts.ui_small, room);
                     ui_text_small(frame, app, x, bottom, &hint, p.text_muted, clip);
                 }
+                Setting::LspServer(_) if editing => {
+                    let hint = t!("settings-lsp-edit-hint");
+                    let hint = ellipsize(frame, hint, app.fonts.ui_small, room);
+                    ui_text_small(frame, app, x, bottom, &hint, p.text_muted, clip);
+                }
                 Setting::FormatCommand(_) | Setting::FixCommand(_) => {
                     draw_tool_detail(app, frame, row.setting, bottom)
+                }
+                Setting::LspServer(id) => {
+                    let command = app
+                        .config
+                        .lsp_servers
+                        .get(id)
+                        .map(|args| crate::app::lsp::display_lsp_command(args))
+                        .filter(|command| !command.is_empty())
+                        .unwrap_or_else(|| t!("settings-lsp-not-configured").to_owned());
+                    let command = ellipsize(frame, &command, app.fonts.ui_small, room);
+                    ui_text_small(frame, app, x, bottom, &command, p.text_muted, clip);
                 }
                 // Git 模块开着但用不了：说明换成原因。
                 Setting::GitModule
@@ -416,13 +433,21 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
         SettingControl::Font => draw_field(app, frame, row, clip),
         SettingControl::Command if editing => draw_field(app, frame, row, clip),
         SettingControl::Command => {
-            let (text, dim) = match app.settings.tool_row(row.setting) {
-                Some(r) => (r.tool.clone(), r.unset),
-                None if row.setting == Setting::TerminalShell => match app.configured_shell() {
-                    Some(shell) => (shell.name, false),
-                    None => (t!("settings-terminal-shell-default").to_owned(), false),
+            let (text, dim) = match row.setting {
+                Setting::LspServer(id) => app
+                    .config
+                    .lsp_servers
+                    .get(id)
+                    .map(|_| (t!("settings-lsp-edit").to_owned(), false))
+                    .unwrap_or_else(|| (t!("settings-lsp-set").to_owned(), true)),
+                _ => match app.settings.tool_row(row.setting) {
+                    Some(r) => (r.tool.clone(), r.unset),
+                    None if row.setting == Setting::TerminalShell => match app.configured_shell() {
+                        Some(shell) => (shell.name, false),
+                        None => (t!("settings-terminal-shell-default").to_owned(), false),
+                    },
+                    None => (t!("format-tool-auto").to_owned(), false),
                 },
-                None => (t!("format-tool-auto").to_owned(), false),
             };
             let hovered = app.settings.hover == Some(SettingsPart::Field(row.setting));
             draw_popup(app, frame, row.control, &text, dim, hovered, clip);
@@ -706,6 +731,7 @@ fn draw_field(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect
         Setting::FormatCommand(_) | Setting::FixCommand(_) => {
             (None, t!("settings-command-placeholder"))
         }
+        Setting::LspServer(_) => (None, t!("settings-lsp-command-placeholder")),
         Setting::TerminalShell => (None, t!("settings-terminal-shell-placeholder")),
         _ => (app.config.editor_font.clone(), t!("settings-font-default")),
     };

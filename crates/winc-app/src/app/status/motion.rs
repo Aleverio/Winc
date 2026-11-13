@@ -46,6 +46,10 @@ pub enum StatusKey {
     Indent,
     /// 语言。
     Language,
+    /// Language server connection state.
+    Lsp,
+    /// Current document diagnostic count.
+    Diagnostics,
     /// 新版本提示。
     Update,
 }

@@ -22,6 +22,8 @@ pub enum SettingsPage {
     Format,
     /// Git：Git 模块的选项；模块关闭时不列出。
     Git,
+    /// Language Server Protocol servers.
+    Lsp,
     /// 终端：默认 shell、面板位置、字体、字号和终端行为。
     Terminal,
     /// 模块：可选模块的开关。
@@ -41,11 +43,12 @@ pub struct Modules {
 
 impl SettingsPage {
     /// 全部分类，顺序与分类栏从上到下的顺序一致。
-    pub const ALL: [SettingsPage; 8] = [
+    pub const ALL: [SettingsPage; 9] = [
         SettingsPage::Appearance,
         SettingsPage::Editor,
         SettingsPage::Format,
         SettingsPage::Git,
+        SettingsPage::Lsp,
         SettingsPage::Terminal,
         SettingsPage::Modules,
         SettingsPage::Keys,
@@ -68,6 +71,7 @@ impl SettingsPage {
             SettingsPage::Editor => t!("settings-page-editor"),
             SettingsPage::Format => t!("settings-page-format"),
             SettingsPage::Git => t!("settings-page-git"),
+            SettingsPage::Lsp => t!("settings-page-lsp"),
             SettingsPage::Terminal => t!("settings-page-terminal"),
             SettingsPage::Modules => t!("settings-page-modules"),
             SettingsPage::Keys => t!("settings-page-keys"),
@@ -166,6 +170,15 @@ impl SettingsPage {
                 ]
             }
             SettingsPage::Git => vec![plain(vec![Setting::GitConfirmPush, Setting::DiffInline])],
+            SettingsPage::Lsp => vec![Section {
+                title: Some(t!("settings-lsp-servers")),
+                items: languages
+                    .lsp
+                    .iter()
+                    .map(|&id| Setting::LspServer(id))
+                    .chain([Setting::AddLspLanguage])
+                    .collect(),
+            }],
             SettingsPage::Modules => vec![plain(vec![Setting::GitModule, Setting::TerminalModule])],
             SettingsPage::Format => {
                 let mut sections = vec![
@@ -226,6 +239,8 @@ pub struct ToolLanguages {
     pub format: Vec<&'static str>,
     /// 「修复工具」一组列出的语言 id。
     pub fix: Vec<&'static str>,
+    /// LSP server rows currently available in the settings page.
+    pub lsp: Vec<&'static str>,
 }
 
 /// 一页中的一组设置项，共用一块底色，可以带标题。
@@ -337,6 +352,10 @@ pub enum Setting {
     FormatCommand(&'static str),
     /// 某种语言（语言 id）的修复命令。
     FixCommand(&'static str),
+    /// 某种语言（语言 id）的 LSP server command.
+    LspServer(&'static str),
+    /// 为当前文档的语言添加或修改 LSP server.
+    AddLspLanguage,
     /// 格式化工具一组下面的「添加语言…」。
     AddLanguage,
     /// 修复工具一组下面的「添加语言…」。
@@ -456,6 +475,7 @@ impl Setting {
             | Setting::FixCommand(_)
             | Setting::AddLanguage
             | Setting::AddFixLanguage => SettingsPage::Format,
+            Setting::LspServer(_) | Setting::AddLspLanguage => SettingsPage::Lsp,
             Setting::TerminalShell
             | Setting::TerminalPosition
             | Setting::TerminalFont
@@ -523,6 +543,8 @@ impl Setting {
             Setting::FormatCommand(id) | Setting::FixCommand(id) => {
                 winc_syntax::find(id).map_or(id, |l| l.name)
             }
+            Setting::LspServer(id) => winc_syntax::find(id).map_or(id, |l| l.name),
+            Setting::AddLspLanguage => t!("settings-lsp-add-current"),
             Setting::AddLanguage | Setting::AddFixLanguage => t!("settings-add-language"),
             Setting::TerminalShell => t!("settings-terminal-shell"),
             Setting::TerminalPosition => t!("settings-terminal-position"),
@@ -639,9 +661,10 @@ impl Setting {
             | Setting::TerminalConfirmClose
             | Setting::TerminalPrompt
             | Setting::TerminalShellIntegration => SettingControl::Switch,
-            Setting::FormatCommand(_) | Setting::FixCommand(_) | Setting::TerminalShell => {
-                SettingControl::Command
-            }
+            Setting::FormatCommand(_)
+            | Setting::FixCommand(_)
+            | Setting::LspServer(_)
+            | Setting::TerminalShell => SettingControl::Command,
             Setting::SkipOnSave
             | Setting::Language
             | Setting::BackgroundImage
@@ -651,7 +674,9 @@ impl Setting {
             | Setting::VimClipboard
             | Setting::TerminalPosition
             | Setting::TerminalOptionAsMeta => SettingControl::Choice,
-            Setting::AddLanguage | Setting::AddFixLanguage => SettingControl::Action,
+            Setting::AddLanguage | Setting::AddFixLanguage | Setting::AddLspLanguage => {
+                SettingControl::Action
+            }
             Setting::KeySearch => SettingControl::Search,
             Setting::Version => SettingControl::Product,
             Setting::Website | Setting::Repository | Setting::Community | Setting::License => {

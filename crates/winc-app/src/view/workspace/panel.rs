@@ -872,6 +872,20 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
             let rect = app.hits.status.iter().find(|(_, i)| *i == item)?.0;
             Some((rect, with_key(t!("cmd-settings"), Some(Action::Settings))))
         }
+        Hover::Status(item @ crate::app::StatusItem::Lsp) => {
+            let rect = app.hits.status.iter().find(|(_, i)| *i == item)?.0;
+            Some((rect, t!("settings-lsp-status-tooltip").to_owned()))
+        }
+        Hover::Status(item @ crate::app::StatusItem::Diagnostics) => {
+            let rect = app.hits.status.iter().find(|(_, i)| *i == item)?.0;
+            let diagnostic = app
+                .editor
+                .active()
+                .and_then(|doc| doc.path.as_ref())
+                .and_then(|path| app.lsp_diagnostics.get(path))
+                .and_then(|diagnostics| diagnostics.first())?;
+            Some((rect, diagnostic.message.clone()))
+        }
         // 分支选择器的拉取、推送、获取：写明会做什么（和谁差几个提交、推到哪儿）；不能用时写原因。
         Hover::PickerPart(
             part @ (crate::app::PickerPart::Pull

@@ -34,6 +34,10 @@ pub enum StatusItem {
     Settings,
     /// 后台检查找到了新版本：点了打开更新窗口。
     Update,
+    /// Language server connection state; clicking opens its settings.
+    Lsp,
+    /// Current document diagnostics; clicking shows the first message.
+    Diagnostics,
 }
 
 /// 返回状态栏上显示的缩进文案，例如「空格: 4」「制表符长度: 4」。
@@ -62,6 +66,23 @@ impl App {
         if item == StatusItem::Settings {
             return self.open_settings();
         }
+        if item == StatusItem::Lsp {
+            return self.open_lsp_settings();
+        }
+        if item == StatusItem::Diagnostics {
+            let Some(diagnostic) = self
+                .editor
+                .active()
+                .and_then(|doc| doc.path.as_ref())
+                .and_then(|path| self.lsp_diagnostics.get(path))
+                .and_then(|diagnostics| diagnostics.first())
+            else {
+                return;
+            };
+            let line = diagnostic.range.start.line.saturating_add(1);
+            self.flash(format!("Line {line}: {}", diagnostic.message));
+            return;
+        }
         if item == StatusItem::Update {
             #[cfg(target_os = "macos")]
             crate::macos::check_for_updates(true);
@@ -84,7 +105,9 @@ impl App {
                 StatusItem::Branch
                 | StatusItem::Terminal
                 | StatusItem::Settings
-                | StatusItem::Update,
+                | StatusItem::Update
+                | StatusItem::Lsp
+                | StatusItem::Diagnostics,
                 _,
             ) => return,
         };

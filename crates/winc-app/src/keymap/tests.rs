@@ -139,6 +139,8 @@ fn default_key_labels_per_system() {
     assert_eq!(label(Os::Linux, Action::Format), ["Ctrl+Shift+I"]);
     assert_eq!(label(Os::Mac, Action::FormatSelection), ["⌘K ⌘F"]);
     assert_eq!(label(Os::Mac, Action::GoBack), ["⌃-"]);
+    assert_eq!(label(Os::Mac, Action::ShowHover), ["⌘K ⌘I"]);
+    assert_eq!(label(Os::Windows, Action::ShowHover), ["Ctrl+K Ctrl+I"]);
     assert_eq!(label(Os::Windows, Action::GoBack), ["Alt+←"]);
     assert_eq!(label(Os::Linux, Action::GoBack), ["Ctrl+Alt+-"]);
     assert_eq!(label(Os::Mac, Action::CopyPath), ["⌥⌘C", "⌘K ⌥⌘C"]);

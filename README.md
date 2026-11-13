@@ -42,7 +42,7 @@ Measured on macOS; results vary with hardware and system load.
 | Area | Capabilities |
 | --- | --- |
 | Editing | Multiple cursors, find and replace, native input methods, and smooth scrolling in gigabyte-sized files |
-| Syntax | Highlighting for common programming, markup, data, and configuration languages, plus lightweight go-to-definition and usages without a language server |
+| Syntax | Highlighting for common programming, markup, data, and configuration languages, optional LSP hover, plus lightweight go-to-definition and usages |
 | Formatting | Whole-file formatting with external tools such as rustfmt, Prettier, Black, Ruff, and gofmt |
 | Preview | Markdown, images, SVG, and spreadsheets (xlsx, csv), with the source one click away |
 | Git | Side-by-side diffs with word-level highlights, staging by hunk, commit and push, a commit graph, and blame |
@@ -72,6 +72,25 @@ zoomed image to pan, and double-click to fit it again. This also works in the SV
 
 The portable ZIP keeps settings and state in the `data` folder beside `winc.exe`; delete that
 folder to keep them in the user profile instead.
+
+## Language Servers
+
+Install a language server separately, then configure its executable and arguments by language id
+in the user configuration file:
+
+```json
+{
+  "lsp": {
+    "servers": {
+      "rust": ["rust-analyzer", "--stdio"]
+    }
+  }
+}
+```
+
+Winc sends opened and edited files to the configured server. Use **Show Hover** (Ctrl/Cmd+K,
+Ctrl/Cmd+I) to request hover information. The existing lightweight navigation remains available
+when no server is configured.
 
 winc is developed and tested mainly on macOS. Download it from
 [winc.si](https://winc.si/#download); all versions are on

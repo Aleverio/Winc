@@ -208,6 +208,7 @@ impl App {
         self.settings.hover = None;
         self.settings.languages = ToolLanguages::default();
         self.refresh_format_rows(true);
+        self.refresh_lsp_languages();
         // 列出字体要读取字体文件，先在后台读好，打开字体菜单时不必等待；「默认 Shell」菜单中的
         // shell 同样在后台检测。
         std::thread::spawn(winc_render::installed_fonts);
@@ -446,7 +447,17 @@ impl App {
             self.settings.scroll = 0.0;
         }
         if self.settings.selected.page() != page {
-            self.settings.selected = page.first();
+            self.settings.selected = if page == SettingsPage::Lsp {
+                self.settings
+                    .languages
+                    .lsp
+                    .first()
+                    .copied()
+                    .map(Setting::LspServer)
+                    .unwrap_or(Setting::AddLspLanguage)
+            } else {
+                page.first()
+            };
             self.settings.scroll = 0.0;
             self.settings.error = self.broken_font(page);
         }
@@ -701,6 +712,15 @@ impl App {
         self.settings.keyboard = true;
         let setting = self.settings.selected;
 
+        if matches!(setting, Setting::LspServer(_)) {
+            self.settings_start_editing(setting);
+            return;
+        }
+        if setting == Setting::AddLspLanguage {
+            self.settings_add_lsp_language();
+            return;
+        }
+
         match setting.control() {
             SettingControl::Font => self.settings_start_editing(setting),
             SettingControl::Switch => self.settings_toggle(setting),
@@ -715,6 +735,63 @@ impl App {
             }
             SettingControl::Search => self.focus = Focus::KeySearch,
         }
+    }
+
+    fn refresh_lsp_languages(&mut self) {
+        let mut languages: Vec<_> = self
+            .config
+            .lsp_servers
+            .keys()
+            .filter_map(|id| winc_syntax::find(id).map(|language| language.id))
+            .collect();
+        if let Some(id) = self
+            .editor
+            .active()
+            .map(|doc| doc.highlighter.language().id)
+            && !languages.contains(&id)
+        {
+            languages.push(id);
+        }
+        self.settings.languages.lsp = languages;
+    }
+
+    pub(crate) fn open_lsp_settings(&mut self) {
+        self.settings.languages.lsp.clear();
+        self.refresh_lsp_languages();
+        self.open_settings();
+        self.settings_show_page(SettingsPage::Lsp);
+        let active = self
+            .editor
+            .active()
+            .map(|doc| doc.highlighter.language().id);
+        self.settings.selected = active
+            .filter(|id| self.settings.languages.lsp.contains(id))
+            .map(Setting::LspServer)
+            .or_else(|| {
+                self.settings
+                    .languages
+                    .lsp
+                    .first()
+                    .copied()
+                    .map(Setting::LspServer)
+            })
+            .unwrap_or(Setting::AddLspLanguage);
+        self.settings_scroll_into_view();
+        self.request_redraw();
+    }
+
+    pub(super) fn settings_add_lsp_language(&mut self) {
+        let Some(language) = self.editor.active().map(|doc| doc.highlighter.language()) else {
+            self.flash(t!("settings-lsp-open-file"));
+            return;
+        };
+        if !self.settings.languages.lsp.contains(&language.id) {
+            self.settings.languages.lsp.push(language.id);
+        }
+        let setting = Setting::LspServer(language.id);
+        self.settings.selected = setting;
+        self.settings_scroll_into_view();
+        self.settings_start_editing(setting);
     }
 
     /// 开关 `setting` 当前是否开启。
@@ -870,6 +947,11 @@ impl App {
 
         let current = match tool_setting(setting) {
             Some((task, id)) => task_commands(&self.config, task).get(id).cloned(),
+            None if let Setting::LspServer(id) = setting => self
+                .config
+                .lsp_servers
+                .get(id)
+                .map(|args| crate::app::lsp::display_lsp_command(args)),
             None if setting == Setting::TerminalShell => self.config.terminal_shell.clone(),
             None => self.font_setting(setting).clone(),
         };
@@ -975,6 +1057,9 @@ impl App {
 
         match tool_setting(setting) {
             Some((task, id)) => self.settings_commit_command(task, id, value),
+            None if let Setting::LspServer(id) = setting => {
+                self.settings_commit_lsp_server(setting, id, value)
+            }
             None if setting == Setting::TerminalShell => {
                 self.settings.editing = None;
                 self.settings.editing_original = None;
@@ -984,6 +1069,40 @@ impl App {
             }
             None => self.settings_commit_font(setting, value),
         }
+    }
+
+    fn settings_commit_lsp_server(
+        &mut self,
+        setting: Setting,
+        language: &'static str,
+        command: Option<String>,
+    ) {
+        let args = match command {
+            Some(command) => match crate::app::lsp::split_server_command(&command) {
+                Ok(args) => Some(args),
+                Err(error) => {
+                    self.settings.error = Some((setting, error));
+                    self.request_redraw();
+                    return;
+                }
+            },
+            None => None,
+        };
+        match args {
+            Some(args) => {
+                self.config.lsp_servers.insert(language.to_owned(), args);
+            }
+            None => {
+                self.config.lsp_servers.remove(language);
+            }
+        }
+        self.settings.editing = None;
+        self.settings.editing_original = None;
+        self.settings.error = None;
+        self.focus = Focus::Settings;
+        self.save_config();
+        self.reset_lsp_server(language);
+        self.request_redraw();
     }
 
     /// 提交格式化（修复）命令并写回配置；`command` 为 `None`（清空）表示自动选择。

@@ -82,6 +82,42 @@ impl Screen<'_> {
         }
     }
 
+    /// Language-server diagnostics appear as colored markers beside their source lines.
+    pub(super) fn draw_diagnostics(&self, frame: &mut Frame<'_>, row: &Row<'_>) {
+        let Some(path) = self.doc.path.as_ref() else {
+            return;
+        };
+        let Some(diagnostics) = self.app.lsp_diagnostics.get(path) else {
+            return;
+        };
+        let severity = diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.range.start.line as usize == row.line)
+            .filter_map(|diagnostic| diagnostic.severity)
+            .min_by_key(|severity| match *severity {
+                lsp_types::DiagnosticSeverity::ERROR => 0,
+                lsp_types::DiagnosticSeverity::WARNING => 1,
+                lsp_types::DiagnosticSeverity::INFORMATION => 2,
+                lsp_types::DiagnosticSeverity::HINT => 3,
+                _ => 4,
+            });
+        let Some(severity) = severity else {
+            return;
+        };
+        let color = match severity {
+            lsp_types::DiagnosticSeverity::ERROR => self.app.palette.error,
+            lsp_types::DiagnosticSeverity::WARNING => self.app.palette.warning,
+            _ => self.app.palette.accent,
+        };
+        let marker = Rect::new(
+            self.gutter.x + 2.0,
+            row.gutter_y + self.lh * 0.35,
+            3.0,
+            (self.lh * 0.3).max(3.0),
+        );
+        frame.rect_clipped(marker, color, 1.5, self.gutter);
+    }
+
     /// 逐行追溯：同一次提交连着的几行只在第一行写作者和时间，每一行左边一道按新旧深浅的色条；
     /// 鼠标指着的那一次提交的几行字深一些。
     pub(super) fn draw_blame(&self, frame: &mut Frame<'_>, row: &Row<'_>) {

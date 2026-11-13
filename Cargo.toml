@@ -24,6 +24,10 @@ winc-version = { path = "crates/winc-version" }
 winc-app = { path = "crates/winc-app" }
 winc-typeset = { path = "crates/winc-typeset" }
 winc-vim = { path = "crates/winc-vim" }
+dscode-lsp = "0.1"
+lsp-types = "0.94"
+tokio = { version = "1", features = ["rt-multi-thread", "time"] }
+serde_json = "1"
 
 # 只把 LF、CR、CRLF 当换行。默认的 `unicode_lines` 还认 VT、FF、U+0085、U+2028、U+2029，
 # 行号会和编译器、git、grep 报的对不上（C 和 Python 源码里常见分页符 FF）。
@@ -70,6 +74,9 @@ fluent-bundle = "0.16"
 unic-langid = "0.9"
 # 读取系统的首选语言，界面语言为「跟随系统」时使用。
 sys-locale = "0.3"
+
+[patch.crates-io]
+dscode-lsp = { path = "vendor/dscode-lsp" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

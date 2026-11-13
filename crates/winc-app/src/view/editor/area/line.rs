@@ -136,6 +136,7 @@ impl Screen<'_> {
 
         self.draw_number(frame, &row, number);
         self.draw_change_marks(frame, &row);
+        self.draw_diagnostics(frame, &row);
         self.draw_blame(frame, &row);
         self.draw_bookmark(frame, &row);
         self.draw_fold_arrow(frame, &row);

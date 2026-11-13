@@ -210,6 +210,8 @@ pub struct Config {
     ///
     /// 没写的语言自动选择工具。
     pub fix_commands: BTreeMap<String, String>,
+    /// 各语言的 LSP 服务命令：数组第一项是可执行文件，后续各项是参数。
+    pub lsp_servers: BTreeMap<String, Vec<String>>,
 }
 
 /// 终端里哪一边的 ⌥ 当 Meta 用；另一边仍然输入 `å`、`∑` 这类字符。

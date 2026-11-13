@@ -152,6 +152,7 @@ pub fn bindings(os: Os) -> Vec<Binding> {
     t.one(ClearWordHighlights, Editor, key(shift, Escape));
 
     t.one(GoToDefinition, Editor, key(none, F(12)));
+    t.chord(ShowHover, Editor, chord_k, c(cmd, 'i'));
     t.one(FindReferences, Editor, key(shift, F(12)));
     t.one(Undo, Editor, c(cmd, 'z'));
     if mac {

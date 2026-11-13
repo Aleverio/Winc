@@ -277,6 +277,7 @@ impl ApplicationHandler<UserEvent> for App {
 
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
         self.handle_event(event);
+        self.sync_lsp_documents();
     }
 
     fn window_event(&mut self, _event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -416,6 +417,7 @@ impl ApplicationHandler<UserEvent> for App {
             WindowEvent::DroppedFile(path) => self.drop_file(&path),
             _ => {}
         }
+        self.sync_lsp_documents();
     }
 }
 
@@ -430,6 +432,26 @@ impl App {
             UserEvent::PickFailed(kind, error) => self.pick_failed(kind, error.as_deref()),
             UserEvent::Searched => self.poll_global(),
             UserEvent::Definitions => self.poll_definitions(),
+            UserEvent::LspHover(id, revision, caret, result) => {
+                self.lsp_hovered(id, revision, caret, result);
+            }
+            UserEvent::LspState(language, root, state) => {
+                if let Some(state) = state {
+                    self.lsp_status.insert((language, root), state);
+                } else {
+                    self.lsp_status.remove(&(language, root));
+                }
+                self.request_redraw();
+            }
+            UserEvent::LspDiagnostics(path, diagnostics) => {
+                if diagnostics.is_empty() {
+                    self.lsp_diagnostics.remove(&path);
+                } else {
+                    self.lsp_diagnostics.insert(path, diagnostics);
+                }
+                self.request_redraw();
+            }
+            UserEvent::LspError(error) => self.flash(error),
             UserEvent::FilesChanged => self.files_changed(),
             UserEvent::GitQuestion => self.poll_git_questions(),
             done @ (UserEvent::GitStatus

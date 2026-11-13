@@ -34,6 +34,7 @@ fn reads_every_field() {
                     "onSaveExclude": ["Markdown"],
                     "commands": { "JSON": "jq --indent 4 .", "c++": " clang-format ", "rust": "" }
                 },
+                "lsp": { "servers": { "Rust": ["rust-analyzer"], "python": ["pyright-langserver", "--stdio"] } },
                 "theme": "light"
             }"#,
     );
@@ -60,6 +61,40 @@ fn reads_every_field() {
             ("json".to_string(), "jq --indent 4 .".to_string()),
         ])
     );
+    assert_eq!(
+        config.lsp_servers,
+        BTreeMap::from([
+            (
+                "python".to_string(),
+                vec!["pyright-langserver".to_string(), "--stdio".to_string()]
+            ),
+            ("rust".to_string(), vec!["rust-analyzer".to_string()]),
+        ])
+    );
+    let (round_trip, problems) = Config::parse(&config.to_json());
+    assert!(problems.is_empty(), "{problems:?}");
+    assert_eq!(round_trip.lsp_servers, config.lsp_servers);
+}
+
+#[test]
+fn invalid_lsp_server_commands_are_reported_and_ignored() {
+    let (config, problems) = Config::parse(
+        r#"{"lsp": {"servers": {"rust": [], "python": ["pyright-langserver", 1], "go": "gopls"}}}"#,
+    );
+    assert!(config.lsp_servers.is_empty());
+    assert_eq!(problems.len(), 3, "{problems:?}");
+}
+
+#[test]
+fn duplicate_lsp_language_ids_are_reported() {
+    let (config, problems) = Config::parse(
+        r#"{"lsp": {"servers": {"rust": ["rust-analyzer"], "Rust": ["other-server"]}}}"#,
+    );
+    assert_eq!(
+        config.lsp_servers,
+        BTreeMap::from([("rust".to_string(), vec!["rust-analyzer".to_string()])])
+    );
+    assert_eq!(problems.len(), 1, "{problems:?}");
 }
 
 #[test]
@@ -279,6 +314,10 @@ fn round_trips_through_json() {
         )]),
         fix_on_save: Some(true),
         fix_commands: BTreeMap::from([("python".to_string(), "ruff check --fix -".to_string())]),
+        lsp_servers: BTreeMap::from([(
+            "rust".to_string(),
+            vec!["rust-analyzer".to_string(), "--stdio".to_string()],
+        )]),
     };
 
     let (parsed, problems) = Config::parse(&config.to_json());
