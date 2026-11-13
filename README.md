@@ -67,6 +67,7 @@ These are Alverion's fork changes; the original Winc project and its authors are
 | Interface | Sixteen built-in themes, light and dark, and a complete interface in English and Simplified Chinese |
 | Modules | Git, the terminal, and SSH remote can each be turned off. First-time setup on the start page offers the appearance, theme, language, and modules |
 | Updates | Signed in-app updates on all three platforms, with the release notes shown in the app after each update |
+| Lsp | it has been added, but it is still experimental |
 
 Touchscreens support tapping buttons and placing the caret, double-tapping to select a word,
 swiping to scroll, and dragging scrollbars and panel dividers. Hold for 500 ms to open the context
