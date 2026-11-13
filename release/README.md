@@ -18,7 +18,7 @@ tag.
 | `.github/workflows/release-arch-repo.yml` | Stages the signed Arch repository after a stable release is published |
 | `.github/workflows/update-feeds.yml` | Publishes signed appcasts to the stable/beta update-feed releases |
 | `.github/workflows/release-{prepare,macos,linux,windows}.yml` | Reusable jobs called by `release.yml` |
-| `.github/actions/build-setup/` | Shared toolchain and cache setup; pins the release Rust version |
+| `.github/actions/build-setup/` | Shared source check and toolchain setup; pins the release Rust version |
 | `release/macos/` | `package.sh` (app, dmg, appcast), `verify.sh`, and Apple signing setup |
 | `release/linux/` | `package.sh` (AppImage and deb), pinned packaging tools, desktop entry and AppRun |
 | `release/linux/arch/` | Arch package recipe, repository staging and installer template |
@@ -119,6 +119,11 @@ The update key is required. Add `WINC_UPDATE_PRIVATE_KEY` under **Settings → S
 key. `release/common/config.mjs` embeds that public key and the matching GitHub update-channel URL
 into each release build. Builds without both values do not check for updates. Portable Windows,
 deb, and Arch installations are not self-updating.
+
+The in-app release notes are not part of a channel. The app reads
+`https://winc.si/releases/notes/<language>.md` (`en.md`, `zh-cn.md`) when the user opens them;
+winc.si generates these files from its changelog. Each release starts with a `## <version> · <date>`
+line, which the app uses to pick the releases to show (`crates/winc-app/src/release_notes.rs`).
 
 Windows NSIS installations are per-user; MSI installations are per-machine and use the fixed
 UpgradeCode `00FDC6A5-D527-59AE-B4A5-E051B25222F3`. Do not change it between releases. Each installer

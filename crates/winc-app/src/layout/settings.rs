@@ -179,7 +179,11 @@ impl SettingsPage {
                     .chain([Setting::AddLspLanguage])
                     .collect(),
             }],
-            SettingsPage::Modules => vec![plain(vec![Setting::GitModule, Setting::TerminalModule])],
+            SettingsPage::Modules => vec![plain(vec![
+                Setting::GitModule,
+                Setting::TerminalModule,
+                Setting::RemoteModule,
+            ])],
             SettingsPage::Format => {
                 let mut sections = vec![
                     plain(vec![
@@ -214,6 +218,7 @@ impl SettingsPage {
                 plain(vec![Setting::Version]),
                 plain(vec![Setting::Updates, Setting::CheckUpdates]),
                 plain(vec![
+                    Setting::ReleaseNotes,
                     Setting::Website,
                     Setting::Repository,
                     Setting::Community,
@@ -324,6 +329,8 @@ pub enum Setting {
     Version,
     /// 「关于」页的更新状态和「检查更新」按钮。
     Updates,
+    /// 「关于」页的「更新日志」：在阅读标签中打开，列出各版的更改。
+    ReleaseNotes,
     /// 「关于」页的官网链接。
     Website,
     /// 「关于」页的源代码仓库（GitHub）链接。
@@ -386,6 +393,8 @@ pub enum Setting {
     GitConfirmPush,
     /// 终端模块的开关。
     TerminalModule,
+    /// 远程模块的开关。
+    RemoteModule,
     /// 「快捷键」页顶部的搜索框。
     ///
     /// 该页没有设置项，选中这一项即表示停留在该页。
@@ -466,6 +475,7 @@ impl Setting {
             Setting::Version
             | Setting::Updates
             | Setting::CheckUpdates
+            | Setting::ReleaseNotes
             | Setting::Website
             | Setting::Repository
             | Setting::Community
@@ -490,7 +500,9 @@ impl Setting {
             | Setting::TerminalShellIntegration
             | Setting::TerminalOptionAsMeta => SettingsPage::Terminal,
             Setting::GitConfirmPush | Setting::DiffInline => SettingsPage::Git,
-            Setting::GitModule | Setting::TerminalModule => SettingsPage::Modules,
+            Setting::GitModule | Setting::TerminalModule | Setting::RemoteModule => {
+                SettingsPage::Modules
+            }
             Setting::KeySearch => SettingsPage::Keys,
         }
     }
@@ -541,6 +553,7 @@ impl Setting {
             Setting::Community => "Telegram",
             Setting::License => t!("settings-license"),
             Setting::Updates => t!("settings-updates"),
+            Setting::ReleaseNotes => t!("settings-release-notes"),
             Setting::FormatOnSave => t!("settings-format-on-save"),
             Setting::FixOnSave => t!("settings-fix-on-save"),
             Setting::SkipOnSave => t!("settings-skip-on-save"),
@@ -563,6 +576,7 @@ impl Setting {
             Setting::GitModule => "Git",
             Setting::GitConfirmPush => t!("settings-git-confirm-push"),
             Setting::TerminalModule => t!("settings-terminal-module"),
+            Setting::RemoteModule => t!("settings-remote-module"),
             Setting::KeySearch => t!("settings-key-search"),
         }
     }
@@ -602,6 +616,7 @@ impl Setting {
             Setting::RestoreWindow => Some(t!("settings-restore-window-desc")),
             Setting::Animations => Some(t!("settings-animations-desc")),
             Setting::BackgroundImage => Some(t!("settings-background-image-desc")),
+            Setting::BackgroundFit => Some(t!("settings-background-fit-desc")),
             Setting::BackgroundOpacity => Some(t!("settings-background-opacity-desc")),
             Setting::RemoteImages => Some(t!("settings-remote-images-desc")),
             Setting::CheckUpdates => Some(t!("settings-check-updates-desc")),
@@ -612,6 +627,7 @@ impl Setting {
             Setting::SkipOnSave => Some(t!("settings-skip-on-save-desc")),
             Setting::LspAuto(_) => Some(t!("settings-lsp-auto-desc")),
             Setting::GitModule => Some(t!("settings-git-module-desc")),
+            Setting::RemoteModule => Some(t!("settings-remote-module-desc")),
             Setting::GitConfirmPush => Some(t!("settings-git-confirm-push-desc")),
             Setting::TerminalCopyOnSelect => Some(t!("settings-terminal-copy-on-select-desc")),
             Setting::TerminalConfirmClose => Some(t!("settings-terminal-confirm-close-desc")),
@@ -663,6 +679,7 @@ impl Setting {
             | Setting::GitModule
             | Setting::GitConfirmPush
             | Setting::TerminalModule
+            | Setting::RemoteModule
             | Setting::TerminalCopyOnSelect
             | Setting::TerminalConfirmClose
             | Setting::TerminalPrompt
@@ -686,9 +703,11 @@ impl Setting {
             }
             Setting::KeySearch => SettingControl::Search,
             Setting::Version => SettingControl::Product,
-            Setting::Website | Setting::Repository | Setting::Community | Setting::License => {
-                SettingControl::Link
-            }
+            Setting::ReleaseNotes
+            | Setting::Website
+            | Setting::Repository
+            | Setting::Community
+            | Setting::License => SettingControl::Link,
             Setting::Updates => SettingControl::Button,
         }
     }
