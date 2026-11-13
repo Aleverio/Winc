@@ -141,6 +141,8 @@ impl SettingsPage {
                     Setting::VimYankHighlight,
                 ]),
                 plain(vec![
+                    Setting::AutoSaveTyping,
+                    Setting::AutoSaveDelay,
                     Setting::AutoSave,
                     Setting::HotExit,
                     Setting::RestoreFolder,
@@ -275,8 +277,12 @@ pub enum Setting {
     EditorSize,
     /// Tab 宽度。
     TabWidth,
-    /// 自动保存。
+    /// 切换标签或离开应用时保存。
     AutoSave,
+    /// 停止输入后自动保存。
+    AutoSaveTyping,
+    /// 停止输入后自动保存的等待时间。
+    AutoSaveDelay,
     /// 热退出：退出时不逐个询问是否保存，下次打开时恢复未保存的修改。
     HotExit,
     /// 启动时打开上次退出时打开的目录和标签。
@@ -456,6 +462,8 @@ impl Setting {
             | Setting::EditorSize
             | Setting::TabWidth
             | Setting::AutoSave
+            | Setting::AutoSaveTyping
+            | Setting::AutoSaveDelay
             | Setting::HotExit
             | Setting::RestoreFolder
             | Setting::CompactFolders
@@ -523,6 +531,8 @@ impl Setting {
             Setting::EditorSize => t!("settings-editor-size"),
             Setting::TabWidth => t!("settings-tab-width"),
             Setting::AutoSave => t!("settings-auto-save"),
+            Setting::AutoSaveTyping => t!("settings-auto-save-typing"),
+            Setting::AutoSaveDelay => t!("settings-auto-save-delay"),
             Setting::HotExit => t!("settings-hot-exit"),
             Setting::RestoreFolder => t!("settings-restore-folder"),
             Setting::StickyScroll => t!("settings-sticky-scroll"),
@@ -596,6 +606,8 @@ impl Setting {
         let text = match self {
             Setting::SystemTitleBar => Some(t!("settings-system-title-bar-desc")),
             Setting::AutoSave => Some(t!("settings-auto-save-desc")),
+            Setting::AutoSaveTyping => Some(t!("settings-auto-save-typing-desc")),
+            Setting::AutoSaveDelay => Some(t!("settings-auto-save-delay-desc")),
             Setting::HotExit => Some(t!("settings-hot-exit-desc")),
             Setting::RestoreFolder => Some(t!("settings-restore-folder-desc")),
             Setting::StickyScroll => Some(t!("settings-sticky-scroll-desc")),
@@ -650,11 +662,13 @@ impl Setting {
             | Setting::FontWeight
             | Setting::BackgroundOpacity
             | Setting::TerminalSize
-            | Setting::TabWidth => SettingControl::Stepper,
+            | Setting::TabWidth
+            | Setting::AutoSaveDelay => SettingControl::Stepper,
             Setting::Theme => SettingControl::Themes,
             Setting::LightTheme | Setting::DarkTheme => SettingControl::ThemeList,
             Setting::SystemTitleBar
             | Setting::AutoSave
+            | Setting::AutoSaveTyping
             | Setting::HotExit
             | Setting::RestoreFolder
             | Setting::CompactFolders
@@ -834,7 +848,7 @@ pub enum SettingsPart {
     SearchField,
     /// 分类栏中的一项。
     Page(SettingsPage),
-    /// 字体名、格式化命令的输入框。
+    /// 字体名、命令或可自定义数值的输入框。
     Field(Setting),
     /// 字体输入框右端的下拉按钮。
     FontMenu(Setting),
@@ -1170,6 +1184,8 @@ impl SettingsLayout {
                     Some(SettingsPart::Decrease(row.setting))
                 } else if parts.plus.contains(x, y) {
                     Some(SettingsPart::Increase(row.setting))
+                } else if row.setting == Setting::AutoSaveDelay && parts.value.contains(x, y) {
+                    Some(SettingsPart::Field(row.setting))
                 } else {
                     None
                 }
@@ -1377,6 +1393,7 @@ fn control_rect(setting: Setting, row: Rect, editing: bool) -> Rect {
         SettingControl::Product => return row,
         SettingControl::Button => (SETTINGS_BUTTON_W, SETTINGS_CONTROL_H),
         SettingControl::Switch => (SETTINGS_SWITCH_W, SETTINGS_SWITCH_H),
+        SettingControl::Stepper if editing => (SETTINGS_COMMAND_W, SETTINGS_CONTROL_H),
         SettingControl::Stepper => (SETTINGS_STEP_W * 2.0 + SETTINGS_VALUE_W, SETTINGS_CONTROL_H),
         // 没有名称（组标题就是名称），缩略图排满整行。
         SettingControl::ThemeList => {

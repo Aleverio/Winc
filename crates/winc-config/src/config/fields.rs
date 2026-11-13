@@ -127,6 +127,29 @@ const EDITOR: &[Field] = &[
         write: |config| config.tab_width.map(|width| Json::Number(width as f64)),
     },
     bool_field!("autoSave", auto_save),
+    bool_field!("autoSaveWhileTyping", auto_save_while_typing),
+    Field {
+        key: "autoSaveDelayMs",
+        read: |config, value, name, problems| {
+            let label = t!("config-label-auto-save-delay");
+            config.auto_save_delay_ms =
+                read_number(value, name, Config::AUTO_SAVE_DELAY_RANGE, label, problems)
+                    .filter(|value| {
+                        let whole = value.fract() == 0.0;
+                        if !whole {
+                            let value = value.to_string();
+                            problems.push(t!("config-not-integer", name = name, value = value));
+                        }
+                        whole
+                    })
+                    .map(|value| value as u32);
+        },
+        write: |config| {
+            config
+                .auto_save_delay_ms
+                .map(|delay| Json::Number(f64::from(delay)))
+        },
+    },
     bool_field!("hotExit", hot_exit),
     bool_field!("restoreFolder", restore_folder),
     bool_field!("openFolderInNewWindow", open_folder_in_new_window),

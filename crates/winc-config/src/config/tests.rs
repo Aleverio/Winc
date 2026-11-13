@@ -262,6 +262,8 @@ fn round_trips_through_json() {
         ui_background_fit: Some(BackgroundFit::Tile),
         tab_width: Some(8),
         auto_save: Some(true),
+        auto_save_while_typing: Some(true),
+        auto_save_delay_ms: Some(750),
         hot_exit: Some(false),
         restore_folder: Some(false),
         open_folder_in_new_window: Some(true),

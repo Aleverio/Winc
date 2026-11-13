@@ -179,6 +179,13 @@ impl LspClient {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.as_std_mut().creation_flags(CREATE_NO_WINDOW);
+        }
 
         let mut child = match cmd.spawn() {
             Ok(child) => child,
@@ -369,6 +376,15 @@ impl LspClient {
                         dynamic_registration: Some(false),
                         link_support: Some(false),
                     }),
+                    code_action: Some(CodeActionClientCapabilities {
+                        dynamic_registration: Some(false),
+                        code_action_literal_support: Some(CodeActionLiteralSupport {
+                            code_action_kind: CodeActionKindLiteralSupport {
+                                value_set: vec!["quickfix".to_owned()],
+                            },
+                        }),
+                        ..Default::default()
+                    }),
                     ..Default::default()
                 }),
                 ..Default::default()
@@ -392,12 +408,13 @@ impl LspClient {
     ///
     /// - `uri` — The URI of the document that was opened.
     /// - `language_id` — The language identifier for the document.
+    /// - `version` — The document version assigned by the editor.
     /// - `text` — The full initial content of the document.
     pub async fn did_open(
-        &self, uri: Url, language_id: String, text: String,
+        &self, uri: Url, language_id: String, version: i32, text: String,
     ) -> Result<(), String> {
         let params = DidOpenTextDocumentParams {
-            text_document: TextDocumentItem { uri, language_id, version: 1, text },
+            text_document: TextDocumentItem { uri, language_id, version, text },
         };
 
         self.send_notification("textDocument/didOpen", params).await
@@ -451,6 +468,24 @@ impl LspClient {
         };
 
         self.send_request("textDocument/hover", params).await
+    }
+
+    /// Requests compiler-provided quick fixes for a diagnostic range.
+    pub async fn code_actions(
+        &self, uri: Url, range: Range, diagnostics: Vec<Diagnostic>,
+    ) -> Result<Option<CodeActionResponse>, String> {
+        let params = CodeActionParams {
+            text_document: TextDocumentIdentifier { uri },
+            range,
+            context: CodeActionContext {
+                diagnostics,
+                only: None,
+                trigger_kind: None,
+            },
+            work_done_progress_params: WorkDoneProgressParams::default(),
+            partial_result_params: PartialResultParams::default(),
+        };
+        self.send_request("textDocument/codeAction", params).await
     }
 
     /// Sends a JSON-RPC request to the language server and waits for a response.

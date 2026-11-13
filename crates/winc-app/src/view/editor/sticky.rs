@@ -66,6 +66,9 @@ pub(super) fn draw_sticky(app: &mut App, frame: &mut Frame<'_>, index: usize) {
         match states[i] {
             Some(state) => {
                 winc_syntax::highlight_line(language, &chars, state, &mut tokens);
+                if let Some(tree_tokens) = doc.highlighter.tree_sitter_tokens(row.line) {
+                    winc_syntax::overlay_tree_tokens(&mut tokens, tree_tokens, chars.len());
+                }
             }
             None => tokens.clear(),
         }

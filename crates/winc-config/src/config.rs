@@ -59,6 +59,10 @@ pub struct Config {
     pub tab_width: Option<usize>,
     /// 是否在切换标签或窗口失去焦点时保存修改，默认为否。
     pub auto_save: Option<bool>,
+    /// 是否在停止输入一段时间后保存修改，默认为否。
+    pub auto_save_while_typing: Option<bool>,
+    /// 停止输入后自动保存前等待的毫秒数；范围见 [`Config::AUTO_SAVE_DELAY_RANGE`]。
+    pub auto_save_delay_ms: Option<u32>,
     /// 热退出：退出时不逐个询问是否保存，未保存的内容在下次启动时恢复，默认为开。
     pub hot_exit: Option<bool>,
     /// 启动时打开上次退出时打开的目录和标签，默认为开。
@@ -389,6 +393,10 @@ impl Config {
     ///
     /// 超出范围的值在读入时忽略并报告；上下限为经验值。
     pub const TAB_WIDTH_RANGE: std::ops::RangeInclusive<f32> = 1.0..=16.0;
+    /// 自动保存的等待时间范围（毫秒）。
+    pub const AUTO_SAVE_DELAY_RANGE: std::ops::RangeInclusive<f32> = 100.0..=5_000.0;
+    /// 自动保存的默认等待时间（毫秒）。
+    pub const AUTO_SAVE_DELAY_DEFAULT_MS: u32 = 500;
     /// Vim 模式下光标与窗口上下边缘之间保留行数的可用范围（行）。
     ///
     /// 超出范围的值在读入时忽略并报告；上限取自调参，超过窗口高度一半的值效果相同。

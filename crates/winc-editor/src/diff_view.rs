@@ -12,7 +12,7 @@ use winc_core::Lines;
 use winc_core::diff::{self, LineHunk};
 use winc_core::text::{self, MAX_LINE_CHARS};
 use winc_core::wrap::Breaks;
-use winc_syntax::{Highlighter, Language};
+use winc_syntax::{Highlighter, Language, LineState};
 
 use crate::document::{STICKY_HIGHLIGHT_BUDGET, rope_starts_quoted};
 use crate::editing::folding::line_breaks;
@@ -81,6 +81,19 @@ impl DiffSide {
         self
     }
 
+    /// 返回行首高亮状态，并按需准备 Tree-sitter 的 token 缓存。
+    pub fn highlight_state(&mut self, line: usize, budget: usize) -> Option<LineState> {
+        let state = self.highlighter.state_at(&self.text, line, budget);
+        if self
+            .highlighter
+            .needs_tree_sitter_update(self.text.len_bytes())
+        {
+            let source = self.text.to_string();
+            self.highlighter.update_tree_sitter(&source);
+        }
+        state
+    }
+
     /// 返回该侧自上而下显示 `rows` 各行时固定在顶部的块（从外层到内层，最多 `max` 个），以及
     /// 高亮是否已推算到位；参数与返回值的含义同 [`crate::Document::sticky_scopes`]。
     pub fn sticky_scopes(
@@ -92,8 +105,8 @@ impl DiffSide {
     ) -> (Vec<Scope>, bool) {
         // 判断块是否在字符串中，需要 `rows` 及其下方 `SCAN_DOWN` 行的高亮状态，先推算到那里。
         let last = rows.last().copied().unwrap_or(0) + scopes::SCAN_DOWN;
-        let settled = (self.highlighter)
-            .state_at(&self.text, last, STICKY_HIGHLIGHT_BUDGET)
+        let settled = self
+            .highlight_state(last, STICKY_HIGHLIGHT_BUDGET)
             .is_some();
         let language = self.highlighter.language();
         let (text, highlighter) = (&self.text, &mut self.highlighter);

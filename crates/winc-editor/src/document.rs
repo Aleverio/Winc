@@ -939,12 +939,21 @@ impl Document {
     /// （见 [`winc_syntax::Highlighter::state_near`]）。
     pub fn highlight_state(&mut self, line: usize, budget: usize) -> Option<LineState> {
         match &self.text {
-            Content::Rope(rope) => self.highlighter.state_at(rope, line, budget),
-            Content::Large(large) => Some(self.highlighter.state_near(
-                &**large,
-                line,
-                HIGHLIGHT_LOOKBACK,
-            )),
+            Content::Rope(rope) => {
+                let state = self.highlighter.state_at(rope, line, budget);
+                if self.highlighter.needs_tree_sitter_update(rope.len_bytes()) {
+                    let source = rope.to_string();
+                    self.highlighter.update_tree_sitter(&source);
+                }
+                state
+            }
+            Content::Large(large) => {
+                self.highlighter.needs_tree_sitter_update(usize::MAX);
+                Some(
+                    self.highlighter
+                        .state_near(&**large, line, HIGHLIGHT_LOOKBACK),
+                )
+            }
         }
     }
 

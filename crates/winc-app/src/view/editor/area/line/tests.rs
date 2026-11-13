@@ -14,6 +14,17 @@ fn diagnostic_utf16_columns_map_to_character_boundaries() {
 }
 
 #[test]
+fn partial_diagnostic_ranges_expand_to_the_whole_identifier() {
+    let text = "awwwwwwwwwwwwwwwwwww";
+    assert_eq!(
+        Screen::expand_identifier_range(text, 0, 10),
+        (0, text.len())
+    );
+    assert_eq!(Screen::expand_identifier_range("foo.bar", 3, 4), (3, 4));
+    assert_eq!(Screen::expand_identifier_range("foo", 1, 1), (0, 3));
+}
+
+#[test]
 fn the_active_guide_is_the_block_around_the_caret() {
     let code = "fn a() {\n    if x {\n        one();\n\n        two();\n    }\n    three();\n}\n";
     let doc = Document::from_text(DocumentId(1), code);

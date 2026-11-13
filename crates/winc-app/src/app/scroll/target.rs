@@ -216,6 +216,19 @@ impl App {
             ScrollTarget::Pdf => self.scroll_pdf_by(sx, sy),
             ScrollTarget::Picture => self.scroll_picture_by(sx, sy),
             ScrollTarget::Table => self.scroll_table(sx, sy, origin),
+            ScrollTarget::Editor(_)
+                if self
+                    .hits
+                    .diagnostic_popup
+                    .is_some_and(|popup| popup.rect.contains(x, y)) =>
+            {
+                if let Some(popup) = self.hits.diagnostic_popup {
+                    self.diagnostic_scroll.0 =
+                        (self.diagnostic_scroll.0 - sx).clamp(0.0, popup.max_scroll_x);
+                    self.diagnostic_scroll.1 =
+                        (self.diagnostic_scroll.1 - sy).clamp(0.0, popup.max_scroll_y);
+                }
+            }
             ScrollTarget::Editor(id) => self.scroll_editor_by_pixels(id, sx, sy),
             ScrollTarget::Picker
             | ScrollTarget::Commit
@@ -328,5 +341,47 @@ impl App {
             ScrollTarget::Pdf => self.preview.pdf.scroll = scroll,
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::bench::Bench;
+    use winc_config::Config;
+    use winc_editor::{DocumentId, Editor};
+
+    #[test]
+    fn diagnostic_popup_scroll_is_bounded_on_both_axes() {
+        let mut app = App::new(
+            Editor::default(),
+            None,
+            Bench::from_env(),
+            Config::default(),
+        );
+        app.hits.diagnostic_popup = Some(crate::app::hits::DiagnosticPopupHit {
+            rect: Rect::new(10.0, 20.0, 100.0, 80.0),
+            document: DocumentId(0),
+            index: 0,
+            max_scroll_x: 20.0,
+            max_scroll_y: 30.0,
+        });
+
+        app.scroll_target_by(
+            ScrollTarget::Editor(DocumentId(0)),
+            (20.0, 30.0),
+            false,
+            (-10.0, -15.0),
+        );
+        assert_eq!(app.diagnostic_scroll, (10.0, 15.0));
+
+        app.scroll_target_by(
+            ScrollTarget::Editor(DocumentId(0)),
+            (20.0, 30.0),
+            false,
+            (-100.0, 100.0),
+        );
+        assert_eq!(app.diagnostic_scroll, (20.0, 0.0));
     }
 }

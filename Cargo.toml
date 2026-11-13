@@ -34,6 +34,12 @@ winc-watch = { path = "crates/winc-watch" }
 # 只把 LF、CR、CRLF 当换行。默认的 `unicode_lines` 还认 VT、FF、U+0085、U+2028、U+2029，
 # 行号会和编译器、git、grep 报的对不上（C 和 Python 源码里常见分页符 FF）。
 ropey = { version = "1.6", default-features = false, features = ["simd", "cr_lines"] }
+tree-sitter = "0.25"
+tree-sitter-javascript = "0.25"
+tree-sitter-json = "0.24"
+tree-sitter-python = "0.25"
+tree-sitter-rust = "0.24"
+tree-sitter-typescript = "0.23"
 unicode-segmentation = "1"
 unicode-width = "0.2"
 winit = "0.30"

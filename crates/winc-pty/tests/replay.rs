@@ -58,7 +58,11 @@ fn replay(name: &str, styled_rows: &[usize]) {
     }
     let expected = std::fs::read_to_string(&expected_path)
         .unwrap_or_else(|_| panic!("没有 {name}.screen，先用 WINC_UPDATE_FIXTURES=1 生成"));
-    assert_eq!(actual, expected, "{name} 的屏幕和快照不一样");
+    assert_eq!(
+        actual,
+        expected.replace("\r\n", "\n"),
+        "{name} 的屏幕和快照不一样"
+    );
 }
 
 #[test]

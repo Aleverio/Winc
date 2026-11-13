@@ -194,6 +194,7 @@ impl App {
         }
 
         match self.target_at(x, y) {
+            Target::Diagnostic(document, index) => Hover::Diagnostic(document, index),
             Target::WindowControl(control) => Hover::WindowControl(control),
             Target::ResizeEdge(direction) => Hover::ResizeEdge(direction),
             Target::NoticeButton => Hover::NoticeButton,
@@ -274,6 +275,18 @@ impl App {
         }
         if let Some(control) = self.window_control_at(x, y) {
             return Target::WindowControl(control);
+        }
+        if !self.overlays.picker.open
+            && self.bars.goto_input.is_none()
+            && self.panels.name_input.is_none()
+            && !self.settings.open
+            && self.overlays.form_dialog.is_none()
+            && self.popup().is_none()
+            && self.overlays.alert.is_none()
+            && let Some(popup) = self.hits.diagnostic_popup
+            && popup.rect.contains(x, y)
+        {
+            return Target::Diagnostic(popup.document, popup.index);
         }
         // 浮于编辑区之上的卡片和提示条：只响应其中的按钮，卡片的其余区域遮挡下方的部件。
         if let Some(card) = self.hits.changes_card
@@ -500,6 +513,15 @@ impl App {
             return Target::Picture;
         }
         if l.editor.contains(x, y) && self.editor.active.is_some() {
+            if let Some(hit) = self
+                .hits
+                .diagnostics
+                .iter()
+                .rev()
+                .find(|hit| hit.rect.contains(x, y))
+            {
+                return Target::Diagnostic(hit.document, hit.index);
+            }
             return Target::Editor;
         }
         Target::None
@@ -849,6 +871,8 @@ impl App {
 /// 窗口中某一点上最上层的可交互目标，见 [`App::target_at`]。
 #[derive(Debug, Clone, Copy)]
 pub(super) enum Target {
+    /// 标注或详情浮窗中的一处 LSP 诊断。
+    Diagnostic(crate::app::DocumentId, usize),
     /// 遮挡下方但此处没有按钮的区域：提示条、卡片的空白处。
     ///
     /// 点击时不做任何操作，也不传给下方的部件。

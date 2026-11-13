@@ -296,7 +296,11 @@ impl App {
         tokens: &mut Vec<winc_syntax::Token>,
     ) -> LineState {
         if chars.len() < LONG_TOKENS_MIN {
-            return winc_syntax::highlight_line(language, chars, state, tokens);
+            let next = winc_syntax::highlight_line(language, chars, state, tokens);
+            if let Some(tree_tokens) = doc.highlighter.tree_sitter_tokens(line) {
+                winc_syntax::overlay_tree_tokens(tokens, tree_tokens, chars.len());
+            }
+            return next;
         }
         let key = (doc.id, doc.revision, line, chars.len(), state, language.id);
         let mut cache = self.caches.line_tokens.borrow_mut();
@@ -309,6 +313,9 @@ impl App {
             return next;
         }
         let next = winc_syntax::highlight_line(language, chars, state, tokens);
+        if let Some(tree_tokens) = doc.highlighter.tree_sitter_tokens(line) {
+            winc_syntax::overlay_tree_tokens(tokens, tree_tokens, chars.len());
+        }
         if cache.entries.len() >= LONG_TOKENS_LINES {
             cache.entries.remove(0);
         }

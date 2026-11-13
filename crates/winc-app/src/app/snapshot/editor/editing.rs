@@ -312,6 +312,37 @@ fn auto_save_writes_on_switching_tabs_and_leaving_the_window() {
 }
 
 #[test]
+fn auto_save_while_typing_debounces_until_the_configured_delay() {
+    let dir = sample_folder("auto-save-typing");
+    let file = dir.join("short.rs");
+    let mut app = app_with(&file, false);
+    app.config.auto_save_while_typing = Some(true);
+    app.config.auto_save_delay_ms = Some(1_000);
+    let id = app.editor.active().unwrap().id;
+    let original = std::fs::read_to_string(&file).unwrap();
+
+    app.run(Command::Insert("x".into()));
+    let first_due = app.auto_save_pending[&id];
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), original);
+
+    app.run(Command::Insert("y".into()));
+    let second_due = app.auto_save_pending[&id];
+    assert!(second_due > first_due);
+    assert_eq!(
+        app.auto_save_typing_tick(first_due),
+        Some(second_due),
+        "ketikan baru harus mengatur ulang batas waktu"
+    );
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), original);
+
+    assert_eq!(app.auto_save_typing_tick(second_due), None);
+    assert!(std::fs::read_to_string(&file).unwrap().starts_with("xy"));
+    assert!(!app.editor.document(id).unwrap().is_dirty());
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn editorconfig_sets_indentation_and_tidies_on_save() {
     let dir = winc_config::files::canonicalize(sample_folder("editorconfig")).unwrap();
     std::fs::write(

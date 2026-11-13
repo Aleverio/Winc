@@ -38,6 +38,7 @@ pub use editor::editing::BraceKey;
 pub use editor::folding::FoldMotion;
 pub(crate) use editor::folding::fold_column;
 pub use editor::format::{FormatState, ToolAnswer};
+pub(crate) use editor::hint::DiagnosticHint;
 pub use editor::hint::NameHint;
 pub(crate) use editor::scrollbar::{ScrollArea, Scrollbars, ThumbLook};
 pub use editor::sticky::StickyRow;
@@ -259,6 +260,15 @@ pub enum UserEvent {
     GitBase,
     /// LSP hover 请求的结果。
     LspHover(DocumentId, u64, usize, Result<Option<String>, String>),
+    /// LSP 为一条诊断返回的快速修复标题。
+    LspCodeActions(
+        DocumentId,
+        u64,
+        usize,
+        lsp_types::Range,
+        String,
+        Result<Vec<String>, String>,
+    ),
     /// LSP 服务器连接状态变化。
     LspState(String, PathBuf, Option<Result<(), String>>),
     /// LSP 推送的文档诊断。
@@ -442,6 +452,8 @@ impl Focus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Hover {
     None,
+    /// LSP 诊断的 underline 或详情浮窗，参数为文档和诊断序号。
+    Diagnostic(DocumentId, usize),
     /// 文件视图底部大纲里的一处（符号行、行首箭头、标题行及其右端的按钮）。
     Outline(OutlineTarget),
     /// 编辑区右侧的缩略图。
@@ -779,10 +791,18 @@ pub struct App {
     pub(crate) lsp: Option<lsp::LspBridge>,
     /// 已发送给 LSP 的文档路径和版本。
     pub(crate) lsp_sent: HashMap<DocumentId, (PathBuf, u64)>,
+    /// 最近向 LSP 通知保存的文档路径和版本。
+    pub(crate) lsp_saved: HashMap<DocumentId, (PathBuf, u64)>,
     /// 已连接的语言服务状态，按语言和工作区根目录区分。
     pub(crate) lsp_status: HashMap<(String, PathBuf), Result<(), String>>,
     /// 最近收到的 LSP 诊断，按文档路径区分。
     pub(crate) lsp_diagnostics: HashMap<PathBuf, Vec<lsp_types::Diagnostic>>,
+    /// 当前文档版本、诊断对应的语言服务器修复建议。
+    pub(crate) lsp_code_actions: HashMap<(DocumentId, u64, usize), Result<Vec<String>, String>>,
+    /// 正在等待语言服务器返回修复建议的诊断。
+    pub(crate) lsp_code_actions_pending: HashSet<(DocumentId, u64, usize)>,
+    /// 诊断详情浮窗的水平、垂直滚动位置。
+    pub(crate) diagnostic_scroll: (f32, f32),
     /// 当前生效的配置。
     pub config: Config,
     /// 配置与状态文件的写回：文件的路径、配置文件当前的内容和配置的版本号。
@@ -853,6 +873,8 @@ pub struct App {
     pub(crate) jumps: editor::Jumps,
     /// 覆盖在界面之上的浮层：右键菜单、快速打开、对话框、提示框和悬停提示。
     pub(crate) overlays: input::Overlays,
+    /// 最近悬停的诊断详情浮窗，离开后保留四秒。
+    pub(crate) diagnostic_hint: Option<DiagnosticHint>,
     /// 编辑区水平滚动条的内容宽度（逻辑像素），绘制时更新；没有水平滚动条时为 0。
     pub text_content_w: f32,
     /// 预览标签的文档；是否仍是预览标签见 [`App::preview_index`]。
@@ -901,6 +923,8 @@ pub struct App {
     // 状态栏消息和悬停提示
     /// 文件已从磁盘删除、自动保存因此未写入且已提示过用户的文档；失去焦点时不再重复提示。
     deleted_told: HashSet<DocumentId>,
+    /// 停止输入后待自动保存的文档及其截止时刻。
+    pub(crate) auto_save_pending: HashMap<DocumentId, Instant>,
     /// 右上角提示条的状态。
     pub notice: lifecycle::notice::Notice,
 
@@ -1066,6 +1090,17 @@ impl App {
         };
         if hover == self.pointer.hover {
             return;
+        }
+        match hover {
+            Hover::Diagnostic(document, index) => {
+                self.show_diagnostic_hint(document, index);
+                self.request_lsp_code_actions(document, index);
+            }
+            _ => self.retain_diagnostic_hint(Instant::now()),
+        }
+        if !matches!(hover, Hover::Diagnostic(document, index) if self.pointer.hover == Hover::Diagnostic(document, index))
+        {
+            self.diagnostic_scroll = (0.0, 0.0);
         }
 
         // 鼠标移到预览的标题指示条上时，标题列表展开并淡入。

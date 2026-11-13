@@ -98,6 +98,7 @@ fn merge_conflicts_resolve_and_commit() {
     };
     let sh = |args: &[&str]| assert!(git_in(args), "git {args:?}");
     sh(&["init", "-q", "-b", "main"]);
+    sh(&["config", "core.autocrlf", "false"]);
     sh(&["config", "user.name", "t"]);
     sh(&["config", "user.email", "t@t"]);
     sh(&["config", "commit.gpgsign", "false"]);
@@ -255,6 +256,7 @@ fn partial_commits_failed_commits_and_missing_contents() {
         assert!(ok, "git {args:?}");
     };
     sh(&["init", "-q", "-b", "main"]);
+    sh(&["config", "core.autocrlf", "false"]);
     let cancel = Cancel::default();
 
     // 还没有提交过：文件不在 `HEAD` 里，不算失败；只提交一部分时同样可以提交。

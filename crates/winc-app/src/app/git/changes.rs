@@ -338,6 +338,12 @@ impl App {
             let chars: Vec<char> = line.trim_end_matches(['\n', '\r']).chars().collect();
             let mut tokens = Vec::new();
             state = winc_syntax::highlight_line(language, &chars, state, &mut tokens);
+            if let Some(tree_tokens) = self.editor.documents[index]
+                .highlighter
+                .tree_sitter_tokens(hunk.new.start + i)
+            {
+                winc_syntax::overlay_tree_tokens(&mut tokens, tree_tokens, chars.len());
+            }
             let words = marks
                 .as_ref()
                 .and_then(|m| m.old.get(i).cloned())

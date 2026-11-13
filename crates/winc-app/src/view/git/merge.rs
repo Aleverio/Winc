@@ -471,10 +471,7 @@ fn draw_side_pane(
             gutter,
         );
         crate::view::diff::line_chars(source, line, &mut chars);
-        let state =
-            source
-                .highlighter
-                .state_at(&source.text, line, crate::view::editor::HIGHLIGHT_BUDGET);
+        let state = source.highlight_state(line, crate::view::editor::HIGHLIGHT_BUDGET);
         app.caches.highlight_pending |= state.is_none();
         tokens.clear();
         let _ = winc_syntax::highlight_line(
@@ -483,6 +480,9 @@ fn draw_side_pane(
             state.unwrap_or_default(),
             &mut tokens,
         );
+        if let Some(tree_tokens) = source.highlighter.tree_sitter_tokens(line) {
+            winc_syntax::overlay_tree_tokens(&mut tokens, tree_tokens, chars.len());
+        }
         crate::view::editor::draw_glyphs(
             app,
             frame,

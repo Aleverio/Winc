@@ -436,6 +436,7 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
     match row.setting.control() {
         SettingControl::Font => draw_field(app, frame, row, clip),
         SettingControl::Command if editing => draw_field(app, frame, row, clip),
+        SettingControl::Stepper if editing => draw_field(app, frame, row, clip),
         SettingControl::Command => {
             let (text, dim) = match row.setting {
                 Setting::LspServer(id) => app

@@ -324,7 +324,8 @@ impl App {
         if row >= doc.row_count() {
             return Some(doc.text().end_pos());
         }
-        let cell = ((x - (t.x + TEXT_PAD - doc.scroll_x)) / self.metrics.cell)
+        let text_left = f64::from(t.x) + f64::from(TEXT_PAD) - f64::from(doc.scroll_x);
+        let cell = ((f64::from(x) - text_left) / f64::from(self.metrics.cell))
             .round()
             .max(0.0) as usize;
         if doc.is_wrapping() {
@@ -659,9 +660,14 @@ impl App {
         let Some(doc) = self.editor.active_mut() else {
             return;
         };
+        let (doc_id, previous_revision) = (doc.id, doc.revision);
         doc.execute(command, page, tab_width);
+        let edited = doc.revision != previous_revision;
         if let Some(input) = input {
             self.vim_typed(input);
+        }
+        if edited {
+            self.schedule_auto_save(doc_id);
         }
 
         // 行数变化可能改变行号的位数，因此需要重新布局行号栏。

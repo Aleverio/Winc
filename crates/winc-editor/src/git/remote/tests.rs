@@ -194,8 +194,14 @@ fn a_tag_can_be_pushed_and_deleted_from_the_remote() {
         .unwrap();
 
     let exists = || {
-        git.operate(&bare, &["rev-parse", "--verify", "refs/tags/x"])
-            .is_ok()
+        Command::new("git")
+            .arg("--git-dir")
+            .arg(&bare)
+            .args(["rev-parse", "--verify", "refs/tags/x"])
+            .output()
+            .unwrap()
+            .status
+            .success()
     };
     assert!(!exists());
     git.push_tag(&source, "x").unwrap();

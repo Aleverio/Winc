@@ -803,9 +803,7 @@ fn draw_body(
                 None => Breaks::default(),
             };
             prefix = std::cell::OnceCell::new();
-            let state = text_side
-                .highlighter
-                .state_at(&text_side.text, line, HIGHLIGHT_BUDGET);
+            let state = text_side.highlight_state(line, HIGHLIGHT_BUDGET);
             app.caches.highlight_pending |= state.is_none();
             let language = text_side.highlighter.language();
             tokens.clear();
@@ -815,6 +813,9 @@ fn draw_body(
                 state.unwrap_or_default(),
                 &mut tokens,
             );
+            if let Some(tree_tokens) = text_side.highlighter.tree_sitter_tokens(line) {
+                winc_syntax::overlay_tree_tokens(&mut tokens, tree_tokens, chars.len());
+            }
         }
         // 本行各字符之前的格数在首次使用时计算一次，改动的字符、查找结果、选区、光标均按列查表。
         // 本段之外的列限制到本段的两端，绘制宽度为 0。

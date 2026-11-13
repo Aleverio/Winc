@@ -33,7 +33,9 @@ settings-ui-zoom = Zoom
 settings-editor-font = Font
 settings-editor-size = Font Size
 settings-tab-width = Tab Width
-settings-auto-save = Auto Save
+settings-auto-save = Save on Tab/App Switch
+settings-auto-save-typing = Auto Save While Typing
+settings-auto-save-delay = Auto Save Delay (ms)
 settings-hot-exit = Hot Exit
 settings-restore-folder = Restore Last Folder on Launch
 settings-sticky-scroll = Sticky Scroll
@@ -93,7 +95,10 @@ settings-key-search = Search Shortcuts
 
 ## Setting descriptions.
 
-settings-auto-save-desc = Save changes automatically when switching tabs or apps
+settings-auto-save-desc = Save changes when switching tabs or leaving Winc
+settings-auto-save-typing-desc = Save after you stop typing; edits are written after the delay below
+settings-auto-save-delay-desc = Wait this many milliseconds after the last edit. Click the value to enter 100–5000 ms.
+settings-auto-save-delay-invalid = Enter a whole number from 100 to 5000
 settings-hot-exit-desc = Quit without confirming each file, and restore unsaved changes on next launch
 settings-restore-folder-desc = Remember the open folder and tabs on quit, and restore them on next launch
 settings-sticky-scroll-desc = Pin the current function, class and heading to the top of the editor while scrolling

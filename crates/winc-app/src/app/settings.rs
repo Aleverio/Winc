@@ -728,6 +728,10 @@ impl App {
             self.settings_add_lsp_language();
             return;
         }
+        if setting == Setting::AutoSaveDelay {
+            self.settings_start_editing(setting);
+            return;
+        }
 
         match setting.control() {
             SettingControl::Font => self.settings_start_editing(setting),
@@ -818,6 +822,7 @@ impl App {
             Setting::FormatOnSave => self.config.format_on_save == Some(true),
             Setting::FixOnSave => self.config.fix_on_save == Some(true),
             Setting::AutoSave => self.config.auto_save == Some(true),
+            Setting::AutoSaveTyping => self.config.auto_save_while_typing == Some(true),
             Setting::HotExit => self.config.hot_exit != Some(false),
             Setting::RestoreFolder => self.config.restore_folder != Some(false),
             Setting::StickyScroll => self.config.sticky_scroll != Some(false),
@@ -887,6 +892,7 @@ impl App {
             Setting::FormatOnSave => self.config.format_on_save = Some(on),
             Setting::FixOnSave => self.config.fix_on_save = Some(on),
             Setting::AutoSave => self.config.auto_save = Some(on),
+            Setting::AutoSaveTyping => self.config.auto_save_while_typing = Some(on),
             Setting::HotExit => self.config.hot_exit = Some(on),
             Setting::RestoreFolder => self.config.restore_folder = Some(on),
             Setting::StickyScroll => self.config.sticky_scroll = Some(on),
@@ -958,6 +964,13 @@ impl App {
         if setting == Setting::RemoteImages {
             self.preview.markdown.forget_images();
         }
+        if setting == Setting::AutoSaveTyping {
+            if on {
+                self.schedule_dirty_auto_saves();
+            } else {
+                self.auto_save_pending.clear();
+            }
+        }
         if setting == Setting::GitModule {
             self.git_folder_changed();
         }
@@ -979,7 +992,7 @@ impl App {
         self.request_redraw();
     }
 
-    /// 开始编辑字体名或格式化命令：输入框中是当前的设置并全选，直接键入即替换。
+    /// 开始编辑文字或数值设置：输入框中是当前的设置并全选，直接键入即替换。
     pub(super) fn settings_start_editing(&mut self, setting: Setting) {
         if matches!(&self.settings.editing, Some((s, _)) if *s == setting) {
             self.focus = Focus::Setting;
@@ -988,15 +1001,24 @@ impl App {
 
         self.settings_leave_field();
 
-        let current = match tool_setting(setting) {
-            Some((task, id)) => task_commands(&self.config, task).get(id).cloned(),
-            None if let Setting::LspServer(id) = setting => self
-                .config
-                .lsp_servers
-                .get(id)
-                .map(|args| crate::app::lsp::display_lsp_command(args)),
-            None if setting == Setting::TerminalShell => self.config.terminal_shell.clone(),
-            None => self.font_setting(setting).clone(),
+        let current = if setting == Setting::AutoSaveDelay {
+            Some(
+                self.config
+                    .auto_save_delay_ms
+                    .unwrap_or(Config::AUTO_SAVE_DELAY_DEFAULT_MS)
+                    .to_string(),
+            )
+        } else {
+            match tool_setting(setting) {
+                Some((task, id)) => task_commands(&self.config, task).get(id).cloned(),
+                None if let Setting::LspServer(id) = setting => self
+                    .config
+                    .lsp_servers
+                    .get(id)
+                    .map(|args| crate::app::lsp::display_lsp_command(args)),
+                None if setting == Setting::TerminalShell => self.config.terminal_shell.clone(),
+                None => self.font_setting(setting).clone(),
+            }
         };
         let mut field = TextField::default();
         field.set_text(current.as_deref().unwrap_or(""));
@@ -1090,13 +1112,40 @@ impl App {
         self.request_redraw();
     }
 
-    /// 提交正在编辑的字体名或命令。
+    /// 提交正在编辑的字体名、命令或数值。
     pub(super) fn settings_commit_field(&mut self) {
         let Some((setting, field)) = self.settings.editing.as_ref() else {
             return;
         };
         let (setting, text) = (*setting, field.text().trim().to_owned());
         let value = (!text.is_empty()).then_some(text);
+
+        if setting == Setting::AutoSaveDelay {
+            let delay = match value.and_then(|value| value.parse::<u32>().ok()) {
+                Some(delay)
+                    if (Config::AUTO_SAVE_DELAY_RANGE.start().round() as u32
+                        ..=Config::AUTO_SAVE_DELAY_RANGE.end().round() as u32)
+                        .contains(&delay) =>
+                {
+                    delay
+                }
+                _ => {
+                    self.settings.error =
+                        Some((setting, t!("settings-auto-save-delay-invalid").to_owned()));
+                    self.request_redraw();
+                    return;
+                }
+            };
+            self.config.auto_save_delay_ms = Some(delay);
+            self.settings.editing = None;
+            self.settings.editing_original = None;
+            self.settings.error = None;
+            self.focus = Focus::Settings;
+            self.save_config();
+            self.schedule_dirty_auto_saves();
+            self.request_redraw();
+            return;
+        }
 
         match tool_setting(setting) {
             Some((task, id)) => self.settings_commit_command(task, id, value),
@@ -1303,6 +1352,12 @@ impl App {
                 self.config.tab_width.unwrap_or(self.editor.tab_width) as f32,
                 Config::TAB_WIDTH_RANGE,
             ),
+            Setting::AutoSaveDelay => (
+                self.config
+                    .auto_save_delay_ms
+                    .unwrap_or(Config::AUTO_SAVE_DELAY_DEFAULT_MS) as f32,
+                Config::AUTO_SAVE_DELAY_RANGE,
+            ),
             _ => return (String::new(), true, true),
         };
 
@@ -1357,6 +1412,18 @@ impl App {
                 self.config.tab_width = Some(next);
                 self.editor.tab_width = next;
                 self.ensure_caret_visible();
+            }
+            Setting::AutoSaveDelay => {
+                let range = Config::AUTO_SAVE_DELAY_RANGE;
+                let current = self
+                    .config
+                    .auto_save_delay_ms
+                    .unwrap_or(Config::AUTO_SAVE_DELAY_DEFAULT_MS);
+                let next = (current as i32 + if up { 100 } else { -100 })
+                    .clamp(range.start().round() as i32, range.end().round() as i32)
+                    as u32;
+                self.config.auto_save_delay_ms = Some(next);
+                self.schedule_dirty_auto_saves();
             }
             _ => return,
         }

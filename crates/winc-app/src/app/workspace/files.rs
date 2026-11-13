@@ -549,6 +549,81 @@ impl App {
         if self.config.auto_save != Some(true) {
             return;
         }
+        self.auto_save_documents(ids);
+    }
+
+    /// 在各文档修改后重置静默计时；打开自动保存时也用于安排现有的未保存文档。
+    pub(in crate::app) fn schedule_dirty_auto_saves(&mut self) {
+        if self.config.auto_save_while_typing != Some(true) {
+            self.auto_save_pending.clear();
+            return;
+        }
+        let ids: Vec<_> = self
+            .editor
+            .documents
+            .iter()
+            .filter(|doc| doc.is_dirty())
+            .map(|doc| doc.id)
+            .collect();
+        let due = Instant::now() + self.auto_save_delay();
+        self.auto_save_pending.retain(|id, _| ids.contains(id));
+        self.auto_save_pending
+            .extend(ids.into_iter().map(|id| (id, due)));
+    }
+
+    /// 文档内容确实变化时，从当前时刻重新开始等待。
+    pub(in crate::app) fn schedule_auto_save(&mut self, id: DocumentId) {
+        if self.config.auto_save_while_typing != Some(true) {
+            return;
+        }
+        if self.editor.document(id).is_some_and(|doc| doc.is_dirty()) {
+            self.auto_save_pending
+                .insert(id, Instant::now() + self.auto_save_delay());
+        } else {
+            self.auto_save_pending.remove(&id);
+        }
+    }
+
+    /// 到期后安静地保存文档；返回下一个需要唤醒的时刻。
+    pub(in crate::app) fn auto_save_typing_tick(&mut self, now: Instant) -> Option<Instant> {
+        if self.config.auto_save_while_typing != Some(true) {
+            self.auto_save_pending.clear();
+            return None;
+        }
+        let due: Vec<_> = self
+            .auto_save_pending
+            .iter()
+            .filter_map(|(&id, &at)| (now >= at).then_some(id))
+            .collect();
+        #[cfg(target_os = "macos")]
+        if !due.is_empty()
+            && self
+                .window
+                .handle
+                .as_deref()
+                .is_some_and(crate::macos::has_sheet)
+        {
+            let retry = now + Duration::from_millis(250);
+            self.auto_save_pending
+                .extend(due.into_iter().map(|id| (id, retry)));
+            return self.auto_save_pending.values().copied().min();
+        }
+        for id in due {
+            self.auto_save_pending.remove(&id);
+            self.auto_save_documents(&[id]);
+        }
+        self.auto_save_pending.values().copied().min()
+    }
+
+    fn auto_save_delay(&self) -> Duration {
+        Duration::from_millis(u64::from(
+            self.config
+                .auto_save_delay_ms
+                .unwrap_or(winc_config::Config::AUTO_SAVE_DELAY_DEFAULT_MS),
+        ))
+    }
+
+    fn auto_save_documents(&mut self, ids: &[DocumentId]) {
         #[cfg(target_os = "macos")]
         if self
             .window

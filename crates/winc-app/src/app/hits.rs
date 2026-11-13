@@ -4,6 +4,22 @@
 
 use super::*;
 
+#[derive(Clone, Copy)]
+pub(crate) struct DiagnosticHit {
+    pub rect: Rect,
+    pub document: DocumentId,
+    pub index: usize,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct DiagnosticPopupHit {
+    pub rect: Rect,
+    pub document: DocumentId,
+    pub index: usize,
+    pub max_scroll_x: f32,
+    pub max_scroll_y: f32,
+}
+
 /// 本帧绘制时记录的可点击范围与位置。
 #[derive(Default)]
 pub struct Hits {
@@ -91,6 +107,10 @@ pub struct Hits {
     ///
     /// 文字宽度要到绘制时才知道，悬停和点击使用这里记录的位置。
     pub(crate) install_links: Vec<(crate::layout::Setting, Rect)>,
+    /// 当前文本中各诊断下划线的悬停区域。
+    pub(crate) diagnostics: Vec<DiagnosticHit>,
+    /// 当前显示的诊断详情浮窗及其可滚动范围。
+    pub(crate) diagnostic_popup: Option<DiagnosticPopupHit>,
 }
 
 impl Hits {
@@ -134,6 +154,8 @@ impl Hits {
             pdf_thumbs,
             pdf_tools,
             install_links,
+            diagnostics,
+            diagnostic_popup: _,
         } = self;
         start.clear();
         placeholder.clear();
@@ -170,5 +192,6 @@ impl Hits {
         pdf_thumbs.clear();
         pdf_tools.clear();
         install_links.clear();
+        diagnostics.clear();
     }
 }

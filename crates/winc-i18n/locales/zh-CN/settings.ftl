@@ -32,8 +32,10 @@ settings-font-weight = 全局字重
 settings-ui-zoom = 界面缩放
 settings-editor-font = 字体
 settings-editor-size = 字号
-settings-tab-width = 制表符长度
-settings-auto-save = 自动保存
+settings-tab-width = 制表符宽度
+settings-auto-save = 切换标签或应用时保存
+settings-auto-save-typing = 输入后自动保存
+settings-auto-save-delay = 自动保存延迟（毫秒）
 settings-hot-exit = 热退出
 settings-restore-folder = 启动时恢复上次的目录
 settings-sticky-scroll = 粘滞滚动
@@ -93,7 +95,10 @@ settings-key-search = 搜索快捷键
 
 ## 设置项的说明。
 
-settings-auto-save-desc = 切换标签页或应用时自动保存修改
+settings-auto-save-desc = 切换标签页或离开 Winc 时保存修改
+settings-auto-save-typing-desc = 停止输入一段时间后保存；延迟时间可在下方设置
+settings-auto-save-delay-desc = 输入停止后等待的毫秒数；点击数值可填写 100–5000 毫秒
+settings-auto-save-delay-invalid = 请输入 100 到 5000 之间的整数
 settings-hot-exit-desc = 退出时无需逐个确认保存，下次启动时恢复未保存的修改
 settings-restore-folder-desc = 退出时记录打开的目录和标签页，下次启动时恢复
 settings-sticky-scroll-desc = 滚动时将当前函数、类和标题固定在编辑区顶部

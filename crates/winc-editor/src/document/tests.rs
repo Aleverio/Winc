@@ -85,6 +85,20 @@ fn indentation_and_line_endings_chosen_in_the_status_bar() {
 }
 
 #[test]
+fn document_prepares_tree_sitter_tokens_for_supported_languages() {
+    let mut doc = Document::from_text(DocumentId(1), "fn greet() {}\n");
+    doc.set_language("main.rs");
+    assert_eq!(doc.highlight_state(0, 10), Some(LineState::Normal));
+    assert!(
+        doc.highlighter
+            .tree_sitter_tokens(0)
+            .unwrap()
+            .iter()
+            .any(|token| token.kind == winc_syntax::TokenKind::Function)
+    );
+}
+
+#[test]
 fn save_round_trip_preserves_bytes() {
     let dir = scratch("save");
     let path = dir.join("a.py");

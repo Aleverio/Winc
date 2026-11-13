@@ -1,12 +1,14 @@
-//! 语法高亮：按 [`Language`] 的规则表逐行做词法分析，跨行结构的状态记录在行首的 [`LineState`] 中。
+//! 语法高亮：受支持的源语言由 Tree-sitter 解析，其他语言及大型文件使用逐行 lexer。
 //!
-//! [`Highlighter`] 按文档逐行缓存行首状态，编辑后从修改行开始失效，绘制时只推算可见区域。
-//! 本 crate 不依赖绘制与主题：token 只标出类别，颜色由 `winc-render` 和 `winc-app` 决定。
+//! [`Highlighter`] 缓存逐行 lexer 状态，并为 Tree-sitter 文档增量更新语法树。编辑器按行读取 token；
+//! 本 crate 不依赖绘制与主题，颜色由 `winc-render` 和 `winc-app` 决定。
 
 mod lang;
 mod lexer;
+mod tree_sitter;
 
 use std::ops::ControlFlow;
+use std::sync::Arc;
 
 use winc_core::text::{Lines, MAX_LINE_BYTES, MAX_LINE_CHARS};
 
@@ -15,8 +17,9 @@ pub use lang::{
     detect_with_first_line, find, languages,
 };
 pub use lexer::{LineState, Token, TokenKind, highlight_line};
+pub use tree_sitter::{MAX_TREE_SITTER_BYTES, overlay_tree_tokens};
 
-/// 一个文档的高亮状态：每行行首的词法状态缓存。
+/// 一个文档的高亮状态：逐行 lexer 状态缓存及可选的 Tree-sitter 语法树。
 ///
 /// 只保存已经推算到的行，其余行在需要时向后推算；编辑后从修改所在行开始失效。
 #[derive(Debug, Clone)]
@@ -36,6 +39,10 @@ pub struct Highlighter {
     near_from: usize,
     /// 推算状态时复用的字符缓冲，避免每行分配。
     chars: Vec<char>,
+    /// Tree-sitter 语法树和按行缓存的语法 token（适用于受支持的小型源文件）。
+    tree_sitter: Option<Arc<tree_sitter::TreeTokens>>,
+    /// 文本从上次建立语法树后发生了变化。
+    tree_sitter_dirty: bool,
 }
 
 impl Highlighter {
@@ -47,6 +54,8 @@ impl Highlighter {
             near: Vec::new(),
             near_from: 0,
             chars: Vec::new(),
+            tree_sitter: None,
+            tree_sitter_dirty: true,
         }
     }
 
@@ -68,6 +77,44 @@ impl Highlighter {
             Some(kept) => self.near.truncate(kept + 1),
             None => self.near.clear(),
         }
+        self.tree_sitter_dirty = true;
+    }
+
+    /// 是否应为当前文本更新 Tree-sitter 语法树。
+    ///
+    /// 对不支持的语言和超出大小上限的文件清除树缓存，继续使用逐行 lexer。
+    pub fn needs_tree_sitter_update(&mut self, byte_len: usize) -> bool {
+        if byte_len > MAX_TREE_SITTER_BYTES || !tree_sitter::supports(self.language.id) {
+            self.tree_sitter = None;
+            self.tree_sitter_dirty = false;
+            return false;
+        }
+        self.tree_sitter_dirty
+    }
+
+    /// 使用当前源代码建立或增量更新 Tree-sitter 语法树。
+    ///
+    /// 超过 [`MAX_TREE_SITTER_BYTES`] 的文件由逐行 lexer 处理，避免完整源文本和语法树占用过多内存。
+    pub fn update_tree_sitter(&mut self, source: &str) {
+        let previous = self
+            .tree_sitter
+            .take()
+            .and_then(|cache| Arc::try_unwrap(cache).ok());
+        self.tree_sitter =
+            tree_sitter::TreeTokens::update(self.language, source, previous).map(Arc::new);
+        self.tree_sitter_dirty = false;
+    }
+
+    /// 返回已准备好的 Tree-sitter token；文本变更后、重建完成前返回 `None`。
+    pub fn tree_sitter_tokens(&self, line: usize) -> Option<&[Token]> {
+        if self.tree_sitter_dirty {
+            return None;
+        }
+        self.tree_sitter
+            .as_ref()
+            .filter(|tokens| tokens.language_id == self.language.id)
+            .and_then(|tokens| tokens.lines.get(line))
+            .map(Vec::as_slice)
     }
 
     /// 返回第 `line` 行行首的状态（行号从 0 起）；本次推算后仍未到达该行时返回 `None`。

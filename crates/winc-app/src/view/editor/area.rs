@@ -16,6 +16,7 @@ use winc_syntax::{Language, Token};
 use super::*;
 use crate::app::FoldMotion;
 use crate::app::git::merge::MergeTarget;
+use crate::app::hits::DiagnosticHit;
 
 /// 绘制当前文档的文本区，`index` 是它在 `documents` 中的位置。
 ///
@@ -244,6 +245,7 @@ pub(super) fn draw_text_area(app: &mut App, frame: &mut Frame<'_>, index: usize)
         screen.draw_conflict_markers(frame, &conflicts, &mut merge_hits);
     }
     app.hits.merge = merge_hits;
+    app.hits.diagnostics.extend(scratch.diagnostic_hits);
 
     app.hits.folded = scratch.folded_hits;
     app.hits.long_lines = scratch.long_hits;
@@ -336,6 +338,7 @@ type LineHits = Vec<(Rect, usize)>;
 /// 逐行绘制时复用的缓冲区，以及从各行收集的结果。
 struct Scratch {
     chars: Vec<char>,
+    diagnostic_hits: Vec<DiagnosticHit>,
     /// 按列对齐时各字符的单元格位置和所属的列。
     cells: Vec<usize>,
     fields: Vec<usize>,
@@ -355,6 +358,7 @@ impl Scratch {
     fn new() -> Self {
         Self {
             chars: Vec::with_capacity(256),
+            diagnostic_hits: Vec::new(),
             cells: Vec::new(),
             fields: Vec::new(),
             tokens: Vec::with_capacity(32),

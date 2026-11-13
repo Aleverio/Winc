@@ -78,6 +78,43 @@ fn scan_sees_only_line_prefix() {
     assert_eq!(highlighter.state_near(&text, 1, 10), LineState::Normal);
 }
 
+#[test]
+fn tree_sitter_tokens_cache_incrementally_and_fall_back_for_large_files() {
+    let language = find("rust").unwrap();
+    let mut highlighter = Highlighter::new(language);
+    let source = "fn first() {}\n";
+    assert!(highlighter.needs_tree_sitter_update(source.len()));
+    highlighter.update_tree_sitter(source);
+    assert!(
+        highlighter
+            .tree_sitter_tokens(0)
+            .unwrap()
+            .iter()
+            .any(|token| token.kind == TokenKind::Function)
+    );
+    assert!(!highlighter.needs_tree_sitter_update(source.len()));
+
+    highlighter.invalidate_from(0);
+    assert!(highlighter.tree_sitter_tokens(0).is_none());
+    let changed = "fn second() {}\n";
+    assert!(highlighter.needs_tree_sitter_update(changed.len()));
+    highlighter.update_tree_sitter(changed);
+    assert!(
+        highlighter
+            .tree_sitter_tokens(0)
+            .unwrap()
+            .iter()
+            .any(|token| token.kind == TokenKind::Function)
+    );
+
+    assert!(!highlighter.needs_tree_sitter_update(MAX_TREE_SITTER_BYTES + 1));
+    assert!(highlighter.tree_sitter_tokens(0).is_none());
+
+    let mut fallback = Highlighter::new(find("markdown").unwrap());
+    assert!(!fallback.needs_tree_sitter_update(20));
+    assert!(fallback.tree_sitter_tokens(0).is_none());
+}
+
 mod measure {
     use ropey::Rope;
 

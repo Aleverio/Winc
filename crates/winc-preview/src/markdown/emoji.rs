@@ -22,7 +22,11 @@ fn lookup(name: &str) -> Option<&'static str> {
     });
     let line = |i: usize| {
         let from = starts[i] as usize;
-        let line = TABLE[from..].split('\n').next().unwrap_or_default();
+        let line = TABLE[from..]
+            .split('\n')
+            .next()
+            .unwrap_or_default()
+            .trim_end_matches('\r');
         line.split_once('\t').unwrap_or((line, ""))
     };
     let i = starts

@@ -13,6 +13,7 @@ fn sh(dir: &Path, args: &[&str]) -> String {
         .arg(dir)
         .args(["-c", "user.name=t", "-c", "user.email=t@t"])
         .args(["-c", "commit.gpgsign=false"])
+        .args(["-c", "safe.bareRepository=all"])
         .args(args)
         .output()
         .unwrap();
@@ -28,6 +29,7 @@ fn cloned(name: &str) -> (PathBuf, PathBuf) {
     sh(&remote, &["init", "-q", "--bare", "-b", "main"]);
     let work = crate::test_util::scratch(name);
     sh(&work, &["init", "-q", "-b", "main"]);
+    sh(&work, &["config", "core.autocrlf", "false"]);
     std::fs::write(work.join("a.txt"), "one\n").unwrap();
     sh(&work, &["add", "."]);
     sh(&work, &["commit", "-q", "-m", "one"]);

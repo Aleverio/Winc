@@ -52,6 +52,7 @@ impl App {
             run: terminal::run::RunConfigs::default(),
             lsp: None,
             lsp_sent: HashMap::new(),
+            lsp_saved: HashMap::new(),
             lsp_status: HashMap::new(),
             lsp_diagnostics: HashMap::new(),
             store: crate::app::settings::Store {
@@ -60,6 +61,9 @@ impl App {
                 state_path: None,
                 config_rev: 0,
             },
+            lsp_code_actions: HashMap::new(),
+            lsp_code_actions_pending: HashSet::new(),
+            diagnostic_scroll: (0.0, 0.0),
             config,
             theme_choice,
             state: State::default(),
@@ -165,6 +169,7 @@ impl App {
                 menu_button: None,
                 tooltip: Default::default(),
             },
+            diagnostic_hint: None,
             text_content_w: 0.0,
             preview_tab: None,
             clipboard: Default::default(),
@@ -204,6 +209,7 @@ impl App {
             closing: Default::default(),
             ask_on_quit: Arc::new(AtomicBool::new(false)),
             deleted_told: HashSet::new(),
+            auto_save_pending: HashMap::new(),
             notice: Default::default(),
             frame: crate::app::lifecycle::FrameState {
                 renderer: None,

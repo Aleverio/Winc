@@ -19,6 +19,8 @@ struct SyncRequest {
     revision: u64,
     text: String,
     opened: bool,
+    changed: bool,
+    saved: bool,
 }
 
 struct HoverRequest {
@@ -33,9 +35,22 @@ struct HoverRequest {
     caret: usize,
 }
 
+struct CodeActionsRequest {
+    language: String,
+    command: Vec<String>,
+    root: PathBuf,
+    path: PathBuf,
+    range: lsp_types::Range,
+    diagnostic: lsp_types::Diagnostic,
+    document: winc_editor::DocumentId,
+    revision: u64,
+    index: usize,
+}
+
 enum Request {
     Sync(SyncRequest),
     Hover(HoverRequest),
+    CodeActions(Box<CodeActionsRequest>),
     Reset(String, PathBuf),
 }
 
@@ -112,17 +127,33 @@ async fn handle_request(
             revision,
             text,
             opened,
+            changed,
+            saved,
         }) => {
             let client = get_client(&language, &command, &root, clients, proxy).await?;
             let uri = file_uri(&path)?;
-            let result = if opened {
-                client.did_open(uri, language, text).await
-            } else {
+            if opened {
+                client
+                    .did_open(
+                        uri.clone(),
+                        language,
+                        revision.min(i32::MAX as u64) as i32,
+                        text,
+                    )
+                    .await
+                    .map_err(|error| format!("LSP document open failed: {error}"))?;
+            } else if changed {
                 client
                     .did_change(uri, revision.min(i32::MAX as u64) as i32, text)
                     .await
-            };
-            result.map_err(|error| format!("LSP document sync failed: {error}"))?;
+                    .map_err(|error| format!("LSP document sync failed: {error}"))?;
+            }
+            if saved {
+                client
+                    .did_save(file_uri(&path)?)
+                    .await
+                    .map_err(|error| format!("LSP document save notification failed: {error}"))?;
+            }
             Ok(None)
         }
         Request::Hover(HoverRequest {
@@ -146,6 +177,47 @@ async fn handle_request(
             }
             .await;
             Ok(Some(UserEvent::LspHover(document, revision, caret, result)))
+        }
+        Request::CodeActions(request) => {
+            let CodeActionsRequest {
+                language,
+                command,
+                root,
+                path,
+                range,
+                diagnostic,
+                document,
+                revision,
+                index,
+            } = *request;
+            let requested_range = range;
+            let requested_message = diagnostic.message.clone();
+            let result = async {
+                let client = get_client(&language, &command, &root, clients, proxy).await?;
+                let actions = client
+                    .code_actions(file_uri(&path)?, range, vec![diagnostic])
+                    .await
+                    .map_err(|error| format!("LSP quick-fix request failed: {error}"))?;
+                Ok::<_, String>(
+                    actions
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|action| match action {
+                            lsp_types::CodeActionOrCommand::CodeAction(action) => action.title,
+                            lsp_types::CodeActionOrCommand::Command(command) => command.title,
+                        })
+                        .collect(),
+                )
+            }
+            .await;
+            Ok(Some(UserEvent::LspCodeActions(
+                document,
+                revision,
+                index,
+                requested_range,
+                requested_message,
+                result,
+            )))
         }
         Request::Reset(language, root) => {
             if let Some(client) = clients.remove(&(language.clone(), root.clone())) {
@@ -342,6 +414,11 @@ impl App {
                 .document(*id)
                 .is_none_or(|doc| doc.highlighter.language().id != language)
         });
+        self.lsp_saved.retain(|id, _| {
+            self.editor
+                .document(*id)
+                .is_none_or(|doc| doc.highlighter.language().id != language)
+        });
         self.lsp_diagnostics.retain(|path, _| {
             !self.editor.documents.iter().any(|doc| {
                 doc.path.as_ref() == Some(path) && doc.highlighter.language().id == language
@@ -351,11 +428,11 @@ impl App {
     }
 
     pub(in crate::app) fn sync_lsp_documents(&mut self) {
-        if self.config.lsp_servers.is_empty() {
+        if self.config.lsp_servers.is_empty() && self.config.lsp_auto.is_empty() {
             return;
         }
 
-        let Some(proxy) = self.proxy.clone() else {
+        let Some(proxy) = self.link.proxy.clone() else {
             return;
         };
         if self.lsp.is_none() {
@@ -388,17 +465,25 @@ impl App {
                 continue;
             };
             open.insert(doc.id);
-            if self
+            let changed = self
                 .lsp_sent
                 .get(&doc.id)
-                .is_some_and(|(sent_path, revision)| sent_path == path && *revision == doc.revision)
-            {
-                continue;
-            }
+                .is_none_or(|(sent_path, revision)| sent_path != path || *revision != doc.revision);
             let opened = self
                 .lsp_sent
                 .get(&doc.id)
                 .is_none_or(|(sent_path, _)| sent_path != path);
+            let saved = !doc.is_dirty()
+                && (opened
+                    || self
+                        .lsp_saved
+                        .get(&doc.id)
+                        .is_none_or(|(saved_path, revision)| {
+                            saved_path != path || *revision != doc.revision
+                        }));
+            if !changed && !saved {
+                continue;
+            }
             let root = self
                 .editor
                 .root()
@@ -415,14 +500,17 @@ impl App {
                 root,
                 rope.to_string(),
                 opened,
+                changed,
+                saved,
             ));
         }
         self.lsp_sent.retain(|id, _| open.contains(id));
+        self.lsp_saved.retain(|id, _| open.contains(id));
 
         let Some(bridge) = self.lsp.clone() else {
             return;
         };
-        for (id, path, revision, language, command, root, text, opened) in pending {
+        for (id, path, revision, language, command, root, text, opened, changed, saved) in pending {
             match bridge.sync(SyncRequest {
                 language,
                 command,
@@ -431,9 +519,14 @@ impl App {
                 revision,
                 text,
                 opened,
+                changed,
+                saved,
             }) {
                 Ok(()) => {
-                    self.lsp_sent.insert(id, (path, revision));
+                    self.lsp_sent.insert(id, (path.clone(), revision));
+                    if saved {
+                        self.lsp_saved.insert(id, (path, revision));
+                    }
                 }
                 Err(error) => self.flash(format!("LSP worker stopped: {error}")),
             }
@@ -499,6 +592,109 @@ impl App {
             caret,
         }) {
             self.flash(format!("Could not request LSP hover: {error}"));
+        }
+    }
+
+    pub(in crate::app) fn request_lsp_code_actions(
+        &mut self,
+        document: winc_editor::DocumentId,
+        index: usize,
+    ) {
+        let Some((revision, path, language, diagnostic)) =
+            self.editor.document(document).and_then(|doc| {
+                let path = doc.path.clone()?;
+                let language = doc.highlighter.language().id.to_owned();
+                let diagnostic = self.lsp_diagnostics.get(&path)?.get(index)?.clone();
+                Some((doc.revision, path, language, diagnostic))
+            })
+        else {
+            return;
+        };
+        let key = (document, revision, index);
+        self.lsp_code_actions
+            .retain(|(id, version, _), _| *id != document || *version == revision);
+        self.lsp_code_actions_pending
+            .retain(|(id, version, _)| *id != document || *version == revision);
+        if self.lsp_code_actions.contains_key(&key) || !self.lsp_code_actions_pending.insert(key) {
+            return;
+        }
+        let command = if self.config.lsp_auto.iter().any(|id| id == &language) {
+            auto_server_command(&language)
+        } else {
+            self.config.lsp_servers.get(&language).cloned()
+        };
+        let Some(command) = command else {
+            self.lsp_code_actions_pending.remove(&key);
+            self.lsp_code_actions.insert(key, Ok(Vec::new()));
+            self.request_redraw();
+            return;
+        };
+        let root = self
+            .editor
+            .root()
+            .filter(|root| path.starts_with(root))
+            .or_else(|| path.parent())
+            .unwrap_or(&path)
+            .to_path_buf();
+        let Some(bridge) = self.lsp.clone() else {
+            self.lsp_code_actions_pending.remove(&key);
+            self.lsp_code_actions.insert(
+                key,
+                Err("The language-server worker is unavailable.".to_owned()),
+            );
+            self.request_redraw();
+            return;
+        };
+        if let Err(error) = bridge
+            .sender
+            .send(Request::CodeActions(Box::new(CodeActionsRequest {
+                language,
+                command,
+                root,
+                path,
+                range: diagnostic.range,
+                diagnostic,
+                document,
+                revision,
+                index,
+            })))
+        {
+            self.lsp_code_actions_pending.remove(&key);
+            self.lsp_code_actions.insert(
+                key,
+                Err(format!("Could not request compiler suggestions: {error}")),
+            );
+            self.request_redraw();
+        }
+    }
+
+    pub(in crate::app) fn lsp_code_actions_received(
+        &mut self,
+        document: winc_editor::DocumentId,
+        revision: u64,
+        index: usize,
+        range: lsp_types::Range,
+        message: String,
+        result: Result<Vec<String>, String>,
+    ) {
+        let key = (document, revision, index);
+        self.lsp_code_actions_pending.remove(&key);
+        let current = self
+            .editor
+            .document(document)
+            .filter(|doc| doc.revision == revision);
+        let still_current = current.is_some_and(|doc| {
+            doc.path
+                .as_ref()
+                .and_then(|path| self.lsp_diagnostics.get(path))
+                .and_then(|diagnostics| diagnostics.get(index))
+                .is_some_and(|diagnostic| {
+                    diagnostic.range == range && diagnostic.message == message
+                })
+        });
+        if still_current {
+            self.lsp_code_actions.insert(key, result);
+            self.request_redraw();
         }
     }
 

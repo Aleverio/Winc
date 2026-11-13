@@ -126,6 +126,24 @@ fn zoom_scales_the_whole_window_in_steps() {
 }
 
 #[test]
+fn auto_save_delay_accepts_a_custom_value_and_rejects_out_of_range_input() {
+    let mut app = blank_app(false);
+    app.settings_start_editing(Setting::AutoSaveDelay);
+    app.settings.editing.as_mut().unwrap().1.set_text("1250");
+    app.settings_commit_field();
+    assert_eq!(app.config.auto_save_delay_ms, Some(1_250));
+
+    app.settings_start_editing(Setting::AutoSaveDelay);
+    app.settings.editing.as_mut().unwrap().1.set_text("99");
+    app.settings_commit_field();
+    assert_eq!(app.config.auto_save_delay_ms, Some(1_250));
+    assert_eq!(
+        app.settings.error.as_ref().map(|(setting, _)| *setting),
+        Some(Setting::AutoSaveDelay)
+    );
+}
+
+#[test]
 fn long_descriptions_wrap_and_make_the_row_taller() {
     use crate::theme::{SETTINGS_DESC_LINE, SETTINGS_DESC_LINES, SETTINGS_ROW_TALL};
 
@@ -345,6 +363,16 @@ fn settings_mouse_controls_use_the_same_geometry_as_drawing() {
         app.settings.hover,
         Some(SettingsPart::Increase(Setting::TabWidth))
     );
+
+    // 点击自动保存延迟的数值区域可编辑自定义毫秒数。
+    app.settings_scroll_by(-1_000.0);
+    paint(&mut app);
+    click_part(&mut app, SettingsPart::Field(Setting::AutoSaveDelay));
+    assert!(matches!(
+        &app.settings.editing,
+        Some((Setting::AutoSaveDelay, _))
+    ));
+    app.settings_cancel_field();
 
     click_part(&mut app, SettingsPart::Page(SettingsPage::Appearance));
     click_part(&mut app, SettingsPart::Theme(ThemeChoice::Dark));

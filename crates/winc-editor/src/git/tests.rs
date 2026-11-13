@@ -275,6 +275,7 @@ fn runs_the_real_git() {
         assert!(ok, "git {args:?}");
     };
     sh(&["init", "-q", "-b", "main"]);
+    sh(&["config", "core.autocrlf", "false"]);
     std::fs::write(dir.join("src/a.rs"), "one\n").unwrap();
     sh(&["add", "."]);
     sh(&["commit", "-q", "-m", "first"]);
@@ -595,6 +596,7 @@ fn untrusted_repository_commands_do_not_run() {
         assert!(ok, "git {args:?}");
     };
     sh(&["init", "-q", "-b", "main"]);
+    sh(&["config", "core.autocrlf", "false"]);
     sh(&["config", "user.name", "t"]);
     sh(&["config", "user.email", "t@t"]);
     sh(&["config", "commit.gpgsign", "false"]);
@@ -1192,7 +1194,7 @@ fn publishing_a_branch_pushes_to_origin_before_other_remotes() {
     assert_eq!(String::from_utf8_lossy(&upstream.stdout).trim(), "origin");
     let pushed = |bare: &Path| {
         Command::new("git")
-            .arg("-C")
+            .arg("--git-dir")
             .arg(bare)
             .args(["rev-parse", "--verify", "--quiet", "refs/heads/feature"])
             .status()

@@ -161,6 +161,9 @@ impl App {
         // 分支：快速打开面板开着时点其他位置关掉快速打开面板，正在输入名字时点其他位置
         // 先提交名字。
         match target {
+            Target::Diagnostic(document, index) => {
+                self.set_hover(Hover::Diagnostic(document, index));
+            }
             Target::Blocked | Target::None => {}
             Target::NoticeButton => self.run_notice_action(),
             Target::Change(target) => self.press_change(target),

@@ -170,6 +170,9 @@ fn draw_side(
             match source.highlighter.known_state(line) {
                 Some(state) => {
                     winc_syntax::highlight_line(language, &chars, state, &mut tokens);
+                    if let Some(tree_tokens) = source.highlighter.tree_sitter_tokens(line) {
+                        winc_syntax::overlay_tree_tokens(&mut tokens, tree_tokens, chars.len());
+                    }
                 }
                 None => tokens.clear(),
             }

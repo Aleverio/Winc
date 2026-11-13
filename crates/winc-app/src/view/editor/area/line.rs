@@ -2,6 +2,7 @@
 
 use winc_config::RenderWhitespace;
 use winc_i18n::t;
+use winc_render::Stroke;
 
 use super::*;
 use crate::app::vim::CaretShape;
@@ -31,6 +32,7 @@ impl Screen<'_> {
             tokens,
             number,
             guide_indent,
+            diagnostic_hits,
             folded_hits,
             long_hits,
             ime_cursor,
@@ -172,24 +174,29 @@ impl Screen<'_> {
         }
         self.draw_whitespace(frame, &row);
         let cells = self.draw_content(frame, &row, tokens);
-        self.draw_diagnostic_underlines(frame, &row);
+        diagnostic_hits.extend(self.draw_diagnostic_underlines(frame, &row));
         self.draw_tail(frame, &row, cells, (folded_hits, long_hits));
         self.draw_carets(frame, &row, ime_cursor);
     }
 
-    fn draw_diagnostic_underlines(&self, frame: &mut Frame<'_>, row: &Row<'_>) {
+    fn draw_diagnostic_underlines(
+        &self,
+        frame: &mut Frame<'_>,
+        row: &Row<'_>,
+    ) -> Vec<DiagnosticHit> {
+        let mut hits = Vec::new();
         let Some(path) = self.doc.path.as_ref() else {
-            return;
+            return hits;
         };
         let Some(diagnostics) = self.app.lsp_diagnostics.get(path) else {
-            return;
+            return hits;
         };
         let Some(rope) = self.doc.text().rope() else {
-            return;
+            return hits;
         };
         let line = row.line;
         if line >= rope.len_lines() {
-            return;
+            return hits;
         }
         let text = self.doc.text().line_content(line).slice().to_string();
         let line_start = rope.line_to_char(line);
@@ -197,20 +204,20 @@ impl Screen<'_> {
         let visible_start = row.line_start + visible.start;
         let visible_end = row.line_start + visible.end;
 
-        for diagnostic in diagnostics
+        for (index, diagnostic) in diagnostics
             .iter()
-            .filter(|diagnostic| diagnostic.range.start.line as usize == line)
+            .enumerate()
+            .filter(|(_, diagnostic)| diagnostic.range.start.line as usize == line)
         {
-            let start = line_start
-                + Self::utf16_column_to_char(&text, diagnostic.range.start.character)
-                    .max(visible_start.saturating_sub(line_start));
-            let end = if diagnostic.range.end.line as usize == line {
-                line_start
-                    + Self::utf16_column_to_char(&text, diagnostic.range.end.character)
-                        .min(visible_end.saturating_sub(line_start))
+            let start_col = Self::utf16_column_to_char(&text, diagnostic.range.start.character);
+            let end_col = if diagnostic.range.end.line as usize == line {
+                Self::utf16_column_to_char(&text, diagnostic.range.end.character)
             } else {
-                visible_end
+                text.chars().count()
             };
+            let (start_col, end_col) = Self::expand_identifier_range(&text, start_col, end_col);
+            let start = line_start + start_col.max(visible_start.saturating_sub(line_start));
+            let end = line_start + end_col.min(visible_end.saturating_sub(line_start));
             let start = start.max(row.line_start).min(visible_end);
             let end = end.max(start).min(visible_end);
             let color = match diagnostic.severity {
@@ -220,10 +227,32 @@ impl Screen<'_> {
             };
             self.spans(row, start, end, &mut |top, x0, x1| {
                 let width = (x1 - x0).max(3.0);
-                let underline = Rect::new(x0, top + self.lh - 2.0, width, 1.5);
-                frame.rect_clipped(underline, color, 0.75, self.text_rect);
+                let base_y = top + self.lh - 2.5;
+                let offsets = [0.0, 1.25, 0.0, -1.25, 0.0];
+                let mut wave = Vec::new();
+                let mut at = x0;
+                let mut phase = 0;
+                while at < x0 + width {
+                    let next = (at + 2.0).min(x0 + width);
+                    wave.push(Stroke::Line(
+                        at,
+                        base_y + offsets[phase],
+                        next,
+                        base_y + offsets[phase + 1],
+                    ));
+                    at = next;
+                    phase = (phase + 1) % (offsets.len() - 1);
+                }
+                frame.stroke(&wave, 1.0, color, self.text_rect);
+                hits.push(DiagnosticHit {
+                    rect: Rect::new(x0, top + self.lh - 6.0, width.max(7.0), 6.0)
+                        .intersect(self.text_rect),
+                    document: self.doc.id,
+                    index,
+                });
             });
         }
+        hits
     }
 
     /// 返回位置 `pos` 在本行中的段号（从 0 起）和 x 坐标。
@@ -266,6 +295,39 @@ impl Screen<'_> {
             }
         }
         text.chars().count()
+    }
+
+    fn expand_identifier_range(text: &str, start: usize, end: usize) -> (usize, usize) {
+        let chars: Vec<char> = text.chars().collect();
+        let mut start = start.min(chars.len());
+        let mut end = end.clamp(start, chars.len());
+        let is_identifier = |character: char| character == '_' || character.is_alphanumeric();
+
+        if start == end {
+            if start < chars.len() && is_identifier(chars[start])
+                || start > 0 && is_identifier(chars[start - 1])
+            {
+                while start > 0 && is_identifier(chars[start - 1]) {
+                    start -= 1;
+                }
+                while end < chars.len() && is_identifier(chars[end]) {
+                    end += 1;
+                }
+            }
+            return (start, end);
+        }
+
+        if start < chars.len() && is_identifier(chars[start]) {
+            while start > 0 && is_identifier(chars[start - 1]) {
+                start -= 1;
+            }
+        }
+        if end > 0 && is_identifier(chars[end - 1]) {
+            while end < chars.len() && is_identifier(chars[end]) {
+                end += 1;
+            }
+        }
+        (start, end)
     }
 
     /// 对文本范围 `start..end` 在屏幕上占据的每一块调用 `f(y, x0, x1)`；跨段时每段一块。

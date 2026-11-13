@@ -158,6 +158,7 @@ pub fn draw(app: &mut App, frame: &mut Frame<'_>) {
     }
 
     editor::hint::draw_name_hint(app, frame);
+    editor::hint::draw_diagnostic_hint(app, frame);
 
     app.hits.conflict_card = draw_conflict(app, frame);
     // 合并冲突的卡片排在磁盘冲突卡片下面。

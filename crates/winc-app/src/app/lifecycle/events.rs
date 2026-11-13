@@ -443,6 +443,9 @@ impl App {
             UserEvent::LspHover(id, revision, caret, result) => {
                 self.lsp_hovered(id, revision, caret, result);
             }
+            UserEvent::LspCodeActions(id, revision, index, range, message, result) => {
+                self.lsp_code_actions_received(id, revision, index, range, message, result);
+            }
             UserEvent::LspState(language, root, state) => {
                 if let Some(state) = state {
                     self.lsp_status.insert((language, root), state);
@@ -452,6 +455,16 @@ impl App {
                 self.request_redraw();
             }
             UserEvent::LspDiagnostics(path, diagnostics) => {
+                let documents = self
+                    .lsp_sent
+                    .iter()
+                    .filter(|(_, (sent_path, _))| sent_path == &path)
+                    .map(|(id, _)| *id)
+                    .collect::<HashSet<_>>();
+                self.lsp_code_actions
+                    .retain(|(id, _, _), _| !documents.contains(id));
+                self.lsp_code_actions_pending
+                    .retain(|(id, _, _)| !documents.contains(id));
                 if diagnostics.is_empty() {
                     self.lsp_diagnostics.remove(&path);
                 } else {
@@ -771,6 +784,8 @@ impl App {
         earliest(&mut wake, self.format_progress_tick(now));
 
         earliest(&mut wake, self.log_tick(now));
+
+        earliest(&mut wake, self.auto_save_typing_tick(now));
 
         if let Some(at) = self.frame.next_frame {
             if now >= at {
