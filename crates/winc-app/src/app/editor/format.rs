@@ -211,7 +211,14 @@ impl App {
             .then(|| doc.text().rope())
             .flatten()
             .map(|rope| FormatRange::new(rope, doc.selection.from(), doc.selection.to()));
+        let can_use_lsp = range.is_none();
         if let Err(e) = self.start(Task::Format, id, false, range) {
+            if can_use_lsp
+                && matches!(&e, FormatError::Unset(_) | FormatError::Unavailable(_))
+                && self.request_lsp_format(id)
+            {
+                return;
+            }
             self.task_failed(Task::Format, id, &e);
         }
     }

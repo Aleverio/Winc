@@ -44,7 +44,9 @@ const MIN_SHOWN_DURATION: u32 = 50;
 /// 面板关着时什么也不绘制。
 pub(super) fn draw_terminal(app: &mut App, frame: &mut Frame<'_>) {
     draw_panel(app, frame);
-    draw_find(app, frame);
+    if !app.problems.open {
+        draw_find(app, frame);
+    }
 }
 
 /// 绘制标签栏和内容区，查找条之外的部分。
@@ -57,6 +59,10 @@ fn draw_panel(app: &mut App, frame: &mut Frame<'_>) {
     let focused = app.focus == Focus::Terminal;
     frame.rect(card, p.editor_bg);
     draw_header(app, frame, card);
+    if app.problems.open {
+        problems::draw(app, frame, card);
+        return;
+    }
 
     let grid = app.terminal_grid();
     if let Some(error) = &app.terminal.error {
@@ -423,28 +429,42 @@ fn draw_sticky(
 /// 标签栏：各个标签（当前标签凸起，悬停或正在看时露出关闭按钮）、「+」；右边是运行配置的按钮，
 /// 最右端是切换面板位置、收起面板两个按钮。
 fn draw_header(app: &mut App, frame: &mut Frame<'_>, card: Rect) {
-    app.note_terminal_tabs();
-    app.note_stop_button();
+    if !app.problems.open {
+        app.note_terminal_tabs();
+        app.note_stop_button();
+    }
     let p = app.palette;
     let header = Rect::new(card.x, card.y, card.w, header_height(card));
     let y = card.y + (header.h - TAB_H) / 2.0;
-    let left = card.x + tab_inset(card);
     // 面板在右边时标签栏在顶栏那一行，右端让给窗口按钮（由应用绘制标题栏时）。
     let controls = app.layout.controls;
-    let end = if controls.w > 0.0 && controls.y < header.bottom() && controls.x < header.right() {
-        controls.x - TAB_GAP
-    } else {
-        header.right()
-    };
+    let end = header_end(header, controls);
     // 按钮的尺寸和间距与编辑区标签栏相同；标签放不下时「+」紧贴右边的按钮。
     let button_y = card.y + (header.h - BUTTON) / 2.0;
     let hide = Rect::new(end - BUTTONS_END - BUTTON, button_y, BUTTON, BUTTON);
     let position = Rect::new(hide.x - TAB_GAP - BUTTON, button_y, BUTTON, BUTTON);
-    let run = run_buttons(app, frame, left, position.x - TAB_GAP, button_y);
+    let mut hits = Vec::new();
+    let left = draw_panel_tabs(
+        app,
+        frame,
+        card.x + tab_inset(card),
+        position.x - TAB_GAP,
+        y,
+        header,
+        &mut hits,
+    );
+    let run = (!app.problems.open)
+        .then(|| run_buttons(app, frame, left, position.x - TAB_GAP, button_y))
+        .flatten();
+    if app.problems.open {
+        draw_panel_controls(app, frame, position, hide, header, &mut hits);
+        app.hits.terminal = hits;
+        return;
+    }
     // 标签和「+」放得下的宽度。
     let rest = run.map_or(position.x, |[menu, ..]| menu.x) - TAB_GAP;
     // 能选的 shell 不止一个时，「+」右边是选 shell 的按钮。
-    let shell_menu = app.terminal_shell_list().len() > 1;
+    let shell_menu = !app.problems.open && app.terminal_shell_list().len() > 1;
     let room = rest - left - TAB_GAP - BUTTON;
     let room = if shell_menu {
         room - TAB_GAP - BUTTON
@@ -493,7 +513,6 @@ fn draw_header(app: &mut App, frame: &mut Frame<'_>, card: Rect) {
     let mut rename = app.terminal.rename.take();
     let mut caret = None;
     let strip = &app.terminal.strip;
-    let mut hits = Vec::new();
     let mut x = left - scroll;
     let mut lifted = None;
     // 正在看的、悬停的、拖着的标签有自己的底色，两边不绘制竖线。
@@ -603,6 +622,63 @@ fn draw_header(app: &mut App, frame: &mut Frame<'_>, card: Rect) {
         hits.push((menu, HeaderHit::ShellMenu));
     }
 
+    draw_panel_controls(app, frame, position, hide, header, &mut hits);
+    if let Some(run) = run {
+        draw_run_buttons(app, frame, run, header, &mut hits);
+    }
+    app.hits.terminal = hits;
+}
+
+fn draw_panel_tabs(
+    app: &App,
+    frame: &mut Frame<'_>,
+    left: f32,
+    right: f32,
+    y: f32,
+    header: Rect,
+    hits: &mut Vec<(Rect, HeaderHit)>,
+) -> f32 {
+    let p = app.palette;
+    let mut x = left;
+    let mut tabs = vec![(t!("terminal-tab-default-name"), HeaderHit::TerminalView)];
+    tabs.push((t!("problems-title"), HeaderHit::ProblemsView));
+    for (label, hit) in tabs {
+        if hit == HeaderHit::TerminalView && !app.terminal_enabled() {
+            continue;
+        }
+        let w = (frame.measure(FontKind::Ui, app.fonts.ui, label) + 20.0).min(right - x);
+        if w <= 0.0 {
+            break;
+        }
+        let rect = Rect::new(x, y, w, TAB_H);
+        let active = match hit {
+            HeaderHit::TerminalView => app.terminal.open,
+            HeaderHit::ProblemsView => app.problems.open,
+            _ => false,
+        };
+        let hovered = app.pointer.hover == Hover::TerminalHeader(hit);
+        workspace::top_bar::draw_tab_fill(frame, p, rect, active, hovered, header);
+        let color = if hovered || active {
+            p.text
+        } else {
+            p.text_muted
+        };
+        ui_text(frame, app, rect.x + 10.0, rect, label, color, header);
+        hits.push((rect.intersect(header), hit));
+        x += w + TAB_GAP;
+    }
+    x.min(right)
+}
+
+fn draw_panel_controls(
+    app: &App,
+    frame: &mut Frame<'_>,
+    position: Rect,
+    hide: Rect,
+    header: Rect,
+    hits: &mut Vec<(Rect, HeaderHit)>,
+) {
+    let p = app.palette;
     // 右端：切换面板的位置（编辑区右边或下面），图标绘制的是点下去以后的位置。
     if app.pointer.hover == Hover::TerminalHeader(HeaderHit::Position) {
         frame.rect_clipped(position, p.hover, RADIUS_ROW, header);
@@ -623,10 +699,15 @@ fn draw_header(app: &mut App, frame: &mut Frame<'_>, card: Rect) {
     let center = (hide.x + BUTTON / 2.0, hide.y + BUTTON / 2.0);
     icons::collapse(frame, center, toward, p.text_muted, header);
     hits.push((hide, HeaderHit::Hide));
-    if let Some(run) = run {
-        draw_run_buttons(app, frame, run, header, &mut hits);
+}
+
+fn header_end(header: Rect, controls: Rect) -> f32 {
+    let overlap = controls.intersect(header);
+    if overlap.w > 0.0 && overlap.h > 0.0 {
+        controls.x - TAB_GAP
+    } else {
+        header.right()
     }
-    app.hits.terminal = hits;
 }
 
 /// 配置名按钮最宽多少（逻辑像素），约容纳 8 个汉字；更长的名字截短。

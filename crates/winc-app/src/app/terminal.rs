@@ -101,6 +101,10 @@ enum Request {
 /// 标签栏上可以点的东西，画的时候记下位置（[`TerminalPanel::hits`]）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HeaderHit {
+    /// 切换到终端面板。
+    TerminalView,
+    /// 切换到 Problems 面板。
+    ProblemsView,
     /// 第几个标签。
     Tab(usize),
     /// 第几个标签的关闭按钮。
@@ -376,6 +380,14 @@ impl App {
         } else {
             self.focus = Focus::Terminal;
         }
+
+        self.reset_blink();
+        self.relayout();
+        self.request_redraw();
+    }
+
+    pub(in crate::app) fn select_terminal_panel(&mut self) {
+        self.open_terminal_panel();
         self.reset_blink();
         self.relayout();
         self.request_redraw();
@@ -614,10 +626,13 @@ impl App {
     ///
     /// 只改面板，不新建、不关标签。
     pub(super) fn set_terminal_open(&mut self, open: bool) {
-        if open == self.terminal.open {
+        if open == self.terminal.open && (!open || !self.problems.open) {
             return;
         }
         let from = self.terminal_shown().0;
+        if open {
+            self.problems.open = false;
+        }
         self.terminal.open = open;
         // 打开时正在看的标签就在眼前，它的未读点不需要保留。
         if open && let Some(tab) = self.terminal.tabs.get_mut(self.terminal.active) {
@@ -629,6 +644,10 @@ impl App {
         if !open && self.focus.in_terminal() {
             self.focus = Focus::Editor;
         }
+        self.animate_terminal_panel(from);
+    }
+
+    pub(super) fn animate_terminal_panel(&mut self, from: f32) {
         self.terminal.motion = self
             .panel_clock(SIDEBAR_ANIMATION)
             .map(|clock| PanelMotion {
@@ -653,7 +672,11 @@ impl App {
     /// 面板露出的比例（0 到 1）和在哪一边（在右边为真）。
     pub(crate) fn terminal_shown(&self) -> (f32, bool) {
         let right = self.terminal_right();
-        let target = if self.terminal.open { 1.0 } else { 0.0 };
+        let target = if self.terminal.open || self.problems.open {
+            1.0
+        } else {
+            0.0
+        };
         let Some(motion) = self.terminal.motion else {
             return (target, right);
         };
@@ -694,7 +717,7 @@ impl App {
     pub(super) fn toggle_terminal_position(&mut self) {
         self.config.terminal_right = Some(!self.terminal_right());
         self.save_config();
-        if self.terminal.open {
+        if self.terminal.open || self.problems.open {
             self.terminal.motion = self.panel_clock(MOVE_ANIMATION).map(|clock| PanelMotion {
                 from: 1.0,
                 moved: true,

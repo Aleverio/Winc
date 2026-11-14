@@ -57,8 +57,8 @@ These are Alverion's fork changes; the original Winc project and its authors are
 | Area | Capabilities |
 | --- | --- |
 | Editing | Multiple cursors, find and replace, native input methods, smooth scrolling in gigabyte-sized files, and an experimental Vim mode |
-| Syntax | Highlighting for common programming, markup, data, and configuration languages, LSP hover and diagnostics, plus lightweight go-to-definition and usages |
-| Formatting | Whole-file formatting with external tools such as rustfmt, Prettier, Black, Ruff, and gofmt |
+| Syntax | Highlighting for common programming, markup, data, and configuration languages, LSP hover and diagnostics, plus language-server or lightweight go-to-definition and usages |
+| Formatting | Whole-file formatting with external tools such as rustfmt, Prettier, Black, Ruff, and gofmt; LSP formatting as a fallback |
 | Preview | Markdown with math and Mermaid diagrams, images, SVG, PDF (macOS and Windows), Word documents (docx), and spreadsheets (xlsx, csv), with the source one click away |
 | Git | Side-by-side diffs with word-level highlights, staging by hunk, commit and push, a commit graph, and blame |
 | Project | A file tree, quick open, and project search that follows `.gitignore` |
@@ -67,7 +67,7 @@ These are Alverion's fork changes; the original Winc project and its authors are
 | Interface | Sixteen built-in themes, light and dark, and a complete interface in English and Simplified Chinese |
 | Modules | Git, the terminal, and SSH remote can each be turned off. First-time setup on the start page offers the appearance, theme, language, and modules |
 | Updates | Signed in-app updates on all three platforms, with the release notes shown in the app after each update |
-| Lsp | it has been added, but it is still experimental |
+| LSP | Experimental: incremental synchronization, diagnostics, hover, definition/declaration/type/implementation and reference navigation, manual completion, signature help, quick-fix code actions, and formatting fallback |
 
 Touchscreens support tapping buttons and placing the caret, double-tapping to select a word,
 swiping to scroll, and dragging scrollbars and panel dividers. Hold for 500 ms to open the context
@@ -94,9 +94,9 @@ folder to keep them in the user profile instead.
 ## Language Servers
 
 Install a language server separately. In **Settings → Language Servers**, enable automatic
-selection for a built-in default (Rust, Python, Go, or JSON), or enter a custom executable and
-arguments for the language. Servers must already be installed and available on `PATH`. The same
-choices can be stored in the user configuration file:
+selection for a built-in default, or enter a custom executable and arguments for a language. Servers
+must already be installed and available on `PATH`. The same choices can be stored in the user
+configuration file:
 
 ```json
 {
@@ -112,6 +112,46 @@ choices can be stored in the user configuration file:
 Winc sends opened and edited files to the selected server, underlines reported diagnostics, and
 shows their line and column when you click the diagnostic count in the status bar. Use **Show
 Hover** (Ctrl/Cmd+K, Ctrl/Cmd+I) to request hover information.
+Navigation, signature help, completion, quick fixes, and formatting depend on the selected server's
+advertised capabilities; when navigation returns no location, Winc falls back to its lightweight
+local search.
+Use **F12** for definition, **Shift+F12** for references, **Alt+F12** for declaration,
+**Ctrl/Cmd+F12** for implementation, and **Ctrl/Cmd+Shift+F12** for type definition.
+
+| Language | Automatic server command | Current LSP features |
+| --- | --- | --- |
+| Rust | `rust-analyzer` | Diagnostics, hover, definition/declaration/type/implementation, references, completion, signature help, quick fixes, formatting fallback |
+| Python | `pyright-langserver --stdio` | Diagnostics, hover, definition/declaration/type/implementation, references, completion, signature help, quick fixes, formatting fallback |
+| Go | `gopls` | Diagnostics, hover, definition/declaration/type/implementation, references, completion, signature help, quick fixes, formatting fallback |
+| JSON | `vscode-json-language-server --stdio` | Diagnostics, hover, definition/declaration/type/implementation, references, completion, signature help, quick fixes, formatting fallback |
+| Other languages | Configure a command in Settings | Server-dependent diagnostics, navigation, completion, signature help, quick fixes, formatting fallback |
+
+Document changes are sent incrementally after the initial open. Servers are closed when documents
+leave their workspace or are no longer eligible for synchronization. LSP is currently disabled for
+documents Winc classifies as large (over 16 MiB); this preserves the editor's large-file memory
+behavior. Whole-document LSP formatting is used when Winc cannot select an external formatter;
+formatting selected text still requires an external formatter. Invoke signature help with
+**Ctrl+Shift+Space**, or completion with **Ctrl+Space**; trigger-character completion is not
+automatic yet.
+Completion items are filtered and sorted, snippets are expanded, and item details/documentation are
+shown in the popup. Workspace edits are applied only to open documents; file create/rename/delete
+operations and edits requiring user confirmation are rejected.
+
+The existing `cargo xtask bench` command measures app-level typing, highlighting, scrolling, startup,
+and memory behavior. To compare cold and incremental Tree-sitter update latency on a generated Rust
+source file, run:
+
+```sh
+cargo test -p winc-syntax --lib tree_sitter_update_benchmark -- --ignored --nocapture
+```
+
+This benchmark measures parse plus token collection, not allocations separately; timings depend on
+build mode and machine. Two recent Windows release-mode runs on the generated 182,780-byte Rust
+source measured cold medians of 266–276 ms and incremental medians of 203–221 ms. Tree-sitter
+currently handles Rust, Python, JavaScript, TypeScript/TSX, and JSON up to 256 KiB; other languages
+and larger files use Winc's line-based lexer. This single-language benchmark does not justify
+expanding grammar coverage or changing the large-file cutoff; compare representative sources and
+repeatable release-build measurements before doing either.
 
 Alverion's builds and releases for this fork are published on
 [this repository's GitHub Releases page](https://github.com/Aleverio/Winc/releases) when available.

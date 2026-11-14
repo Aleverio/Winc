@@ -42,6 +42,8 @@ pub(crate) enum ScrollTarget {
     TerminalStrip,
     /// 终端的回滚缓冲，或终端中接收滚轮的程序。
     Terminal,
+    /// Problems 面板的诊断列表。
+    Problems,
     /// Markdown 预览。
     Markdown,
     /// PDF 预览的缩略图栏。
@@ -68,6 +70,7 @@ impl ScrollTarget {
                 | Self::LogList
                 | Self::Commit
                 | Self::Outline
+                | Self::Problems
                 | Self::Results
                 | Self::Tree
                 | Self::TerminalStrip
@@ -127,6 +130,8 @@ impl App {
             ScrollTarget::Tree
         } else if self.log_active() && self.log_parts().details.contains(x, y) {
             ScrollTarget::LogDetails
+        } else if self.problems.open && l.terminal.contains(x, y) {
+            ScrollTarget::Problems
         } else if l.terminal.contains(x, y) && y < terminal_header {
             ScrollTarget::TerminalStrip
         } else if l.terminal.contains(x, y) {
@@ -204,6 +209,7 @@ impl App {
             }
             ScrollTarget::TerminalStrip => self.terminal.strip.wheel(along),
             ScrollTarget::Terminal => self.terminal_wheel(dy),
+            ScrollTarget::Problems => self.scroll_problems(dy),
             ScrollTarget::Markdown => {
                 // 横向滚动落在比正文宽的表格上时滚动该表格，其余按竖直方向滚动预览。
                 let table =

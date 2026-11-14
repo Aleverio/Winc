@@ -521,7 +521,9 @@ impl App {
         };
         if jump && count == 1 && !l.gutter.contains(x, y) {
             self.select(pos, pos);
-            self.go_to_definition();
+            if !self.request_lsp_navigation(crate::app::lsp::NavigationKind::Definition) {
+                self.go_to_definition();
+            }
             return;
         }
 

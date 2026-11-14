@@ -195,6 +195,8 @@ impl App {
 
         match self.target_at(x, y) {
             Target::Diagnostic(document, index) => Hover::Diagnostic(document, index),
+            Target::Problem(document, index) => Hover::Problem(document, index),
+            Target::LspCodeAction(document, _, index, _) => Hover::Diagnostic(document, index),
             Target::WindowControl(control) => Hover::WindowControl(control),
             Target::ResizeEdge(direction) => Hover::ResizeEdge(direction),
             Target::NoticeButton => Hover::NoticeButton,
@@ -257,6 +259,7 @@ impl App {
             | Target::LogText
             | Target::Editor
             | Target::Terminal
+            | Target::Problems
             | Target::None => Hover::None,
         }
     }
@@ -283,10 +286,25 @@ impl App {
             && self.overlays.form_dialog.is_none()
             && self.popup().is_none()
             && self.overlays.alert.is_none()
-            && let Some(popup) = self.hits.diagnostic_popup
-            && popup.rect.contains(x, y)
         {
-            return Target::Diagnostic(popup.document, popup.index);
+            if let Some(action) = self
+                .hits
+                .lsp_code_actions
+                .iter()
+                .find(|hit| hit.rect.contains(x, y))
+            {
+                return Target::LspCodeAction(
+                    action.document,
+                    action.revision,
+                    action.diagnostic,
+                    action.action,
+                );
+            }
+            if let Some(popup) = self.hits.diagnostic_popup
+                && popup.rect.contains(x, y)
+            {
+                return Target::Diagnostic(popup.document, popup.index);
+            }
         }
         // 浮于编辑区之上的卡片和提示条：只响应其中的按钮，卡片的其余区域遮挡下方的部件。
         if let Some(card) = self.hits.changes_card
@@ -428,10 +446,22 @@ impl App {
         if let Some(hit) = hit(&self.hits.terminal, x, y) {
             return Target::TerminalHeader(hit);
         }
+        if let Some((_, (document, index))) = self
+            .hits
+            .problems
+            .iter()
+            .rev()
+            .find(|(rect, _)| rect.contains(x, y))
+        {
+            return Target::Problem(*document, *index);
+        }
         if y < TOP_BAR_END {
             return Target::TitleBar;
         }
         if l.terminal.contains(x, y) {
+            if self.problems.open {
+                return Target::Problems;
+            }
             return match self.terminal_block_hit(x, y) {
                 Some(hit) => Target::TerminalBlock(hit),
                 None => Target::Terminal,
@@ -873,6 +903,10 @@ impl App {
 pub(super) enum Target {
     /// 标注或详情浮窗中的一处 LSP 诊断。
     Diagnostic(crate::app::DocumentId, usize),
+    /// Problems 面板中的一条诊断。
+    Problem(crate::app::DocumentId, usize),
+    /// An executable code action in the diagnostic popup.
+    LspCodeAction(crate::app::DocumentId, u64, usize, usize),
     /// 遮挡下方但此处没有按钮的区域：提示条、卡片的空白处。
     ///
     /// 点击时不做任何操作，也不传给下方的部件。
@@ -949,6 +983,8 @@ pub(super) enum Target {
     Picture,
     /// 终端面板。
     Terminal,
+    /// Problems 面板中不属于可点击行的区域。
+    Problems,
     /// 编辑区与终端面板之间的间距。
     TerminalDivider,
     /// 文件视图中大纲标题行的上沿。

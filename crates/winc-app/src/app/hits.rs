@@ -20,6 +20,15 @@ pub(crate) struct DiagnosticPopupHit {
     pub max_scroll_y: f32,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct LspCodeActionHit {
+    pub rect: Rect,
+    pub document: DocumentId,
+    pub revision: u64,
+    pub diagnostic: usize,
+    pub action: usize,
+}
+
 /// 本帧绘制时记录的可点击范围与位置。
 #[derive(Default)]
 pub struct Hits {
@@ -109,8 +118,12 @@ pub struct Hits {
     pub(crate) install_links: Vec<(crate::layout::Setting, Rect)>,
     /// 当前文本中各诊断下划线的悬停区域。
     pub(crate) diagnostics: Vec<DiagnosticHit>,
+    /// Problems 面板中的诊断行。
+    pub(crate) problems: Vec<(Rect, (DocumentId, usize))>,
     /// 当前显示的诊断详情浮窗及其可滚动范围。
     pub(crate) diagnostic_popup: Option<DiagnosticPopupHit>,
+    /// 当前诊断浮窗中各个可执行的 LSP code action。
+    pub(crate) lsp_code_actions: Vec<LspCodeActionHit>,
 }
 
 impl Hits {
@@ -155,7 +168,9 @@ impl Hits {
             pdf_tools,
             install_links,
             diagnostics,
+            problems,
             diagnostic_popup: _,
+            lsp_code_actions,
         } = self;
         start.clear();
         placeholder.clear();
@@ -193,5 +208,7 @@ impl Hits {
         pdf_tools.clear();
         install_links.clear();
         diagnostics.clear();
+        problems.clear();
+        lsp_code_actions.clear();
     }
 }

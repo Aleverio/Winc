@@ -14,8 +14,13 @@ pub enum Action {
     GoToSymbol,
     GoToLine,
     GoToDefinition,
+    GoToDeclaration,
+    GoToTypeDefinition,
+    GoToImplementation,
     ShowHover,
     FindReferences,
+    TriggerCompletion,
+    SignatureHelp,
     GoBack,
     GoForward,
     Settings,
@@ -220,6 +225,7 @@ pub enum Action {
     ShowCommit,
     GitRevertChange,
     ToggleTerminal,
+    ShowProblems,
     /// 运行当前选中的配置；运行中时重新运行。
     RunConfiguration,
     /// 停止当前选中的配置。
@@ -269,8 +275,13 @@ impl Action {
             GoToSymbol => t!("cmd-go-to-symbol"),
             GoToLine => t!("cmd-go-to-line"),
             GoToDefinition => t!("cmd-go-to-definition"),
+            GoToDeclaration => t!("cmd-go-to-declaration"),
+            GoToTypeDefinition => t!("cmd-go-to-type-definition"),
+            GoToImplementation => t!("cmd-go-to-implementation"),
             ShowHover => t!("cmd-show-hover"),
             FindReferences => t!("cmd-find-references"),
+            TriggerCompletion => t!("cmd-trigger-completion"),
+            SignatureHelp => t!("cmd-signature-help"),
             GoBack => t!("cmd-go-back"),
             GoForward => t!("cmd-go-forward"),
             Settings => t!("cmd-settings"),
@@ -451,6 +462,7 @@ impl Action {
             ShowCommit => t!("cmd-show-commit"),
             GitRevertChange => t!("cmd-git-revert-change"),
             ToggleTerminal => t!("cmd-toggle-terminal"),
+            ShowProblems => t!("cmd-show-problems"),
             RunConfiguration => t!("cmd-run-configuration"),
             StopConfiguration => t!("cmd-stop-configuration"),
             EditRunConfigurations => t!("cmd-edit-run-configurations"),
@@ -485,8 +497,13 @@ impl Action {
             GoToSymbol => "Go to Symbol in Editor",
             GoToLine => "Go to Line",
             GoToDefinition => "Go to Definition",
+            GoToDeclaration => "Go to Declaration",
+            GoToTypeDefinition => "Go to Type Definition",
+            GoToImplementation => "Go to Implementation",
             ShowHover => "Show Hover",
             FindReferences => "Find All References",
+            TriggerCompletion => "Trigger Completion",
+            SignatureHelp => "Trigger Signature Help",
             GoBack => "Go Back",
             GoForward => "Go Forward",
             Settings => "Settings",
@@ -661,6 +678,7 @@ impl Action {
             ShowCommit => "Git: Commit",
             GitRevertChange => "Git: Revert Change",
             ToggleTerminal => "Toggle Terminal",
+            ShowProblems => "View: Show Problems",
             RunConfiguration => "Run Configuration",
             StopConfiguration => "Stop Configuration",
             EditRunConfigurations => "Edit Run Configurations",
@@ -695,8 +713,13 @@ impl Action {
             | GoToSymbol
             | GoToLine
             | GoToDefinition
+            | GoToDeclaration
+            | GoToTypeDefinition
+            | GoToImplementation
             | ShowHover
             | FindReferences
+            | TriggerCompletion
+            | SignatureHelp
             | GoBack
             | GoForward
             | Settings
@@ -836,6 +859,7 @@ impl Action {
             | ShowCommit
             | GitRevertChange
             | ToggleTerminal
+            | ShowProblems
             | RunConfiguration
             | StopConfiguration
             | EditRunConfigurations
@@ -1017,8 +1041,13 @@ pub const ACTIONS: &[Action] = {
         GoToSymbol,
         GoToLine,
         GoToDefinition,
+        GoToDeclaration,
+        GoToTypeDefinition,
+        GoToImplementation,
         ShowHover,
         FindReferences,
+        TriggerCompletion,
+        SignatureHelp,
         GoBack,
         GoForward,
         ShowCommands,
@@ -1190,6 +1219,7 @@ pub const ACTIONS: &[Action] = {
         GitBlame,
         GitRevertChange,
         ToggleTerminal,
+        ShowProblems,
         RunConfiguration,
         StopConfiguration,
         EditRunConfigurations,

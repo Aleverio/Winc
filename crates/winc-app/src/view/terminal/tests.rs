@@ -3,6 +3,19 @@
 use super::*;
 
 #[test]
+fn window_controls_only_reserve_space_when_they_overlap_the_terminal_header() {
+    let header = Rect::new(300.0, 400.0, 1000.0, 40.0);
+    let controls_in_title_bar = Rect::new(1200.0, 0.0, 80.0, 32.0);
+    let controls_in_header = Rect::new(1200.0, 408.0, 80.0, 32.0);
+
+    assert_eq!(header_end(header, controls_in_title_bar), header.right());
+    assert_eq!(
+        header_end(header, controls_in_header),
+        controls_in_header.x - TAB_GAP
+    );
+}
+
+#[test]
 fn bold_is_bright_only_when_asked() {
     let p = &crate::theme::DARK;
     let bold_red = Style {

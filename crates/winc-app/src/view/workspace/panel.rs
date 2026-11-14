@@ -839,10 +839,12 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
         }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Hide) => {
             let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
-            Some((
-                rect,
-                with_key(t!("terminal-hide-panel"), Some(Action::ToggleTerminal)),
-            ))
+            let label = if app.problems.open {
+                t!("problems-hide-panel").to_owned()
+            } else {
+                with_key(t!("terminal-hide-panel"), Some(Action::ToggleTerminal))
+            };
+            Some((rect, label))
         }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Run(button)) => {
             use crate::app::terminal::run::RunButton;

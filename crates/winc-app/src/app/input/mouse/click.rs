@@ -164,6 +164,10 @@ impl App {
             Target::Diagnostic(document, index) => {
                 self.set_hover(Hover::Diagnostic(document, index));
             }
+            Target::Problem(document, index) => self.open_problem(document, index),
+            Target::LspCodeAction(document, revision, diagnostic, action) => {
+                self.apply_lsp_code_action(document, revision, diagnostic, action);
+            }
             Target::Blocked | Target::None => {}
             Target::NoticeButton => self.run_notice_action(),
             Target::Change(target) => self.press_change(target),
@@ -304,6 +308,13 @@ impl App {
                 }
             }
             Target::TerminalBlock(_) => self.terminal_mouse_down(x, y, MouseButton::Left),
+            Target::Problems => {}
+            Target::TerminalHeader(crate::app::terminal::HeaderHit::TerminalView) => {
+                self.select_terminal_panel();
+            }
+            Target::TerminalHeader(crate::app::terminal::HeaderHit::ProblemsView) => {
+                self.select_problems_panel();
+            }
             Target::TerminalHeader(_) if self.field_at(x, y) == Some(Focus::TerminalRename) => {
                 self.focus = Focus::TerminalRename;
                 self.click_field(x, y);
@@ -336,8 +347,11 @@ impl App {
                     HeaderHit::ShellMenu => self.open_terminal_shell_menu(),
                     HeaderHit::Restart => self.request_terminal_restart(),
                     HeaderHit::Position => self.toggle_terminal_position(),
-                    HeaderHit::Hide => self.click_terminal_button(),
-                    HeaderHit::Run(_) | HeaderHit::Find(_) => {}
+                    HeaderHit::Hide => self.hide_bottom_panel(),
+                    HeaderHit::Run(_)
+                    | HeaderHit::Find(_)
+                    | HeaderHit::TerminalView
+                    | HeaderHit::ProblemsView => {}
                 }
             }
             // 双击分隔线恢复为左右各占一半，单击按住开始拖动。

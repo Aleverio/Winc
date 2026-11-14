@@ -95,9 +95,26 @@ impl App {
             }
             GoToSymbol => self.open_symbols(),
             GoToLine => self.open_goto(),
+            GoToDefinition
+                if self.request_lsp_navigation(crate::app::lsp::NavigationKind::Definition) => {}
             GoToDefinition => self.go_to_definition(),
+            GoToDeclaration
+                if self.request_lsp_navigation(crate::app::lsp::NavigationKind::Declaration) => {}
+            GoToDeclaration => self.go_to_definition(),
+            GoToTypeDefinition
+                if self.request_lsp_navigation(crate::app::lsp::NavigationKind::TypeDefinition) => {
+            }
+            GoToTypeDefinition => self.go_to_definition(),
+            GoToImplementation
+                if self.request_lsp_navigation(crate::app::lsp::NavigationKind::Implementation) => {
+            }
+            GoToImplementation => self.go_to_definition(),
             ShowHover => self.request_lsp_hover(),
+            FindReferences
+                if self.request_lsp_navigation(crate::app::lsp::NavigationKind::References) => {}
             FindReferences => self.find_references(),
+            TriggerCompletion => self.request_lsp_completion(),
+            SignatureHelp => self.request_lsp_signature_help(),
             // 有日志标签且可以后退时先在日志里后退；日志里已经找不到的提交（例如被跳过的
             // 父提交）直接跳过，继续找回更早的记录。
             GoBack if self.log_navigate(false) => {}
@@ -433,6 +450,7 @@ impl App {
             ShowCommit => self.show_commit(),
             ShowOutline => self.show_outline(),
             ToggleTerminal => self.toggle_terminal(),
+            ShowProblems => self.toggle_problems(),
             RunConfiguration => self.run_current_config(),
             StopConfiguration => self.stop_current_config(),
             EditRunConfigurations => self.edit_run_configs(),

@@ -366,8 +366,16 @@ impl App {
             MenuCommand::Format => self.format_active(),
             MenuCommand::FormatSelection => self.format_selection(),
             MenuCommand::Fix => self.fix_active(),
-            MenuCommand::GoToDefinition => self.go_to_definition(),
-            MenuCommand::FindReferences => self.find_references(),
+            MenuCommand::GoToDefinition => {
+                if !self.request_lsp_navigation(crate::app::lsp::NavigationKind::Definition) {
+                    self.go_to_definition();
+                }
+            }
+            MenuCommand::FindReferences => {
+                if !self.request_lsp_navigation(crate::app::lsp::NavigationKind::References) {
+                    self.find_references();
+                }
+            }
             MenuCommand::AddBookmark => self.set_bookmark(true),
             MenuCommand::RemoveBookmark => self.set_bookmark(false),
             MenuCommand::ListBookmarks => self.list_bookmarks(),

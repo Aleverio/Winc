@@ -443,10 +443,40 @@ impl App {
             UserEvent::LspHover(id, revision, caret, result) => {
                 self.lsp_hovered(id, revision, caret, result);
             }
+            UserEvent::LspCompletion(event) => self.lsp_completion_received(*event),
+            UserEvent::LspSignatureHelp(document, revision, caret, result) => {
+                self.lsp_signature_help_received(document, revision, caret, result);
+            }
+            UserEvent::LspNavigation(event) => self.lsp_navigation_received(*event),
+            UserEvent::LspFormatted(document, revision, result) => {
+                self.lsp_formatted(document, revision, result);
+            }
             UserEvent::LspCodeActions(id, revision, index, range, message, result) => {
                 self.lsp_code_actions_received(id, revision, index, range, message, result);
             }
             UserEvent::LspState(language, root, state) => {
+                if matches!(&state, Some(Err(_))) {
+                    let failed = self
+                        .lsp_sent
+                        .iter()
+                        .filter(|(_, sent)| sent.language == language && sent.root == root)
+                        .map(|(id, sent)| (*id, sent.path.clone()))
+                        .collect::<Vec<_>>();
+                    for (id, path) in failed {
+                        if let Some(sent) = self.lsp_sent.get(&id) {
+                            self.lsp_failed.insert(id, sent.revision);
+                        }
+                        self.lsp_sent.remove(&id);
+                        self.lsp_saved.remove(&id);
+                        self.lsp_code_actions
+                            .retain(|(document, _, _), _| *document != id);
+                        self.lsp_code_actions_pending
+                            .retain(|(document, _, _)| *document != id);
+                        if !self.lsp_sent.values().any(|sent| sent.path == path) {
+                            self.lsp_diagnostics.remove(&path);
+                        }
+                    }
+                }
                 if let Some(state) = state {
                     self.lsp_status.insert((language, root), state);
                 } else {
@@ -454,13 +484,58 @@ impl App {
                 }
                 self.request_redraw();
             }
+            UserEvent::LspSyncFailed(document, revision, language, root, error) => {
+                let failed = self
+                    .lsp_sent
+                    .iter()
+                    .filter(|(_, sent)| sent.language == language && sent.root == root)
+                    .map(|(id, sent)| (*id, sent.path.clone(), sent.revision))
+                    .collect::<Vec<_>>();
+                for (id, path, failed_revision) in failed {
+                    self.lsp_failed.insert(id, failed_revision);
+                    self.lsp_sent.remove(&id);
+                    self.lsp_saved.remove(&id);
+                    self.lsp_code_actions.retain(|(doc, _, _), _| *doc != id);
+                    self.lsp_code_actions_pending
+                        .retain(|(doc, _, _)| *doc != id);
+                    if !self.lsp_sent.values().any(|sent| sent.path == path) {
+                        self.lsp_diagnostics.remove(&path);
+                    }
+                }
+                if self
+                    .editor
+                    .document(document)
+                    .is_some_and(|doc| doc.revision == revision)
+                {
+                    self.lsp_failed.insert(document, revision);
+                }
+                self.lsp_status.insert((language, root), Err(error.clone()));
+                self.flash(error);
+            }
+            UserEvent::LspSyncSucceeded(document, revision) => {
+                if self
+                    .lsp_failed
+                    .get(&document)
+                    .is_some_and(|failed| *failed <= revision)
+                {
+                    self.lsp_failed.remove(&document);
+                }
+            }
+            UserEvent::LspApplyWorkspaceEdit(edit, response) => {
+                let result = self.apply_lsp_workspace_edit(*edit);
+                let _ = response.send(result);
+            }
             UserEvent::LspDiagnostics(path, diagnostics) => {
                 let documents = self
                     .lsp_sent
                     .iter()
-                    .filter(|(_, (sent_path, _, _))| sent_path == &path)
+                    .filter(|(_, sent)| sent.path == path)
                     .map(|(id, _)| *id)
                     .collect::<HashSet<_>>();
+                if documents.is_empty() {
+                    self.lsp_diagnostics.remove(&path);
+                    return;
+                }
                 self.lsp_code_actions
                     .retain(|(id, _, _), _| !documents.contains(id));
                 self.lsp_code_actions_pending

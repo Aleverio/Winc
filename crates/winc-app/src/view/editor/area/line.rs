@@ -204,11 +204,15 @@ impl Screen<'_> {
         let visible_start = row.line_start + visible.start;
         let visible_end = row.line_start + visible.end;
 
-        for (index, diagnostic) in diagnostics
+        let mut line_diagnostics = diagnostics
             .iter()
             .enumerate()
             .filter(|(_, diagnostic)| diagnostic.range.start.line as usize == line)
-        {
+            .collect::<Vec<_>>();
+        // Paint lower severities first so an overlapping hint cannot cover an error underline.
+        line_diagnostics
+            .sort_by_key(|(_, diagnostic)| diagnostic_paint_priority(diagnostic.severity));
+        for (index, diagnostic) in line_diagnostics {
             let start_col = Self::utf16_column_to_char(&text, diagnostic.range.start.character);
             let end_col = if diagnostic.range.end.line as usize == line {
                 Self::utf16_column_to_char(&text, diagnostic.range.end.character)
@@ -735,6 +739,14 @@ pub(in crate::view::editor) fn active_guide(
     // 块尾的空行不属于该块：参考线只绘制到最后一个非空行。
     let end = (start..end).rev().find(|&l| indent(l).is_some())? + 1;
     Some((level, start..end))
+}
+
+fn diagnostic_paint_priority(severity: Option<lsp_types::DiagnosticSeverity>) -> u8 {
+    match severity {
+        Some(lsp_types::DiagnosticSeverity::ERROR) => 2,
+        Some(lsp_types::DiagnosticSeverity::WARNING) => 1,
+        _ => 0,
+    }
 }
 
 #[cfg(test)]

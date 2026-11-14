@@ -14,6 +14,7 @@ mod input;
 mod lifecycle;
 pub(crate) mod lsp;
 pub(crate) mod preview;
+pub(crate) mod problems;
 mod release_notes;
 pub(crate) mod remote;
 pub(crate) mod scroll;
@@ -109,7 +110,6 @@ use winc_core::{Lines, Selection};
 use winc_editor::{COPY_LIMIT, Command, DocumentId, Editor, Entry, EntryKind, FileIndex, Search};
 use winc_render::{FontError, FontKind, FontSpec, Metrics, Rect, Renderer};
 
-use ropey::Rope;
 use winc_config::{Config, Session, State, ThemeChoice, resolve_font};
 
 use crate::bench::{Bench, Next};
@@ -261,6 +261,18 @@ pub enum UserEvent {
     GitBase,
     /// LSP hover 请求的结果。
     LspHover(DocumentId, u64, usize, Result<Option<String>, String>),
+    /// LSP completion items for a document revision and caret.
+    LspCompletion(Box<lsp::CompletionEvent>),
+    /// LSP signature-help response for a document revision and caret.
+    LspSignatureHelp(DocumentId, u64, usize, Result<Option<String>, String>),
+    /// LSP definition or reference locations for a document revision and caret.
+    LspNavigation(Box<lsp::NavigationEvent>),
+    /// LSP whole-document formatting response.
+    LspFormatted(
+        DocumentId,
+        u64,
+        Result<Option<Vec<lsp_types::TextEdit>>, String>,
+    ),
     /// LSP 为一条诊断返回的快速修复标题。
     LspCodeActions(
         DocumentId,
@@ -268,10 +280,19 @@ pub enum UserEvent {
         usize,
         lsp_types::Range,
         String,
-        Result<Vec<String>, String>,
+        Result<Vec<lsp_types::CodeActionOrCommand>, String>,
     ),
     /// LSP 服务器连接状态变化。
     LspState(String, PathBuf, Option<Result<(), String>>),
+    /// LSP didOpen/didChange/didSave failed for a document revision.
+    LspSyncFailed(DocumentId, u64, String, PathBuf, String),
+    /// An LSP document revision was synchronized successfully.
+    LspSyncSucceeded(DocumentId, u64),
+    /// A language server requested a workspace edit; the UI thread applies it and replies.
+    LspApplyWorkspaceEdit(
+        Box<lsp_types::WorkspaceEdit>,
+        tokio::sync::oneshot::Sender<Result<(), String>>,
+    ),
     /// LSP 推送的文档诊断。
     LspDiagnostics(PathBuf, Vec<lsp_types::Diagnostic>),
     /// LSP worker 或服务器启动、通信失败。
@@ -455,6 +476,8 @@ pub enum Hover {
     None,
     /// LSP 诊断的 underline 或详情浮窗，参数为文档和诊断序号。
     Diagnostic(DocumentId, usize),
+    /// Problems 面板中的一条诊断。
+    Problem(DocumentId, usize),
     /// 文件视图底部大纲里的一处（符号行、行首箭头、标题行及其右端的按钮）。
     Outline(OutlineTarget),
     /// 编辑区右侧的缩略图。
@@ -788,10 +811,14 @@ pub struct App {
     pub(crate) terminal: terminal::TerminalPanel,
     /// 当前目录的运行配置。
     pub(crate) run: terminal::run::RunConfigs,
+    /// 底部 Problems 面板的选择和滚动位置。
+    pub(crate) problems: problems::ProblemsPanel,
     /// 后台 language server 的通信桥；仅在配置了 LSP 服务后创建。
     pub(crate) lsp: Option<lsp::LspBridge>,
     /// 已发送给 LSP 的文档路径和版本。
-    pub(crate) lsp_sent: HashMap<DocumentId, (PathBuf, u64, Rope)>,
+    pub(crate) lsp_sent: HashMap<DocumentId, lsp::LspDocumentSnapshot>,
+    /// Document revisions whose last synchronization failed and should not be retried on every event.
+    pub(crate) lsp_failed: HashMap<DocumentId, u64>,
     /// 最近向 LSP 通知保存的文档路径和版本。
     pub(crate) lsp_saved: HashMap<DocumentId, (PathBuf, u64)>,
     /// 已连接的语言服务状态，按语言和工作区根目录区分。
@@ -799,9 +826,12 @@ pub struct App {
     /// 最近收到的 LSP 诊断，按文档路径区分。
     pub(crate) lsp_diagnostics: HashMap<PathBuf, Vec<lsp_types::Diagnostic>>,
     /// 当前文档版本、诊断对应的语言服务器修复建议。
-    pub(crate) lsp_code_actions: HashMap<(DocumentId, u64, usize), Result<Vec<String>, String>>,
+    pub(crate) lsp_code_actions:
+        HashMap<(DocumentId, u64, usize), Result<Vec<lsp_types::CodeActionOrCommand>, String>>,
     /// 正在等待语言服务器返回修复建议的诊断。
     pub(crate) lsp_code_actions_pending: HashSet<(DocumentId, u64, usize)>,
+    /// Completion results for the active document, when its suggestion popup is open.
+    pub(crate) lsp_completion: Option<lsp::CompletionPopup>,
     /// 诊断详情浮窗的水平、垂直滚动位置。
     pub(crate) diagnostic_scroll: (f32, f32),
     /// 当前生效的配置。

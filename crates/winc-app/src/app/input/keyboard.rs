@@ -288,6 +288,28 @@ impl App {
             }
             return;
         }
+        if self.lsp_completion.is_some() {
+            match &event.logical_key {
+                Key::Named(NamedKey::ArrowUp) => {
+                    self.move_lsp_completion(false);
+                    return;
+                }
+                Key::Named(NamedKey::ArrowDown) => {
+                    self.move_lsp_completion(true);
+                    return;
+                }
+                Key::Named(NamedKey::Enter | NamedKey::Tab) => {
+                    self.accept_lsp_completion();
+                    return;
+                }
+                Key::Named(NamedKey::Escape) => {
+                    self.lsp_completion = None;
+                    self.request_redraw();
+                    return;
+                }
+                _ => self.lsp_completion = None,
+            }
+        }
         if self.markdown_key(&event.logical_key, cmd)
             || self.table_key(&event.logical_key, cmd)
             || self.pdf_key(&event.logical_key)

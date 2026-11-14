@@ -39,7 +39,7 @@ mod error;
 mod manager;
 mod pool;
 
-pub use client::{LspClient, LspClientState, LspNotification};
+pub use client::{LspClient, LspClientState, LspNotification, LspServerRequest};
 pub use error::LspError;
 pub use manager::LspManager;
 pub use pool::{LspPoolStats, LspServerPool, LspServerStrategy};

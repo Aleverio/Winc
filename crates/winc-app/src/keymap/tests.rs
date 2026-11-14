@@ -55,6 +55,92 @@ fn no_two_bindings_fight_over_a_key() {
 }
 
 #[test]
+fn language_server_shortcuts_are_available_in_the_editor_and_live_markdown() {
+    use KeyCode::{F, Space};
+
+    for os in ALL_OS {
+        let cmd = if os == Os::Mac {
+            Mods::META
+        } else {
+            Mods::CTRL
+        };
+        for context in [Context::Editor, Context::Markdown] {
+            assert_eq!(
+                runs(os, Mods::CTRL, Space, context),
+                Some(Action::TriggerCompletion),
+                "{os:?} {context:?}"
+            );
+            assert_eq!(
+                runs(os, Mods::CTRL | Mods::SHIFT, Space, context),
+                Some(Action::SignatureHelp),
+                "{os:?} {context:?}"
+            );
+            assert_eq!(
+                runs(os, Mods::NONE, F(12), context),
+                Some(Action::GoToDefinition),
+                "{os:?} {context:?}"
+            );
+            assert_eq!(
+                runs(os, Mods::ALT, F(12), context),
+                Some(Action::GoToDeclaration),
+                "{os:?} {context:?}"
+            );
+            assert_eq!(
+                runs(os, cmd, F(12), context),
+                Some(Action::GoToImplementation),
+                "{os:?} {context:?}"
+            );
+            assert_eq!(
+                runs(os, cmd | Mods::SHIFT, F(12), context),
+                Some(Action::GoToTypeDefinition),
+                "{os:?} {context:?}"
+            );
+            assert_eq!(
+                runs(os, Mods::SHIFT, F(12), context),
+                Some(Action::FindReferences),
+                "{os:?} {context:?}"
+            );
+
+            let first = Stroke {
+                key: KeyCode::Char('k'),
+                mods: cmd,
+            };
+            let second = Stroke {
+                key: KeyCode::Char('i'),
+                mods: cmd,
+            };
+            let table = bindings(os);
+            assert_eq!(lookup(&table, first, None, context), Lookup::Chord);
+            assert!(
+                matches!(
+                    lookup(&table, second, Some(first), context),
+                    Lookup::Run(actions) if actions.contains(&Action::ShowHover)
+                ),
+                "{os:?} {context:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn problems_panel_shortcut_is_available_across_contexts() {
+    for os in ALL_OS {
+        let command = if os == Os::Mac {
+            Mods::META
+        } else {
+            Mods::CTRL
+        };
+        for context in [Context::Editor, Context::Other, Context::Terminal] {
+            assert_eq!(
+                runs(os, command | Mods::SHIFT, KeyCode::Char('m'), context),
+                Some(Action::ShowProblems),
+                "{os:?} {context:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn every_action_is_listed_once_in_order() {
     for (i, a) in ACTIONS.iter().enumerate() {
         assert!(!ACTIONS[i + 1..].contains(a), "{a:?}");
@@ -141,6 +227,11 @@ fn default_key_labels_per_system() {
     assert_eq!(label(Os::Mac, Action::GoBack), ["⌃-"]);
     assert_eq!(label(Os::Mac, Action::ShowHover), ["⌘K ⌘I"]);
     assert_eq!(label(Os::Windows, Action::ShowHover), ["Ctrl+K Ctrl+I"]);
+    assert_eq!(label(Os::Mac, Action::TriggerCompletion), ["⌃Space"]);
+    assert_eq!(
+        label(Os::Windows, Action::TriggerCompletion),
+        ["Ctrl+Space"]
+    );
     assert_eq!(label(Os::Windows, Action::GoBack), ["Alt+←"]);
     assert_eq!(label(Os::Linux, Action::GoBack), ["Ctrl+Alt+-"]);
     assert_eq!(label(Os::Mac, Action::CopyPath), ["⌥⌘C", "⌘K ⌥⌘C"]);

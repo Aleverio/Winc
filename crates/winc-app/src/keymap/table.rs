@@ -152,8 +152,13 @@ pub fn bindings(os: Os) -> Vec<Binding> {
     t.one(ClearWordHighlights, Editor, key(shift, Escape));
 
     t.one(GoToDefinition, Editor, key(none, F(12)));
+    t.one(GoToDeclaration, Editor, key(alt, F(12)));
+    t.one(GoToTypeDefinition, Editor, key(cmd | shift, F(12)));
+    t.one(GoToImplementation, Editor, key(cmd, F(12)));
     t.chord(ShowHover, Editor, chord_k, c(cmd, 'i'));
     t.one(FindReferences, Editor, key(shift, F(12)));
+    t.one(TriggerCompletion, Editor, key(ctrl, Space));
+    t.one(SignatureHelp, Editor, key(ctrl | shift, Space));
     t.one(Undo, Editor, c(cmd, 'z'));
     if mac {
         t.one(Redo, Editor, c(cmd | shift, 'z'));
@@ -415,6 +420,7 @@ pub fn bindings(os: Os) -> Vec<Binding> {
     // ⌘J 也开关底部面板。是全局的：macOS 上带 ⌘，在终端里也生效；其他系统上是
     // Ctrl+J，焦点在终端时交给 shell（Ctrl+J 是换行）。
     t.one(ToggleTerminal, Global, c(cmd, 'j'));
+    t.one(ShowProblems, Global, c(cmd | shift, 'm'));
     t.one(RunConfiguration, Global, key(none, F(5)));
     t.one(StopConfiguration, Global, key(shift, F(5)));
     t.one(ClearTerminal, Terminal, c(term, 'k'));

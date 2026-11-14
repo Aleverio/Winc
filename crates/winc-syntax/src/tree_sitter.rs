@@ -450,10 +450,50 @@ pub fn overlay_tree_tokens(tokens: &mut Vec<Token>, tree: &[Token], char_len: us
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Instant;
 
     fn tokens(language: &str, source: &str) -> Vec<Vec<Token>> {
         let language = crate::find(language).unwrap();
         TreeTokens::update(language, source, None).unwrap().lines
+    }
+
+    #[test]
+    #[ignore = "repeatable local Tree-sitter latency benchmark"]
+    fn tree_sitter_update_benchmark() {
+        let language = crate::find("rust").unwrap();
+        let mut source = (0..5_000)
+            .map(|line| format!("fn item_{line}() {{ let value = {line}; }}\n"))
+            .collect::<String>();
+        let source_bytes = source.len();
+        assert!(source_bytes <= MAX_TREE_SITTER_BYTES);
+        let mut previous = TreeTokens::update(language, &source, None);
+        let mut cold = Vec::new();
+        let mut incremental = Vec::new();
+
+        for iteration in 0..21 {
+            let started = Instant::now();
+            let _tree = TreeTokens::update(language, &source, None).unwrap();
+            cold.push(started.elapsed());
+
+            let replace = iteration % 2 == 0;
+            let next_source = if replace {
+                source.replacen("let value = 0", "let value = 1", 1)
+            } else {
+                source.replacen("let value = 1", "let value = 0", 1)
+            };
+            let started = Instant::now();
+            previous = TreeTokens::update(language, &next_source, previous);
+            incremental.push(started.elapsed());
+            source = next_source;
+        }
+
+        cold.sort_unstable();
+        incremental.sort_unstable();
+        println!(
+            "Tree-sitter Rust ({source_bytes} bytes): cold median={:?}, incremental median={:?}",
+            cold[cold.len() / 2],
+            incremental[incremental.len() / 2]
+        );
     }
 
     #[test]

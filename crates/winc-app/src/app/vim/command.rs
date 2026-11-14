@@ -391,7 +391,11 @@ impl App {
                 self.close_tabs(others.filter(|id| Some(*id) != active).collect());
             }
             AppCommand::List(listing) => self.vim_show_list(listing),
-            AppCommand::Definition => self.go_to_definition(),
+            AppCommand::Definition => {
+                if !self.request_lsp_navigation(crate::app::lsp::NavigationKind::Definition) {
+                    self.go_to_definition();
+                }
+            }
             AppCommand::OpenFile => self.vim_open_file(),
             AppCommand::NoHighlight => {
                 if let Some(state) = &mut self.vim {

@@ -19,7 +19,7 @@ const GAP: f32 = 2.0;
 /// 出现时滑动的距离（逻辑像素）。
 const SLIDE: f32 = 3.0;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum DiagnosticDetailKind {
     Heading,
     Text,
@@ -39,6 +39,7 @@ struct DiagnosticDetailRow {
     text: String,
     y: f32,
     h: f32,
+    action: Option<usize>,
 }
 
 fn wrap_diagnostic_text(
@@ -219,6 +220,7 @@ pub(in crate::view) fn draw_diagnostic_hint(app: &mut App, frame: &mut Frame<'_>
     let Some(doc) = app.editor.document(document) else {
         return;
     };
+    let revision = doc.revision;
     let Some(path) = doc.path.as_ref() else {
         return;
     };
@@ -349,7 +351,7 @@ pub(in crate::view) fn draw_diagnostic_hint(app: &mut App, frame: &mut Frame<'_>
         Some(Ok(actions)) if !actions.is_empty() => {
             details.extend(actions.iter().map(|action| DiagnosticDetail {
                 kind: DiagnosticDetailKind::Suggestion,
-                text: format!("- {action}"),
+                text: format!("▶ {}", crate::app::lsp::code_action_title(action)),
             }));
         }
         Some(Ok(_)) => details.push(DiagnosticDetail {
@@ -444,7 +446,16 @@ pub(in crate::view) fn draw_diagnostic_hint(app: &mut App, frame: &mut Frame<'_>
     let text_width = width - 2.0 * pad - 8.0;
     let mut rows = Vec::new();
     let mut content_height = 0.0;
+    let mut next_action = 0;
     for detail in details {
+        let action =
+            if detail.kind == DiagnosticDetailKind::Suggestion && detail.text.starts_with("▶ ") {
+                let action = next_action;
+                next_action += 1;
+                Some(action)
+            } else {
+                None
+            };
         let is_heading = matches!(detail.kind, DiagnosticDetailKind::Heading);
         if is_heading && !rows.is_empty() {
             content_height += 6.0;
@@ -461,6 +472,7 @@ pub(in crate::view) fn draw_diagnostic_hint(app: &mut App, frame: &mut Frame<'_>
                 text,
                 y: content_height,
                 h: row_height,
+                action,
             });
             content_height += row_height;
         }
@@ -543,6 +555,17 @@ pub(in crate::view) fn draw_diagnostic_hint(app: &mut App, frame: &mut Frame<'_>
                 );
                 if row.bottom() <= body.y || row.y >= body.bottom() {
                     continue;
+                }
+                if let Some(action) = detail.action {
+                    app.hits
+                        .lsp_code_actions
+                        .push(crate::app::hits::LspCodeActionHit {
+                            rect: Rect::new(body.x, row.y, body.w, row.h),
+                            document,
+                            revision,
+                            diagnostic: index,
+                            action,
+                        });
                 }
                 let (text, color, x) = match detail.kind {
                     DiagnosticDetailKind::Heading => (
@@ -633,6 +656,61 @@ fn draw_pointer(frame: &mut Frame<'_>, p: &Palette, card: Rect, tip_x: f32, down
         Stroke::Line(tip.0, tip.1, tip_x + POINTER, edge),
     ];
     frame.stroke(&lines, 1.0, p.popup_border, frame.bounds());
+}
+
+pub(in crate::view) fn draw_completion_popup(app: &mut App, frame: &mut Frame<'_>) {
+    let Some(popup) = app.lsp_completion.as_ref() else {
+        return;
+    };
+    if !app.editor.active().is_some_and(|doc| {
+        doc.id == popup.document
+            && doc.revision == popup.revision
+            && doc.selection.head == popup.caret
+    }) {
+        app.lsp_completion = None;
+        return;
+    }
+    let (items, selected) = (popup.items.clone(), popup.selected);
+    let editor = app.layout.editor;
+    if items.is_empty() || editor.w <= 80.0 || editor.h <= 80.0 {
+        return;
+    }
+    let line_h = app.fonts.line_height.max(18.0);
+    let row_count = items.len().min(7);
+    let first = selected.saturating_sub(row_count - 1);
+    let visible = &items[first..(first + row_count).min(items.len())];
+    let width = editor.w.clamp(180.0, 420.0);
+    let docs = crate::app::lsp::completion::completion_documentation(&items[selected]);
+    let detail_height = if docs.is_empty() { 0.0 } else { line_h * 1.5 };
+    let height = (row_count as f32 * line_h + detail_height + 12.0).min(editor.h - 16.0);
+    let card = Rect::new(editor.x + 8.0, editor.y + 8.0, width, height);
+    draw_card(frame, app.palette, card, RADIUS_POPUP, app.palette.popup_bg);
+    let mut y = card.y + 6.0;
+    for (offset, item) in visible.iter().enumerate() {
+        let index = first + offset;
+        let row = Rect::new(card.x + 6.0, y, card.w - 12.0, line_h);
+        if index == selected {
+            frame.rounded(row, app.palette.hover, RADIUS_ROW);
+        }
+        let detail = item
+            .label_details
+            .as_ref()
+            .and_then(|details| details.detail.as_deref())
+            .or(item.detail.as_deref())
+            .unwrap_or("");
+        let label = if detail.is_empty() {
+            item.label.clone()
+        } else {
+            format!("{}  {detail}", item.label)
+        };
+        ui_text(frame, app, row.x + 8.0, row, &label, app.palette.text, card);
+        y += line_h;
+    }
+    if !docs.is_empty() && y + detail_height <= card.bottom() {
+        let docs = docs.lines().next().unwrap_or_default();
+        let row = Rect::new(card.x + 12.0, y + 3.0, card.w - 24.0, line_h);
+        ui_text(frame, app, row.x, row, docs, app.palette.text_muted, card);
+    }
 }
 
 #[cfg(test)]

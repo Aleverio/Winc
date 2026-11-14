@@ -27,6 +27,7 @@ mod input;
 mod memory;
 mod pictures;
 mod preview;
+mod problems;
 #[cfg(unix)]
 mod remote;
 mod settings;

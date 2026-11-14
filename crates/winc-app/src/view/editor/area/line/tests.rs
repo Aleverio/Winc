@@ -25,6 +25,22 @@ fn partial_diagnostic_ranges_expand_to_the_whole_identifier() {
 }
 
 #[test]
+fn errors_are_painted_after_overlapping_hints() {
+    let mut severities = [
+        Some(lsp_types::DiagnosticSeverity::ERROR),
+        Some(lsp_types::DiagnosticSeverity::HINT),
+    ];
+    severities.sort_by_key(|severity| diagnostic_paint_priority(*severity));
+    assert_eq!(
+        severities,
+        [
+            Some(lsp_types::DiagnosticSeverity::HINT),
+            Some(lsp_types::DiagnosticSeverity::ERROR),
+        ]
+    );
+}
+
+#[test]
 fn the_active_guide_is_the_block_around_the_caret() {
     let code = "fn a() {\n    if x {\n        one();\n\n        two();\n    }\n    three();\n}\n";
     let doc = Document::from_text(DocumentId(1), code);

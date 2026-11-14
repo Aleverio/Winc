@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Sender};
 use std::thread;
 
-use dscode_lsp::{LspClient, LspClientState, LspNotification};
+use dscode_lsp::{LspClient, LspClientState, LspNotification, LspServerRequest};
 use lsp_types::{
     Hover, HoverContents, MarkedString, PublishDiagnosticsParams, TextDocumentContentChangeEvent,
     Url,
@@ -15,17 +15,45 @@ use super::*;
 use crate::app::UserEvent;
 use crate::winc::WindowProxy;
 
+pub(crate) mod completion;
+mod edit;
+pub(crate) mod navigation;
+pub(crate) mod signature;
+mod sync;
+pub(crate) use sync::{
+    auto_server_command, display_lsp_command, incremental_change, split_server_command,
+};
+#[cfg(test)]
+mod tests;
+
 struct SyncRequest {
+    document: winc_editor::DocumentId,
     language: String,
     command: Vec<String>,
     root: PathBuf,
     path: PathBuf,
     revision: u64,
     text: Option<String>,
+    snapshot: Rope,
     changes: Vec<TextDocumentContentChangeEvent>,
-    opened: bool,
     changed: bool,
     saved: bool,
+}
+
+pub(crate) struct LspDocumentSnapshot {
+    pub(in crate::app) path: PathBuf,
+    pub(in crate::app) language: String,
+    command: Vec<String>,
+    pub(in crate::app) root: PathBuf,
+    pub(in crate::app) revision: u64,
+    text: Rope,
+}
+
+#[derive(Clone)]
+struct CloseRequest {
+    language: String,
+    root: PathBuf,
+    path: PathBuf,
 }
 
 struct HoverRequest {
@@ -38,6 +66,82 @@ struct HoverRequest {
     document: winc_editor::DocumentId,
     revision: u64,
     caret: usize,
+    kind: HoverRequestKind,
+}
+
+#[derive(Clone, Copy)]
+enum HoverRequestKind {
+    Hover,
+    SignatureHelp,
+}
+
+pub(super) struct CompletionRequest {
+    pub(super) language: String,
+    pub(super) command: Vec<String>,
+    pub(super) root: PathBuf,
+    pub(super) path: PathBuf,
+    pub(super) line: u32,
+    pub(super) character: u32,
+    pub(super) document: winc_editor::DocumentId,
+    pub(super) revision: u64,
+    pub(super) caret: usize,
+}
+
+struct FormattingRequest {
+    language: String,
+    command: Vec<String>,
+    root: PathBuf,
+    path: PathBuf,
+    document: winc_editor::DocumentId,
+    revision: u64,
+    options: lsp_types::FormattingOptions,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum NavigationKind {
+    Definition,
+    Declaration,
+    TypeDefinition,
+    Implementation,
+    References,
+}
+
+pub(crate) struct NavigationRequest {
+    pub(crate) language: String,
+    pub(crate) command: Vec<String>,
+    pub(crate) root: PathBuf,
+    pub(crate) path: PathBuf,
+    pub(crate) line: u32,
+    pub(crate) character: u32,
+    pub(crate) document: winc_editor::DocumentId,
+    pub(crate) revision: u64,
+    pub(crate) caret: usize,
+    pub(crate) kind: NavigationKind,
+}
+
+#[derive(Debug)]
+pub(crate) struct NavigationEvent {
+    pub(crate) document: winc_editor::DocumentId,
+    pub(crate) revision: u64,
+    pub(crate) caret: usize,
+    pub(crate) kind: NavigationKind,
+    pub(crate) result: Result<Vec<lsp_types::Location>, String>,
+}
+
+#[derive(Debug)]
+pub(crate) struct CompletionEvent {
+    pub(crate) document: winc_editor::DocumentId,
+    pub(crate) revision: u64,
+    pub(crate) caret: usize,
+    pub(crate) result: Result<Option<lsp_types::CompletionResponse>, String>,
+}
+
+pub(crate) struct CompletionPopup {
+    pub(crate) document: winc_editor::DocumentId,
+    pub(crate) revision: u64,
+    pub(crate) caret: usize,
+    pub(crate) items: Vec<lsp_types::CompletionItem>,
+    pub(crate) selected: usize,
 }
 
 struct CodeActionsRequest {
@@ -52,10 +156,23 @@ struct CodeActionsRequest {
     index: usize,
 }
 
+struct ExecuteCommandRequest {
+    language: String,
+    command: Vec<String>,
+    root: PathBuf,
+    command_name: String,
+    arguments: Vec<serde_json::Value>,
+}
+
 enum Request {
     Sync(SyncRequest),
+    Close(CloseRequest),
     Hover(HoverRequest),
+    Completion(CompletionRequest),
+    Formatting(FormattingRequest),
+    Navigation(NavigationRequest),
     CodeActions(Box<CodeActionsRequest>),
+    ExecuteCommand(ExecuteCommandRequest),
     Reset(String, PathBuf),
 }
 
@@ -95,6 +212,16 @@ impl LspBridge {
                         }
                     }
                 }
+                let shutdown_proxy = proxy.clone();
+                runtime.block_on(async {
+                    for (_, client) in clients.drain() {
+                        if let Err(error) = client.stop().await {
+                            let _ = shutdown_proxy.send_event(UserEvent::LspError(format!(
+                                "Could not gracefully stop an LSP server: {error}"
+                            )));
+                        }
+                    }
+                });
             })?;
         Ok(Self { sender })
     }
@@ -108,6 +235,36 @@ impl LspBridge {
     fn hover(&self, request: HoverRequest) -> Result<(), String> {
         self.sender
             .send(Request::Hover(request))
+            .map_err(|error| error.to_string())
+    }
+
+    pub(super) fn completion(&self, request: CompletionRequest) -> Result<(), String> {
+        self.sender
+            .send(Request::Completion(request))
+            .map_err(|error| error.to_string())
+    }
+
+    fn formatting(&self, request: FormattingRequest) -> Result<(), String> {
+        self.sender
+            .send(Request::Formatting(request))
+            .map_err(|error| error.to_string())
+    }
+
+    fn navigation(&self, request: NavigationRequest) -> Result<(), String> {
+        self.sender
+            .send(Request::Navigation(request))
+            .map_err(|error| error.to_string())
+    }
+
+    fn close(&self, request: CloseRequest) -> Result<(), String> {
+        self.sender
+            .send(Request::Close(request))
+            .map_err(|error| error.to_string())
+    }
+
+    fn execute_command(&self, request: ExecuteCommandRequest) -> Result<(), String> {
+        self.sender
+            .send(Request::ExecuteCommand(request))
             .map_err(|error| error.to_string())
     }
 
@@ -125,40 +282,72 @@ async fn handle_request(
 ) -> Result<Option<UserEvent>, String> {
     match request {
         Request::Sync(SyncRequest {
+            document,
             language,
             command,
             root,
             path,
             revision,
             text,
+            snapshot,
             changes,
-            opened,
             changed,
             saved,
         }) => {
-            let client = get_client(&language, &command, &root, clients, proxy).await?;
-            let uri = file_uri(&path)?;
-            if opened {
-                client
-                    .did_open(
-                        uri.clone(),
-                        language,
-                        revision.min(i32::MAX as u64) as i32,
-                        text.unwrap_or_default(),
-                    )
-                    .await
-                    .map_err(|error| format!("LSP document open failed: {error}"))?;
-            } else if changed {
-                client
-                    .did_change_with_changes(uri, revision.min(i32::MAX as u64) as i32, changes)
-                    .await
-                    .map_err(|error| format!("LSP document sync failed: {error}"))?;
+            let result = async {
+                let client = get_client(&language, &command, &root, clients, proxy, false).await?;
+                let uri = file_uri(&path)?;
+                if !client.document_is_open(&uri).await {
+                    client
+                        .did_open(
+                            uri.clone(),
+                            language.clone(),
+                            revision.min(i32::MAX as u64) as i32,
+                            text.unwrap_or_else(|| snapshot.to_string()),
+                        )
+                        .await
+                        .map_err(|error| format!("LSP document open failed: {error}"))?;
+                } else if changed && !changes.is_empty() {
+                    client
+                        .did_change_with_changes(uri, revision.min(i32::MAX as u64) as i32, changes)
+                        .await
+                        .map_err(|error| format!("LSP document sync failed: {error}"))?;
+                }
+                if saved {
+                    client.did_save(file_uri(&path)?).await.map_err(|error| {
+                        format!("LSP document save notification failed: {error}")
+                    })?;
+                }
+                Ok::<_, String>(())
             }
-            if saved {
+            .await;
+            if let Err(error) = result {
+                let key = (language.clone(), root.clone());
+                if let Some(client) = clients.remove(&key)
+                    && let Err(stop_error) = client.stop().await
+                {
+                    let _ = proxy.send_event(UserEvent::LspError(format!(
+                        "Could not stop the failed {language} language server: {stop_error}"
+                    )));
+                }
+                let _ = proxy.send_event(UserEvent::LspSyncFailed(
+                    document, revision, language, root, error,
+                ));
+                return Ok(None);
+            }
+            let _ = proxy.send_event(UserEvent::LspSyncSucceeded(document, revision));
+            Ok(None)
+        }
+        Request::Close(CloseRequest {
+            language,
+            root,
+            path,
+        }) => {
+            if let Some(client) = clients.get(&(language.clone(), root.clone())) {
                 client
-                    .did_save(file_uri(&path)?)
+                    .did_close(file_uri(&path)?)
                     .await
-                    .map_err(|error| format!("LSP document save notification failed: {error}"))?;
+                    .map_err(|error| format!("LSP document close failed: {error}"))?;
             }
             Ok(None)
         }
@@ -172,17 +361,156 @@ async fn handle_request(
             document,
             revision,
             caret,
+            kind,
         }) => {
-            let result = async {
-                let client = get_client(&language, &command, &root, clients, proxy).await?;
-                let hover = client
-                    .hover(file_uri(&path)?, line, character)
+            let client = get_client(&language, &command, &root, clients, proxy, true).await?;
+            let uri = file_uri(&path)?;
+            let proxy = proxy.clone();
+            tokio::spawn(async move {
+                match kind {
+                    HoverRequestKind::Hover => {
+                        let result = client
+                            .hover(uri, line, character)
+                            .await
+                            .map(|hover| hover.map(hover_text))
+                            .map_err(|error| format!("LSP hover failed: {error}"));
+                        let _ = proxy
+                            .send_event(UserEvent::LspHover(document, revision, caret, result));
+                    }
+                    HoverRequestKind::SignatureHelp => {
+                        let result = client
+                            .signature_help(uri, line, character)
+                            .await
+                            .map(|help| help.map(signature::signature_help_text))
+                            .map_err(|error| format!("LSP signature-help request failed: {error}"));
+                        let _ = proxy.send_event(UserEvent::LspSignatureHelp(
+                            document, revision, caret, result,
+                        ));
+                    }
+                }
+            });
+            Ok(None)
+        }
+        Request::Completion(CompletionRequest {
+            language,
+            command,
+            root,
+            path,
+            line,
+            character,
+            document,
+            revision,
+            caret,
+        }) => {
+            let client = get_client(&language, &command, &root, clients, proxy, true).await?;
+            let uri = file_uri(&path)?;
+            let proxy = proxy.clone();
+            tokio::spawn(async move {
+                let result = client
+                    .completion(
+                        uri,
+                        line,
+                        character,
+                        lsp_types::CompletionTriggerKind::INVOKED,
+                        None,
+                    )
+                    .await;
+                let _ = proxy.send_event(UserEvent::LspCompletion(Box::new(CompletionEvent {
+                    document,
+                    revision,
+                    caret,
+                    result,
+                })));
+            });
+            Ok(None)
+        }
+        Request::Formatting(FormattingRequest {
+            language,
+            command,
+            root,
+            path,
+            document,
+            revision,
+            options,
+        }) => {
+            let client = get_client(&language, &command, &root, clients, proxy, true).await?;
+            let uri = file_uri(&path)?;
+            let proxy = proxy.clone();
+            tokio::spawn(async move {
+                let result = client
+                    .formatting(uri, options)
                     .await
-                    .map_err(|error| format!("LSP hover failed: {error}"))?;
-                Ok::<_, String>(hover.map(hover_text))
-            }
-            .await;
-            Ok(Some(UserEvent::LspHover(document, revision, caret, result)))
+                    .map_err(|error| format!("LSP formatting request failed: {error}"));
+                let _ = proxy.send_event(UserEvent::LspFormatted(document, revision, result));
+            });
+            Ok(None)
+        }
+        Request::Navigation(request) => {
+            let client = match get_client(
+                &request.language,
+                &request.command,
+                &request.root,
+                clients,
+                proxy,
+                true,
+            )
+            .await
+            {
+                Ok(client) => client,
+                Err(error) => {
+                    let _ = proxy.send_event(UserEvent::LspNavigation(Box::new(NavigationEvent {
+                        document: request.document,
+                        revision: request.revision,
+                        caret: request.caret,
+                        kind: request.kind,
+                        result: Err(error),
+                    })));
+                    return Ok(None);
+                }
+            };
+            let proxy = proxy.clone();
+            tokio::spawn(async move {
+                let result = async {
+                    let uri = file_uri(&request.path)?;
+                    match request.kind {
+                        NavigationKind::Definition => {
+                            client
+                                .definition_locations(uri, request.line, request.character)
+                                .await
+                        }
+                        NavigationKind::Declaration => {
+                            client
+                                .declaration_locations(uri, request.line, request.character)
+                                .await
+                        }
+                        NavigationKind::TypeDefinition => {
+                            client
+                                .type_definition_locations(uri, request.line, request.character)
+                                .await
+                        }
+                        NavigationKind::Implementation => {
+                            client
+                                .implementation_locations(uri, request.line, request.character)
+                                .await
+                        }
+                        NavigationKind::References => {
+                            client
+                                .reference_locations(uri, request.line, request.character)
+                                .await
+                        }
+                    }
+                    .map_err(|error| format!("LSP navigation request failed: {error}"))
+                }
+                .await;
+                let _ = proxy.send_event(UserEvent::LspNavigation(Box::new(NavigationEvent {
+                    document: request.document,
+                    revision: request.revision,
+                    caret: request.caret,
+                    kind: request.kind,
+                    result,
+                })));
+            });
+            Ok(None)
         }
         Request::CodeActions(request) => {
             let CodeActionsRequest {
@@ -198,40 +526,59 @@ async fn handle_request(
             } = *request;
             let requested_range = range;
             let requested_message = diagnostic.message.clone();
-            let result = async {
-                let client = get_client(&language, &command, &root, clients, proxy).await?;
-                let actions = client
-                    .code_actions(file_uri(&path)?, range, vec![diagnostic])
+            let client = get_client(&language, &command, &root, clients, proxy, true).await?;
+            let proxy = proxy.clone();
+            tokio::spawn(async move {
+                let result = async {
+                    let actions = client
+                        .code_actions(file_uri(&path)?, range, vec![diagnostic])
+                        .await
+                        .map_err(|error| format!("LSP quick-fix request failed: {error}"))?;
+                    Ok::<_, String>(actions.unwrap_or_default())
+                }
+                .await;
+                let _ = proxy.send_event(UserEvent::LspCodeActions(
+                    document,
+                    revision,
+                    index,
+                    requested_range,
+                    requested_message,
+                    result,
+                ));
+            });
+            Ok(None)
+        }
+        Request::ExecuteCommand(ExecuteCommandRequest {
+            language,
+            command,
+            root,
+            command_name,
+            arguments,
+        }) => {
+            let client = get_client(&language, &command, &root, clients, proxy, true).await?;
+            let proxy = proxy.clone();
+            tokio::spawn(async move {
+                if let Err(error) = client
+                    .execute_command(command_name.clone(), arguments)
                     .await
-                    .map_err(|error| format!("LSP quick-fix request failed: {error}"))?;
-                Ok::<_, String>(
-                    actions
-                        .unwrap_or_default()
-                        .into_iter()
-                        .map(|action| match action {
-                            lsp_types::CodeActionOrCommand::CodeAction(action) => action.title,
-                            lsp_types::CodeActionOrCommand::Command(command) => command.title,
-                        })
-                        .collect(),
-                )
-            }
-            .await;
-            Ok(Some(UserEvent::LspCodeActions(
-                document,
-                revision,
-                index,
-                requested_range,
-                requested_message,
-                result,
-            )))
+                {
+                    let _ = proxy.send_event(UserEvent::LspError(format!(
+                        "LSP command {command_name} failed: {error}"
+                    )));
+                }
+            });
+            Ok(None)
         }
         Request::Reset(language, root) => {
             if let Some(client) = clients.remove(&(language.clone(), root.clone())) {
-                client.stop().await.map_err(|error| {
+                let result = client.stop().await;
+                let _ = proxy.send_event(UserEvent::LspState(language.clone(), root.clone(), None));
+                result.map_err(|error| {
                     format!("Could not stop the {language} language server: {error}")
                 })?;
+            } else {
+                let _ = proxy.send_event(UserEvent::LspState(language, root, None));
             }
-            let _ = proxy.send_event(UserEvent::LspState(language, root, None));
             Ok(None)
         }
     }
@@ -243,14 +590,22 @@ async fn get_client(
     root: &Path,
     clients: &mut HashMap<(String, PathBuf), Arc<LspClient>>,
     proxy: &WindowProxy,
+    report_startup_error: bool,
 ) -> Result<Arc<LspClient>, String> {
     let key = (language.to_owned(), root.to_path_buf());
     if let Some(client) = clients.get(&key).cloned() {
-        if client.get_state().await != LspClientState::Crashed {
+        let matches_command = command
+            .split_first()
+            .is_some_and(|(program, args)| client.matches_command(program, args));
+        if matches_command && client.get_state().await != LspClientState::Crashed {
             return Ok(client);
         }
         clients.remove(&key);
-        let _ = client.stop().await;
+        if let Err(error) = client.stop().await {
+            let _ = proxy.send_event(UserEvent::LspError(format!(
+                "Could not stop the previous {language} language server: {error}"
+            )));
+        }
         let _ = proxy.send_event(UserEvent::LspState(
             language.to_owned(),
             root.to_path_buf(),
@@ -266,6 +621,7 @@ async fn get_client(
         args.to_vec(),
     ));
     let notifications = client.subscribe_notifications();
+    let server_requests = client.subscribe_server_requests();
     let _ = proxy.send_event(UserEvent::LspState(
         language.to_owned(),
         root.to_path_buf(),
@@ -285,16 +641,25 @@ async fn get_client(
     }
     .await;
     if let Err(error) = startup {
-        let _ = proxy.send_event(UserEvent::LspState(
-            language.to_owned(),
-            root.to_path_buf(),
-            Some(Err(error.clone())),
-        ));
+        if report_startup_error {
+            let _ = proxy.send_event(UserEvent::LspState(
+                language.to_owned(),
+                root.to_path_buf(),
+                Some(Err(error.clone())),
+            ));
+        }
         return Err(error);
     }
     forward_notifications(
         &client,
         notifications,
+        language.to_owned(),
+        root.to_path_buf(),
+        proxy.clone(),
+    );
+    forward_server_requests(
+        &client,
+        server_requests,
         language.to_owned(),
         root.to_path_buf(),
         proxy.clone(),
@@ -306,6 +671,118 @@ async fn get_client(
         Some(Ok(())),
     ));
     Ok(client)
+}
+
+fn forward_server_requests(
+    client: &Arc<LspClient>,
+    mut requests: tokio::sync::broadcast::Receiver<LspServerRequest>,
+    language: String,
+    root: PathBuf,
+    proxy: WindowProxy,
+) {
+    let client = Arc::clone(client);
+    tokio::spawn(async move {
+        loop {
+            let request = match requests.recv().await {
+                Ok(request) => request,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(count)) => {
+                    let _ = proxy.send_event(UserEvent::LspError(format!(
+                        "Dropped {count} requests from the {language} language server"
+                    )));
+                    continue;
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+            };
+            let response = match request.method.as_str() {
+                "workspace/applyEdit" => {
+                    let result = workspace_apply_edit_response(&request.params, &proxy).await;
+                    client.respond(request.id, result).await
+                }
+                _ => match server_request_response(&request, &root) {
+                    Ok(result) => client.respond(request.id, result).await,
+                    Err((code, message)) => client.respond_error(request.id, code, message).await,
+                },
+            };
+            if let Err(error) = response {
+                let _ = proxy.send_event(UserEvent::LspError(format!(
+                    "Could not respond to {language} language server request: {error}"
+                )));
+            }
+        }
+    });
+}
+
+async fn workspace_apply_edit_response(
+    params: &serde_json::Value,
+    proxy: &WindowProxy,
+) -> serde_json::Value {
+    let result = async {
+        let value = params
+            .get("edit")
+            .cloned()
+            .ok_or_else(|| "Workspace edit request has no edit payload".to_owned())?;
+        let edit = serde_json::from_value(value)
+            .map_err(|error| format!("Invalid workspace edit: {error}"))?;
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        proxy
+            .send_event(UserEvent::LspApplyWorkspaceEdit(Box::new(edit), sender))
+            .map_err(|_| "The editor window is no longer available".to_owned())?;
+        match tokio::time::timeout(std::time::Duration::from_secs(10), receiver).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) => Err("The editor could not process the workspace edit".to_owned()),
+            Err(_) => Err("The editor took too long to apply the workspace edit".to_owned()),
+        }
+    }
+    .await;
+    match result {
+        Ok(()) => serde_json::json!({ "applied": true }),
+        Err(error) => serde_json::json!({
+            "applied": false,
+            "failureReason": error
+        }),
+    }
+}
+
+fn server_request_response(
+    request: &LspServerRequest,
+    root: &Path,
+) -> Result<serde_json::Value, (i64, String)> {
+    match request.method.as_str() {
+        "workspace/configuration" => {
+            let count = request
+                .params
+                .get("items")
+                .and_then(serde_json::Value::as_array)
+                .map_or(0, Vec::len);
+            Ok(serde_json::Value::Array(vec![
+                serde_json::Value::Null;
+                count
+            ]))
+        }
+        "workspace/workspaceFolders" => {
+            let uri = file_uri(root).map_err(|error| (-32603, error))?;
+            let folders = vec![lsp_types::WorkspaceFolder {
+                uri,
+                name: root
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or_default()
+                    .to_owned(),
+            }];
+            serde_json::to_value(folders).map_err(|error| (-32603, error.to_string()))
+        }
+        "client/registerCapability"
+        | "client/unregisterCapability"
+        | "window/workDoneProgress/create" => Ok(serde_json::Value::Null),
+        method => Err((-32601, format!("Unsupported LSP server request: {method}"))),
+    }
+}
+
+pub(crate) fn code_action_title(action: &lsp_types::CodeActionOrCommand) -> &str {
+    match action {
+        lsp_types::CodeActionOrCommand::CodeAction(action) => &action.title,
+        lsp_types::CodeActionOrCommand::Command(command) => &command.title,
+    }
 }
 
 fn forward_notifications(
@@ -354,6 +831,15 @@ fn diagnostic_event(notification: LspNotification) -> Option<UserEvent> {
     Some(UserEvent::LspDiagnostics(path, diagnostics.diagnostics))
 }
 
+pub(crate) fn position_to_line_col(
+    rope: &Rope,
+    position: lsp_types::Position,
+) -> Result<(usize, usize), String> {
+    let character = edit::lsp_position_to_char(rope, position)?;
+    let line = position.line as usize;
+    Ok((line, character - rope.line_to_char(line)))
+}
+
 fn file_uri(path: &Path) -> Result<Url, String> {
     Url::from_file_path(path).map_err(|()| format!("Invalid LSP file path: {}", path.display()))
 }
@@ -387,6 +873,40 @@ fn hover_text(hover: Hover) -> String {
 }
 
 impl App {
+    pub(in crate::app) fn lsp_formatted(
+        &mut self,
+        document: winc_editor::DocumentId,
+        revision: u64,
+        result: Result<Option<Vec<lsp_types::TextEdit>>, String>,
+    ) {
+        let Some(doc) = self.editor.document(document) else {
+            return;
+        };
+        if doc.revision != revision {
+            return;
+        }
+        let Some(path) = doc.path.clone() else {
+            return;
+        };
+        match result {
+            Ok(Some(edits)) if !edits.is_empty() => {
+                let Ok(uri) = file_uri(&path) else {
+                    self.flash("Could not format the document: invalid file path".to_owned());
+                    return;
+                };
+                let edit = lsp_types::WorkspaceEdit {
+                    changes: Some(HashMap::from([(uri, edits)])),
+                    ..Default::default()
+                };
+                if let Err(error) = self.apply_lsp_workspace_edit(edit) {
+                    self.flash(format!("Could not apply LSP formatting edits: {error}"));
+                }
+            }
+            Ok(_) => {}
+            Err(error) => self.flash(error),
+        }
+    }
+
     pub(in crate::app) fn reset_lsp_server(&mut self, language: &str) {
         let roots: std::collections::HashSet<_> = self
             .editor
@@ -415,7 +935,8 @@ impl App {
                 ));
             }
         }
-        self.lsp_sent.retain(|id, _| {
+        self.lsp_sent.retain(|_, sent| sent.language != language);
+        self.lsp_failed.retain(|id, _| {
             self.editor
                 .document(*id)
                 .is_none_or(|doc| doc.highlighter.language().id != language)
@@ -434,14 +955,15 @@ impl App {
     }
 
     pub(in crate::app) fn sync_lsp_documents(&mut self) {
-        if self.config.lsp_servers.is_empty() && self.config.lsp_auto.is_empty() {
+        let configured = !self.config.lsp_servers.is_empty() || !self.config.lsp_auto.is_empty();
+        if !configured && self.lsp_sent.is_empty() {
             return;
         }
 
         let Some(proxy) = self.link.proxy.clone() else {
             return;
         };
-        if self.lsp.is_none() {
+        if configured && self.lsp.is_none() {
             match LspBridge::new(proxy) {
                 Ok(bridge) => self.lsp = Some(bridge),
                 Err(error) => {
@@ -453,6 +975,9 @@ impl App {
 
         let mut open = std::collections::HashSet::new();
         let mut pending = Vec::new();
+        let mut closing = Vec::new();
+        self.lsp_failed
+            .retain(|id, _| self.editor.document(*id).is_some());
         for doc in &self.editor.documents {
             let Some(path) = doc.path.as_ref() else {
                 continue;
@@ -461,6 +986,14 @@ impl App {
                 continue;
             }
             let language = doc.highlighter.language().id;
+            if self
+                .lsp_failed
+                .get(&doc.id)
+                .is_some_and(|revision| *revision == doc.revision)
+            {
+                continue;
+            }
+            self.lsp_failed.remove(&doc.id);
             let command = if self.config.lsp_auto.iter().any(|id| id == language) {
                 auto_server_command(language)
             } else {
@@ -470,17 +1003,34 @@ impl App {
             let Some(rope) = doc.text().rope() else {
                 continue;
             };
+            let root = self
+                .editor
+                .root()
+                .filter(|root| path.starts_with(root))
+                .or_else(|| path.parent())
+                .unwrap_or(path)
+                .to_path_buf();
+            let previous = self.lsp_sent.get(&doc.id);
+            let same_target = previous.is_some_and(|sent| {
+                sent.path == *path
+                    && sent.language == language
+                    && sent.command == command
+                    && sent.root == root
+            });
+            if let Some(sent) = previous.filter(|_| !same_target) {
+                closing.push((
+                    doc.id,
+                    CloseRequest {
+                        language: sent.language.clone(),
+                        root: sent.root.clone(),
+                        path: sent.path.clone(),
+                    },
+                ));
+            }
             open.insert(doc.id);
-            let changed = self
-                .lsp_sent
-                .get(&doc.id)
-                .is_none_or(|(sent_path, revision, _)| {
-                    sent_path != path || *revision != doc.revision
-                });
-            let opened = self
-                .lsp_sent
-                .get(&doc.id)
-                .is_none_or(|(sent_path, _, _)| sent_path != path);
+            let changed =
+                !same_target || previous.is_some_and(|sent| sent.revision != doc.revision);
+            let opened = !same_target;
             let saved = !doc.is_dirty()
                 && (opened
                     || self
@@ -495,20 +1045,13 @@ impl App {
             let (text, changes) = if opened {
                 (Some(rope.to_string()), Vec::new())
             } else {
-                let Some((_, sent_revision, sent_text)) = self.lsp_sent.get(&doc.id) else {
+                let Some(sent) = previous else {
                     continue;
                 };
                 let change =
-                    incremental_change(sent_text, rope, doc.unchanged_lines_since(*sent_revision));
+                    incremental_change(&sent.text, rope, doc.unchanged_lines_since(sent.revision));
                 (None, change.into_iter().collect())
             };
-            let root = self
-                .editor
-                .root()
-                .filter(|root| path.starts_with(root))
-                .or_else(|| path.parent())
-                .unwrap_or(path)
-                .to_path_buf();
             pending.push((
                 doc.id,
                 path.clone(),
@@ -518,18 +1061,47 @@ impl App {
                 root,
                 text,
                 changes,
-                opened,
                 changed,
                 saved,
                 rope.clone(),
             ));
         }
-        self.lsp_sent.retain(|id, _| open.contains(id));
-        self.lsp_saved.retain(|id, _| open.contains(id));
+        for (id, sent) in &self.lsp_sent {
+            if !open.contains(id) {
+                closing.push((
+                    *id,
+                    CloseRequest {
+                        language: sent.language.clone(),
+                        root: sent.root.clone(),
+                        path: sent.path.clone(),
+                    },
+                ));
+            }
+        }
 
         let Some(bridge) = self.lsp.clone() else {
             return;
         };
+        let mut closed = std::collections::HashSet::new();
+        for (id, request) in closing {
+            if !closed.insert(id) {
+                continue;
+            }
+            if let Err(error) = bridge.close(request.clone()) {
+                self.flash(format!("Could not close the LSP document: {error}"));
+            }
+            if let Some(sent) = self.lsp_sent.remove(&id) {
+                self.lsp_saved.remove(&id);
+                self.lsp_code_actions
+                    .retain(|(document, _, _), _| *document != id);
+                self.lsp_code_actions_pending
+                    .retain(|(document, _, _)| *document != id);
+                if !self.lsp_sent.values().any(|open| open.path == sent.path) {
+                    self.lsp_diagnostics.remove(&sent.path);
+                }
+            }
+            self.lsp_failed.remove(&id);
+        }
         for (
             id,
             path,
@@ -539,26 +1111,36 @@ impl App {
             root,
             text,
             changes,
-            opened,
             changed,
             saved,
             snapshot,
         ) in pending
         {
             match bridge.sync(SyncRequest {
-                language,
-                command,
-                root,
+                document: id,
+                language: language.clone(),
+                command: command.clone(),
+                root: root.clone(),
                 path: path.clone(),
                 revision,
                 text,
+                snapshot: snapshot.clone(),
                 changes,
-                opened,
                 changed,
                 saved,
             }) {
                 Ok(()) => {
-                    self.lsp_sent.insert(id, (path.clone(), revision, snapshot));
+                    self.lsp_sent.insert(
+                        id,
+                        LspDocumentSnapshot {
+                            path: path.clone(),
+                            language,
+                            command,
+                            root,
+                            revision,
+                            text: snapshot,
+                        },
+                    );
                     if saved {
                         self.lsp_saved.insert(id, (path, revision));
                     }
@@ -600,7 +1182,7 @@ impl App {
         } else {
             self.config.lsp_servers.get(&language).cloned()
         };
-        let Some(command) = command else {
+        let Some(server_command) = command else {
             self.flash(format!("No LSP server is configured for {language}"));
             return;
         };
@@ -617,7 +1199,7 @@ impl App {
         };
         if let Err(error) = bridge.hover(HoverRequest {
             language,
-            command,
+            command: server_command,
             root,
             path,
             line,
@@ -625,9 +1207,60 @@ impl App {
             document: id,
             revision,
             caret,
+            kind: HoverRequestKind::Hover,
         }) {
             self.flash(format!("Could not request LSP hover: {error}"));
         }
+    }
+
+    pub(in crate::app) fn request_lsp_format(&mut self, document: winc_editor::DocumentId) -> bool {
+        self.sync_lsp_documents();
+        let Some((revision, path, language, options)) =
+            self.editor.document(document).and_then(|doc| {
+                let path = doc.path.clone()?;
+                let language = doc.highlighter.language().id.to_owned();
+                let options = lsp_types::FormattingOptions {
+                    tab_size: doc.tab_width(self.editor.tab_width).max(1) as u32,
+                    insert_spaces: !matches!(doc.indent(), winc_core::Indent::Tabs),
+                    ..Default::default()
+                };
+                Some((doc.revision, path, language, options))
+            })
+        else {
+            return false;
+        };
+        let command = if self.config.lsp_auto.iter().any(|id| id == &language) {
+            auto_server_command(&language)
+        } else {
+            self.config.lsp_servers.get(&language).cloned()
+        };
+        let Some(server_command) = command else {
+            return false;
+        };
+        let root = self
+            .editor
+            .root()
+            .filter(|root| path.starts_with(root))
+            .or_else(|| path.parent())
+            .unwrap_or(&path)
+            .to_path_buf();
+        let Some(bridge) = self.lsp.clone() else {
+            self.flash("LSP worker is unavailable".to_owned());
+            return true;
+        };
+        let request = FormattingRequest {
+            language,
+            command: server_command,
+            root,
+            path,
+            document,
+            revision,
+            options,
+        };
+        if let Err(error) = bridge.formatting(request) {
+            self.flash(format!("Could not request LSP formatting: {error}"));
+        }
+        true
     }
 
     pub(in crate::app) fn request_lsp_code_actions(
@@ -658,7 +1291,7 @@ impl App {
         } else {
             self.config.lsp_servers.get(&language).cloned()
         };
-        let Some(command) = command else {
+        let Some(server_command) = command else {
             self.lsp_code_actions_pending.remove(&key);
             self.lsp_code_actions.insert(key, Ok(Vec::new()));
             self.request_redraw();
@@ -684,7 +1317,7 @@ impl App {
             .sender
             .send(Request::CodeActions(Box::new(CodeActionsRequest {
                 language,
-                command,
+                command: server_command,
                 root,
                 path,
                 range: diagnostic.range,
@@ -710,7 +1343,7 @@ impl App {
         index: usize,
         range: lsp_types::Range,
         message: String,
-        result: Result<Vec<String>, String>,
+        result: Result<Vec<lsp_types::CodeActionOrCommand>, String>,
     ) {
         let key = (document, revision, index);
         self.lsp_code_actions_pending.remove(&key);
@@ -733,6 +1366,90 @@ impl App {
         }
     }
 
+    pub(in crate::app) fn apply_lsp_code_action(
+        &mut self,
+        document: winc_editor::DocumentId,
+        revision: u64,
+        diagnostic: usize,
+        action_index: usize,
+    ) {
+        let Some(action) = self
+            .lsp_code_actions
+            .get(&(document, revision, diagnostic))
+            .and_then(|actions| actions.as_ref().ok())
+            .and_then(|actions| actions.get(action_index))
+            .cloned()
+        else {
+            return;
+        };
+        let Some(doc) = self
+            .editor
+            .document(document)
+            .filter(|doc| doc.revision == revision)
+        else {
+            return;
+        };
+        let Some(path) = doc.path.clone() else {
+            self.flash("This code action has no file path".to_owned());
+            return;
+        };
+        let language = doc.highlighter.language().id.to_owned();
+        let root = self
+            .editor
+            .root()
+            .filter(|root| path.starts_with(root))
+            .or_else(|| path.parent())
+            .unwrap_or(&path)
+            .to_path_buf();
+        let command = if self.config.lsp_auto.iter().any(|id| id == &language) {
+            auto_server_command(&language)
+        } else {
+            self.config.lsp_servers.get(&language).cloned()
+        };
+        let Some(server_command) = command else {
+            self.flash(format!("No LSP server is configured for {language}"));
+            return;
+        };
+        let mut applied = false;
+        let command_to_run = match action {
+            lsp_types::CodeActionOrCommand::CodeAction(action) => {
+                if let Some(disabled) = action.disabled {
+                    self.flash(disabled.reason);
+                    return;
+                }
+                if let Some(edit) = action.edit {
+                    if let Err(error) = self.apply_lsp_workspace_edit(edit) {
+                        self.flash(format!("Could not apply code action: {error}"));
+                        return;
+                    }
+                    applied = true;
+                }
+                action.command
+            }
+            lsp_types::CodeActionOrCommand::Command(command) => Some(command),
+        };
+        if let Some(command) = command_to_run {
+            let Some(bridge) = self.lsp.clone() else {
+                self.flash("LSP worker is unavailable".to_owned());
+                return;
+            };
+            if let Err(error) = bridge.execute_command(ExecuteCommandRequest {
+                language,
+                command: server_command,
+                root,
+                command_name: command.command,
+                arguments: command.arguments.unwrap_or_default(),
+            }) {
+                self.flash(format!("Could not run LSP code action: {error}"));
+                return;
+            }
+            applied = true;
+        }
+        if !applied {
+            self.flash("This code action contains no applicable edit or command".to_owned());
+        }
+    }
+
     pub(in crate::app) fn lsp_hovered(
         &mut self,
         document: winc_editor::DocumentId,
@@ -751,309 +1468,5 @@ impl App {
             Ok(_) => self.flash("No hover information available".to_owned()),
             Err(error) => self.flash(error),
         }
-    }
-}
-
-pub(crate) fn auto_server_command(language: &str) -> Option<Vec<String>> {
-    let (program, args): (&str, &[&str]) = match language {
-        "rust" => ("rust-analyzer", &[]),
-        "python" => ("pyright-langserver", &["--stdio"]),
-        "go" => ("gopls", &[]),
-        "json" => ("vscode-json-language-server", &["--stdio"]),
-        _ => return None,
-    };
-    Some(
-        std::iter::once(program.to_owned())
-            .chain(args.iter().map(|arg| (*arg).to_owned()))
-            .collect(),
-    )
-}
-
-/// Build one ranged LSP edit, using the known unchanged prefix and a common suffix.
-fn incremental_change(
-    old: &Rope,
-    new: &Rope,
-    unchanged_lines: usize,
-) -> Option<TextDocumentContentChangeEvent> {
-    let unchanged_lines = unchanged_lines
-        .min(old.len_lines() - 1)
-        .min(new.len_lines() - 1);
-    let prefix_start = old.line_to_char(unchanged_lines);
-    debug_assert_eq!(prefix_start, new.line_to_char(unchanged_lines));
-
-    let mut old_prefix = old.slice(prefix_start..).chars();
-    let mut new_prefix = new.slice(prefix_start..).chars();
-    let mut start = prefix_start;
-    while let (Some(old), Some(new)) = (old_prefix.next(), new_prefix.next()) {
-        if old != new {
-            break;
-        }
-        start += 1;
-    }
-
-    let old_tail = old.slice(start..);
-    let new_tail = new.slice(start..);
-    let mut old_chars = old_tail.chars_at(old_tail.len_chars()).reversed();
-    let mut new_chars = new_tail.chars_at(new_tail.len_chars()).reversed();
-    let mut suffix = 0;
-    while let (Some(old), Some(new)) = (old_chars.next(), new_chars.next()) {
-        if old != new {
-            break;
-        }
-        suffix += 1;
-    }
-
-    let old_end = old.len_chars() - suffix;
-    let new_end = new.len_chars() - suffix;
-    if start == old_end && start == new_end {
-        return None;
-    }
-
-    let position = |text: &Rope, char_index: usize| {
-        let line = text.char_to_line(char_index);
-        let line_start = text.line_to_char(line);
-        lsp_types::Position::new(
-            line.min(u32::MAX as usize) as u32,
-            text.slice(line_start..char_index)
-                .len_utf16_cu()
-                .min(u32::MAX as usize) as u32,
-        )
-    };
-    Some(TextDocumentContentChangeEvent {
-        range: Some(lsp_types::Range::new(
-            position(old, start),
-            position(old, old_end),
-        )),
-        range_length: Some(
-            old.slice(start..old_end)
-                .len_utf16_cu()
-                .min(u32::MAX as usize) as u32,
-        ),
-        text: new.slice(start..new_end).to_string(),
-    })
-}
-
-#[cfg(test)]
-mod command_tests {
-    use super::*;
-    use lsp_types::{Diagnostic, Position, Range};
-
-    #[test]
-    fn server_command_splits_arguments_without_a_shell() {
-        assert_eq!(
-            split_server_command(r#"clangd --compile-commands-dir "C:\work space""#).unwrap(),
-            ["clangd", "--compile-commands-dir", r"C:\work space"]
-        );
-    }
-
-    #[test]
-    fn server_command_rejects_unclosed_quotes() {
-        assert!(split_server_command(r#"clangd --config "oops"#).is_err());
-    }
-
-    #[test]
-    fn publish_diagnostics_notifications_are_forwarded_to_the_document() {
-        let path = std::env::temp_dir().join("winc-lsp-diagnostics.rs");
-        let uri = Url::from_file_path(&path).unwrap();
-        let notification = LspNotification {
-            method: "textDocument/publishDiagnostics".to_owned(),
-            params: serde_json::to_value(PublishDiagnosticsParams {
-                uri,
-                version: None,
-                diagnostics: vec![Diagnostic {
-                    range: Range::new(Position::new(0, 0), Position::new(0, 1)),
-                    severity: Some(lsp_types::DiagnosticSeverity::ERROR),
-                    code: None,
-                    code_description: None,
-                    source: Some("test".to_owned()),
-                    message: "expected a value".to_owned(),
-                    related_information: None,
-                    tags: None,
-                    data: None,
-                }],
-            })
-            .unwrap(),
-        };
-
-        let Some(UserEvent::LspDiagnostics(received_path, diagnostics)) =
-            diagnostic_event(notification)
-        else {
-            panic!("publishDiagnostics must produce a document diagnostics event");
-        };
-        assert_eq!(received_path, path);
-        assert_eq!(diagnostics.len(), 1);
-        assert_eq!(diagnostics[0].message, "expected a value");
-    }
-
-    #[test]
-    fn automatic_servers_are_known_for_the_supported_defaults() {
-        assert_eq!(
-            auto_server_command("rust"),
-            Some(vec!["rust-analyzer".to_owned()])
-        );
-        assert_eq!(
-            auto_server_command("python"),
-            Some(vec!["pyright-langserver".to_owned(), "--stdio".to_owned()])
-        );
-        assert!(auto_server_command("unknown").is_none());
-    }
-
-    #[test]
-    fn incremental_change_uses_utf16_positions_for_unicode_edits() {
-        let old = Rope::from_str("same\nA🦀Z\nunchanged");
-        let new = Rope::from_str("same\nA🦀newZ\nunchanged");
-
-        let change = incremental_change(&old, &new, 1).unwrap();
-        assert_eq!(
-            change.range,
-            Some(lsp_types::Range::new(
-                lsp_types::Position::new(1, 3),
-                lsp_types::Position::new(1, 3),
-            ))
-        );
-        assert_eq!(change.range_length, Some(0));
-        assert_eq!(change.text, "new");
-    }
-
-    #[test]
-    fn incremental_change_handles_line_insertions_and_deletions() {
-        let old = Rope::from_str("first\nlast\n");
-        let new = Rope::from_str("first\ninserted\nlast\n");
-
-        let change = incremental_change(&old, &new, 1).unwrap();
-        assert_eq!(
-            change.range,
-            Some(lsp_types::Range::new(
-                lsp_types::Position::new(1, 0),
-                lsp_types::Position::new(1, 0),
-            ))
-        );
-        assert_eq!(change.text, "inserted\n");
-    }
-
-    #[test]
-    fn incremental_change_returns_none_when_the_text_is_unchanged() {
-        let text = Rope::from_str("same text\n");
-        assert!(incremental_change(&text, &text, 0).is_none());
-    }
-
-    #[test]
-    fn incremental_change_handles_replacement_without_a_common_prefix_or_suffix() {
-        let old = Rope::from_str("abc");
-        let new = Rope::from_str("xyz");
-
-        let change = incremental_change(&old, &new, 0).unwrap();
-        assert_eq!(
-            change.range,
-            Some(lsp_types::Range::new(
-                lsp_types::Position::new(0, 0),
-                lsp_types::Position::new(0, 3),
-            ))
-        );
-        assert_eq!(change.range_length, Some(3));
-        assert_eq!(change.text, "xyz");
-    }
-
-    #[test]
-    fn incremental_change_handles_insertions_at_the_end() {
-        let old = Rope::from_str("existing");
-        let new = Rope::from_str("existing text");
-
-        let change = incremental_change(&old, &new, 0).unwrap();
-        assert_eq!(
-            change.range,
-            Some(lsp_types::Range::new(
-                lsp_types::Position::new(0, 8),
-                lsp_types::Position::new(0, 8),
-            ))
-        );
-        assert_eq!(change.range_length, Some(0));
-        assert_eq!(change.text, " text");
-    }
-}
-
-pub(in crate::app) fn split_server_command(command: &str) -> Result<Vec<String>, String> {
-    let mut args = Vec::new();
-    let mut current = None::<String>;
-    let mut chars = command.chars().peekable();
-    while let Some(c) = chars.next() {
-        match c {
-            c if c.is_whitespace() => {
-                if let Some(arg) = current.take() {
-                    args.push(arg);
-                }
-            }
-            '\'' => {
-                let arg = current.get_or_insert_with(String::new);
-                loop {
-                    match chars.next() {
-                        Some('\'') => break,
-                        Some(c) => arg.push(c),
-                        None => return Err("Unclosed single quote in server command".to_owned()),
-                    }
-                }
-            }
-            '"' => {
-                let arg = current.get_or_insert_with(String::new);
-                loop {
-                    match chars.next() {
-                        Some('"') => break,
-                        Some('\\') if matches!(chars.peek(), Some('"' | '\\')) => {
-                            arg.extend(chars.next());
-                        }
-                        Some(c) => arg.push(c),
-                        None => return Err("Unclosed double quote in server command".to_owned()),
-                    }
-                }
-            }
-            c => current.get_or_insert_with(String::new).push(c),
-        }
-    }
-    args.extend(current);
-    if args.is_empty() {
-        return Err("A language server executable is required".to_owned());
-    }
-    Ok(args)
-}
-
-pub(crate) fn display_lsp_command(args: &[String]) -> String {
-    args.iter()
-        .map(|arg| {
-            if arg.chars().any(char::is_whitespace) || arg.contains('"') {
-                format!("\"{}\"", arg.replace('\\', "\\\\").replace('"', "\\\""))
-            } else {
-                arg.clone()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use lsp_types::{MarkupContent, MarkupKind};
-
-    #[test]
-    fn hover_content_fits_the_single_line_hint() {
-        let content = Hover {
-            contents: HoverContents::Markup(MarkupContent {
-                kind: MarkupKind::Markdown,
-                value: "```rust\nfn answer() -> u32\n```".to_owned(),
-            }),
-            range: None,
-        };
-        assert_eq!(hover_text(content), "```rust fn answer() -> u32 ```");
-    }
-
-    #[test]
-    fn long_hover_content_is_truncated_at_a_character_boundary() {
-        let content = Hover {
-            contents: HoverContents::Scalar(MarkedString::String("🦀".repeat(181))),
-            range: None,
-        };
-        let text = hover_text(content);
-        assert_eq!(text.chars().count(), 183);
-        assert!(text.ends_with("..."));
     }
 }

@@ -337,8 +337,13 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
     if action {
         let icon = (row.row.x + 14.0, icon_center_y(app, row.row, app.fonts.ui));
         icons::plus(frame, icon, 9.0, p.accent, clip);
-        let text = row.setting.label();
-        ui_text(frame, app, row.row.x + 26.0, row.row, text, p.accent, clip);
+        let text = ellipsize(
+            frame,
+            row.setting.label(),
+            app.fonts.ui,
+            (row.row.w - 34.0).max(0.0),
+        );
+        ui_text(frame, app, row.row.x + 26.0, row.row, &text, p.accent, clip);
         return None;
     }
 

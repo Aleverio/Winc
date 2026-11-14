@@ -489,7 +489,7 @@ impl App {
     }
 
     /// 打开 `place` 所在的文件，并选中其中的名字 `name`。
-    pub(super) fn open_place(&mut self, place: &Place, name: &str) {
+    pub(in crate::app) fn open_place(&mut self, place: &Place, name: &str) {
         let (line, col, name) = (place.line, place.col, name.to_owned());
         self.open_path_then(&place.path, move |app| {
             let col = col.or_else(|| {
@@ -516,7 +516,12 @@ impl App {
     }
 
     /// 在挂在光标所在名字下方的浮窗中列出 `items`，直接打字可以筛选。
-    pub(super) fn show_places(&mut self, kind: PlacesKind, name: String, items: Vec<Place>) {
+    pub(in crate::app) fn show_places(
+        &mut self,
+        kind: PlacesKind,
+        name: String,
+        items: Vec<Place>,
+    ) {
         let Some(doc) = self.editor.active() else {
             return;
         };
