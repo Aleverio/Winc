@@ -109,6 +109,7 @@ use winc_core::{Lines, Selection};
 use winc_editor::{COPY_LIMIT, Command, DocumentId, Editor, Entry, EntryKind, FileIndex, Search};
 use winc_render::{FontError, FontKind, FontSpec, Metrics, Rect, Renderer};
 
+use ropey::Rope;
 use winc_config::{Config, Session, State, ThemeChoice, resolve_font};
 
 use crate::bench::{Bench, Next};
@@ -790,7 +791,7 @@ pub struct App {
     /// 后台 language server 的通信桥；仅在配置了 LSP 服务后创建。
     pub(crate) lsp: Option<lsp::LspBridge>,
     /// 已发送给 LSP 的文档路径和版本。
-    pub(crate) lsp_sent: HashMap<DocumentId, (PathBuf, u64)>,
+    pub(crate) lsp_sent: HashMap<DocumentId, (PathBuf, u64, Rope)>,
     /// 最近向 LSP 通知保存的文档路径和版本。
     pub(crate) lsp_saved: HashMap<DocumentId, (PathBuf, u64)>,
     /// 已连接的语言服务状态，按语言和工作区根目录区分。

@@ -5,7 +5,11 @@ use std::sync::mpsc::{self, Sender};
 use std::thread;
 
 use dscode_lsp::{LspClient, LspClientState, LspNotification};
-use lsp_types::{Hover, HoverContents, MarkedString, PublishDiagnosticsParams, Url};
+use lsp_types::{
+    Hover, HoverContents, MarkedString, PublishDiagnosticsParams, TextDocumentContentChangeEvent,
+    Url,
+};
+use ropey::Rope;
 
 use super::*;
 use crate::app::UserEvent;
@@ -17,7 +21,8 @@ struct SyncRequest {
     root: PathBuf,
     path: PathBuf,
     revision: u64,
-    text: String,
+    text: Option<String>,
+    changes: Vec<TextDocumentContentChangeEvent>,
     opened: bool,
     changed: bool,
     saved: bool,
@@ -126,6 +131,7 @@ async fn handle_request(
             path,
             revision,
             text,
+            changes,
             opened,
             changed,
             saved,
@@ -138,13 +144,13 @@ async fn handle_request(
                         uri.clone(),
                         language,
                         revision.min(i32::MAX as u64) as i32,
-                        text,
+                        text.unwrap_or_default(),
                     )
                     .await
                     .map_err(|error| format!("LSP document open failed: {error}"))?;
             } else if changed {
                 client
-                    .did_change(uri, revision.min(i32::MAX as u64) as i32, text)
+                    .did_change_with_changes(uri, revision.min(i32::MAX as u64) as i32, changes)
                     .await
                     .map_err(|error| format!("LSP document sync failed: {error}"))?;
             }
@@ -468,11 +474,13 @@ impl App {
             let changed = self
                 .lsp_sent
                 .get(&doc.id)
-                .is_none_or(|(sent_path, revision)| sent_path != path || *revision != doc.revision);
+                .is_none_or(|(sent_path, revision, _)| {
+                    sent_path != path || *revision != doc.revision
+                });
             let opened = self
                 .lsp_sent
                 .get(&doc.id)
-                .is_none_or(|(sent_path, _)| sent_path != path);
+                .is_none_or(|(sent_path, _, _)| sent_path != path);
             let saved = !doc.is_dirty()
                 && (opened
                     || self
@@ -484,6 +492,16 @@ impl App {
             if !changed && !saved {
                 continue;
             }
+            let (text, changes) = if opened {
+                (Some(rope.to_string()), Vec::new())
+            } else {
+                let Some((_, sent_revision, sent_text)) = self.lsp_sent.get(&doc.id) else {
+                    continue;
+                };
+                let change =
+                    incremental_change(sent_text, rope, doc.unchanged_lines_since(*sent_revision));
+                (None, change.into_iter().collect())
+            };
             let root = self
                 .editor
                 .root()
@@ -498,10 +516,12 @@ impl App {
                 language.to_owned(),
                 command,
                 root,
-                rope.to_string(),
+                text,
+                changes,
                 opened,
                 changed,
                 saved,
+                rope.clone(),
             ));
         }
         self.lsp_sent.retain(|id, _| open.contains(id));
@@ -510,7 +530,21 @@ impl App {
         let Some(bridge) = self.lsp.clone() else {
             return;
         };
-        for (id, path, revision, language, command, root, text, opened, changed, saved) in pending {
+        for (
+            id,
+            path,
+            revision,
+            language,
+            command,
+            root,
+            text,
+            changes,
+            opened,
+            changed,
+            saved,
+            snapshot,
+        ) in pending
+        {
             match bridge.sync(SyncRequest {
                 language,
                 command,
@@ -518,12 +552,13 @@ impl App {
                 path: path.clone(),
                 revision,
                 text,
+                changes,
                 opened,
                 changed,
                 saved,
             }) {
                 Ok(()) => {
-                    self.lsp_sent.insert(id, (path.clone(), revision));
+                    self.lsp_sent.insert(id, (path.clone(), revision, snapshot));
                     if saved {
                         self.lsp_saved.insert(id, (path, revision));
                     }
@@ -734,6 +769,70 @@ pub(crate) fn auto_server_command(language: &str) -> Option<Vec<String>> {
     )
 }
 
+/// Build one ranged LSP edit, using the known unchanged prefix and a common suffix.
+fn incremental_change(
+    old: &Rope,
+    new: &Rope,
+    unchanged_lines: usize,
+) -> Option<TextDocumentContentChangeEvent> {
+    let unchanged_lines = unchanged_lines
+        .min(old.len_lines() - 1)
+        .min(new.len_lines() - 1);
+    let prefix_start = old.line_to_char(unchanged_lines);
+    debug_assert_eq!(prefix_start, new.line_to_char(unchanged_lines));
+
+    let mut old_prefix = old.slice(prefix_start..).chars();
+    let mut new_prefix = new.slice(prefix_start..).chars();
+    let mut start = prefix_start;
+    while let (Some(old), Some(new)) = (old_prefix.next(), new_prefix.next()) {
+        if old != new {
+            break;
+        }
+        start += 1;
+    }
+
+    let old_tail = old.slice(start..);
+    let new_tail = new.slice(start..);
+    let mut old_chars = old_tail.chars_at(old_tail.len_chars()).reversed();
+    let mut new_chars = new_tail.chars_at(new_tail.len_chars()).reversed();
+    let mut suffix = 0;
+    while let (Some(old), Some(new)) = (old_chars.next(), new_chars.next()) {
+        if old != new {
+            break;
+        }
+        suffix += 1;
+    }
+
+    let old_end = old.len_chars() - suffix;
+    let new_end = new.len_chars() - suffix;
+    if start == old_end && start == new_end {
+        return None;
+    }
+
+    let position = |text: &Rope, char_index: usize| {
+        let line = text.char_to_line(char_index);
+        let line_start = text.line_to_char(line);
+        lsp_types::Position::new(
+            line.min(u32::MAX as usize) as u32,
+            text.slice(line_start..char_index)
+                .len_utf16_cu()
+                .min(u32::MAX as usize) as u32,
+        )
+    };
+    Some(TextDocumentContentChangeEvent {
+        range: Some(lsp_types::Range::new(
+            position(old, start),
+            position(old, old_end),
+        )),
+        range_length: Some(
+            old.slice(start..old_end)
+                .len_utf16_cu()
+                .min(u32::MAX as usize) as u32,
+        ),
+        text: new.slice(start..new_end).to_string(),
+    })
+}
+
 #[cfg(test)]
 mod command_tests {
     use super::*;
@@ -797,6 +896,79 @@ mod command_tests {
             Some(vec!["pyright-langserver".to_owned(), "--stdio".to_owned()])
         );
         assert!(auto_server_command("unknown").is_none());
+    }
+
+    #[test]
+    fn incremental_change_uses_utf16_positions_for_unicode_edits() {
+        let old = Rope::from_str("same\nA🦀Z\nunchanged");
+        let new = Rope::from_str("same\nA🦀newZ\nunchanged");
+
+        let change = incremental_change(&old, &new, 1).unwrap();
+        assert_eq!(
+            change.range,
+            Some(lsp_types::Range::new(
+                lsp_types::Position::new(1, 3),
+                lsp_types::Position::new(1, 3),
+            ))
+        );
+        assert_eq!(change.range_length, Some(0));
+        assert_eq!(change.text, "new");
+    }
+
+    #[test]
+    fn incremental_change_handles_line_insertions_and_deletions() {
+        let old = Rope::from_str("first\nlast\n");
+        let new = Rope::from_str("first\ninserted\nlast\n");
+
+        let change = incremental_change(&old, &new, 1).unwrap();
+        assert_eq!(
+            change.range,
+            Some(lsp_types::Range::new(
+                lsp_types::Position::new(1, 0),
+                lsp_types::Position::new(1, 0),
+            ))
+        );
+        assert_eq!(change.text, "inserted\n");
+    }
+
+    #[test]
+    fn incremental_change_returns_none_when_the_text_is_unchanged() {
+        let text = Rope::from_str("same text\n");
+        assert!(incremental_change(&text, &text, 0).is_none());
+    }
+
+    #[test]
+    fn incremental_change_handles_replacement_without_a_common_prefix_or_suffix() {
+        let old = Rope::from_str("abc");
+        let new = Rope::from_str("xyz");
+
+        let change = incremental_change(&old, &new, 0).unwrap();
+        assert_eq!(
+            change.range,
+            Some(lsp_types::Range::new(
+                lsp_types::Position::new(0, 0),
+                lsp_types::Position::new(0, 3),
+            ))
+        );
+        assert_eq!(change.range_length, Some(3));
+        assert_eq!(change.text, "xyz");
+    }
+
+    #[test]
+    fn incremental_change_handles_insertions_at_the_end() {
+        let old = Rope::from_str("existing");
+        let new = Rope::from_str("existing text");
+
+        let change = incremental_change(&old, &new, 0).unwrap();
+        assert_eq!(
+            change.range,
+            Some(lsp_types::Range::new(
+                lsp_types::Position::new(0, 8),
+                lsp_types::Position::new(0, 8),
+            ))
+        );
+        assert_eq!(change.range_length, Some(0));
+        assert_eq!(change.text, " text");
     }
 }
 

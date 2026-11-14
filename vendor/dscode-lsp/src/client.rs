@@ -426,13 +426,31 @@ impl LspClient {
     /// - `version` — The new version number of the document.
     /// - `text` — The full updated content of the document.
     pub async fn did_change(&self, uri: Url, version: i32, text: String) -> Result<(), String> {
-        let params = DidChangeTextDocumentParams {
-            text_document: VersionedTextDocumentIdentifier { uri, version },
-            content_changes: vec![TextDocumentContentChangeEvent {
+        self.did_change_with_changes(
+            uri,
+            version,
+            vec![TextDocumentContentChangeEvent {
                 range: None,
                 range_length: None,
                 text,
             }],
+        )
+        .await
+    }
+
+    /// Sends incremental `textDocument/didChange` content changes.
+    ///
+    /// Changes are applied by the server in order; ranged changes must use positions
+    /// relative to the document state after all preceding changes in this notification.
+    pub async fn did_change_with_changes(
+        &self,
+        uri: Url,
+        version: i32,
+        content_changes: Vec<TextDocumentContentChangeEvent>,
+    ) -> Result<(), String> {
+        let params = DidChangeTextDocumentParams {
+            text_document: VersionedTextDocumentIdentifier { uri, version },
+            content_changes,
         };
 
         self.send_notification("textDocument/didChange", params).await

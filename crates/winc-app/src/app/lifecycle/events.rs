@@ -458,7 +458,7 @@ impl App {
                 let documents = self
                     .lsp_sent
                     .iter()
-                    .filter(|(_, (sent_path, _))| sent_path == &path)
+                    .filter(|(_, (sent_path, _, _))| sent_path == &path)
                     .map(|(id, _)| *id)
                     .collect::<HashSet<_>>();
                 self.lsp_code_actions
