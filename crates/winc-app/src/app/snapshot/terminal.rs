@@ -597,7 +597,7 @@ fn the_tab_bar_keeps_even_gaps_around_tabs_and_buttons() {
 
     // 标签放不下：第一个终端标签在面板视图标签之后，四周留白相同。
     let tab = hit(&app, terminal::HeaderHit::Tab(0));
-    let panel_tabs_end = hit(&app, terminal::HeaderHit::ProblemsView).right() + TAB_GAP;
+    let panel_tabs_end = hit(&app, terminal::HeaderHit::ProblemsView).right();
     assert_eq!(tab.x - panel_tabs_end, tab.y - card.y);
     assert_eq!(tab.x - panel_tabs_end, app.terminal_view().y - tab.bottom());
     assert_eq!(tab.x - panel_tabs_end, 5.0);
