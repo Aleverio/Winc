@@ -516,15 +516,15 @@ fn dmg_background(work: &Path, output: &Path) -> Result<(), String> {
 /// 应用图标的源文件，相对 workspace 根目录。
 const ICON_SOURCE: &str = "crates/winc-app/assets/icon.svg";
 
-/// `ICON_SOURCE` 中图标底板的宽度（像素），以 1024 × 1024 的画布计，即底板 `<rect>` 的 `width`。
+/// `ICON_SOURCE` 的画布宽度（像素），以 1024 × 1024 的画布计。
 ///
-/// 底板接近铺满画布，Windows、Linux 的图标按原样使用；macOS 的图标缩小到 [`MACOS_ICON_TILE`]。
-pub(crate) const ICON_TILE: f32 = 920.0;
+/// Windows、Linux 按原样使用；macOS 图标缩小到 [`MACOS_ICON_TILE`]。
+pub(crate) const ICON_TILE: f32 = 1024.0;
 
-/// macOS 应用图标中底板的边长（像素），以 1024 × 1024 的画布计。
+/// macOS 应用图标的可见内容边长（像素），以 1024 × 1024 的画布计。
 ///
 /// 依据 Apple Design Resources 中的 macOS 应用图标模板：底板 824 × 824，四周各留 100，留白用于
-/// 系统绘制的阴影。macOS 15 及更早的版本按原样显示图标，底板超出该尺寸时，程序坞中的显示尺寸
+/// 系统绘制的阴影。macOS 15 及更早的版本按原样显示图标，内容超出该尺寸时，程序坞中的显示尺寸
 /// 大于按模板制作的图标。
 pub(crate) const MACOS_ICON_TILE: f32 = 824.0;
 
@@ -583,7 +583,7 @@ fn app_icon(work: &Path, output: &Path) -> Result<(), String> {
 
 /// 将应用图标渲染为边长 `size`（像素）的 macOS 图标。
 ///
-/// 整个图标按 [`MACOS_ICON_TILE`] 与 [`ICON_TILE`] 之比缩小后居中放在透明画布上，底板因此位于
+/// 整个图标按 [`MACOS_ICON_TILE`] 与 [`ICON_TILE`] 之比缩小后居中放在透明画布上，内容因此位于
 /// 模板规定的位置。
 pub(crate) fn macos_icon(
     picture: &winc_preview::image::Picture,
