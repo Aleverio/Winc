@@ -595,11 +595,12 @@ fn the_tab_bar_keeps_even_gaps_around_tabs_and_buttons() {
             .unwrap()
     };
 
-    // 标签放不下：第一个标签上、下、左的留白相同。
+    // 标签放不下：第一个终端标签在面板视图标签之后，四周留白相同。
     let tab = hit(&app, terminal::HeaderHit::Tab(0));
-    assert_eq!(tab.x - card.x, tab.y - card.y);
-    assert_eq!(tab.x - card.x, app.terminal_view().y - tab.bottom());
-    assert_eq!(tab.x - card.x, 5.0);
+    let panel_tabs_end = hit(&app, terminal::HeaderHit::ProblemsView).right() + TAB_GAP;
+    assert_eq!(tab.x - panel_tabs_end, tab.y - card.y);
+    assert_eq!(tab.x - panel_tabs_end, app.terminal_view().y - tab.bottom());
+    assert_eq!(tab.x - panel_tabs_end, 5.0);
 
     // 「+」、运行、切换位置、收起四个按钮间距相同，尺寸和间距与编辑区标签栏一致。
     let new = hit(&app, terminal::HeaderHit::New);

@@ -6,7 +6,9 @@ fn problems_panel_uses_lsp_diagnostics_without_starting_a_terminal() {
     let dir = sample_folder("problems-panel");
     let path = dir.join("src").join("main.rs");
     let mut app = app_with(&path, true);
-    let document = app.editor.active().unwrap().id;
+    let active = app.editor.active().unwrap();
+    let document = active.id;
+    let path = active.path.clone().unwrap();
     app.lsp_diagnostics.insert(
         path,
         vec![Diagnostic {
@@ -67,10 +69,20 @@ fn problems_tab_switches_the_bottom_panel_without_starting_a_terminal() {
 #[test]
 fn problems_are_sorted_by_severity_then_location() {
     let dir = sample_folder("problems-order");
-    let first = dir.join("src/main.rs");
-    let second = dir.join("short.rs");
-    let mut app = app_with(&first, false);
-    app.open_path(&second);
+    let first_file = dir.join("src/main.rs");
+    let second_file = dir.join("short.rs");
+    let mut app = app_with(&first_file, false);
+    app.open_path(&second_file);
+    let path_for = |name: &str| {
+        app.editor
+            .documents
+            .iter()
+            .find(|document| document.name() == name)
+            .and_then(|document| document.path.clone())
+            .unwrap()
+    };
+    let first = path_for("main.rs");
+    let second = path_for("short.rs");
     app.lsp_diagnostics.insert(
         first,
         vec![Diagnostic {

@@ -517,12 +517,21 @@ pub fn lookup(
     pending: Option<Stroke>,
     context: Context,
 ) -> Lookup {
+    lookup_for(Os::CURRENT, table, stroke, pending, context)
+}
+
+fn lookup_for(
+    os: Os,
+    table: &[Binding],
+    stroke: Stroke,
+    pending: Option<Stroke>,
+    context: Context,
+) -> Lookup {
     // 焦点在终端时，全局快捷键中只有带 ⌘ 的（macOS）或带 Ctrl+Shift 的
     // （其他系统）不交给终端程序，其余组合留给终端程序使用；
     // 单按 Ctrl 的组合由终端程序处理。
-    let reaches = |mods: Mods| {
-        mods.has(Mods::META) || !cfg!(target_os = "macos") && mods.has(Mods::CTRL | Mods::SHIFT)
-    };
+    let reaches =
+        |mods: Mods| mods.has(Mods::META) || os != Os::Mac && mods.has(Mods::CTRL | Mods::SHIFT);
     let applies = |b: &&Binding| {
         b.when.covers(context)
             && (context != Context::Terminal

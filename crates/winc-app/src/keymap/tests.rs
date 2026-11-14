@@ -6,7 +6,7 @@ use super::*;
 const ALL_OS: [Os; 3] = [Os::Mac, Os::Windows, Os::Linux];
 
 fn press(os: Os, mods: Mods, key: KeyCode, context: Context) -> Lookup {
-    lookup(&bindings(os), Stroke { key, mods }, None, context)
+    lookup_for(os, &bindings(os), Stroke { key, mods }, None, context)
 }
 
 fn runs(os: Os, mods: Mods, key: KeyCode, context: Context) -> Option<Action> {
@@ -110,10 +110,10 @@ fn language_server_shortcuts_are_available_in_the_editor_and_live_markdown() {
                 mods: cmd,
             };
             let table = bindings(os);
-            assert_eq!(lookup(&table, first, None, context), Lookup::Chord);
+            assert_eq!(lookup_for(os, &table, first, None, context), Lookup::Chord);
             assert!(
                 matches!(
-                    lookup(&table, second, Some(first), context),
+                    lookup_for(os, &table, second, Some(first), context),
                     Lookup::Run(actions) if actions.contains(&Action::ShowHover)
                 ),
                 "{os:?} {context:?}"
@@ -369,18 +369,21 @@ fn chords_wait_for_the_second_key() {
         key: KeyCode::Char('k'),
         mods: Mods::META,
     };
-    assert_eq!(lookup(&table, k, None, Context::Editor), Lookup::Chord);
+    assert_eq!(
+        lookup_for(Os::Mac, &table, k, None, Context::Editor),
+        Lookup::Chord
+    );
     let s = Stroke {
         key: KeyCode::Char('s'),
         mods: Mods::META,
     };
     assert_eq!(
-        lookup(&table, s, Some(k), Context::Editor),
+        lookup_for(Os::Mac, &table, s, Some(k), Context::Editor),
         Lookup::Run(vec![Action::KeyboardShortcuts])
     );
     // 第二段对不上：不执行任何命令。
     assert_eq!(
-        lookup(&table, k, Some(k), Context::Editor),
+        lookup_for(Os::Mac, &table, k, Some(k), Context::Editor),
         Lookup::Run(Vec::new())
     );
     // 编辑区用 `⌘K ⌥⌘C` 复制路径，文件树中没有该组合。
@@ -389,11 +392,11 @@ fn chords_wait_for_the_second_key() {
         mods: Mods::META | Mods::ALT,
     };
     assert_eq!(
-        lookup(&table, copy, Some(k), Context::Editor),
+        lookup_for(Os::Mac, &table, copy, Some(k), Context::Editor),
         Lookup::Run(vec![Action::CopyPath])
     );
     assert_eq!(
-        lookup(&table, copy, Some(k), Context::Tree),
+        lookup_for(Os::Mac, &table, copy, Some(k), Context::Tree),
         Lookup::Run(Vec::new())
     );
 }
@@ -624,7 +627,7 @@ fn diff_navigation_keys_reach_their_commands_from_key_events() {
                 mods,
             )
             .unwrap();
-            let found = lookup(&table, stroke, None, Context::Editor);
+            let found = lookup_for(os, &table, stroke, None, Context::Editor);
             assert!(
                 matches!(&found, Lookup::Run(actions) if actions.contains(&action)),
                 "{os:?} {named:?} {mods:?}"
