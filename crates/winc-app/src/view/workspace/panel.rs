@@ -828,6 +828,15 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
             let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
             Some((rect, label.to_owned()))
         }
+        Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Maximize) => {
+            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
+            let label = if app.terminal.maximized {
+                t!("terminal-restore-panel")
+            } else {
+                t!("terminal-maximize-panel")
+            };
+            Some((rect, with_key(label, Some(Action::MaximizeTerminal))))
+        }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Position) => {
             let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
             let label = if app.terminal_right() {

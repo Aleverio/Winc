@@ -111,16 +111,22 @@ pub fn draw(app: &mut App, frame: &mut Frame<'_>) {
     }
 
     draw_top_bar(app, frame);
-    draw_sidebar_button(app, frame);
     app.sync_merge_panes();
     draw_editor(app, frame);
     editor::draw_split(app, frame);
     preview::markdown::draw_diagram_view(app, frame);
     git::merge::draw_side_panes(app, frame);
+    // 最大化、还原途中面板盖在编辑区上面：编辑区的圆角先修整好，面板再画在上面。
+    let covered = app.terminal.grow.is_some();
+    if covered {
+        round_editor_corners(app, frame);
+    }
     terminal::draw_terminal(app, frame);
+    // 侧栏开关和窗口按钮画在终端之上：面板在右边、最大化且侧栏收起时伸到它们下面。
+    draw_sidebar_button(app, frame);
     draw_window_controls(app, frame);
     draw_status(app, frame);
-    draw_island_corners(app, frame);
+    draw_island_corners(app, frame, !covered);
     // 以下都是浮在内容之上的面板、菜单和提示，底色保持不透明。
     frame.end_wallpaper();
     draw_file_drop(app, frame);
@@ -224,24 +230,32 @@ fn draw_modal(app: &mut App, frame: &mut Frame<'_>) {
 /// 把侧栏、编辑区（以及终端面板）的四角改为圆角。
 ///
 /// 卡片内容按直角矩形绘制，最后用窗口底色覆盖四角圆弧外侧的部分；之后绘制的浮层不受影响。
-fn draw_island_corners(app: &App, frame: &mut Frame<'_>) {
+/// `editor` 为假时不修整编辑区：终端面板正盖在它上面，它的圆角已在面板之前修整过。
+fn draw_island_corners(app: &App, frame: &mut Frame<'_>, editor: bool) {
     let l = &app.layout;
     let p = app.palette;
 
     if l.sidebar.right() > 0.0 {
         frame.round_corners(l.sidebar, RADIUS_ISLAND, p.frame_bg);
     }
+    if editor {
+        round_editor_corners(app, frame);
+    }
+    if l.terminal.h > 0.0 {
+        frame.round_corners(l.terminal, RADIUS_ISLAND, p.frame_bg);
+    }
+}
 
+/// 修整编辑区卡片（顶栏那一行连同下面的编辑区）的四角，见 [`draw_island_corners`]。
+fn round_editor_corners(app: &App, frame: &mut Frame<'_>) {
+    let l = &app.layout;
     let editor = Rect::new(
         l.top_bar.x,
         l.top_bar.y,
         l.top_bar.w,
         l.editor.bottom() - l.top_bar.y,
     );
-    frame.round_corners(editor, RADIUS_ISLAND, p.frame_bg);
-    if l.terminal.h > 0.0 {
-        frame.round_corners(l.terminal, RADIUS_ISLAND, p.frame_bg);
-    }
+    frame.round_corners(editor, RADIUS_ISLAND, app.palette.frame_bg);
 }
 
 /// 拖动文件经过窗口时，为松手后接收该文件的终端面板或编辑区（含标签栏）绘制放置目标底色。

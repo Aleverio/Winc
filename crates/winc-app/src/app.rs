@@ -549,6 +549,7 @@ impl Hover {
             Hover::TreeTool(_)
                 | Hover::TerminalHeader(
                     terminal::HeaderHit::Position
+                        | terminal::HeaderHit::Maximize
                         | terminal::HeaderHit::ShellMenu
                         | terminal::HeaderHit::Find(_)
                         | terminal::HeaderHit::Hide
