@@ -24,11 +24,16 @@ impl App {
             return;
         };
         let (from, to) = (from.oid.clone(), to.oid.clone());
-        self.start_log_compare(from, to);
+        self.start_log_compare(from, to, false);
     }
 
-    /// 在当前日志标签里比较 `from`（旧）和 `to`（新），在后台取两者之间改了的文件。
-    pub(super) fn start_log_compare(&mut self, from: String, to: String) {
+    /// 在当前日志标签比较两个版本。手动输入的右侧版本先解析为提交号，以便文件列表和差异使用同一次快照。
+    pub(in crate::app::git) fn start_log_compare(
+        &mut self,
+        from: String,
+        to: String,
+        resolve_target: bool,
+    ) {
         self.git.log.file = None;
         let Some(root) = self.git.root.clone() else {
             return;
@@ -40,6 +45,8 @@ impl App {
         let Some(view) = doc.log.as_deref_mut() else {
             return;
         };
+        view.compare_request += 1;
+        let request = view.compare_request;
         view.compare = Some(Compare {
             from: from.clone(),
             to: to.clone(),
@@ -49,15 +56,20 @@ impl App {
         self.git.log.waiting = Some(Instant::now() + LOADING_DELAY);
         let sender = self.git.log.results.0.clone();
         self.spawn_git(UserEvent::GitLog, move |tool| {
-            let files = match tool {
-                Ok(git) => git.commit_files(&root, Some(&from), &to, &Cancel::default()),
-                Err(e) => Err(unusable(&e)),
-            };
+            let result = tool.map_err(|e| unusable(&e)).and_then(|git| {
+                let cancel = Cancel::default();
+                let to = if resolve_target {
+                    git.resolve_revision(&root, &to, &cancel)?
+                } else {
+                    to
+                };
+                let files = git.commit_files(&root, Some(&from), &to, &cancel)?;
+                Ok((to, files))
+            });
             let _ = sender.send(Loaded::Compare {
                 doc: id,
-                from,
-                to,
-                files,
+                request,
+                result,
             });
         });
         self.request_redraw();
@@ -80,7 +92,7 @@ impl App {
         let current = self.current_branch_label();
         self.git_show_log();
         if self.log_active() {
-            self.start_log_compare(current, branch.to_owned());
+            self.start_log_compare(current, branch.to_owned(), false);
         }
     }
 }

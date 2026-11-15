@@ -53,6 +53,8 @@ pub struct LogView {
     pub query: LogQuery,
     /// 正在比较两个版本（两个提交，或者两个分支）：详情一栏换成两者之间改了的文件。
     pub compare: Option<Compare>,
+    /// 最近一次比较请求的编号；后台返回时编号不一致就丢弃。
+    pub compare_request: u64,
     /// 重取了、新的第一批还没到。
     ///
     /// `commits`、`graph` 还是重取之前的内容，仍然可以显示和点击，第一批到达时整体替换

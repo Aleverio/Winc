@@ -75,6 +75,25 @@ impl QuestionView {
         }
     }
 
+    /// 左侧是菜单所属的提交，右侧输入要比较的版本。
+    pub(super) fn compare_revision(from: &str) -> Self {
+        Self {
+            title: t!("git-compare-revision-title").to_owned(),
+            message: None,
+            message_lines: 0,
+            values: vec![QuestionValue {
+                label: t!("git-compare-left"),
+                text: from.to_owned(),
+                mono: true,
+            }],
+            inputs: vec![QuestionInput {
+                label: t!("git-compare-right"),
+                placeholder: t!("git-go-to-placeholder"),
+            }],
+            confirm: t!("git-compare-button"),
+        }
+    }
+
     /// 返回「按路径筛选」对话框的内容：一个输入框。
     pub(super) fn log_path() -> Self {
         Self {

@@ -172,6 +172,11 @@ impl App {
                 self.set_clipboard(tag, false);
             }
             MenuCommand::LogGoTo => self.open_go_to_revision(),
+            MenuCommand::LogCompareRevision => self.show_form_dialog(
+                crate::app::git::form::FormKind::CompareRevision { from: oid },
+                TextField::default(),
+                crate::layout::DialogPart::Branch,
+            ),
             MenuCommand::LogCopyPatch => self.copy_log_patch(oid),
             MenuCommand::LogCopyMessage => {
                 let message = self

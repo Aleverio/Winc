@@ -41,6 +41,8 @@ pub(crate) enum FormKind {
     Remote { editing: Option<String> },
     /// 在 Git 日志中转到一个提交：输入提交号、分支名或标签名。
     GoToRevision,
+    /// 比较日志中点到的提交与输入的版本。
+    CompareRevision { from: String },
     /// 按路径筛选 Git 日志：输入相对仓库根目录的路径或通配。
     LogPath,
     /// 交互式变基。
@@ -91,6 +93,7 @@ impl FormKind {
             FormKind::Remote { editing } => Some(QuestionView::remote(editing.as_deref())),
             FormKind::Connect => Some(QuestionView::connect()),
             FormKind::GoToRevision => Some(QuestionView::go_to_revision()),
+            FormKind::CompareRevision { from } => Some(QuestionView::compare_revision(from)),
             FormKind::LogPath => Some(QuestionView::log_path()),
             FormKind::Worktree
             | FormKind::Branch { .. }
@@ -345,13 +348,17 @@ impl App {
             }
             FormKind::Connect => self.connect_plan(dialog),
             FormKind::Push(form) => self.push_plan(dialog, form),
-            FormKind::GoToRevision => {
+            FormKind::GoToRevision | FormKind::CompareRevision { .. } => {
                 let revision = dialog.name.text().trim();
                 // 提交号、分支名和标签名都不含空白，也不以 `-` 开头。
                 let problem = revision.starts_with('-') || revision.contains(char::is_whitespace);
                 FormPlan {
                     problem: problem.then(|| t!("git-go-to-invalid").to_owned()),
-                    confirm: t!("git-go-to-button"),
+                    confirm: if matches!(dialog.kind, FormKind::GoToRevision) {
+                        t!("git-go-to-button")
+                    } else {
+                        t!("git-compare-button")
+                    },
                     enabled: !revision.is_empty() && !problem,
                     base: String::new(),
                     base_enabled: false,
@@ -533,6 +540,13 @@ impl App {
             self.go_to_log_revision(revision);
             return;
         }
+        if let FormKind::CompareRevision { from } = &dialog.kind {
+            let from = from.clone();
+            let revision = dialog.name.text().trim().to_owned();
+            self.close_form_dialog();
+            self.start_log_compare(from, revision, true);
+            return;
+        }
         if matches!(dialog.kind, FormKind::LogPath) {
             // 写成相对仓库根目录的样子：开头的 `./`、`/` 和末尾的 `/` 去掉。
             let text = dialog.name.text().trim();
@@ -564,6 +578,7 @@ impl App {
             FormKind::Question(..)
             | FormKind::Connect
             | FormKind::GoToRevision
+            | FormKind::CompareRevision { .. }
             | FormKind::LogPath => {}
             FormKind::Clone => self.submit_clone(),
             FormKind::Push(form) => {

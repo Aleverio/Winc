@@ -333,9 +333,8 @@ enum Loaded {
     /// 比较两个版本时两者之间改动的文件。
     Compare {
         doc: DocumentId,
-        from: String,
-        to: String,
-        files: Result<Vec<CommitFile>, String>,
+        request: u64,
+        result: Result<(String, Vec<CommitFile>), String>,
     },
     /// 一个文件在一次提交中的差异，打开为标签。
     Diff {

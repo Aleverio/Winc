@@ -106,21 +106,24 @@ impl App {
                 }
                 Loaded::Compare {
                     doc,
-                    from,
-                    to,
-                    files,
+                    request,
+                    result,
                 } => {
                     let Some(compare) = self
                         .editor
                         .document_mut(doc)
-                        .and_then(|d| d.log.as_deref_mut()?.compare.as_mut())
-                        .filter(|c| c.from == from && c.to == to)
+                        .and_then(|d| d.log.as_deref_mut())
+                        .filter(|view| view.compare_request == request)
+                        .and_then(|view| view.compare.as_mut())
                     else {
                         continue;
                     };
                     self.git.log.waiting = None;
-                    match files {
-                        Ok(files) => compare.files = Some(files),
+                    match result {
+                        Ok((to, files)) => {
+                            compare.to = to;
+                            compare.files = Some(files);
+                        }
                         Err(e) => {
                             compare.files = Some(Vec::new());
                             compare.error = Some(e);
