@@ -520,7 +520,7 @@ fn typing_filters_the_language_menu() {
             .collect()
     };
 
-    app.open_language_menu();
+    app.open_status_menu(StatusItem::Language);
     paint(&mut app);
     let all = app.popup().unwrap().levels[0].rows.len();
     typed(&mut app, "Ru");
@@ -544,7 +544,7 @@ fn typing_filters_the_language_menu() {
     );
 
     // 没有匹配：一行说明，不能选中；⌫ 删字后恢复匹配。
-    app.open_language_menu();
+    app.open_status_menu(StatusItem::Language);
     paint(&mut app);
     typed(&mut app, "zzq");
     assert_eq!(titles(&app), ["[zzq]", "无匹配项"]);
@@ -567,7 +567,7 @@ fn typing_filters_the_language_menu() {
     assert!(app.overlays.context_menu.is_none());
 
     // 筛选时空格是文字：「Visual Basic」这类名字可以接着键入。
-    app.open_language_menu();
+    app.open_status_menu(StatusItem::Language);
     paint(&mut app);
     typed(&mut app, "a b");
     assert_eq!(app.popup().unwrap().query, "a b");
@@ -586,16 +586,60 @@ fn typing_filters_the_language_menu() {
 #[test]
 #[ignore = "截图，手动运行"]
 fn shoot_popup_filter() {
+    use crate::app::status::status_bar::StatusItem;
     use winit::keyboard::Key;
     let dir = sample_folder("popup-filter-shot");
     let mut app = app_with(&dir.join("a.txt"), false);
     paint(&mut app);
-    app.open_language_menu();
+    app.open_status_menu(StatusItem::Language);
     paint(&mut app);
     for c in ["r", "u"] {
         app.popup_logical_key(&Key::Character(c.into()));
     }
     shoot(&mut app, "popup-filter-light");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 命令「更改文件的语言」在面板中列出语言，键入文字筛选：查询恰好是扩展名的语言排在最前，名字
+/// 中分散出现的也能找到；没有匹配时列表为空。
+#[test]
+fn the_language_picker_filters_by_name_and_extension() {
+    use crate::app::LanguageRow;
+    let dir = sample_folder("language-picker");
+    let mut app = app_with(&dir.join("a.txt"), false);
+    paint(&mut app);
+    app.run_action(crate::keymap::Action::ChangeLanguageMode);
+    let first = |app: &mut App, query: &str| {
+        app.overlays.picker.input.set_text(query);
+        app.picker_refresh();
+        (app.overlays.picker.hits.first())
+            .and_then(|&h| LanguageRow::of(h))
+            .map(LanguageRow::title)
+    };
+    assert_eq!(first(&mut app, "ts"), Some("TypeScript"));
+    assert_eq!(first(&mut app, "md"), Some("Markdown"));
+    assert_eq!(first(&mut app, "rust"), Some("Rust"));
+    assert!(first(&mut app, "rs").is_some());
+    assert_eq!(first(&mut app, "zzqq"), None);
+    // 命中的字标出：「rust」标出 Rust 的四个字。
+    first(&mut app, "rust");
+    assert_eq!(app.language_matched(0), [0, 1, 2, 3]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 截图：面板中的语言列表，键入「ru」筛选（`language-picker-light`）。
+#[test]
+#[ignore = "截图，手动运行"]
+fn shoot_language_picker() {
+    let dir = sample_folder("language-picker-shot");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    paint(&mut app);
+    app.run_action(crate::keymap::Action::ChangeLanguageMode);
+    paint(&mut app);
+    shoot(&mut app, "language-picker-open");
+    app.overlays.picker.input.set_text("ru");
+    app.picker_refresh();
+    shoot(&mut app, "language-picker-light");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

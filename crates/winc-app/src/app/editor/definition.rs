@@ -533,6 +533,7 @@ impl App {
         self.overlays.picker.branch_rows = None;
         self.overlays.picker.location_rows = None;
         self.overlays.picker.folders = false;
+        self.overlays.picker.languages = false;
         self.overlays.picker.vim_list = None;
         self.overlays.picker.remote = None;
         self.overlays.picker.places = Some(Places {

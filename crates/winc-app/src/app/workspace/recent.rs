@@ -43,6 +43,7 @@ impl App {
         self.overlays.picker.branch_rows = None;
         self.overlays.picker.location_rows = None;
         self.overlays.picker.remote = None;
+        self.overlays.picker.languages = false;
         self.overlays.picker.folders = true;
         self.overlays.picker.open = true;
         self.overlays.picker.doc = self.editor.active().map(|d| d.id);
