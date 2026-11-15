@@ -248,3 +248,11 @@ class Store {
         ["User"]
     );
 }
+
+/// 微信小程序：WXS 按 JavaScript 列出函数和变量；WXSS 和样式表一样不列出符号。
+#[test]
+fn wechat_mini_program_files() {
+    let wxs = "var format = function (n) {\n  return n;\n};\nfunction pad(n) {}\nmodule.exports = { format: format };\n";
+    assert_eq!(names("wxs", wxs), ["format", "pad"]);
+    assert!(names("wxss", ".title {\n  font-size: 32rpx;\n}\n").is_empty());
+}

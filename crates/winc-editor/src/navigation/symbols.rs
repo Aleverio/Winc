@@ -376,7 +376,7 @@ fn recognize(
                 None,
             ));
         }
-        "text" | "json" | "html" | "xml" | "svg" | "css" | "scss" | "sass" | "less"
+        "text" | "json" | "html" | "xml" | "svg" | "css" | "scss" | "sass" | "less" | "wxss"
         | "dockerfile" | "dotenv" | "ignore" => return None,
         _ => {}
     }
@@ -417,7 +417,16 @@ fn recognize(
     let braces = c_family
         || matches!(
             language.id,
-            "javascript" | "typescript" | "arkts" | "vue" | "java" | "groovy" | "scala" | "kotlin"
+            "javascript"
+                | "typescript"
+                | "arkts"
+                | "vue"
+                | "wxml"
+                | "wxs"
+                | "java"
+                | "groovy"
+                | "scala"
+                | "kotlin"
         );
     if braces
         && let Some(caps) = METHOD.captures(content)
