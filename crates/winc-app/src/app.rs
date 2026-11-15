@@ -563,6 +563,7 @@ impl Hover {
                 | Hover::Browser
                 | Hover::ViewTab(_)
                 | Hover::Outline(OutlineTarget::FoldAll)
+                | Hover::MarkdownToc(preview::markdown::TocTarget::Pin)
                 | Hover::Search(_)
                 | Hover::Panel(
                     PanelButton::Tool(_)
