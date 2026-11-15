@@ -42,6 +42,8 @@ mod web;
 mod winc;
 #[cfg(windows)]
 mod windows;
+#[cfg(all(unix, not(target_os = "macos")))]
+mod x11;
 
 /// 大块内存释放后立即归还给系统。
 #[cfg(target_os = "macos")]
