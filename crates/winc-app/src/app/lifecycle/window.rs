@@ -792,6 +792,8 @@ pub struct WindowState {
     ///
     /// 最小化期间不更新；从最小化的窗口打开新窗口时按该位置错开（见 `App::cascade_from`）。
     pub(crate) frame: Option<winc_config::WindowFrame>,
+    /// 下一次记录 `frame` 的时刻（见 `App::window_frame_tick`）；没有待记录的变化时为 `None`。
+    pub(in crate::app) frame_due: Option<Instant>,
     /// 窗口是否完全不可见（被遮挡、最小化或位于其他桌面）；不可见时不绘制，窗口画面标记为可清除。
     pub(in crate::app) occluded: bool,
 }
@@ -804,6 +806,7 @@ impl Default for WindowState {
             focused: true,
             hidden: false,
             frame: None,
+            frame_due: None,
             occluded: false,
         }
     }

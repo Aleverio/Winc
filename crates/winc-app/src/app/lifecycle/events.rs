@@ -301,11 +301,11 @@ impl ApplicationHandler<UserEvent> for App {
                 // 抬手事件可能不再送达，因此在此结束触摸。
                 self.pointer.title_click = None;
                 self.cancel_touch();
-                self.note_window_frame();
+                self.window_frame_changed();
             }
             WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
                 self.cancel_touch();
-                self.note_window_frame();
+                self.window_frame_changed();
                 if let Some(renderer) = &mut self.frame.renderer {
                     renderer.resize();
                 }
@@ -733,6 +733,8 @@ impl App {
         earliest(&mut wake, self.tree_drag_tick(now));
 
         earliest(&mut wake, self.file_hover_tick(now));
+
+        earliest(&mut wake, self.window_frame_tick(now));
 
         earliest(&mut wake, self.backup_tick(now));
 
