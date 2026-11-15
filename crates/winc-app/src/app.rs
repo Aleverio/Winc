@@ -55,7 +55,7 @@ pub(crate) use input::context_menu::{
 pub use input::context_menu::{ContextMenu, MenuButton, MenuCommand};
 pub use input::palette::palette;
 pub(crate) use lifecycle::alert::{AlertButton, AlertKey, AlertPart, AlertParts};
-use lifecycle::appearance::{configured_font, forced_theme};
+use lifecycle::appearance::{forced_theme, unusable_font};
 pub(crate) use lifecycle::backup::{restore_at_launch, restore_tabs};
 pub use lifecycle::closing::{CloseRequest, SaveChoice, SavePrompt};
 pub use lifecycle::notice::{NoticeAction, NoticeGhost};
@@ -108,7 +108,7 @@ use winc_core::{Lines, Selection};
 use winc_editor::{COPY_LIMIT, Command, DocumentId, Editor, Entry, EntryKind, FileIndex, Search};
 use winc_render::{FontError, FontKind, FontSpec, Metrics, Rect, Renderer};
 
-use winc_config::{Config, Session, State, ThemeChoice, resolve_font};
+use winc_config::{Config, Session, State, ThemeChoice, resolve_font_list};
 
 use crate::bench::{Bench, Next};
 use crate::field::{TextField, Unit};
