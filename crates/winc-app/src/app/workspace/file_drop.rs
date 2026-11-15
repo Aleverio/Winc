@@ -81,14 +81,16 @@ impl App {
 
     /// 返回拖入中的文件此刻的位置（逻辑像素）。
     ///
-    /// 系统在拖动期间不发送鼠标移动事件，需要向系统查询；查不到时（测试中没有窗口，或 Linux
-    /// 上没有查询的途径）使用最后一次鼠标移动的位置。
+    /// 系统在拖动期间不发送鼠标移动事件，需要向系统查询；查不到时（测试中没有窗口）使用最后一次
+    /// 鼠标移动的位置。Wayland 上 winit 不传递拖入的文件，不会走到这里。
     fn drop_point(&self) -> (f32, f32) {
         #[cfg(target_os = "macos")]
         let query = crate::macos::mouse_location;
         #[cfg(windows)]
         let query = crate::windows::mouse_location;
-        #[cfg(any(target_os = "macos", windows))]
+        #[cfg(all(unix, not(target_os = "macos")))]
+        let query = crate::x11::mouse_location;
+        #[cfg(any(unix, windows))]
         if let Some((x, y)) = self.window.handle.as_ref().and_then(|w| query(w)) {
             return (x / self.zoom(), y / self.zoom());
         }
