@@ -903,8 +903,10 @@ fn draw_folder_rows(
 
     let mut hits = Vec::new();
     let scroll = app.overlays.picker.scroll;
+    let parents = crate::app::parents(&app.state.recent);
     for i in parts.visible(scroll, app.overlays.picker.hits.len()) {
-        let Some(folder) = app.state.recent.get(app.overlays.picker.hits[i]) else {
+        let index = app.overlays.picker.hits[i];
+        let (Some(folder), Some(parent)) = (app.state.recent.get(index), parents.get(index)) else {
             continue;
         };
         let row = parts.row(i, scroll);
@@ -937,8 +939,9 @@ fn draw_folder_rows(
             hits.push((close, forget));
         }
 
-        // 查询命中的字用强调色标出；从中间截短了的文字下标对不上，不标。
-        let (name, parent) = folder_label(folder);
+        // 查询命中的字用强调色标出；截短了的文字下标对不上，不标。上级目录放不下时截短，同名
+        // 目录保留区分彼此的部分（见 `fit_parent`）。
+        let (name, _) = folder_label(folder);
         let (in_name, in_parent) = app.folder_matched(i);
         let room = (close.x - 8.0 - (row.x + PICKER_TEXT_X)).max(0.0);
         let shown = ellipsize(frame, &name, app.fonts.ui, room);
@@ -950,9 +953,9 @@ fn draw_folder_rows(
         let at = (row.x + PICKER_TEXT_X, row);
         let x = marked_label(frame, app, app.fonts.ui, at, &shown, &marks, p.text, clip);
         let room = close.x - 8.0 - (x + 8.0);
-        if !parent.is_empty() && room > 20.0 {
-            let shown = ellipsize(frame, &parent, app.fonts.ui_small, room);
-            let marks = if shown.len() == parent.len() {
+        if !parent.text.is_empty() && room > 20.0 {
+            let shown = fit_parent(frame, parent, app.fonts.ui_small, room);
+            let marks = if shown == parent.text {
                 in_parent
             } else {
                 Vec::new()

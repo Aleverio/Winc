@@ -16,7 +16,9 @@ use winc_render::{Color, Faux, FontKind, Frame, Rect};
 use crate::app::animation::{Card, dialog_curve, reveal};
 use crate::app::workspace::picker::picker_parts;
 use crate::app::workspace::tab_names::{tab_folder, tab_icon_name};
-use crate::app::{App, DropZone, Hover, MenuButton, ScrollArea, ThumbLook, WORD_HIGHLIGHT_COUNT};
+use crate::app::{
+    App, DropZone, Hover, MenuButton, Parent, ScrollArea, ThumbLook, WORD_HIGHLIGHT_COUNT,
+};
 use crate::field::{FieldView, TextField};
 use crate::icons;
 use crate::keymap::{self, Action};
@@ -1088,6 +1090,29 @@ fn truncate_end<'a>(frame: &mut Frame<'_>, text: &'a str, size: f32, max: f32) -
 /// 结尾（例如文件扩展名）。
 fn ellipsize<'a>(frame: &mut Frame<'_>, text: &'a str, size: f32, max: f32) -> Cow<'a, str> {
     fit(frame, text, size, max, true)
+}
+
+/// 把最近目录的上级目录 `parent` 截短到 `max`（逻辑像素）宽以内，字号为 `size`。
+///
+/// 另有同名目录时从开头逐级截去，至少保留区分各同名目录的末尾一段（见 [`Parent::keep`]），
+/// 写成 `…/a/src`；这一段也放不下时截去它的末尾。其余情况从中间截短。
+fn fit_parent<'a>(frame: &mut Frame<'_>, parent: &'a Parent, size: f32, max: f32) -> Cow<'a, str> {
+    let text = parent.text.as_str();
+    if frame.measure(FontKind::Ui, size, text) <= max {
+        return Cow::Borrowed(text);
+    }
+    let Some(keep) = parent.keep.filter(|&keep| keep > 0) else {
+        return ellipsize(frame, text, size, max);
+    };
+    let cuts = text.match_indices(['/', '\\']).map(|(i, _)| i);
+    for cut in cuts.take_while(|&cut| cut < keep) {
+        let short = format!("…{}", &text[cut..]);
+        if frame.measure(FontKind::Ui, size, &short) <= max {
+            return Cow::Owned(short);
+        }
+    }
+    let short = format!("…{}", &text[keep - 1..]);
+    Cow::Owned(truncate_end(frame, &short, size, max).into_owned())
 }
 
 /// 把路径 `path` 截短到 `max`（逻辑像素）宽以内，返回截短后的文本。
