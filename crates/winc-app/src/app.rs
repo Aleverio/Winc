@@ -70,6 +70,7 @@ pub use status::motion::{StatusEntry, StatusKey, StatusMotion, StatusRow};
 pub use status::status_bar::{StatusItem, indent_label};
 pub use workspace::file_drop::DropZone;
 pub use workspace::files::{Pick, PlaceholderAction, TabBar, TabHit};
+pub(crate) use workspace::global::ResultOverflow;
 pub use workspace::global::{GlobalSearch, ResultRow};
 pub(crate) use workspace::outline::{OUTLINE_GAP, has_children as outline_has_children};
 pub use workspace::outline::{OutlineEmpty, OutlineKind, OutlineState, OutlineTarget};

@@ -79,6 +79,7 @@ pub fn draw(app: &mut App, frame: &mut Frame<'_>) {
     frame.base(&base(app));
     let layout = app.layout;
     app.panels.tree.overflow = tree_overflow(app, frame);
+    app.panels.global.overflow = workspace::panel::result_overflow(app, frame);
     app.track_log_tree();
     let before = app.git.commit.overflow.map(|o| o.row);
     app.git.commit.overflow = git::commit::commit_overflow(app, frame);
@@ -134,6 +135,8 @@ pub fn draw(app: &mut App, frame: &mut Frame<'_>) {
     draw_tree_overflow(app, frame);
     git::commit::draw_commit_overflow_closing(app, frame);
     git::commit::draw_commit_overflow(app, frame);
+    workspace::panel::draw_result_overflow_closing(app, frame);
+    workspace::panel::draw_result_overflow(app, frame);
     app.with_log_list(|app| {
         git::commit::draw_commit_overflow_closing(app, frame);
         git::commit::draw_commit_overflow(app, frame);

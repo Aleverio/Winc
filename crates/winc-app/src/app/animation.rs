@@ -359,6 +359,7 @@ impl App {
         self.settle_log_tree();
         self.panels.tree.labels.settle();
         self.git.commit.names.settle();
+        self.panels.global.names.settle();
         settle(&mut self.git.commit.shift, |s| s.clock);
         settle(&mut self.git.commit.actions_slide, |s| s.1);
         settle(&mut self.git.commit.motion, |m| m.clock);
@@ -466,6 +467,7 @@ impl App {
             || self.log_tree_animating()
             || self.panels.tree.labels.moving()
             || self.git.commit.names.moving()
+            || self.panels.global.names.moving()
             || self.git.commit.actions_slide.is_some()
             || self.git.commit.shift.is_some()
             || self.git.commit.motion.is_some()
