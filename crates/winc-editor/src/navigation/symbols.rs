@@ -130,6 +130,15 @@ static METHOD: LazyLock<Regex> = LazyLock::new(|| {
     )
 });
 
+/// C++ 带返回类型的成员函数开头：返回类型可包含空格，例如模板实参之间的空格。
+static C_MEMBER_START: LazyLock<Regex> =
+    LazyLock::new(|| regex(r"^\s+[A-Za-z_][\w:<>,*&\s]*[\s*&](?P<name>IDENT)\s*\("));
+
+/// 成员函数左括号之后的参数、限定词以及函数体的左花括号。
+static C_MEMBER_BODY: LazyLock<Regex> = LazyLock::new(|| {
+    regex(r#"^[^;{}()"'`]*\)\s*(?:(?:const|volatile|noexcept|override|final)\b\s*|&&?\s*)*\{"#)
+});
+
 /// C、C++ 的函数定义：行首（无缩进）是返回类型，其后是名字和左括号，该行不含分号。
 static C_FUNCTION: LazyLock<Regex> = LazyLock::new(|| {
     regex(r"^(?P<head>[A-Za-z_][\w:<>,*&\s]*[\s*&])(?P<name>[A-Za-z_~][\w:~]*)\s*\([^;]*$")
@@ -267,7 +276,17 @@ pub fn symbols(text: &Rope, language: &Language) -> Vec<Symbol> {
         let recognized = if c_family {
             let recognized = recognize_c(content, &c);
             c.advance(content);
-            recognized.or_else(|| recognize(content, language))
+            recognized
+                .or_else(|| recognize(content, language))
+                .or_else(|| {
+                    let indent = indent_width(content);
+                    let parent = parents.iter().rev().find(|(level, ..)| *level < indent);
+                    if matches!(parent, Some((_, _, SymbolKind::Type))) {
+                        recognize_c_member(text, i, content, indent)
+                    } else {
+                        None
+                    }
+                })
         } else {
             recognize(content, language)
         };
@@ -460,6 +479,54 @@ fn recognize_c(
         }
     }
     None
+}
+
+/// 在类型内补充识别折行的 C++ 成员函数（包括按 C 高亮的 `.h`），保留函数名原来的行列。
+fn recognize_c_member(
+    text: &Rope,
+    line: usize,
+    content: &str,
+    indent: usize,
+) -> Option<(String, SymbolKind, usize, usize, Option<String>)> {
+    let caps = C_MEMBER_START.captures(content)?;
+    let name = caps.name("name")?;
+    if NOT_NAMES.contains(&name.as_str())
+        || C_STATEMENTS.contains(&content.split_whitespace().next()?)
+    {
+        return None;
+    }
+    let tail = &content[caps.get(0)?.end()..];
+    let stop = |part: &str| part.contains(['{', '}', ';']);
+    let has_body = if stop(tail) {
+        C_MEMBER_BODY.is_match(tail)
+    } else {
+        // shortcut: 只前瞻常见签名，限制行数和字节数；嵌套参数表达式等复杂写法需要语法分析。
+        let mut signature = tail.to_owned();
+        let mut found = false;
+        for next in text.lines_at(line + 1).take(16) {
+            if signature.len() + next.len_bytes() >= 4096 {
+                break;
+            }
+            let start = signature.len();
+            signature.push('\n');
+            signature.extend(next.chunks());
+            if stop(&signature[start..]) {
+                found = C_MEMBER_BODY.is_match(&signature);
+                break;
+            }
+        }
+        found
+    };
+    has_body.then(|| {
+        let col = content[..name.start()].chars().count();
+        (
+            name.as_str().to_owned(),
+            SymbolKind::Function,
+            col,
+            indent,
+            None,
+        )
+    })
 }
 
 /// 识别一行中的符号，返回（名字，种类，列，层级，行内写明的上级）。
