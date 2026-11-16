@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::draw::canvas::{Tinted, Wall};
-use crate::text::sequence;
+use winc_emoji as sequence;
 
 /// 一帧的绘制上下文：画布、字形缓存、覆盖率表和裁剪区域。
 ///

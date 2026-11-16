@@ -191,9 +191,10 @@ impl Screen<'_> {
                 // 制表符的宽度取决于所在的显示列，不从 0 起时逐个计算。
                 if row.base > 0 {
                     let mut at = row.base;
+                    let mut behind = text::Behind::default();
                     cells[0] = at;
                     for (cell, &c) in cells[1..].iter_mut().zip(row.chars) {
-                        at += text::char_cells(c, at, tab_width);
+                        at += behind.cells(c, at, tab_width);
                         *cell = at;
                     }
                 }

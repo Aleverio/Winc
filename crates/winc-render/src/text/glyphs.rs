@@ -4,6 +4,7 @@ use super::*;
 use swash::FontRef;
 use swash::shape::ShapeContext;
 use swash::zeno::{Fill, Join, Placement, Stroke, Style};
+use winc_emoji as sequence;
 
 /// 字形缓存的键：同一字体槽位、字形、字号和亚像素档位对应同一张位图。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -209,7 +210,7 @@ impl GlyphCache {
             let c = chars[at];
             let joined = chars
                 .get(at + 1)
-                .is_some_and(|&next| sequence::joins(c, next));
+                .is_some_and(|&next| sequence::may_join(c, next));
             let len = if joined {
                 sequence::sequence_len(chars[at..].iter().copied())
             } else {

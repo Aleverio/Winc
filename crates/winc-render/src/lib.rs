@@ -25,7 +25,6 @@ pub use text::font::{FontKind, set_cjk_language};
 pub use text::font_list::{FontFamily, installed_fonts};
 pub use text::font_path::{FontError, FontSpec};
 pub use text::outline::{OutlineFonts, OutlineGlyph, OutlineMetrics};
-pub use text::sequence::{continues_sequence, sequence_len};
 
 use cache::{FastMap, Generations, StrokeCache};
 use draw::canvas::{Canvas, IRect, Tinted, Wall};

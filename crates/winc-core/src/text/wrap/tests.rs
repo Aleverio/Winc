@@ -189,7 +189,7 @@ fn emoji_sequences_are_never_split_across_rows() {
     // 放不下的选择符、修饰符、连接符之后的字符与前面的字符一起折到下一段。
     assert_eq!(split("aaa❤\u{fe0f}b", 4), ["aaa", "❤\u{fe0f}b"]);
     assert_eq!(split("aa👍\u{1f3fd}b", 3), ["aa", "👍\u{1f3fd}b"]);
-    assert_eq!(split("aa👨\u{200d}👩b", 4), ["aa", "👨\u{200d}👩", "b"]);
+    assert_eq!(split("aaa👨\u{200d}👩b", 4), ["aaa", "👨\u{200d}👩b"]);
     assert_eq!(
         split("ab1\u{fe0f}\u{20e3}c", 3),
         ["ab", "1\u{fe0f}\u{20e3}c"]
@@ -197,8 +197,8 @@ fn emoji_sequences_are_never_split_across_rows() {
     assert_eq!(split("ab🇨🇳c", 3), ["ab", "🇨🇳c"]);
     // 序列比行宽还宽时整个占一段，其后照常断开。
     assert_eq!(
-        split("👨\u{200d}👩\u{200d}👧ab", 4),
-        ["👨\u{200d}👩\u{200d}👧", "ab"]
+        split("👨\u{200d}👩\u{200d}👧ab", 1),
+        ["👨\u{200d}👩\u{200d}👧", "a", "b"]
     );
     assert_eq!(
         split("👨\u{200d}👩\u{200d}👧", 2),

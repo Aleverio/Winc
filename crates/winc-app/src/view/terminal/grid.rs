@@ -1,7 +1,7 @@
 //! 网格的绘制：终端颜色换算、按样式分段绘制一行、光标、输入法组字。
 
 use super::*;
-use winc_pty::width::{char_width, is_emoji_tail};
+use winc_pty::width::is_emoji_tail;
 use winc_render::Stroke;
 
 /// 一段文字绘制用的颜色（见 [`Colors::style`]）。
@@ -291,10 +291,10 @@ pub(super) fn draw_line(
 fn sequence_prefix(text: &str) -> Option<&str> {
     let mut chars = text.chars();
     let (first, next) = (chars.next()?, chars.next()?);
-    if !winc_render::continues_sequence(first, next) {
+    if !winc_emoji::may_join(first, next) {
         return None;
     }
-    let len = winc_render::sequence_len(text.chars());
+    let len = winc_emoji::sequence_len(text.chars());
     let end = text
         .char_indices()
         .nth(len)
@@ -615,8 +615,9 @@ fn draw_cluster(
 ///
 /// 超过可用宽度时左端移出可见范围，保留正在输入的结尾。
 pub(super) fn preedit_x(x: f32, text: &str, cell: f32, right: f32) -> f32 {
-    let width = text.chars().map(|c| char_width(c).max(1)).sum::<usize>() as f32 * cell;
-    x.min(right - width)
+    let chars: Vec<char> = text.chars().collect();
+    let cells = crate::view::editor::loose_cells(&chars, 1);
+    x.min(right - cells.iter().sum::<usize>() as f32 * cell)
 }
 
 /// 输入法组字中的文字：绘制在 [`preedit_x`] 处，带强调色的下划线，盖住下面的格子。
@@ -629,9 +630,10 @@ pub(super) fn draw_preedit(
 ) {
     let p = app.palette;
     let cell = app.metrics.terminal_cell;
-    let cells = |c: char| char_width(c).max(1);
     let preedit = app.preedit_at(Focus::Terminal);
-    let width = preedit.chars().map(cells).sum::<usize>() as f32 * cell;
+    let chars: Vec<char> = preedit.chars().collect();
+    let cells = crate::view::editor::loose_cells(&chars, 1);
+    let width = cells.iter().sum::<usize>() as f32 * cell;
     frame.rect_clipped(
         Rect::new(x, y, width, app.fonts.terminal_line_height),
         p.editor_bg,
@@ -639,25 +641,16 @@ pub(super) fn draw_preedit(
         clip,
     );
     let mut px = x;
-    let chars: Vec<char> = preedit.chars().collect();
     let font = (FontKind::Terminal, app.fonts.terminal, cell);
     // emoji 序列在第一个字符处整个绘制，`joined` 之前的字符属于已绘制的序列。
     let mut joined = 0;
-    for (col, &c) in chars.iter().enumerate() {
+    for (col, &width) in cells.iter().enumerate() {
         if col >= joined {
             let at = (px, baseline);
-            let drawn = crate::view::editor::draw_grid_char(
-                frame,
-                font,
-                at,
-                (&chars, col),
-                &cells,
-                p.text,
-                clip,
-            );
-            joined = col + drawn;
+            let drawn = crate::view::editor::draw_grid_char;
+            joined = col + drawn(frame, font, at, (&chars, col), p.text, clip);
         }
-        px += cells(c) as f32 * cell;
+        px += width as f32 * cell;
     }
     frame.rect_clipped(
         Rect::new(x, baseline + 3.0, width, 1.0),

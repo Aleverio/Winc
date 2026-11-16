@@ -6,7 +6,7 @@
 
 use ropey::RopeSlice;
 
-use crate::text::{char_cells, sequence_member};
+use crate::text::{Behind, char_cells};
 
 /// 一行断开后的各段起止：后续各段的起始位置，以及后续各段的缩进宽度。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -77,8 +77,9 @@ pub fn breaks(chars: &[char], width: usize, tab_width: usize) -> Breaks {
     // 整行放得下时无需分段，返回 `Breaks::default()`（缩进记为 0）。调用方通常已测量过行宽，
     // 此处仍测量到超出行宽为止，使结果不依赖调用方的判断；该测量的代价不超过一段的宽度。
     let mut total = 0;
+    let mut behind = Behind::default();
     for &c in chars {
-        total += char_cells(c, total, tab_width);
+        total += behind.cells(c, total, tab_width);
         if total > width {
             break;
         }
@@ -173,8 +174,9 @@ pub fn each_break(
     let bytes = text.as_bytes();
     // 整行放得下时没有断点，缩进记为 0，与 `breaks` 相同。
     let mut total = 0;
+    let mut behind = Behind::default();
     for c in text.chars() {
-        total += char_cells(c, total, tab_width);
+        total += behind.cells(c, total, tab_width);
         if total > width {
             break;
         }
@@ -247,9 +249,10 @@ trait RowChars {
     fn len(&self) -> usize;
     /// 第 `i` 个字符。
     fn at(&self, i: usize) -> char;
-    /// 第 `i` 个字符从显示列 `cell` 起占的显示列数。
+    /// 第 `i` 个字符从显示列 `cell` 起占的显示列数；emoji 序列中的字符按它前面的两个字符计。
     fn cells(&self, i: usize, cell: usize, tab_width: usize) -> usize {
-        char_cells(self.at(i), cell, tab_width)
+        let back = |n: usize| i.checked_sub(n).map(|k| self.at(k));
+        Behind::after(back(2), back(1)).cells(self.at(i), cell, tab_width)
     }
 }
 
@@ -342,7 +345,7 @@ fn row_cut<C: RowChars + ?Sized>(
     };
     // 硬断的位置落在 emoji 序列中间时退到序列之前；序列从这一段的开头起就放不下时整个留在
     // 这一段，不拆开。
-    let inside = |at: usize| at < chars.len() && sequence_member(chars.at(at - 1), chars.at(at));
+    let inside = |at: usize| at < chars.len() && sequence_member(chars, at);
     let mut start = cut;
     while start > earliest && inside(start) {
         start -= 1;
@@ -358,10 +361,19 @@ fn row_cut<C: RowChars + ?Sized>(
     }
 }
 
+/// 第 `at` 个字符是否与它前面的字符属于同一个 emoji 序列：按 [`winc_emoji::joined`] 接在前面
+/// 的字符之后，或与前一个字符同为区域指示符（国旗）。折行时不在它之前断开。
+fn sequence_member<C: RowChars + ?Sized>(chars: &C, at: usize) -> bool {
+    let back = |n: usize| at.checked_sub(n).map(|k| chars.at(k));
+    let c = chars.at(at);
+    winc_emoji::joined((back(2), back(1)), c)
+        || (winc_emoji::regional(c) && back(1).is_some_and(winc_emoji::regional))
+}
+
 /// 是否可以在相邻字符 `a` 和 `b` 之间断开：空白之后、中日韩文字两侧、代码标点之后可以断开，
 /// 行首禁则的标点之前、行尾禁则的括号之后不断开。编辑区的折行和多行输入框的折行都用它。
 pub fn can_break(a: char, b: char) -> bool {
-    if no_line_start(b) || no_line_end(a) || sequence_member(a, b) {
+    if no_line_start(b) || no_line_end(a) || winc_emoji::may_join(a, b) {
         return false;
     }
     if a == ' ' || a == '\t' {
@@ -448,8 +460,9 @@ pub fn cell_in_row(chars: RopeSlice<'_>, breaks: &Breaks, col: usize, tab_width:
     let start = breaks.start_of(row);
     let mut cell = breaks.indent_of(row);
     // 从段首开始测量，不从行首逐个跳过前面各段的字符：长行靠后的各段每帧都需要测量。
+    let mut behind = Behind::default();
     for c in chars.chars_at(start).take(col - start) {
-        cell += char_cells(c, cell, tab_width);
+        cell += behind.cells(c, cell, tab_width);
     }
     cell
 }

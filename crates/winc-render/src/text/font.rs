@@ -824,7 +824,7 @@ impl Fonts {
         order.extend(self.fallbacks.clone());
         // 默认按 emoji 显示的字符先用彩色 emoji 字体：排在它之前的符号字体、中文字体和主字体
         // 常带有同一字符的单色字形。
-        if super::sequence::emoji_presentation(c) {
+        if winc_emoji::presentation(c) {
             order.insert(0, self.emoji);
         }
 

@@ -32,7 +32,7 @@ fn sequence_start(atoms: &[Atom], c: char, run: usize) -> Option<usize> {
         .collect();
     (1..=tail.len()).rev().find_map(|count| {
         let unit = tail[..count].iter().rev().copied().chain([c]);
-        (winc_render::sequence_len(unit) == count + 1).then(|| atoms.len() - count)
+        (winc_emoji::sequence_len(unit) == count + 1).then(|| atoms.len() - count)
     })
 }
 
@@ -288,7 +288,7 @@ impl Cx<'_, '_> {
             _ => None,
         });
         // 与前面的字符组成 emoji 序列：整个序列的宽度记在第一个字符上，其余为 0，中间不换行。
-        if prev.is_some_and(|p| winc_render::continues_sequence(p, c))
+        if prev.is_some_and(|p| winc_emoji::may_join(p, c))
             && let Some(start) = sequence_start(atoms, c, run)
         {
             let chars: Vec<char> = atoms[start..]

@@ -363,8 +363,9 @@ pub(in crate::view) fn draw_caret(
         return Rect::new(x, y, 2.0, app.fonts.line_height);
     }
 
-    let cells = |c: char| text::char_cells(c, 0, tab_width).max(1);
-    let width = preedit.chars().map(cells).sum::<usize>() as f32 * cell;
+    let chars: Vec<char> = preedit.chars().collect();
+    let cells = loose_cells(&chars, tab_width);
+    let width = cells.iter().sum::<usize>() as f32 * cell;
     frame.rect_clipped(
         Rect::new(x, y, width, app.fonts.line_height),
         p.editor_bg,
@@ -372,17 +373,16 @@ pub(in crate::view) fn draw_caret(
         clip,
     );
     let mut px = x;
-    let chars: Vec<char> = preedit.chars().collect();
     let font = (FontKind::Mono, app.fonts.code, cell);
     // emoji 序列在第一个字符处整个绘制，`joined` 之前的字符属于已绘制的序列。
     let mut joined = 0;
 
-    for (col, &c) in chars.iter().enumerate() {
+    for (col, &width) in cells.iter().enumerate() {
         if col >= joined {
             let at = (px, baseline);
-            joined = col + draw_grid_char(frame, font, at, (&chars, col), &cells, p.text, clip);
+            joined = col + draw_grid_char(frame, font, at, (&chars, col), p.text, clip);
         }
-        px += cells(c) as f32 * cell;
+        px += width as f32 * cell;
     }
 
     frame.rect_clipped(
@@ -411,10 +411,10 @@ pub(in crate::view) fn draw_modal_caret(
     let p = app.palette;
     let cell = app.metrics.cell;
     let under = under.filter(|&(chars, col)| col < chars.len());
-    // 序列中各字符的格数之和；不是序列时就是调用方给的宽度。
+    // 光标在 emoji 序列上时块盖住整个序列；不是序列时就是调用方给的宽度。
     let width = under.map_or(width, |(chars, col)| {
-        let len = winc_render::sequence_len(chars[col..].iter().copied());
-        let span: usize = chars[col..col + len].iter().map(|&c| code_cells(c)).sum();
+        let len = winc_emoji::sequence_len(chars[col..].iter().copied());
+        let span = text::sequence_cells(chars[col..col + len].iter().copied(), 0, 1);
         if len > 1 && span > 0 {
             span as f32 * cell
         } else {
@@ -442,15 +442,7 @@ pub(in crate::view) fn draw_modal_caret(
             if let Some((chars, col)) = under.filter(|&(chars, col)| !chars[col].is_whitespace()) {
                 let font = (FontKind::Mono, app.fonts.code, cell);
                 let at = (x, baseline);
-                draw_grid_char(
-                    frame,
-                    font,
-                    at,
-                    (chars, col),
-                    &code_cells,
-                    p.editor_bg,
-                    clip,
-                );
+                draw_grid_char(frame, font, at, (chars, col), p.editor_bg, clip);
             }
         }
         CaretShape::Underline | CaretShape::Block => {}

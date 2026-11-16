@@ -45,9 +45,10 @@ pub(super) fn draw_glyph_run(
     let mut token = tokens.partition_point(|t| t.end <= range.start);
     // emoji 序列在第一个字符处整个绘制，`joined` 之前的字符属于已绘制的序列。
     let mut joined = range.start;
+    let mut behind = text::Behind::before(chars, range.start);
     for col in range {
         let c = chars[col];
-        let width = text::char_cells(c, cells, tab_width);
+        let width = behind.cells(c, cells, tab_width);
         let x = origin_x + cells as f32 * cell;
         cells += width;
         if c == ' ' || c == '\t' || x > clip.right() || col < joined {
@@ -62,7 +63,7 @@ pub(super) fn draw_glyph_run(
             .map_or(TokenKind::Text, |t| t.kind);
         let font = (token_font(kind), app.fonts.code, cell);
         let (at, color) = ((x, baseline), p.token(kind));
-        joined = col + draw_grid_char(frame, font, at, (chars, col), &code_cells, color, clip);
+        joined = col + draw_grid_char(frame, font, at, (chars, col), color, clip);
     }
     cells
 }
@@ -183,9 +184,10 @@ pub(in crate::view) fn draw_glyphs(
     let mut token = 0;
     // emoji 序列在第一个字符处整个绘制，`joined` 之前的字符属于已绘制的序列。
     let mut joined = 0;
+    let mut behind = text::Behind::default();
 
     for (col, &c) in chars.iter().enumerate() {
-        let width = text::char_cells(c, cells, tab_width);
+        let width = behind.cells(c, cells, tab_width);
         let x = origin_x + cells as f32 * cell;
         cells += width;
 
@@ -211,7 +213,7 @@ pub(in crate::view) fn draw_glyphs(
             .map_or(TokenKind::Text, |t| t.kind);
         let font = (token_font(kind), app.fonts.code, cell);
         let (at, color) = ((x, baseline), p.token(kind));
-        joined = col + draw_grid_char(frame, font, at, (chars, col), &code_cells, color, clip);
+        joined = col + draw_grid_char(frame, font, at, (chars, col), color, clip);
     }
     cells
 }
@@ -258,16 +260,7 @@ pub(super) fn draw_columns(
         };
         // 按字符自身的宽度绘制，不计入为对齐而留出的空白。
         let font = (FontKind::Mono, app.fonts.code, cell);
-        joined = col
-            + draw_grid_char(
-                frame,
-                font,
-                (x, baseline),
-                (chars, col),
-                &code_cells,
-                color,
-                clip,
-            );
+        joined = col + draw_grid_char(frame, font, (x, baseline), (chars, col), color, clip);
     }
     positions.last().copied().unwrap_or(0)
 }
@@ -309,45 +302,52 @@ impl App {
     }
 }
 
-/// 在等宽网格上绘制 `chars[col]`，返回绘制的字符数。
+/// 在等宽网格上绘制 `chars[col]`，返回它连同接在后面的 emoji 序列的字符数，调用方跳过其余
+/// 字符。
 ///
-/// `chars[col]` 是由 emoji 字体合成的序列的第一个字符时绘制整个序列，占序列中各字符的格数
-/// 之和，返回序列的字符数，调用方跳过其余字符；否则绘制这一个字符，返回 1。`font` 是字体、
-/// 字号和一格的宽度，`at` 是该字符所在格的左边缘和基线，`cells` 给出一个字符占的格数。
+/// `chars[col]` 是序列的第一个字符时，整个序列由 emoji 字体合成一个图形，占序列的显示列数
+/// （见 [`text::sequence_cells`]）；无法合成时只绘制第一个字符，其余字符不占列，不绘制。`font`
+/// 是字体、字号和一格的宽度，`at` 是该字符所在格的左边缘和基线。
 pub(in crate::view) fn draw_grid_char(
     frame: &mut Frame<'_>,
     (font, size, cell): (FontKind, f32, f32),
     (x, baseline): (f32, f32),
     (chars, col): (&[char], usize),
-    cells: &dyn Fn(char) -> usize,
     color: Color,
     clip: Rect,
 ) -> usize {
     let c = chars[col];
     let next = chars.get(col + 1).copied();
-    if next.is_some_and(|next| winc_render::continues_sequence(c, next)) {
-        let len = winc_render::sequence_len(chars[col..].iter().copied());
-        let unit: String = chars[col..col + len].iter().collect();
-        let span = chars[col..col + len].iter().map(|&c| cells(c)).sum();
-        if len > 1 && frame.cell_sequence(font, size, x, baseline, cell, span, &unit, color, clip) {
-            return len;
-        }
+    if !next.is_some_and(|next| winc_emoji::may_join(c, next)) {
+        let cells = text::char_cells(c, 0, 1).max(1);
+        frame.cell_char(font, size, x, baseline, cell, cells, c, color, clip);
+        return 1;
     }
-    frame.cell_char(
-        font,
-        size,
-        x,
-        baseline,
-        cell,
-        cells(c).max(1),
-        c,
-        color,
-        clip,
-    );
-    1
+    let len = winc_emoji::sequence_len(chars[col..].iter().copied());
+    let span = text::sequence_cells(chars[col..col + len].iter().copied(), 0, 1).max(1);
+    let unit: String = chars[col..col + len].iter().collect();
+    if len == 1 || !frame.cell_sequence(font, size, x, baseline, cell, span, &unit, color, clip) {
+        frame.cell_char(font, size, x, baseline, cell, span, c, color, clip);
+    }
+    len
 }
 
-/// 编辑区中一个字符占的格数，不计制表位；见 [`text::char_cells`]。
-pub(in crate::view) fn code_cells(c: char) -> usize {
-    text::char_cells(c, 0, 1)
+/// 返回 `chars` 中各字符在等宽网格上占的格数，每个字符一项，制表符按 `tab_width` 计。
+///
+/// 与 [`text::Behind::cells`] 相同，但不占列的字符（控制字符、单独的组合符号）也占 1 格，
+/// 只有接在 emoji 序列中的字符占 0 格。用于输入法组字和定义列表中的预览：这些地方的每个
+/// 字符都要看得见。
+pub(in crate::view) fn loose_cells(chars: &[char], tab_width: usize) -> Vec<usize> {
+    let mut behind = text::Behind::default();
+    let mut cells = 0;
+    (chars.iter().enumerate())
+        .map(|(col, &c)| {
+            let before = |back: usize| col.checked_sub(back).map(|k| chars[k]);
+            let member = winc_emoji::joined((before(2), before(1)), c);
+            let width = behind.cells(c, cells, tab_width);
+            let width = if member { width } else { width.max(1) };
+            cells += width;
+            width
+        })
+        .collect()
 }

@@ -1,22 +1,23 @@
-//! emoji 序列：由几个字符合成一个图形的写法，以及默认按 emoji 显示的字符。
+//! emoji 序列的规则：哪些字符合成一个图形，哪些字符默认按 emoji 显示。
 //!
 //! 序列包括带变体选择符的符号（`❤` 加 U+FE0F）、带肤色的手势、用零宽连接符连起来的组合、
-//! 国旗（两个区域指示符）和键帽。绘制时整个序列交给 emoji 字体合成，不逐字符绘制。
+//! 国旗（两个区域指示符）和键帽。文本内核按它计算显示列和折行，渲染层按它把整个序列交给
+//! emoji 字体合成，终端按它判断哪些字符并入前一格；三者共用这一份规则。
 
 /// 变体选择符 15：要求按文字显示。
-pub(crate) const VS15: char = '\u{fe0e}';
+pub const VS15: char = '\u{fe0e}';
 /// 变体选择符 16：要求按 emoji 显示。
-pub(crate) const VS16: char = '\u{fe0f}';
+pub const VS16: char = '\u{fe0f}';
 /// 零宽连接符：把前后的 emoji 连成一个图形。
-pub(crate) const ZWJ: char = '\u{200d}';
+pub const ZWJ: char = '\u{200d}';
 /// 键帽：与前面的数字、`#`、`*` 合成按键的图形。
-pub(crate) const KEYCAP: char = '\u{20e3}';
+pub const KEYCAP: char = '\u{20e3}';
 
 /// 默认按 emoji 显示的字符所在的码点范围（含两端），按码点从小到大排列。
 ///
 /// 取自 Unicode 16 的 `Emoji_Presentation` 属性；U+1FA70 至 U+1FAFF 整段列入，其中尚未分配的
 /// 码点在任何字体中都没有字形。
-pub(crate) const EMOJI_PRESENTATION: &[(u32, u32)] = &[
+const PRESENTATION: &[(u32, u32)] = &[
     (0x231A, 0x231B),
     (0x23E9, 0x23EC),
     (0x23F0, 0x23F0),
@@ -94,12 +95,12 @@ pub(crate) const EMOJI_PRESENTATION: &[(u32, u32)] = &[
     (0x1FA70, 0x1FAFF),
 ];
 
-/// 字符 `c` 是否默认按 emoji 显示（见 [`EMOJI_PRESENTATION`]）；`☺`、`✔` 这类默认按文字显示的
+/// 字符 `c` 是否默认按 emoji 显示；`☺`、`✔` 这类默认按文字显示的
 /// 符号不算。
-pub(crate) fn emoji_presentation(c: char) -> bool {
+pub fn presentation(c: char) -> bool {
     let code = c as u32;
-    code >= EMOJI_PRESENTATION[0].0
-        && EMOJI_PRESENTATION
+    code >= PRESENTATION[0].0
+        && PRESENTATION
             .binary_search_by(|&(start, end)| {
                 if code < start {
                     std::cmp::Ordering::Greater
@@ -113,12 +114,12 @@ pub(crate) fn emoji_presentation(c: char) -> bool {
 }
 
 /// 是否是肤色修饰符（U+1F3FB 至 U+1F3FF）。
-fn modifier(c: char) -> bool {
+pub fn modifier(c: char) -> bool {
     matches!(c, '\u{1f3fb}'..='\u{1f3ff}')
 }
 
 /// 是否是区域指示符（U+1F1E6 至 U+1F1FF）：两个连写表示一面国旗。
-fn regional(c: char) -> bool {
+pub fn regional(c: char) -> bool {
     matches!(c, '\u{1f1e6}'..='\u{1f1ff}')
 }
 
@@ -127,87 +128,98 @@ fn tag(c: char) -> bool {
     matches!(c, '\u{e0020}'..='\u{e007f}')
 }
 
-/// 字符 `c` 是否可以经零宽连接符接在 emoji 之后：默认按 emoji 显示的字符，以及符号区中按
-/// 文字显示的符号（`♂`、`⚕`、`❤`）。
-fn joinable(c: char) -> bool {
-    emoji_presentation(c) || matches!(c, '\u{2190}'..='\u{2bff}' | '\u{1f000}'..='\u{1faff}')
+/// 是否是键帽的基本字符：数字、`#`、`*`。
+fn keycap_base(c: char) -> bool {
+    matches!(c, '0'..='9' | '#' | '*')
 }
 
-/// 字符 `next` 紧跟在 `c` 之后时是否可能与它组成序列；用于在逐字符的循环中快速排除普通文字。
-#[inline]
-pub(crate) fn joins(c: char, next: char) -> bool {
-    next >= ZWJ
-        && (matches!(next, VS15 | VS16 | ZWJ | KEYCAP)
-            || modifier(next)
-            || tag(next)
-            || (regional(c) && regional(next)))
+/// 字符 `c` 是否是图形符号：默认按 emoji 显示的字符，以及符号区中默认按文字显示、加上变体
+/// 选择符或肤色后按 emoji 显示的符号（`♂`、`⚕`、`❤`、`✌`）。
+pub fn pictographic(c: char) -> bool {
+    presentation(c) || matches!(c, '\u{2190}'..='\u{2bff}' | '\u{1f000}'..='\u{1faff}')
+}
+
+/// 字符 `c` 是否可以结束一个 emoji：其后的零宽连接符把下一个图形连进来。
+fn ends_emoji(c: char) -> bool {
+    presentation(c) || c == VS16 || modifier(c) || c == '\u{e007f}'
+}
+
+/// 字符 `c` 是否接在它前面的两个字符 `before`（较远的在前，没有时为 `None`）之后，与它们属于
+/// 同一个 emoji 序列。
+///
+/// 规则只看前两个字符，任何位置都可以从文字中直接判断，不需要从头扫描：变体选择符接在任何
+/// 可见字符之后；肤色修饰符接在图形符号之后；键帽接在数字、`#`、`*` 之后；零宽连接符接在
+/// emoji 之后，并把其后的图形符号连进来（印度系文字中的连接符不算）。成对的区域指示符不在
+/// 此列，见 [`sequence_len`]。
+pub fn joined(before: (Option<char>, Option<char>), c: char) -> bool {
+    let (Some(previous), earlier) = (before.1, before.0) else {
+        return false;
+    };
+    // 序列中的字符都不小于零宽连接符；普通文字在这里就排除。
+    if c < ZWJ {
+        return false;
+    }
+    match c {
+        VS15 | VS16 => !(previous.is_whitespace() || previous.is_control() || previous == ZWJ),
+        ZWJ => ends_emoji(previous),
+        KEYCAP => keycap_base(previous) || (previous == VS16 && earlier.is_some_and(keycap_base)),
+        c if modifier(c) => pictographic(previous) || previous == VS16,
+        c if tag(c) => tag(previous) || previous == '\u{1f3f4}',
+        c => previous == ZWJ && pictographic(c) && earlier.is_some_and(ends_emoji),
+    }
 }
 
 /// 返回 `chars` 开头的 emoji 序列的字符数；开头不是由几个字符组成的序列时返回 1，`chars` 为空
 /// 时返回 0。
 ///
-/// 零宽连接符只连接 emoji：印度系文字中的连接符不算。
-pub fn sequence_len<I>(chars: I) -> usize
-where
-    I: IntoIterator<Item = char>,
-    I::IntoIter: Clone,
-{
-    let mut chars = chars.into_iter().peekable();
+/// 两个连写的区域指示符是一面国旗；其余按 [`joined`] 逐个接上。
+pub fn sequence_len(chars: impl IntoIterator<Item = char>) -> usize {
+    let mut chars = chars.into_iter();
     let Some(base) = chars.next() else {
         return 0;
     };
     if regional(base) {
-        return 1 + usize::from(chars.peek().copied().is_some_and(regional));
+        return 1 + usize::from(chars.next().is_some_and(regional));
     }
-    let mut emoji = emoji_presentation(base);
+    let mut before = (None, Some(base));
     let mut len = 1;
-    while let Some(&next) = chars.peek() {
-        match next {
-            VS16 => emoji = true,
-            VS15 => {}
-            KEYCAP if matches!(base, '0'..='9' | '#' | '*') => {}
-            c if emoji && (modifier(c) || tag(c)) => {}
-            ZWJ if emoji => {
-                let mut ahead = chars.clone();
-                ahead.next();
-                if !ahead.next().is_some_and(joinable) {
-                    break;
-                }
-                // 连接符与其后的字符一并计入。
-                chars.next();
-                len += 1;
-            }
-            _ => break,
+    for c in chars {
+        if !joined(before, c) {
+            break;
         }
-        chars.next();
+        before = (before.1, Some(c));
         len += 1;
     }
     len
 }
 
-/// 字符 `c` 紧跟在 `previous` 之后时是否可能属于同一个 emoji 序列：`c` 是变体选择符、肤色
-/// 修饰符这类只出现在序列中的字符，或 `previous` 是零宽连接符。
-///
-/// 逐字符排版的调用方用它排除普通文字，为真时再用 [`sequence_len`] 确认。
-pub fn continues_sequence(previous: char, c: char) -> bool {
-    previous == ZWJ || joins(previous, c)
+/// 字符 `c` 紧跟在 `previous` 之后时是否可能属于同一个 emoji 序列；逐字符的循环用它排除普通
+/// 文字，为真时再用 [`sequence_len`] 或 [`joined`] 确认。
+#[inline]
+pub fn may_join(previous: char, c: char) -> bool {
+    c >= ZWJ
+        && (previous == ZWJ
+            || matches!(c, VS15 | VS16 | ZWJ | KEYCAP)
+            || modifier(c)
+            || tag(c)
+            || (regional(previous) && regional(c)))
 }
 
 /// 序列 `unit`（见 [`sequence_len`]）是否按 emoji 显示，由 emoji 字体合成。
 ///
 /// 带变体选择符 15 的按文字显示；ASCII 字符只有组成键帽时才是 emoji。
-pub(crate) fn presents_as_emoji(unit: &str) -> bool {
+pub fn presents_as_emoji(unit: &str) -> bool {
     let base = unit.chars().next().unwrap_or(' ');
     !unit.contains(VS15) && (!base.is_ascii() || unit.contains(KEYCAP))
 }
 
 /// 序列中不单独绘制的字符：变体选择符、零宽连接符和标签字符。
-pub(crate) fn ignorable(c: char) -> bool {
+pub fn ignorable(c: char) -> bool {
     matches!(c, VS15 | VS16 | ZWJ) || tag(c)
 }
 
-/// 把一段文字切成绘制的单位：单个字符，或一个 emoji 序列。
-pub(crate) enum Unit<'a> {
+/// 一段文字中的一个绘制单位：单个字符，或一个 emoji 序列。
+pub enum Unit<'a> {
     /// 单个字符。
     Char(char),
     /// 由几个字符组成的 emoji 序列。
@@ -215,11 +227,11 @@ pub(crate) enum Unit<'a> {
 }
 
 /// 返回 `text` 的各个绘制单位。
-pub(crate) fn units(text: &str) -> impl Iterator<Item = Unit<'_>> {
+pub fn units(text: &str) -> impl Iterator<Item = Unit<'_>> {
     let mut chars = text.char_indices().peekable();
     std::iter::from_fn(move || {
         let (start, c) = chars.next()?;
-        if !chars.peek().is_some_and(|&(_, next)| joins(c, next)) {
+        if !chars.peek().is_some_and(|&(_, next)| may_join(c, next)) {
             return Some(Unit::Char(c));
         }
         let len = sequence_len(text[start..].chars());
