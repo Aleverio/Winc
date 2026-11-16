@@ -65,6 +65,8 @@ pub enum Action {
     MarkdownCode,
     /// 可编辑的 Markdown 预览中切换删除线（`~~`）。
     MarkdownStrikethrough,
+    /// 可编辑的 Markdown 预览中切换高亮（`==`）。
+    MarkdownHighlight,
     DeleteLine,
     DeleteAllLeft,
     IndentLines,
@@ -333,6 +335,7 @@ impl Action {
             MarkdownItalic => t!("cmd-markdown-italic"),
             MarkdownCode => t!("cmd-markdown-code"),
             MarkdownStrikethrough => t!("cmd-markdown-strikethrough"),
+            MarkdownHighlight => t!("cmd-markdown-highlight"),
             DeleteLine => t!("cmd-delete-line"),
             DeleteAllLeft => t!("cmd-delete-all-left"),
             IndentLines => t!("cmd-indent-lines"),
@@ -549,6 +552,7 @@ impl Action {
             MarkdownItalic => "Markdown: Toggle Italic",
             MarkdownCode => "Markdown: Toggle Inline Code",
             MarkdownStrikethrough => "Markdown: Toggle Strikethrough",
+            MarkdownHighlight => "Markdown: Toggle Highlight",
             DeleteLine => "Delete Line",
             DeleteAllLeft => "Delete All Left",
             IndentLines => "Indent Line",
@@ -747,6 +751,7 @@ impl Action {
             | MarkdownItalic
             | MarkdownCode
             | MarkdownStrikethrough
+            | MarkdownHighlight
             | DeleteLine
             | DeleteAllLeft
             | IndentLines
@@ -937,7 +942,8 @@ impl Action {
             | MarkdownBold
             | MarkdownItalic
             | MarkdownCode
-            | MarkdownStrikethrough => false,
+            | MarkdownStrikethrough
+            | MarkdownHighlight => false,
             _ => self.group() == Group::Edit,
         }
     }
@@ -1122,6 +1128,7 @@ pub const ACTIONS: &[Action] = {
         MarkdownItalic,
         MarkdownCode,
         MarkdownStrikethrough,
+        MarkdownHighlight,
         DeleteLine,
         DeleteAllLeft,
         IndentLines,

@@ -1226,3 +1226,18 @@ fn jsx_prose_quotes() {
         );
     }
 }
+
+#[test]
+fn markdown_highlights_between_double_equals() {
+    let (tokens, _) = lex("a.md", "a ==亮== 和 ==b== 与 == c ==", LineState::Normal);
+    assert_eq!(
+        tokens,
+        vec![
+            ("==亮==".into(), TokenKind::Emphasis),
+            ("==b==".into(), TokenKind::Emphasis),
+        ]
+    );
+    // 行内代码里的 `==` 是文字，`===` 不是高亮。
+    let (tokens, _) = lex("a.md", "`==x==` a === b", LineState::Normal);
+    assert!(tokens.iter().all(|(_, kind)| *kind == TokenKind::String));
+}
