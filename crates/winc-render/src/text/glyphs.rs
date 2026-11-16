@@ -157,25 +157,41 @@ impl GlyphCache {
         if font.charmap().map(unit.chars().next()?) == 0 {
             return None;
         }
-        // 按 1 个单位的字号整形，结果即以字号为单位。
-        let mut shaper = self
-            .shaper
-            .builder(font)
-            .size(1.0)
-            .normalized_coords(&face.coords)
-            .build();
-        // 键帽中的变体选择符夹在数字和键帽之间，部分字体的合成规则不含它，整形前去掉。
-        if unit.contains(sequence::KEYCAP) {
-            shaper.add_str(&unit.replace(sequence::VS16, ""));
+        let mut shape = |text: &str| {
+            // 按 1 个单位的字号整形，结果即以字号为单位。
+            let mut shaper = self
+                .shaper
+                .builder(font)
+                .size(1.0)
+                .normalized_coords(&face.coords)
+                .build();
+            shaper.add_str(text);
+            let mut glyphs = Vec::new();
+            shaper.shape_with(|cluster| {
+                glyphs.extend(cluster.glyphs.iter().map(|g| (g.id, g.x, g.y, g.advance)));
+            });
+            // 变体选择符、连接符在部分字体中留下没有宽度的空字形，不绘制。
+            glyphs.retain(|&(id, .., advance)| id != 0 || advance > 0.0);
+            glyphs
+        };
+        // 键帽的合成规则依字体而定：有的不含夹在数字和键帽之间的变体选择符，有的要求含有。
+        // 先去掉选择符整形，未合成一个字形时按原序列再整形一次，取字形较少的结果。
+        let mut glyphs = if unit.contains(sequence::KEYCAP) && unit.contains(sequence::VS16) {
+            let bare = shape(&unit.replace(sequence::VS16, ""));
+            let full = if bare.len() > 1 {
+                shape(unit)
+            } else {
+                Vec::new()
+            };
+            if full.is_empty() || bare.len() <= full.len() {
+                bare
+            } else {
+                full
+            }
         } else {
-            shaper.add_str(unit);
-        }
-        let mut glyphs = Vec::new();
-        shaper.shape_with(|cluster| {
-            glyphs.extend(cluster.glyphs.iter().map(|g| (g.id, g.x, g.y, g.advance)));
-        });
-        // 变体选择符、连接符在部分字体中留下没有宽度的空字形，不绘制。
-        glyphs.retain(|&(id, .., advance)| id != 0 || advance > 0.0);
+            shape(unit)
+        };
+        glyphs.shrink_to_fit();
         (!glyphs.is_empty()).then_some(Shaped { slot, glyphs })
     }
 

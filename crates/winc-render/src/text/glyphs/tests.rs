@@ -32,10 +32,12 @@ fn emoji_sequences_are_composed_by_the_emoji_font() {
         let Some(shaped) = cache.shaped(unit) else {
             continue;
         };
-        // 这几种序列在各平台的 emoji 字体中都有合成的字形；国旗、家庭组合依字体而定。
-        if matches!(unit, "❤\u{fe0f}" | "👍\u{1f3fd}" | "1\u{fe0f}\u{20e3}") {
+        // 这两种序列在各平台的 emoji 字体中都有合成的字形。国旗、家庭组合和键帽依字体而定：
+        // 字体没有合成的字形时结果是几个字形，键帽可以由数字与边框两个字形叠成。
+        if matches!(unit, "❤\u{fe0f}" | "👍\u{1f3fd}") {
             assert_eq!(shaped.glyphs.len(), 1, "{unit:?}");
         }
+        assert!(shaped.advance() > 0.0, "{unit:?}");
         let width = cache.measure(FontKind::Ui, Faux::default(), size, unit);
         assert!((width - shaped.advance() * size).abs() < 0.01);
         // 前后有文字时宽度是各部分之和：测量和绘制用同一种切分。
