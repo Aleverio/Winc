@@ -3,13 +3,56 @@
 use super::*;
 
 impl App {
+    /// 竖向终端列表的区域，包含新建入口和终端条目。
+    pub(crate) fn terminal_tab_list(&self) -> Option<Rect> {
+        let card = self.layout.terminal;
+        let shown = self
+            .terminal
+            .strip
+            .position
+            .share(self.config.terminal_vertical_tabs == Some(true));
+        if shown <= 0.0 {
+            return None;
+        }
+        let top = card.y + header_height(card);
+        // 约容纳 8 个汉字和关闭按钮，窄面板最多使用三分之一的宽度。
+        let width = (card.w / 3.0).min(144.0).floor();
+        (width > 0.0 && card.bottom() > top).then(|| {
+            Rect::new(
+                card.right() - width * shown,
+                top,
+                width,
+                card.bottom() - top,
+            )
+        })
+    }
+
+    /// 竖向列表中的终端条目区域，顶部留给新建入口。
+    pub(crate) fn terminal_tab_rows(&self) -> Option<Rect> {
+        let list = self.terminal_tab_list()?;
+        let top =
+            (list.y + crate::theme::TREE_ROW + strip::TAB_GAP + strip::LIST_GAP).min(list.bottom());
+        Some(Rect::new(list.x, top, list.w, list.bottom() - top))
+    }
+
+    /// 终端内容使用的面板范围，含顶部工具栏的高度，扣除竖向标签列表。
+    pub(crate) fn terminal_content_card(&self) -> Rect {
+        let card = self.layout.terminal;
+        Rect {
+            w: self
+                .terminal_tab_list()
+                .map_or(card.w, |list| list.x - card.x),
+            ..card
+        }
+    }
+
     /// 面板里放网格的区域。
     ///
     /// 网格上面还有内容时贴着面板下边（[`grid_rect`]）；没有内容时和备用屏贴着标签栏，零头留在
     /// 下面，此时增减行数不会有历史行进出网格，拖动分隔条时内容也不会跳。网格装满后切换到贴着下边
     /// 时，原来的第一行成为零头处的半行，位置不变。
     pub(crate) fn terminal_grid(&self) -> Rect {
-        let card = self.layout.terminal;
+        let card = self.terminal_content_card();
         let grid = grid_rect(card, self.fonts.terminal_line_height);
         let below = |tab: &TermTab| tab.view_top() > 0 && !tab.modes.has(Modes::ALT_SCREEN);
         if self.terminal.tab().is_some_and(below) {
@@ -41,7 +84,7 @@ impl App {
 
     /// 吸顶行露出的区域：紧贴标签栏，被下一条命令的提示符顶上去时变矮。
     pub(crate) fn terminal_sticky_band(&self) -> Rect {
-        let card = self.layout.terminal;
+        let card = self.terminal_content_card();
         let lh = self.fonts.terminal_line_height;
         let push = self.terminal.tab().map_or(0.0, TermTab::sticky_push);
         Rect::new(
@@ -261,7 +304,10 @@ impl App {
 
     /// 网格放得下几列几行，以及像素尺寸（物理像素，程序查询时回答它）。
     pub(in crate::app) fn terminal_size(&self) -> Size {
-        let grid = grid_rect(self.layout.terminal, self.fonts.terminal_line_height);
+        let grid = grid_rect(
+            self.terminal_content_card(),
+            self.fonts.terminal_line_height,
+        );
         let cols = (grid.w / self.metrics.terminal_cell).floor().max(2.0);
         let rows = (grid.h / self.fonts.terminal_line_height).floor().max(1.0);
         let scale = self

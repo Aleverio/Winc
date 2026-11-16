@@ -120,7 +120,7 @@ impl App {
     pub(crate) fn terminal_scrollbar(&self) -> Option<(Rect, f32, f32)> {
         let tab = self.terminal.tab()?;
         let lh = self.fonts.terminal_line_height;
-        let card = self.layout.terminal;
+        let card = self.terminal_content_card();
         let view = self.terminal_view();
         let track = Rect::new(view.x, view.y, card.right() - view.x, view.h);
         let (position, limit) = tab.scroll_position();

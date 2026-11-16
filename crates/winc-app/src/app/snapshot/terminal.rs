@@ -6,6 +6,7 @@ mod editor;
 mod find;
 mod input;
 mod run;
+mod tabs;
 
 use super::editor::navigation::press;
 use super::*;
@@ -1159,7 +1160,7 @@ fn the_new_button_stays_put_once_the_tabs_narrow() {
     for _ in 0..30 {
         let _ = add_tab(&mut app, "cargo", "");
         paint(&mut app);
-        let widths = &app.terminal.strip.widths;
+        let widths = &app.terminal.strip.sizes;
         if widths.iter().any(|&w| w < TAB_MIN) {
             narrowed += 1;
             let at = *pinned.get_or_insert(new(&app));
@@ -1167,7 +1168,7 @@ fn the_new_button_stays_put_once_the_tabs_narrow() {
         }
     }
     assert!(narrowed > 5, "覆盖了变窄的整个过程：{narrowed}");
-    let widths = &app.terminal.strip.widths;
+    let widths = &app.terminal.strip.sizes;
     assert!(widths.iter().all(|&w| w == TAB_SQUEEZED));
 }
 

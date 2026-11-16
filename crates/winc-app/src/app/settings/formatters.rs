@@ -277,6 +277,7 @@ impl App {
             | Setting::BackgroundFit
             | Setting::TextWidth
             | Setting::TerminalPosition
+            | Setting::TerminalTabPosition
             | Setting::TerminalOptionAsMeta
             | Setting::UiFont
             | Setting::EditorFont
@@ -290,6 +291,7 @@ impl App {
                     Setting::BackgroundFit => MenuTarget::BackgroundFit,
                     Setting::TextWidth => MenuTarget::TextWidth,
                     Setting::TerminalPosition => MenuTarget::TerminalPosition,
+                    Setting::TerminalTabPosition => MenuTarget::TerminalTabPosition,
                     Setting::TerminalOptionAsMeta => MenuTarget::OptionAsMeta,
                     _ => MenuTarget::Font(setting),
                 };

@@ -7,6 +7,7 @@ terminal-restore-panel = Restore panel
 terminal-hide-panel = Hide terminal panel
 terminal-show-panel = Show terminal panel
 terminal-tab-default-name = Terminal
+terminal-new = New Terminal
 terminal-module-disabled = The terminal module isn’t enabled
 
 ## Terminal helper

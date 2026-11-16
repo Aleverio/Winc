@@ -1,6 +1,6 @@
-# winc 的命令块钩子（docs/TERMINAL.md §6）：发 OSC 133（提示符、命令、输出、结束）和 OSC 7
-# （当前目录），不改 shell 的行为。用户自己没设提示符（还是系统默认的那个）时换一个清楚点的，
-# 见 _winc_defaults。这个文件由 winc 生成，改了会被覆盖。
+# zsh 的 shell 集成：通过 OSC 133 和 OSC 7 报告命令块与当前目录。
+# 首次提示符前按设置处理默认提示符，加载启动目录中的 Python 环境并按需添加名称前缀。
+# winc 从 `.zshenv` 读取本文件，启动前按需生成。
 
 [[ -n $_winc_hooked ]] && builtin return
 builtin typeset -g _winc_hooked=1 _winc_running= _winc_home=${${(%):-%x}:A:h}

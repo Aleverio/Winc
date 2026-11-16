@@ -1,14 +1,14 @@
-# winc 的 shell 集成（docs/TERMINAL.md §6.2）。winc 用 `bash --rcfile` 指向这个文件：先照常读用户
-# 的启动文件，再挂上命令块的钩子。只发 OSC 133（提示符、命令、输出、结束）和 OSC 7（当前目录），
-# 不改提示符的样子，不改 shell 的行为。这个文件由 winc 生成，改了会被覆盖。
+# bash 的 shell 集成：读取用户启动文件，加载启动目录中的 Python 环境，报告命令块和当前目录。
+# 使用 OSC 133 和 OSC 7，按 `terminal.prompt` 处理默认提示符，环境加载可添加名称前缀。
+# winc 通过 `--rcfile` 读取本文件，启动前按需生成。
 
-# terminal.prompt 关了时 winc 传 WINC_PROMPT=0：不换默认的提示符（见 _winc_defaults）。
+# `WINC_PROMPT=0` 时保留默认提示符，由 `terminal.prompt` 控制。
 _winc_prompt_on=${WINC_PROMPT-1}
-# 记录启动目录；用户配置中的 cd 不改变项目环境的选择。
+# 记录启动目录，用户配置中的 `cd` 不改变项目环境的选择。
 _winc_python_root=$PWD
 _winc_python_script=${BASH_SOURCE[0]%/*}/../python.sh
 builtin unset WINC_PROMPT
-# 报命令行时带上的随机数（docs/TERMINAL.md §6.3）：放在不导出的变量里，命令看不到。
+# 命令行报告附带的随机数，保存在未导出的变量中，供 OSC 133 验证。
 _winc_nonce=${WINC_NONCE-}
 builtin unset WINC_NONCE
 

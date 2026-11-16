@@ -842,6 +842,16 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
     use crate::keymap::Action;
     use crate::layout::with_key;
     match app.pointer.hover {
+        Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::New) => {
+            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
+            Some((rect, t!("terminal-new").to_owned()))
+        }
+        Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Tab(i))
+            if app.terminal_tab_list().is_some() =>
+        {
+            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
+            Some((rect, app.terminal.tabs.get(i)?.label().to_owned()))
+        }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::ShellMenu) => {
             let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
             Some((rect, t!("terminal-shell-select").to_owned()))

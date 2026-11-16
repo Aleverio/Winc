@@ -185,6 +185,8 @@ pub struct Config {
     /// 终端面板是否放在编辑区右边（配置里的 `"position": "right"`）；否则（`"bottom"` 或
     /// 没写）放在下面。
     pub terminal_right: Option<bool>,
+    /// 是否在面板右侧使用竖向列表管理终端，默认为否。
+    pub terminal_vertical_tabs: Option<bool>,
     /// 是否启用远程模块（经 `ssh` 打开其他主机上的目录），默认为否。
     pub remote_enabled: Option<bool>,
     /// 是否启用 Git 模块（文件状态、分支、变更视图），默认为否。

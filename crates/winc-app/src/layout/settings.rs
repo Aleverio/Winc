@@ -160,6 +160,7 @@ impl SettingsPage {
                     ]),
                     plain(vec![
                         Setting::TerminalPosition,
+                        Setting::TerminalTabPosition,
                         Setting::TerminalFont,
                         Setting::TerminalSize,
                     ]),
@@ -365,6 +366,8 @@ pub enum Setting {
     TerminalShell,
     /// 终端面板的位置：编辑区下方或右侧。
     TerminalPosition,
+    /// 终端标签的位置：顶部或右侧。
+    TerminalTabPosition,
     /// 终端字体。
     TerminalFont,
     /// 终端字号。
@@ -493,6 +496,7 @@ impl Setting {
             | Setting::AddFixLanguage => SettingsPage::Format,
             Setting::TerminalShell
             | Setting::TerminalPosition
+            | Setting::TerminalTabPosition
             | Setting::TerminalFont
             | Setting::TerminalSize
             | Setting::TerminalCopyOnSelect
@@ -572,6 +576,7 @@ impl Setting {
             Setting::AddLanguage | Setting::AddFixLanguage => t!("settings-add-language"),
             Setting::TerminalShell => t!("settings-terminal-shell"),
             Setting::TerminalPosition => t!("settings-terminal-position"),
+            Setting::TerminalTabPosition => t!("settings-terminal-tab-position"),
             Setting::TerminalFont => t!("settings-terminal-font"),
             Setting::TerminalSize => t!("settings-terminal-size"),
             Setting::TerminalCopyOnSelect => t!("settings-terminal-copy-on-select"),
@@ -719,6 +724,7 @@ impl Setting {
             | Setting::RenderWhitespace
             | Setting::VimClipboard
             | Setting::TerminalPosition
+            | Setting::TerminalTabPosition
             | Setting::TerminalOptionAsMeta => SettingControl::Choice,
             Setting::AddLanguage | Setting::AddFixLanguage => SettingControl::Action,
             Setting::KeySearch => SettingControl::Search,

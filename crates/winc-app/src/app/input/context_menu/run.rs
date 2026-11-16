@@ -239,6 +239,11 @@ impl App {
                     self.set_terminal_position(right);
                 }
             }
+            MenuTarget::TerminalTabPosition => {
+                if let MenuCommand::TerminalTabPosition(right) = command {
+                    self.set_terminal_tab_position(right);
+                }
+            }
             MenuTarget::OptionAsMeta => {
                 if let MenuCommand::OptionAsMeta(i) = command
                     && let Some(&choice) = winc_config::OptionAsMeta::ALL.get(i)

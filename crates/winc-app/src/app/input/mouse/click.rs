@@ -342,7 +342,10 @@ impl App {
                         self.activate_terminal_tab(i);
                         self.open_terminal_rename(i);
                     }
-                    HeaderHit::Tab(i) => self.press_terminal_tab(i, x),
+                    HeaderHit::Tab(i) => {
+                        let at = self.terminal.strip.along((x, y));
+                        self.press_terminal_tab(i, at);
+                    }
                     HeaderHit::Close(i) => self.close_terminal_tab(i),
                     HeaderHit::New => self.new_terminal_tab(),
                     HeaderHit::ShellMenu => self.open_terminal_shell_menu(),

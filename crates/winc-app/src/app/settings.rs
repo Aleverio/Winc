@@ -1355,6 +1355,18 @@ impl App {
         }
     }
 
+    /// 设置终端标签的位置：`right` 为右侧，否则为顶部。
+    pub(in crate::app) fn set_terminal_tab_position(&mut self, right: bool) {
+        self.settings.selected = Setting::TerminalTabPosition;
+        if right == (self.config.terminal_vertical_tabs == Some(true)) {
+            return;
+        }
+        self.config.terminal_vertical_tabs = Some(right);
+        self.relayout();
+        self.save_config();
+        self.request_redraw();
+    }
+
     /// 设置终端中用作 Meta 键的 ⌥。
     pub(in crate::app) fn set_option_as_meta(&mut self, choice: winc_config::OptionAsMeta) {
         self.config.option_as_meta = Some(choice);

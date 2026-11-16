@@ -268,6 +268,7 @@ fn round_trips_through_json() {
         terminal_copy_on_select: Some(true),
         terminal_bold_is_bright: Some(true),
         terminal_right: Some(true),
+        terminal_vertical_tabs: Some(true),
         git_enabled: Some(true),
         git_confirm_push: Some(false),
         git_system_proxy: Some(false),

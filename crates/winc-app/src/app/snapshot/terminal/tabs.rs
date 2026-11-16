@@ -1,0 +1,609 @@
+//! 竖向终端标签的布局、滚动与拖动，及终端内容区域的隔离。
+
+use super::*;
+use crate::app::scroll::target::ScrollTarget;
+use crate::app::terminal::HeaderHit;
+
+fn tab_hit(app: &App, index: usize) -> Rect {
+    app.hits
+        .terminal
+        .iter()
+        .find(|(_, hit)| *hit == HeaderHit::Tab(index))
+        .unwrap()
+        .0
+}
+
+/// 固定标签列表的展开、收起进度；收起的时间包含内容先淡出的阶段。
+fn freeze_tab_position(app: &mut App, right: bool, at: std::time::Duration) {
+    use crate::app::animation::{Clock, MODULE_FADE};
+    let position = &mut app.terminal.strip.position;
+    position.track(!right, None);
+    position.track(right, Some(Clock::frozen(at, MODULE_FADE)));
+}
+
+#[test]
+fn vertical_tabs_share_the_panel_without_covering_terminal_content() {
+    let dir = sample_folder("terminal-vertical-layout");
+    for right in [false, true] {
+        let mut app = app_with(&dir.join("short.rs"), false);
+        app.config.terminal_right = Some(right);
+        app.config.terminal_vertical_tabs = Some(true);
+        show_terminal(&mut app, "$ ");
+        paint(&mut app);
+        let full = app.terminal_size();
+        let first = tab_hit(&app, 0);
+        assert!(first.y >= app.terminal_view().y);
+        let new = app
+            .hits
+            .terminal
+            .iter()
+            .find(|(_, hit)| *hit == HeaderHit::New)
+            .unwrap()
+            .0;
+
+        add_tab(&mut app, "python", "$ ");
+        paint(&mut app);
+        let (first, second) = (tab_hit(&app, 0), tab_hit(&app, 1));
+        assert_eq!(first.x, second.x);
+        assert_eq!(second.y - first.bottom(), 2.0);
+        assert!(first.y >= app.terminal_view().y);
+        assert!(app.terminal_grid().right() <= first.x);
+        assert_eq!(app.terminal_size().cols, full.cols);
+        assert_eq!(app.terminal_size().rows, full.rows);
+        assert_eq!(
+            app.hits
+                .terminal
+                .iter()
+                .find(|(_, hit)| *hit == HeaderHit::New)
+                .unwrap()
+                .0,
+            new
+        );
+
+        app.open_terminal_find();
+        paint(&mut app);
+        let find = app.terminal_find_bar().unwrap();
+        assert!(find.right() <= first.x);
+        let blank = (first.x + 12.0, second.bottom() + 20.0);
+        app.focus = Focus::Editor;
+        click(&mut app, blank);
+        assert_eq!(app.focus, Focus::Editor);
+
+        app.close_terminal_tab(1);
+        paint(&mut app);
+        assert_eq!(app.terminal_size(), full);
+        assert!(tab_hit(&app, 0).y >= app.terminal_view().y);
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn tab_position_changes_use_motion_only_when_animations_are_enabled() {
+    use std::time::Duration;
+
+    let dir = sample_folder("terminal-position-motion");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    show_terminal(&mut app, "$ ");
+    paint(&mut app);
+    app.terminal.strip.frozen = Some(Duration::ZERO);
+    app.config.terminal_vertical_tabs = Some(true);
+    paint(&mut app);
+    assert!(app.terminal.strip.animating());
+    let size = app.terminal_size();
+    app.config.ui_animations = Some(false);
+    paint(&mut app);
+    assert!(!app.terminal.strip.animating());
+    assert!(app.terminal_size().cols < size.cols);
+    app.config.terminal_vertical_tabs = Some(false);
+    paint(&mut app);
+    assert!(!app.terminal.strip.animating());
+    app.config.ui_animations = Some(true);
+    app.config.terminal_vertical_tabs = Some(true);
+    paint(&mut app);
+    assert!(app.terminal.strip.animating());
+    let mut startup = app_with(&dir.join("short.rs"), false);
+    startup.config.terminal_vertical_tabs = Some(true);
+    startup.terminal.strip.frozen = Some(Duration::ZERO);
+    show_terminal(&mut startup, "$ ");
+    paint(&mut startup);
+    assert!(!startup.terminal.strip.animating());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn tab_position_motion_moves_layout_continuously_and_reverses_without_jumping() {
+    use crate::app::animation::{EXIT_FADE, MODULE_FADE};
+    use crate::app::terminal::run::RunButton;
+    use std::time::Duration;
+
+    let dir = sample_folder("terminal-position-reverse");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    show_terminal(&mut app, "$ ");
+    add_tab(&mut app, "python", "$ ");
+    paint(&mut app);
+    let size = app.terminal_size();
+    let run_x = |app: &App| {
+        app.hits
+            .terminal
+            .iter()
+            .find(|(_, hit)| *hit == HeaderHit::Run(RunButton::Start))
+            .unwrap()
+            .0
+            .x
+    };
+    let right = run_x(&app);
+    app.terminal.strip.frozen = Some(Duration::ZERO);
+    app.config.terminal_vertical_tabs = Some(true);
+    freeze_tab_position(&mut app, true, MODULE_FADE / 3);
+    paint(&mut app);
+    let list = app.terminal_tab_list().unwrap();
+    assert!(list.x < app.layout.terminal.right());
+    assert!(list.x > app.layout.terminal.right() - list.w);
+    assert!(run_x(&app) < right && run_x(&app) > app.layout.terminal.x + 16.0);
+    assert!(app.terminal_size().cols < size.cols);
+    assert!(
+        app.hits
+            .terminal
+            .iter()
+            .filter(|(rect, _)| rect.w > 0.0)
+            .all(|(rect, _)| rect.right() <= app.layout.terminal.right())
+    );
+    let middle_size = app.terminal_size();
+    let middle_run = run_x(&app);
+    app.config.terminal_vertical_tabs = Some(false);
+    paint(&mut app);
+    assert_eq!(app.terminal_tab_list().unwrap().x, list.x);
+    assert_eq!(app.terminal_size(), middle_size);
+    assert_eq!(run_x(&app), middle_run);
+    freeze_tab_position(&mut app, false, EXIT_FADE + MODULE_FADE);
+    paint(&mut app);
+    assert!(app.terminal_tab_list().is_none());
+    assert!(!app.terminal.strip.animating());
+    assert_eq!(app.terminal_size(), size);
+    assert_eq!(run_x(&app), right);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn vertical_tabs_scroll_separately_and_reveal_the_active_terminal() {
+    let dir = sample_folder("terminal-vertical-scroll");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    app.config.terminal_vertical_tabs = Some(true);
+    show_terminal(&mut app, "$ ");
+    for _ in 0..20 {
+        add_tab(&mut app, "zsh", "$ ");
+    }
+    paint(&mut app);
+    let last = tab_hit(&app, 20);
+    assert!(last.h > 0.0);
+    assert_eq!(tab_hit(&app, 0).h, 0.0);
+    let scroll = app.terminal.tab().unwrap().scroll;
+    let at = (last.x + 12.0, last.y + last.h / 2.0);
+    assert_eq!(
+        app.scroll_target_at(at.0, at.1),
+        ScrollTarget::TerminalStrip
+    );
+    app.scroll_target_by(ScrollTarget::TerminalStrip, at, false, (0.0, 1000.0));
+    paint(&mut app);
+    assert!(tab_hit(&app, 0).h > 0.0);
+    assert_eq!(app.terminal.active, 20);
+    assert_eq!(app.terminal.tab().unwrap().scroll, scroll);
+
+    app.activate_terminal_tab(0);
+    paint(&mut app);
+    app.activate_terminal_tab(20);
+    paint(&mut app);
+    assert!(tab_hit(&app, 20).h > 0.0);
+    assert_eq!(tab_hit(&app, 0).h, 0.0);
+    app.terminal.height /= 2.0;
+    paint(&mut app);
+    let last = tab_hit(&app, 20);
+    assert_eq!(last.h, crate::theme::TREE_ROW);
+    assert!(last.bottom() <= app.layout.terminal.bottom());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn vertical_tabs_reorder_vertically_and_keep_rename_and_close() {
+    let dir = sample_folder("terminal-vertical-drag");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    app.config.terminal_vertical_tabs = Some(true);
+    show_terminal(&mut app, "$ ");
+    add_tab(&mut app, "python", "$ ");
+    add_tab(&mut app, "cargo", "$ ");
+    paint(&mut app);
+    let ids: Vec<_> = app.terminal.tabs.iter().map(|tab| tab.id).collect();
+    let first = tab_hit(&app, 0);
+    let at = (first.x + 16.0, first.y + first.h / 2.0);
+    app.on_mouse_move(at.0, at.1);
+    app.on_mouse_down(MouseButton::Left);
+    app.on_mouse_move(at.0 + 20.0, at.1);
+    assert_eq!(app.terminal.active, 0);
+    app.on_mouse_move(at.0, at.1 + first.h);
+    paint(&mut app);
+    assert_eq!(
+        app.terminal
+            .tabs
+            .iter()
+            .map(|tab| tab.id)
+            .collect::<Vec<_>>(),
+        [ids[1], ids[0], ids[2]]
+    );
+    assert_eq!(app.terminal.active, 1);
+    app.on_mouse_up(MouseButton::Left);
+    app.open_terminal_rename(1);
+    paint(&mut app);
+    let caret = app.ime.cursor.unwrap();
+    let renamed = tab_hit(&app, 1);
+    assert!(caret.x >= renamed.x && caret.right() <= renamed.right());
+    app.edit_field(|field| field.insert("server"));
+    app.finish_terminal_rename(true);
+    assert_eq!(app.terminal.tabs[1].name, "server");
+    app.close_terminal_tab(1);
+    paint(&mut app);
+    assert_eq!(app.terminal.tabs.len(), 2);
+    assert!(app.dragged_terminal_tab().is_none());
+    let last = tab_hit(&app, 1);
+    app.on_mouse_move(last.x + 16.0, last.y + last.h / 2.0);
+    app.on_mouse_down(MouseButton::Left);
+    app.on_mouse_move(last.x + 16.0, last.bottom() + last.h);
+    assert_eq!(app.dragged_terminal_tab().unwrap().1, last.y);
+    app.on_mouse_up(MouseButton::Left);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn changing_tab_orientation_preserves_terminals_and_ends_the_old_drag() {
+    let dir = sample_folder("terminal-tabs-orientation");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    show_terminal(&mut app, "$ ");
+    add_tab(&mut app, "python", "$ ");
+    paint(&mut app);
+    let size = app.terminal_size();
+    let ids: Vec<_> = app.terminal.tabs.iter().map(|tab| tab.id).collect();
+    app.set_terminal_tab_position(true);
+    paint(&mut app);
+    assert!(app.terminal_size().cols < size.cols);
+    let tab = tab_hit(&app, 0);
+    app.on_mouse_move(tab.x + 16.0, tab.y + tab.h / 2.0);
+    app.on_mouse_down(MouseButton::Left);
+    app.on_mouse_move(tab.x + 16.0, tab.y + tab.h / 2.0 + 6.0);
+    assert!(app.dragged_terminal_tab().is_some());
+
+    let mut config = app.config.clone();
+    config.terminal_vertical_tabs = Some(false);
+    app.adopt_config(config);
+    paint(&mut app);
+    assert!(app.dragged_terminal_tab().is_none());
+    assert_eq!(app.terminal_size(), size);
+    assert_eq!(
+        app.terminal
+            .tabs
+            .iter()
+            .map(|tab| tab.id)
+            .collect::<Vec<_>>(),
+        ids
+    );
+    assert_eq!(tab_hit(&app, 0).y, tab_hit(&app, 1).y);
+    app.on_mouse_up(MouseButton::Left);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn list_close_actions_appear_on_hover_and_keep_the_new_entry_fixed() {
+    let dir = sample_folder("terminal-list-close");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    app.config.terminal_vertical_tabs = Some(true);
+    show_terminal(&mut app, "$ ");
+    add_tab(&mut app, "python", "$ ");
+    paint(&mut app);
+    let new = app
+        .hits
+        .terminal
+        .iter()
+        .find(|(_, hit)| *hit == HeaderHit::New)
+        .unwrap()
+        .0;
+    assert!(
+        app.hits
+            .terminal
+            .iter()
+            .all(|(_, hit)| !matches!(hit, HeaderHit::Close(_)))
+    );
+    let row = tab_hit(&app, 0);
+    app.on_mouse_move(row.x + 16.0, row.y + row.h / 2.0);
+    paint(&mut app);
+    let close = app
+        .hits
+        .terminal
+        .iter()
+        .find(|(_, hit)| *hit == HeaderHit::Close(0))
+        .unwrap()
+        .0;
+    click(&mut app, (close.x + close.w / 2.0, close.y + close.h / 2.0));
+    paint(&mut app);
+    assert_eq!(app.terminal.tabs.len(), 1);
+    assert_eq!(app.terminal.tabs[0].label(), "python");
+    assert_eq!(
+        app.hits
+            .terminal
+            .iter()
+            .find(|(_, hit)| *hit == HeaderHit::New)
+            .unwrap()
+            .0,
+        new
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn the_new_terminal_and_shell_menu_share_a_control_with_separate_actions() {
+    use crate::app::MenuButton;
+    use crate::app::terminal::shells::ShellChoice;
+
+    let dir = sample_folder("terminal-list-new-menu");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    app.config.terminal_vertical_tabs = Some(true);
+    show_terminal(&mut app, "(.venv) project ❯ ");
+    app.terminal.shells = ["zsh", "bash"]
+        .into_iter()
+        .map(|name| ShellChoice {
+            name: name.into(),
+            command: name.into(),
+        })
+        .collect();
+    paint(&mut app);
+    let hit = |app: &App, target| {
+        app.hits
+            .terminal
+            .iter()
+            .find(|(_, hit)| *hit == target)
+            .unwrap()
+            .0
+    };
+    let new = hit(&app, HeaderHit::New);
+    let menu = hit(&app, HeaderHit::ShellMenu);
+    assert_eq!(new.right(), menu.x);
+    assert_eq!((new.y, new.h), (menu.y, menu.h));
+    let row = tab_hit(&app, 0);
+    assert_eq!((new.x, menu.right()), (row.x, row.right()));
+    let pixel = |app: &App, x: f32, y: f32| {
+        let renderer = app.frame.renderer.as_ref().unwrap();
+        let scale = renderer.scale_factor();
+        let image = renderer.image().unwrap();
+        image.pixels[(y * scale) as usize * image.width as usize + (x * scale) as usize]
+    };
+    let sample = (new.right() - 6.0, new.y + new.h / 2.0);
+    let idle = pixel(&app, sample.0, sample.1);
+    assert_eq!(idle, pixel(&app, sample.0, row.bottom() + 20.0));
+    app.on_mouse_move(new.x + 12.0, sample.1);
+    paint(&mut app);
+    let hovered = pixel(&app, sample.0, sample.1);
+    assert_ne!(idle, hovered);
+    app.on_mouse_move(menu.x + menu.w / 2.0, sample.1);
+    paint(&mut app);
+    assert_eq!(pixel(&app, sample.0, sample.1), hovered);
+    let waiting = app.terminal.want.len();
+    click(&mut app, (menu.x + menu.w / 2.0, menu.y + menu.h / 2.0));
+    assert_eq!(app.overlays.menu_button, Some(MenuButton::TerminalShells));
+    assert_eq!(app.terminal.want.len(), waiting);
+    paint(&mut app);
+    assert_eq!(pixel(&app, sample.0, sample.1), hovered);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn an_offscreen_rename_does_not_intercept_visible_terminal_tabs() {
+    let dir = sample_folder("terminal-hidden-rename");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    app.config.terminal_vertical_tabs = Some(true);
+    show_terminal(&mut app, "$ ");
+    for _ in 0..20 {
+        add_tab(&mut app, "zsh", "$ ");
+    }
+    app.open_terminal_rename(0);
+    paint(&mut app);
+    let field = app.terminal.rename.as_ref().unwrap().1.view.area;
+    let at = (field.x + 10.0, field.y + field.h / 2.0);
+    app.scroll_target_by(ScrollTarget::TerminalStrip, at, false, (0.0, -1000.0));
+    paint(&mut app);
+    assert_eq!(tab_hit(&app, 0).h, 0.0);
+    assert_ne!(app.field_at(at.0, at.1), Some(Focus::TerminalRename));
+    let expected = app
+        .hits
+        .terminal
+        .iter()
+        .find_map(|(rect, hit)| match hit {
+            HeaderHit::Tab(index) if rect.contains(at.0, at.1) => Some(*index),
+            _ => None,
+        })
+        .unwrap();
+    click(&mut app, at);
+    assert_eq!(app.terminal.active, expected);
+    assert!(app.terminal.rename.is_none());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_partially_visible_rename_is_clipped_and_does_not_cover_the_new_entry() {
+    let dir = sample_folder("terminal-partial-rename");
+    for (dark, right) in [(false, false), (true, true)] {
+        let mut app = app_with(&dir.join("short.rs"), dark);
+        app.config.terminal_right = Some(right);
+        app.config.terminal_vertical_tabs = Some(true);
+        show_terminal(&mut app, "$ ");
+        for _ in 0..40 {
+            add_tab(&mut app, "zsh", "$ ");
+        }
+        app.activate_terminal_tab(0);
+        paint(&mut app);
+        let rows = app.terminal_tab_rows().unwrap();
+        let at = (rows.x + 30.0, rows.y + 10.0);
+        // 保留行底部 5 个逻辑像素，输入框主体位于固定的新建入口中。
+        let delta = -(crate::theme::TREE_ROW - 5.0);
+        app.scroll_target_by(ScrollTarget::TerminalStrip, at, false, (0.0, delta));
+        paint(&mut app);
+        assert_eq!(tab_hit(&app, 0).h, 5.0);
+        let pixels = |app: &App| {
+            let renderer = app.frame.renderer.as_ref().unwrap();
+            let scale = renderer.scale_factor();
+            let image = renderer.image().unwrap();
+            let mut pixels = Vec::new();
+            for y in ((rows.y - crate::theme::TREE_ROW) * scale) as usize..(rows.y * scale) as usize
+            {
+                let start = y * image.width as usize + (rows.x * scale) as usize;
+                let end = y * image.width as usize + (rows.right() * scale) as usize;
+                pixels.extend_from_slice(&image.pixels[start..end]);
+            }
+            pixels
+        };
+        let before = pixels(&app);
+        app.open_terminal_rename(0);
+        paint(&mut app);
+        assert!(pixels(&app) == before, "重命名输入框不应覆盖新建入口");
+        let field = app.terminal.rename.as_ref().unwrap().1.view.area;
+        let hidden = (field.x + 10.0, rows.y - 10.0);
+        assert_ne!(
+            app.field_at(hidden.0, hidden.1),
+            Some(Focus::TerminalRename)
+        );
+        let visible = tab_hit(&app, 0);
+        let at = (field.x + 10.0, visible.y + 1.0);
+        assert_eq!(app.field_at(at.0, at.1), Some(Focus::TerminalRename));
+        let caret = app.ime.cursor.unwrap();
+        assert!(caret.y >= rows.y && caret.bottom() <= visible.bottom());
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_faded_rename_does_not_intercept_the_collapsing_list() {
+    use crate::app::animation::EXIT_FADE;
+
+    let dir = sample_folder("terminal-faded-rename");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    app.config.terminal_vertical_tabs = Some(true);
+    show_terminal(&mut app, "$ ");
+    app.open_terminal_rename(0);
+    paint(&mut app);
+    let field = app.terminal.rename.as_ref().unwrap().1.view.area;
+    let at = (field.x + 10.0, field.y + field.h / 2.0);
+    assert_eq!(app.field_at(at.0, at.1), Some(Focus::TerminalRename));
+    app.config.terminal_vertical_tabs = Some(false);
+    freeze_tab_position(&mut app, false, EXIT_FADE);
+    paint(&mut app);
+    assert!(app.terminal_tab_list().is_some());
+    assert_ne!(app.field_at(at.0, at.1), Some(Focus::TerminalRename));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// 绘制竖向终端列表，覆盖浅色、深色主题及新建入口的悬停和菜单状态。
+///
+/// ```text
+/// cargo test -p winc-app snapshot_terminal_vertical_tabs -- --ignored
+/// ```
+#[test]
+#[ignore = "截图，手动运行"]
+fn snapshot_terminal_vertical_tabs() {
+    use crate::app::terminal::shells::ShellChoice;
+    let dir = sample_folder("terminal-vertical-shot");
+    std::fs::create_dir_all(dir.join(".winc")).unwrap();
+    std::fs::write(
+        dir.join(".winc/run.json"),
+        r#"{"configurations": [{"name": "test", "command": "cargo test"}]}"#,
+    )
+    .unwrap();
+    for dark in [false, true] {
+        for right in [false, true] {
+            let mut app = app_with(&dir.join("short.rs"), dark);
+            app.config.terminal_enabled = Some(true);
+            app.config.terminal_right = Some(right);
+            app.config.terminal_vertical_tabs = Some(true);
+            app.reload_run_configs();
+            assert_eq!(app.run.current().unwrap().name, "test");
+            show_terminal(
+                &mut app,
+                "(.venv) project ❯ cargo test\r\n   Compiling winc-app\r\n",
+            );
+            app.terminal.shells = ["zsh", "bash"]
+                .into_iter()
+                .map(|name| ShellChoice {
+                    name: name.into(),
+                    command: format!("/bin/{name}"),
+                })
+                .collect();
+            for name in ["python", "cargo watch", "ssh server"] {
+                add_tab(&mut app, name, "$ ");
+            }
+            app.activate_terminal_tab(0);
+            let theme = if dark { "dark" } else { "light" };
+            let position = if right { "right" } else { "bottom" };
+            shoot(&mut app, &format!("terminal-vertical-{position}-{theme}"));
+            let new = app
+                .hits
+                .terminal
+                .iter()
+                .find(|(_, hit)| *hit == HeaderHit::New)
+                .unwrap()
+                .0;
+            app.on_mouse_move(new.x + new.w / 2.0, new.y + new.h / 2.0);
+            shoot(
+                &mut app,
+                &format!("terminal-vertical-{position}-{theme}-hover"),
+            );
+            let menu = app
+                .hits
+                .terminal
+                .iter()
+                .find(|(_, hit)| *hit == HeaderHit::ShellMenu)
+                .unwrap()
+                .0;
+            click(&mut app, (menu.x + menu.w / 2.0, menu.y + menu.h / 2.0));
+            shoot(
+                &mut app,
+                &format!("terminal-vertical-{position}-{theme}-menu"),
+            );
+        }
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// 绘制标签位置切换的开始、中间及结束状态。
+///
+/// ```text
+/// cargo test -p winc-app snapshot_terminal_tab_position_motion -- --ignored
+/// ```
+#[test]
+#[ignore = "截图，手动运行"]
+fn snapshot_terminal_tab_position_motion() {
+    use crate::app::animation::{EXIT_FADE, MODULE_FADE};
+    use std::time::Duration;
+
+    let dir = sample_folder("terminal-position-motion-shot");
+    for (dark, right) in [(false, false), (true, true)] {
+        let mut app = app_with(&dir.join("short.rs"), dark);
+        app.config.terminal_right = Some(right);
+        show_terminal(
+            &mut app,
+            "(.venv) project ❯ cargo test\r\n   Compiling winc-app\r\n",
+        );
+        add_tab(&mut app, "python", "$ ");
+        add_tab(&mut app, "cargo watch", "$ ");
+        app.activate_terminal_tab(0);
+        paint(&mut app);
+        let placement = if right { "right-dark" } else { "bottom-light" };
+        for (on, at, phase) in [
+            (true, Duration::ZERO, "in-start"),
+            (true, MODULE_FADE / 3, "in-middle"),
+            (true, MODULE_FADE, "in-end"),
+            (false, EXIT_FADE / 2, "out-start"),
+            (false, EXIT_FADE + MODULE_FADE / 2, "out-middle"),
+            (false, EXIT_FADE + MODULE_FADE, "out-end"),
+        ] {
+            app.config.terminal_vertical_tabs = Some(on);
+            freeze_tab_position(&mut app, on, at);
+            shoot(&mut app, &format!("terminal-position-{placement}-{phase}"));
+        }
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
