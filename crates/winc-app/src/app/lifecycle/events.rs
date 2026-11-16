@@ -668,6 +668,21 @@ impl App {
         let copying = self.copy_tick(now);
         earliest(&mut wake, copying);
 
+        // 鼠标在标题指示条上停留够久：展开标题列表并淡入。
+        if let Some(since) = self.preview.markdown.toc_rest
+            && !self.preview.markdown.toc_shown
+        {
+            let at = since + crate::theme::TOC_HOVER_DELAY;
+            if now >= at {
+                self.preview.markdown.toc_shown = true;
+                self.preview.markdown.toc_close = None;
+                self.preview.markdown.toc_fade = self.clock(animation::TOC_FADE);
+                self.request_redraw();
+            } else {
+                earliest(&mut wake, Some(at));
+            }
+        }
+
         let tooltip_at = self
             .overlays
             .tooltip

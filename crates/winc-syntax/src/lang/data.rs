@@ -673,7 +673,7 @@ pub(super) static SQL: Language = Language {
 pub(super) static MARKDOWN: Language = Language {
     id: "markdown",
     name: "Markdown",
-    extensions: &["md", "markdown", "mdown", "mkd"],
+    extensions: &["md", "markdown", "mdown", "mkd", "mkdn"],
     block_comments: &[("<!--", "-->")],
     markdown: true,
     surround: &['*', '_', '~', '$'],

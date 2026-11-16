@@ -173,6 +173,21 @@ pub(crate) struct MarkdownPreview {
     pub last_table: Option<(usize, usize)>,
     /// 标题列表展开时淡入的时钟；不在淡入中时为 `None`。
     pub toc_fade: Option<crate::app::animation::Clock>,
+    /// 鼠标移到标题指示条上的时刻；不在指示条和标题列表上时为 `None`。停留满
+    /// `TOC_HOVER_DELAY` 后列表展开。
+    pub toc_rest: Option<std::time::Instant>,
+    /// 这次停留是否已经展开了标题列表。
+    pub toc_shown: bool,
+    /// 正文左边缘在排版中的位置（窗口坐标，逻辑像素）：钉住、取消钉住的过渡结束后所在之处。
+    pub toc_left: f32,
+    /// 钉住、取消钉住之前正文左边缘的位置（窗口坐标，逻辑像素）：过渡期间正文从这里滑到
+    /// [`Self::toc_left`]；不在过渡中时为 `None`。
+    pub toc_slide: Option<f32>,
+    /// 鼠标移开后标题列表收起的时钟；不在收起中时为 `None`。
+    pub toc_close: Option<crate::app::animation::Clock>,
+    /// 鼠标停留展开的标题列表上边缘相对预览区域上边缘的位置（逻辑像素），展开时确定；列表
+    /// 收起后为 `None`。滚动预览时当前所在的一节会变，列表留在原处，不随之上下移动。
+    pub toc_top: Option<f32>,
     /// 标题列表钉住（`true`）或取消钉住（`false`）的过渡时钟；不在过渡中时为 `None`。
     pub toc_pin: Option<(bool, crate::app::animation::Clock)>,
     /// 在标题列表中点击过的标题（`toc_tops` 的序号）和点击后的滚动位置。
@@ -309,6 +324,12 @@ impl Default for MarkdownPreview {
             toggled_now: None,
             pending_anchor: None,
             toc_fade: None,
+            toc_rest: None,
+            toc_shown: false,
+            toc_left: 0.0,
+            toc_slide: None,
+            toc_close: None,
+            toc_top: None,
             toc_pin: None,
             toc_picked: None,
             toc_current: None,

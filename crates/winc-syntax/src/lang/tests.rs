@@ -251,3 +251,11 @@ fn log_files_are_detected_with_rotation_suffixes() {
     }
     assert_eq!(find("log").map(|l| l.name), Some("Log"));
 }
+
+#[test]
+fn every_markdown_extension_is_detected() {
+    // 与预览认的扩展名相同：按语言决定能否预览，这些文件打开后都能预览。
+    for name in ["a.md", "a.markdown", "a.mdown", "a.mkd", "a.mkdn", "A.MD"] {
+        assert_eq!(detect(name).id, "markdown", "{name}");
+    }
+}
