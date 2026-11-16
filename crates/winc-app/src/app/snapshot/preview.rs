@@ -1160,3 +1160,24 @@ fn composing_on_a_blank_line_shows_the_text() {
     assert!(full_text(&app).unwrap().contains("ni"));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 截图：编辑区和 Markdown 预览中的 emoji 序列（变体选择符、肤色、组合、国旗、键帽）。
+#[test]
+#[ignore = "截图，手动运行"]
+fn snapshot_emoji_sequences() {
+    let dir = sample_folder("emoji-sequences");
+    let path = dir.join("emoji.md");
+    let text = "# Emoji 😀 ⭐ ✅\n\n\
+        heart ❤\u{fe0f} warn ⚠\u{fe0f} sun ☀\u{fe0f}|end\n\n\
+        skin 👍\u{1f3fd} 👋\u{1f3fb} 🧑\u{1f3ff}\u{200d}💻|end\n\n\
+        family 👨\u{200d}👩\u{200d}👧 👩\u{200d}❤\u{fe0f}\u{200d}👨 🏳\u{fe0f}\u{200d}🌈|end\n\n\
+        flags 🇨🇳 🇯🇵 🇺🇸 keycap 1\u{fe0f}\u{20e3} #\u{fe0f}\u{20e3}|end\n\n\
+        text ☺ ✔ ❤ ☺\u{fe0e} plain 中文 abc|end\n";
+    std::fs::write(&path, text).unwrap();
+    let mut app = app_with(&path, false);
+    shoot(&mut app, "emoji-sequences-editor");
+    app.set_preview_mode(PreviewMode::Preview);
+    settle(&mut app);
+    shoot(&mut app, "emoji-sequences-preview");
+    let _ = std::fs::remove_dir_all(&dir);
+}

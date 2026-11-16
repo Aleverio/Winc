@@ -6,7 +6,7 @@
 
 use ropey::RopeSlice;
 
-use crate::text::char_cells;
+use crate::text::{char_cells, sequence_member};
 
 /// 一行断开后的各段起止：后续各段的起始位置，以及后续各段的缩进宽度。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -335,17 +335,33 @@ fn row_cut<C: RowChars + ?Sized>(
     while cut > earliest && !can_break(chars.at(cut - 1), chars.at(cut)) {
         cut -= 1;
     }
-    RowCut::At(if can_break(chars.at(cut - 1), chars.at(cut)) {
+    let cut = if can_break(chars.at(cut - 1), chars.at(cut)) {
         cut
     } else {
         end
-    })
+    };
+    // 硬断的位置落在 emoji 序列中间时退到序列之前；序列从这一段的开头起就放不下时整个留在
+    // 这一段，不拆开。
+    let inside = |at: usize| at < chars.len() && sequence_member(chars.at(at - 1), chars.at(at));
+    let mut start = cut;
+    while start > earliest && inside(start) {
+        start -= 1;
+    }
+    let mut after = cut;
+    while inside(after) {
+        after += 1;
+    }
+    match (inside(start), after < chars.len()) {
+        (false, _) => RowCut::At(start),
+        (true, true) => RowCut::At(after),
+        (true, false) => RowCut::Rest,
+    }
 }
 
 /// 是否可以在相邻字符 `a` 和 `b` 之间断开：空白之后、中日韩文字两侧、代码标点之后可以断开，
 /// 行首禁则的标点之前、行尾禁则的括号之后不断开。编辑区的折行和多行输入框的折行都用它。
 pub fn can_break(a: char, b: char) -> bool {
-    if no_line_start(b) || no_line_end(a) {
+    if no_line_start(b) || no_line_end(a) || sequence_member(a, b) {
         return false;
     }
     if a == ' ' || a == '\t' {

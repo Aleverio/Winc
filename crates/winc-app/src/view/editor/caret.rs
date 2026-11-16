@@ -372,19 +372,16 @@ pub(in crate::view) fn draw_caret(
         clip,
     );
     let mut px = x;
+    let chars: Vec<char> = preedit.chars().collect();
+    let font = (FontKind::Mono, app.fonts.code, cell);
+    // emoji 序列在第一个字符处整个绘制，`joined` 之前的字符属于已绘制的序列。
+    let mut joined = 0;
 
-    for c in preedit.chars() {
-        frame.cell_char(
-            FontKind::Mono,
-            app.fonts.code,
-            px,
-            baseline,
-            cell,
-            cells(c),
-            c,
-            p.text,
-            clip,
-        );
+    for (col, &c) in chars.iter().enumerate() {
+        if col >= joined {
+            let at = (px, baseline);
+            joined = col + draw_grid_char(frame, font, at, (&chars, col), &cells, p.text, clip);
+        }
         px += cells(c) as f32 * cell;
     }
 
@@ -399,18 +396,31 @@ pub(in crate::view) fn draw_caret(
 
 /// 绘制 Vim 模式的光标：覆盖字符 `c` 的块、字符下方的横线，或空心的块。
 ///
-/// `(x, y, width)` 是字符所占的位置与宽度，`baseline` 是所在行的基线。实心块之下的字符用背景色
+/// `(x, y, width)` 是字符所占的位置与宽度，`baseline` 是所在行的基线，`under` 是光标所在的行
+/// 和列（行尾之后为 `None`）。光标在 emoji 序列上时块盖住整个序列。实心块之下的字符用背景色
 /// 重画；实心块与横线随光标闪烁，空心块不闪烁。
 pub(in crate::view) fn draw_modal_caret(
     app: &App,
     frame: &mut Frame<'_>,
     (x, y, width): (f32, f32, f32),
-    c: Option<char>,
+    under: Option<(&[char], usize)>,
     baseline: f32,
     shape: CaretShape,
     clip: Rect,
 ) {
     let p = app.palette;
+    let cell = app.metrics.cell;
+    let under = under.filter(|&(chars, col)| col < chars.len());
+    // 序列中各字符的格数之和；不是序列时就是调用方给的宽度。
+    let width = under.map_or(width, |(chars, col)| {
+        let len = winc_render::sequence_len(chars[col..].iter().copied());
+        let span: usize = chars[col..col + len].iter().map(|&c| code_cells(c)).sum();
+        if len > 1 && span > 0 {
+            span as f32 * cell
+        } else {
+            width
+        }
+    });
     let block = Rect::new(x.round(), y, width.round().max(1.0), app.fonts.line_height);
     match shape {
         CaretShape::Hollow => {
@@ -429,17 +439,15 @@ pub(in crate::view) fn draw_modal_caret(
         }
         CaretShape::Block if app.blink.visible => {
             frame.rect_clipped(block, p.caret, 1.0, clip);
-            if let Some(c) = c.filter(|c| !c.is_whitespace()) {
-                let cells = (width / app.metrics.cell).round().max(1.0) as usize;
-                let (font, cell) = (app.fonts.code, app.metrics.cell);
-                frame.cell_char(
-                    FontKind::Mono,
+            if let Some((chars, col)) = under.filter(|&(chars, col)| !chars[col].is_whitespace()) {
+                let font = (FontKind::Mono, app.fonts.code, cell);
+                let at = (x, baseline);
+                draw_grid_char(
+                    frame,
                     font,
-                    x,
-                    baseline,
-                    cell,
-                    cells,
-                    c,
+                    at,
+                    (chars, col),
+                    &code_cells,
                     p.editor_bg,
                     clip,
                 );

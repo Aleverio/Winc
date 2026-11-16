@@ -585,7 +585,8 @@ impl Screen<'_> {
             None => self.cell,
         };
         let baseline = row.baseline + part as f32 * lh;
-        draw_modal_caret(app, frame, (x, y, width), c, baseline, shape, clip);
+        let under = Some((row.chars, pos - row.line_start));
+        draw_modal_caret(app, frame, (x, y, width), under, baseline, shape, clip);
     }
 }
 

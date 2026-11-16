@@ -6,4 +6,5 @@ pub(crate) mod font_list;
 pub(crate) mod font_path;
 pub(crate) mod glyphs;
 pub(crate) mod outline;
+pub(crate) mod sequence;
 pub(crate) mod system_outline;

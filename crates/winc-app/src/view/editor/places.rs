@@ -368,8 +368,10 @@ fn draw_code(app: &App, frame: &mut Frame<'_>, place: &Place, area: Rect) {
         );
     }
     let mut token = 0;
-    for (col, c, at, width) in placed {
-        if c.is_whitespace() {
+    // emoji 序列在第一个字符处整个绘制，`joined` 之前的字符属于已绘制的序列。
+    let mut joined = 0;
+    for (col, c, at, _) in placed {
+        if c.is_whitespace() || col < joined {
             continue;
         }
         while tokens.get(token).is_some_and(|t| t.end <= col) {
@@ -391,7 +393,9 @@ fn draw_code(app: &App, frame: &mut Frame<'_>, place: &Place, area: Rect) {
         } else {
             FontKind::Mono
         };
-        frame.cell_char(font, size, x_of(at), baseline, cell, width, c, color, area);
+        let at = (x_of(at), baseline);
+        let font = (font, size, cell);
+        joined = col + draw_grid_char(frame, font, at, (&chars, col), &code_cells, color, area);
     }
 }
 

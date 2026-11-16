@@ -990,10 +990,7 @@ fn draw_live_caret(
     ));
     // 光标的高度和基线均按 [`line_box`] 由字号计算。
     let baseline = y + size * 1.05;
-    let width: f32 = preedit
-        .chars()
-        .map(|c| frame.advance_faux(font, faux, size, c))
-        .sum();
+    let width = frame.measure_faux(font, faux, size, preedit);
     frame.rect_clipped(Rect::new(x, y, width, h), p.editor_bg, 0.0, clip);
     frame.text_faux(font, faux, size, x, baseline, preedit, p.text, clip);
     frame.rect_clipped(

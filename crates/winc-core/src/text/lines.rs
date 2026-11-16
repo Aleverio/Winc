@@ -391,10 +391,35 @@ pub fn char_cells(c: char, cell: usize, tab_width: usize) -> usize {
     }
 }
 
+/// 字符 `c` 紧跟在 `previous` 之后时是否与它属于同一个 emoji 序列：`c` 是变体选择符、零宽
+/// 连接符、键帽、肤色修饰符或标签字符，`previous` 是零宽连接符，或两者都是区域指示符。
+///
+/// 折行时不在这样的两个字符之间断开。只看相邻的两个字符：三个连写的区域指示符整个不断开。
+pub fn sequence_member(previous: char, c: char) -> bool {
+    let regional = |c: char| matches!(c, '\u{1f1e6}'..='\u{1f1ff}');
+    c >= '\u{200d}'
+        && (previous == '\u{200d}'
+            || matches!(
+                c,
+                '\u{200d}' | '\u{20e3}' | '\u{fe0e}' | '\u{fe0f}' | '\u{1f3fb}'..='\u{1f3ff}'
+                    | '\u{e0020}'..='\u{e007f}'
+            )
+            || (regional(previous) && regional(c)))
+}
+
 /// 按 Unicode 宽度表返回 `c` 占的显示列数；没有显示宽度的字符返回 0。
+///
+/// 两类字符按它们在 emoji 序列中的作用计，使常见的序列恰好占 2 列：变体选择符 16（U+FE0F）
+/// 占 1 列，它把前面占 1 列的符号变成 2 列宽的 emoji（`❤` 加 U+FE0F）；肤色修饰符（U+1F3FB 至
+/// U+1F3FF）占 0 列，它与前面的 emoji 合成一个图形。显示列逐字符计算，不看前后的字符，所以
+/// 2 列宽的 emoji 之后多余的选择符仍占 1 列，用零宽连接符连起来的各个 emoji 各占自己的列。
 #[inline(never)]
 fn table_cells(c: char) -> usize {
-    c.width().unwrap_or(0)
+    match c {
+        '\u{fe0f}' => 1,
+        '\u{1f3fb}'..='\u{1f3ff}' => 0,
+        _ => c.width().unwrap_or(0),
+    }
 }
 
 /// 返回 `line` 前 `col` 个字符占用的显示宽度（显示列数）。

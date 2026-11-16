@@ -54,14 +54,21 @@ fn vertical_keeps_goal_cell() {
 
 #[test]
 fn vertical_moves_never_stop_inside_a_grapheme_cluster() {
-    // `👍🏽` 由两个字符组成一个字素，每个字符占 2 个显示列；目标显示列 3 按字符换算会落在两个
-    // 字符之间，必须回到簇边界。
-    let text = Rope::from_str("abcd\na👍🏽b");
+    // `👨‍👩` 由三个字符组成一个字素，两个 emoji 各占 2 个显示列；目标显示列 3 按字符换算会落在
+    // 第二个 emoji 之前，必须回到簇边界。
+    let text = Rope::from_str("abcd\na👨\u{200d}👩b");
     let (pos, _) = vertical(&text, 3, 1, None, 4);
     assert_eq!(text.pos_to_line_col(pos), (1, 1));
     assert_eq!(snap_to_grapheme(&text, 7), 6);
-    assert_eq!(snap_to_grapheme(&text, 8), 8);
+    assert_eq!(snap_to_grapheme(&text, 8), 6);
+    assert_eq!(snap_to_grapheme(&text, 9), 9);
     assert_eq!(snap_to_grapheme(&text, 5), 5);
+    // 带肤色的手势占 2 个显示列，修饰符不占列；带变体选择符的符号同样占 2 列。
+    let text = Rope::from_str("abcd\na👍\u{1f3fd}b\na❤\u{fe0f}b");
+    for line in [1, 2] {
+        let (pos, _) = vertical(&text, 3, line as isize, None, 4);
+        assert_eq!(text.pos_to_line_col(pos), (line, 3));
+    }
 }
 
 #[test]

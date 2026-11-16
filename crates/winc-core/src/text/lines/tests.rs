@@ -216,3 +216,20 @@ fn prefix_cells_match_slice_cells_for_every_column() {
         }
     }
 }
+
+#[test]
+fn emoji_sequences_count_their_cells_per_character() {
+    let cells = |text: &str| {
+        text.chars()
+            .fold(0, |cell, c| cell + char_cells(c, cell, 4))
+    };
+    // 带变体选择符的符号、带肤色的手势和键帽恰好占 2 个显示列。
+    assert_eq!(cells("❤\u{fe0f}"), 2);
+    assert_eq!(cells("👍\u{1f3fd}"), 2);
+    assert_eq!(cells("1\u{fe0f}\u{20e3}"), 2);
+    assert_eq!(cells("🇨🇳"), 2);
+    assert_eq!((cells("❤"), cells("👍"), cells("\u{200d}")), (1, 2, 0));
+    // 显示列逐字符计算：2 列宽的 emoji 之后多余的选择符仍占 1 列，连接符连起来的各占自己的列。
+    assert_eq!(cells("⭐\u{fe0f}"), 3);
+    assert_eq!(cells("👨\u{200d}👩\u{200d}👧"), 6);
+}

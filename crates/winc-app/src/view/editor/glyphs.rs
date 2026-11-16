@@ -43,12 +43,14 @@ pub(super) fn draw_glyph_run(
     let cell = app.metrics.cell;
     let mut cells = start;
     let mut token = tokens.partition_point(|t| t.end <= range.start);
+    // emoji 序列在第一个字符处整个绘制，`joined` 之前的字符属于已绘制的序列。
+    let mut joined = range.start;
     for col in range {
         let c = chars[col];
         let width = text::char_cells(c, cells, tab_width);
         let x = origin_x + cells as f32 * cell;
         cells += width;
-        if c == ' ' || c == '\t' || x > clip.right() {
+        if c == ' ' || c == '\t' || x > clip.right() || col < joined {
             continue;
         }
         while tokens.get(token).is_some_and(|t| t.end <= col) {
@@ -58,17 +60,9 @@ pub(super) fn draw_glyph_run(
             .get(token)
             .filter(|t| t.start <= col)
             .map_or(TokenKind::Text, |t| t.kind);
-        frame.cell_char(
-            token_font(kind),
-            app.fonts.code,
-            x,
-            baseline,
-            cell,
-            width.max(1),
-            c,
-            p.token(kind),
-            clip,
-        );
+        let font = (token_font(kind), app.fonts.code, cell);
+        let (at, color) = ((x, baseline), p.token(kind));
+        joined = col + draw_grid_char(frame, font, at, (chars, col), &code_cells, color, clip);
     }
     cells
 }
@@ -187,6 +181,8 @@ pub(in crate::view) fn draw_glyphs(
     let cell = app.metrics.cell;
     let mut cells = 0;
     let mut token = 0;
+    // emoji 序列在第一个字符处整个绘制，`joined` 之前的字符属于已绘制的序列。
+    let mut joined = 0;
 
     for (col, &c) in chars.iter().enumerate() {
         let width = text::char_cells(c, cells, tab_width);
@@ -197,7 +193,11 @@ pub(in crate::view) fn draw_glyphs(
             break;
         }
 
-        if c == ' ' || c == '\t' || x + width as f32 * cell < clip.x {
+        if c == ' ' || c == '\t' || col < joined {
+            continue;
+        }
+        // 序列的第一个字符在裁剪框左边时仍要绘制：合成的图形可能伸进裁剪框。
+        if x + width as f32 * cell < clip.x && chars.get(col + 1).is_none_or(|&n| n < '\u{200d}') {
             continue;
         }
 
@@ -209,17 +209,9 @@ pub(in crate::view) fn draw_glyphs(
             .get(token)
             .filter(|t| t.start <= col)
             .map_or(TokenKind::Text, |t| t.kind);
-        frame.cell_char(
-            token_font(kind),
-            app.fonts.code,
-            x,
-            baseline,
-            cell,
-            width.max(1),
-            c,
-            p.token(kind),
-            clip,
-        );
+        let font = (token_font(kind), app.fonts.code, cell);
+        let (at, color) = ((x, baseline), p.token(kind));
+        joined = col + draw_grid_char(frame, font, at, (chars, col), &code_cells, color, clip);
     }
     cells
 }
@@ -246,13 +238,14 @@ pub(super) fn draw_columns(
     ];
     let p = app.palette;
     let cell = app.metrics.cell;
+    let mut joined = 0;
     for (col, &c) in chars.iter().enumerate() {
         let (start, end) = (positions[col], positions[col + 1]);
         let x = origin_x + start as f32 * cell;
         if x > clip.right() {
             break;
         }
-        if c.is_whitespace() || x + (end - start) as f32 * cell < clip.x {
+        if c.is_whitespace() || x + (end - start) as f32 * cell < clip.x || col < joined {
             continue;
         }
         let field = fields[col];
@@ -264,18 +257,17 @@ pub(super) fn draw_columns(
             p.token(COLORS[field % COLORS.len()])
         };
         // 按字符自身的宽度绘制，不计入为对齐而留出的空白。
-        let width = text::char_cells(c, 0, 1).max(1);
-        frame.cell_char(
-            FontKind::Mono,
-            app.fonts.code,
-            x,
-            baseline,
-            cell,
-            width,
-            c,
-            color,
-            clip,
-        );
+        let font = (FontKind::Mono, app.fonts.code, cell);
+        joined = col
+            + draw_grid_char(
+                frame,
+                font,
+                (x, baseline),
+                (chars, col),
+                &code_cells,
+                color,
+                clip,
+            );
     }
     positions.last().copied().unwrap_or(0)
 }
@@ -315,4 +307,47 @@ impl App {
         cache.entries.push((key, tokens.clone(), next));
         next
     }
+}
+
+/// 在等宽网格上绘制 `chars[col]`，返回绘制的字符数。
+///
+/// `chars[col]` 是由 emoji 字体合成的序列的第一个字符时绘制整个序列，占序列中各字符的格数
+/// 之和，返回序列的字符数，调用方跳过其余字符；否则绘制这一个字符，返回 1。`font` 是字体、
+/// 字号和一格的宽度，`at` 是该字符所在格的左边缘和基线，`cells` 给出一个字符占的格数。
+pub(in crate::view) fn draw_grid_char(
+    frame: &mut Frame<'_>,
+    (font, size, cell): (FontKind, f32, f32),
+    (x, baseline): (f32, f32),
+    (chars, col): (&[char], usize),
+    cells: &dyn Fn(char) -> usize,
+    color: Color,
+    clip: Rect,
+) -> usize {
+    let c = chars[col];
+    let next = chars.get(col + 1).copied();
+    if next.is_some_and(|next| winc_render::continues_sequence(c, next)) {
+        let len = winc_render::sequence_len(chars[col..].iter().copied());
+        let unit: String = chars[col..col + len].iter().collect();
+        let span = chars[col..col + len].iter().map(|&c| cells(c)).sum();
+        if len > 1 && frame.cell_sequence(font, size, x, baseline, cell, span, &unit, color, clip) {
+            return len;
+        }
+    }
+    frame.cell_char(
+        font,
+        size,
+        x,
+        baseline,
+        cell,
+        cells(c).max(1),
+        c,
+        color,
+        clip,
+    );
+    1
+}
+
+/// 编辑区中一个字符占的格数，不计制表位；见 [`text::char_cells`]。
+pub(in crate::view) fn code_cells(c: char) -> usize {
+    text::char_cells(c, 0, 1)
 }
