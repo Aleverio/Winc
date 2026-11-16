@@ -73,7 +73,7 @@ fn percent_decode(text: &str) -> String {
 /// 把终端里的路径换成本机路径：打开的目录位于 WSL 发行版中时，绝对路径属于同一发行版。
 fn in_project(root: Option<&Path>, path: PathBuf) -> PathBuf {
     match root {
-        Some(root) => winc_editor::wsl::from_terminal(root, path),
+        Some(root) => super::helper::terminal_path(root, path),
         None => path,
     }
 }
@@ -109,6 +109,7 @@ fn link_at(
     line: u64,
     col: usize,
     root: Option<&Path>,
+    exists: &dyn Fn(&Path, bool) -> bool,
 ) -> Option<(usize, usize, Target)> {
     let text = tab.line(line)?;
     // OSC 8：样式里带着链接编号的那一段格子。
@@ -165,7 +166,7 @@ fn link_at(
             .or_else(|| root.map(Path::to_path_buf))?;
         cwd.join(path)
     };
-    winc_backend::fs::exists(&path).then_some((
+    exists(&path, found.line.is_some()).then_some((
         found.start,
         found.end,
         Target::File {
@@ -191,7 +192,9 @@ impl App {
         let link = if held && view.contains(x, y) && self.terminal_shows_line(y) {
             self.terminal_point(x, y, false).and_then(|point| {
                 let tab = self.terminal.tab()?;
-                let (start, end, target) = link_at(tab, point.line, point.col, root.as_deref())?;
+                let exists = |path: &Path, numbered| self.terminal_target(path, numbered);
+                let root = root.as_deref();
+                let (start, end, target) = link_at(tab, point.line, point.col, root, &exists)?;
                 Some(TermLink {
                     tab: tab.id,
                     line: point.line,
@@ -227,7 +230,7 @@ impl App {
                     ));
                 }
             }
-            Target::File { path, .. } if reveal || winc_backend::fs::is_dir(&path) => {
+            Target::File { path, .. } if reveal || self.is_folder(&path) => {
                 self.reveal_path(&path);
             }
             Target::File { path, line, col } => {

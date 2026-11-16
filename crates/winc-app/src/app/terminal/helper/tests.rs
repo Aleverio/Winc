@@ -272,3 +272,28 @@ fn a_remote_folder_starts_the_shell_chosen_for_that_host() {
     let (_, args, _) = launched(Some("pwsh.exe"), dir.to_str().unwrap(), true);
     assert_eq!(args.last().unwrap(), "cd '/srv' && exec $SHELL -l");
 }
+
+#[test]
+fn terminal_paths_belong_to_the_host_the_folder_is_on() {
+    let target = winc_backend::Target::new("me@path-host").unwrap();
+    let root = winc_backend::virtual_path(&target, b"/srv/app");
+    // 打开的目录在远端主机上：shell 报告的绝对路径是那台主机上的路径，重启标签时回到那里。
+    assert_eq!(
+        terminal_path(&root, PathBuf::from("/srv/app/src")),
+        winc_backend::virtual_path(&target, b"/srv/app/src")
+    );
+    assert_eq!(
+        local_cwd(Some(&root), b"/srv/app/src".to_vec()),
+        os_bytes(root.join("src").as_os_str())
+    );
+    // 相对路径由调用方接在目录后面；本机的目录原样返回。
+    assert_eq!(
+        terminal_path(&root, PathBuf::from("src/a.rs")),
+        PathBuf::from("src/a.rs")
+    );
+    let local = std::path::Path::new("/tmp/project");
+    assert_eq!(
+        terminal_path(local, PathBuf::from("/tmp/x")),
+        PathBuf::from("/tmp/x")
+    );
+}

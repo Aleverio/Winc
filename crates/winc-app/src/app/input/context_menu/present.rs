@@ -554,12 +554,12 @@ impl App {
                 document_language_menu(doc.path.is_some())
             }
             MenuTarget::CommitFile(_) if self.commit_multi_selected() => {
-                let any_exists = self.commit_selection().iter().any(winc_backend::fs::exists);
+                let any_exists = (self.commit_selection().iter()).any(|path| self.may_exist(path));
                 commit_selection_menu(any_exists)
             }
             MenuTarget::CommitFile(path) => {
                 let mut menu = commit_file_menu(
-                    winc_backend::fs::exists(path),
+                    self.may_exist(path),
                     self.relative_path(path).is_some(),
                     &self.ignore_kinds(path),
                 );
@@ -612,10 +612,9 @@ impl App {
                 .filter(|(_, remote)| !remote.starts_with('-'))
                 .map(|(i, _)| MenuEntry::Item(MenuCommand::FormRemote(i), true))
                 .collect(),
-            MenuTarget::LogFile(_, path) => log_file_menu(
-                winc_backend::fs::exists(path),
-                self.relative_path(path).is_some(),
-            ),
+            MenuTarget::LogFile(_, path) => {
+                log_file_menu(self.may_exist(path), self.relative_path(path).is_some())
+            }
             MenuTarget::LogCommit(oid) => {
                 let commit = self.log_commit(oid);
                 let tags: Vec<&str> = (commit.iter().flat_map(|c| &c.refs))

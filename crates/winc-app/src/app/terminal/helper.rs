@@ -526,10 +526,22 @@ impl App {
                 choices.push(true);
                 continue;
             }
-            let venv = [".venv", "venv"]
-                .into_iter()
-                .map(|name| dir.join(name))
-                .find(|venv| winc_backend::fs::is_file(venv.join("pyvenv.cfg")));
+            let candidates = [".venv", "venv"].map(|name| dir.join(name));
+            // 远端的目录不能在界面线程上查询：按文件树上看得到的目录判断，看不到时不加载，
+            // 不会在没有询问的情况下加载远端的环境。
+            let venv = if winc_backend::is_remote(&dir) {
+                let listed = |venv: &PathBuf| self.known_folder(venv) == Some(true);
+                match candidates.into_iter().find(listed) {
+                    Some(venv) => Some(venv),
+                    None => {
+                        choices.push(false);
+                        continue;
+                    }
+                }
+            } else {
+                let found = |venv: &PathBuf| winc_backend::fs::is_file(venv.join("pyvenv.cfg"));
+                candidates.into_iter().find(found)
+            };
             let Some(venv) = venv else {
                 choices.push(true);
                 continue;
@@ -830,14 +842,23 @@ fn helper_path() -> Option<PathBuf> {
     path.exists().then_some(path)
 }
 
-/// 把 shell 报告的工作目录 `path` 转换为本机路径：打开的目录 `root` 位于 WSL 发行版中时，绝对路径
-/// 属于同一发行版。重启标签和恢复现场都使用该目录。
+/// 把 shell 报告的工作目录 `path` 转换为编辑器使用的路径（见 [`terminal_path`]）。重启标签和
+/// 恢复现场都使用该目录。
 fn local_cwd(root: Option<&std::path::Path>, path: Vec<u8>) -> Vec<u8> {
     match root {
-        Some(root) => {
-            os_bytes(winc_editor::wsl::from_terminal(root, bytes_path(&path)).as_os_str())
-        }
+        Some(root) => os_bytes(terminal_path(root, bytes_path(&path)).as_os_str()),
         None => path,
+    }
+}
+
+/// 把终端中的路径 `path` 转换为编辑器使用的路径：打开的目录 `root` 在远端主机上时，`/` 开头的
+/// 路径是那台主机上的路径；位于 WSL 发行版中时属于同一发行版。其余路径原样返回。
+pub(super) fn terminal_path(root: &std::path::Path, path: PathBuf) -> PathBuf {
+    let bytes = os_bytes(path.as_os_str());
+    match winc_backend::locate(root) {
+        Some(at) if bytes.first() == Some(&b'/') => winc_backend::virtual_path(&at.target, &bytes),
+        Some(_) => path,
+        None => winc_editor::wsl::from_terminal(root, path),
     }
 }
 

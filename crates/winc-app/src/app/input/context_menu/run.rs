@@ -655,13 +655,9 @@ impl App {
     ///
     /// 把「包含」填成 `./相对路径`，并展开过滤条件。
     pub(in crate::app) fn find_in_folder(&mut self, path: &Path) {
-        let dir = if winc_backend::fs::is_dir(path) {
-            path
-        } else {
-            path.parent().unwrap_or(path)
-        };
+        let dir = self.folder_of(path);
         let include = self
-            .relative_path(dir)
+            .relative_path(&dir)
             .map(|relative| format!("./{relative}"))
             .unwrap_or_default();
 
@@ -797,12 +793,7 @@ impl App {
                 [path] => {
                     let name = winc_editor::display_name(path);
                     // 类别取自文件树：远端的路径不能在界面线程上查询。
-                    let folder = (self.editor.workspace.as_ref())
-                        .and_then(|ws| ws.rows().iter().find(|entry| entry.path == *path))
-                        .map_or_else(
-                            || winc_backend::fs::is_dir(path),
-                            |entry| entry.kind == winc_editor::EntryKind::Dir,
-                        );
+                    let folder = self.is_folder(path);
                     match (folder, permanent) {
                         (true, false) => t!("common-trash-confirm-folder", name = name),
                         (false, false) => t!("common-trash-confirm-item", name = name),
