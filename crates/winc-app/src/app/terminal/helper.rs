@@ -862,6 +862,19 @@ pub(super) fn environment(prompt: bool) -> Vec<(Vec<u8>, Vec<u8>)> {
     if !prompt {
         env.push((b"WINC_PROMPT".to_vec(), b"0".to_vec()));
     }
+    // 从图形界面启动时没有区域设置：按系统的首选语言补上 `LANG`。系统没有对应的区域数据时
+    // 不补，由辅助进程只声明字符编码。
+    #[cfg(target_os = "macos")]
+    if !env
+        .iter()
+        .any(|(k, _)| matches!(&k[..], b"LANG" | b"LC_ALL" | b"LC_CTYPE"))
+        && let Some(name) = winc_i18n::Locale::system_posix()
+        && winc_backend::fs::is_dir(
+            std::path::Path::new("/usr/share/locale").join(format!("{name}.UTF-8")),
+        )
+    {
+        env.push((b"LANG".to_vec(), format!("{name}.UTF-8").into_bytes()));
+    }
     env
 }
 

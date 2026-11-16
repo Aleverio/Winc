@@ -375,8 +375,15 @@ impl Perform for Emulator {
             }
             b"133" => self.shell_mark(params),
             b"9" => {
-                // `9;4;…` 是任务栏进度条扩展，不是通知。
-                if params.get(1).is_some_and(|p| *p != b"4") {
+                // `9;编号;…` 是另一组扩展命令（进度条、当前目录等，编号 1 至 12），不是通知。
+                let extension = |p: &&[u8]| {
+                    p.len() <= 2
+                        && std::str::from_utf8(p)
+                            .ok()
+                            .and_then(|n| n.parse::<u8>().ok())
+                            .is_some_and(|n| (1..=12).contains(&n))
+                };
+                if params.get(1).is_some_and(|p| !extension(p)) {
                     let body = join(&params[1..]);
                     self.notify(String::new(), body);
                 }

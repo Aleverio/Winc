@@ -137,16 +137,23 @@ if [[ -z $_winc_hooked ]]; then
   # 的 `$_` 原样作为最后一个参数，陷阱跑完 `$_` 还是用户的（`mkdir x && cd $_`）。
   _winc_preexec() {
     [[ -n $_winc_at_prompt ]] || builtin return 0
+    # 行编辑中由按键执行的命令（`bind -x`）和补全函数不是用户提交的命令，提示符仍在等待输入。
+    [[ -n ${READLINE_POINT+set} || -n ${COMP_LINE+set} ]] && builtin return 0
     _winc_at_prompt=
     # 空回车、⌃C：PROMPT_COMMAND 又开始跑了，没有用户的命令。
     [[ $BASH_COMMAND == _winc_status ]] && builtin return 0
     builtin local cmd
     cmd=$(HISTTIMEFORMAT= builtin history 1)
-    # 历史的编号没变（HISTCONTROL 没记下这一条、关了历史）时取的是上一条，改用 BASH_COMMAND。
-    if [[ $cmd =~ ^[[:space:]]*([0-9]+)[*[:space:]]+(.*)$ ]] &&
-      [[ ${BASH_REMATCH[1]} != "$_winc_histnum" ]]; then
-      _winc_histnum=${BASH_REMATCH[1]}
-      cmd=${BASH_REMATCH[2]}
+    # 历史的编号没变（HISTCONTROL 没记下这一条、关了历史）时取的是上一条。上一条以这条命令的
+    # 第一段开头时是同一条命令重复执行（`ignoredups`），仍取历史里的整行；否则改用 BASH_COMMAND。
+    if [[ $cmd =~ ^[[:space:]]*([0-9]+)[*[:space:]]+(.*)$ ]]; then
+      if [[ ${BASH_REMATCH[1]} != "$_winc_histnum" ||
+        ${BASH_REMATCH[2]} == "$BASH_COMMAND"* ]]; then
+        _winc_histnum=${BASH_REMATCH[1]}
+        cmd=${BASH_REMATCH[2]}
+      else
+        cmd=$BASH_COMMAND
+      fi
     else
       cmd=$BASH_COMMAND
     fi

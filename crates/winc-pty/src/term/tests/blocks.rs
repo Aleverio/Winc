@@ -35,6 +35,8 @@ fn osc_sequences_become_events() {
             "\x1b]52;c;?\x07",
             "\x1b]9;done\x07",
             "\x1b]9;4;1;50\x07",
+            "\x1b]9;9;C:\\Users\\me\x07",
+            "\x1b]9;12\x07",
             "\x1b]777;notify;Build;ok\x07",
             "\x07",
         ),

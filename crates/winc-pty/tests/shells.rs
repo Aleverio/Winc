@@ -252,7 +252,7 @@ fn bash_as_a_login_shell_reads_the_profile() {
     let t = Temp::new("bash");
     t.write(
         "home/.bash_profile",
-        "PS1='[$?] bb$ '\nPROMPT_COMMAND='USER_PC=$?'\nHISTCONTROL=ignorespace\n",
+        "PS1='[$?] bb$ '\nPROMPT_COMMAND='USER_PC=$?'\nHISTCONTROL=ignoreboth\n",
     );
     let mut sh = Shell::start(&bash, true, env(&t.home(), &[]), &t.0.join("shell"));
     sh.client.until_text("bb$");
@@ -269,6 +269,10 @@ fn bash_as_a_login_shell_reads_the_profile() {
     // 钩子不改变 `$_` 的值。
     let last = sh.run("true abc && echo $_");
     assert_eq!(sh.output(&last), "abc");
+    // 重复执行的命令不再记入历史（`ignoredups`），仍报告整行，不只是管道的第一段。
+    sh.run("echo dup | cat");
+    let again = sh.run("echo dup | cat");
+    assert_eq!(sh.output(&again), "dup");
     // 未记入历史的命令（首字符为空格，`HISTCONTROL=ignorespace`）仍报告该命令自身的命令行。
     let hidden = sh.run(" echo hidden");
     assert_eq!(sh.output(&hidden), "hidden");
