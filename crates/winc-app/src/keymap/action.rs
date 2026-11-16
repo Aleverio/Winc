@@ -65,7 +65,7 @@ pub enum Action {
     MarkdownCode,
     /// 可编辑的 Markdown 预览中切换删除线（`~~`）。
     MarkdownStrikethrough,
-    /// 可编辑的 Markdown 预览中切换荧光笔底色（`==`）。
+    /// 可编辑的 Markdown 预览中切换高亮（`==`）。
     MarkdownHighlight,
     DeleteLine,
     DeleteAllLeft,

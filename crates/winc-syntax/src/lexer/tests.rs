@@ -1295,6 +1295,37 @@ fn jsx_prose_quotes() {
 }
 
 #[test]
+fn markdown_highlights_between_double_equals() {
+    let (tokens, _) = lex("a.md", "a ==亮== 和 ==b== 与 == c ==", LineState::Normal);
+    assert_eq!(
+        tokens,
+        vec![
+            ("==亮==".into(), TokenKind::Emphasis),
+            ("==b==".into(), TokenKind::Emphasis),
+        ]
+    );
+    // 行内代码里的 `==` 是文字，`===` 不是高亮。
+    let (tokens, _) = lex("a.md", "`==x==` a === b", LineState::Normal);
+    assert!(tokens.iter().all(|(_, kind)| *kind == TokenKind::String));
+    // 与预览的规则一致：三个以上的 `=` 不是标记，转义的不是标记，中间的行内代码不结束高亮，
+    // 不成对的标记之后仍可开始一段。
+    let marked = |line: &str| -> Vec<std::string::String> {
+        let (tokens, _) = lex("a.md", line, LineState::Normal);
+        (tokens.into_iter())
+            .filter(|(_, kind)| *kind == TokenKind::Emphasis)
+            .map(|(text, _)| text)
+            .collect()
+    };
+    assert_eq!(marked("===x=="), [] as [&str; 0]);
+    assert_eq!(marked("==a==="), [] as [&str; 0]);
+    assert_eq!(marked("\\==a=="), [] as [&str; 0]);
+    assert_eq!(marked("==a\\==b=="), ["==a\\==b=="]);
+    assert_eq!(marked("==a `==` b=="), ["==a `==` b=="]);
+    assert_eq!(marked("==a ==b=="), ["==b=="]);
+    assert_eq!(marked("x == y 且 a==b==c"), ["==b=="]);
+}
+
+#[test]
 fn log_lines_color_timestamps_levels_and_locations() {
     use TokenKind::*;
     let tokens = |line: &str| {
@@ -1422,18 +1453,5 @@ fn log_lines_color_timestamps_levels_and_locations() {
         "连接已关闭，重试中",
     ] {
         assert_eq!(tokens(line), [], "{line}");
-    }
-}
-
-#[test]
-fn markdown_highlight_marks_are_colored() {
-    let kinds = |line: &str| lex("a.md", line, LineState::Normal).0;
-    assert_eq!(
-        kinds("甲 ==乙丙== 丁"),
-        vec![("==乙丙==".into(), TokenKind::Emphasis)]
-    );
-    // 两侧是空白、不成对或三个以上的 `=` 不算。
-    for line in ["a == b", "==a", "===a===", "a == b and c == d"] {
-        assert!(kinds(line).is_empty(), "{line}");
     }
 }

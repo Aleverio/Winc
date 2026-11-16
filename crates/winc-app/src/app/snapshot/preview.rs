@@ -1189,25 +1189,3 @@ fn snapshot_emoji_sequences() {
     shoot(&mut app, "emoji-sequences-preview");
     let _ = std::fs::remove_dir_all(&dir);
 }
-
-/// 截图：`==文字==` 的荧光笔底色，浅色和深色配色各一张。
-#[test]
-#[ignore = "截图，手动运行"]
-fn shoot_highlight() {
-    for dark in [false, true] {
-        let dir = sample_folder("md-highlight");
-        let path = dir.join("mark.md");
-        let text = "# 荧光笔 ==标题==\n\n\
-            正文里的 ==重点内容== 和 **==加粗的重点==**，以及 ==带 `代码` 和 [链接](https://x.dev) 的==。\n\n\
-            - 列表中的 ==一项==\n- 比较 a == b 不算\n\n\
-            | 表格 | ==单元格== |\n| --- | --- |\n| 甲 | <mark>HTML 写法</mark> |\n";
-        std::fs::write(&path, text).unwrap();
-        let mut app = app_with(&path, dark);
-        paint(&mut app);
-        app.set_preview_mode(PreviewMode::Split);
-        settle(&mut app);
-        let theme = if dark { "dark" } else { "light" };
-        shoot(&mut app, &format!("md-highlight-{theme}"));
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-}

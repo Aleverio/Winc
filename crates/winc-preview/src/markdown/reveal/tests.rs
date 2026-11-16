@@ -28,11 +28,6 @@ fn only_the_touched_element_shows_its_markers() {
     assert_eq!(shown("|默认 **关** 和 `x`"), "默认 关 和 x");
     assert_eq!(shown("默认 **关|** 和 `x`"), "默认 ‹**›关‹**› 和 x");
     assert_eq!(shown("默认 **关** 和 |`x`"), "默认 关 和 ‹`›x‹`›");
-    // 荧光笔文字同理：光标接触时才显示两侧的 `==`。
-    assert_eq!(shown("|默认 ==关== 和"), "默认 关 和");
-    assert_eq!(shown("默认 ==关|== 和"), "默认 ‹==›关‹==› 和");
-    assert_eq!(shown("默认 ==|关== 和"), "默认 ‹==›关‹==› 和");
-    assert_eq!(shown("默认 ==关== 和|"), "默认 关 和");
     assert_eq!(shown("见 [文档|](a.md)。"), "见 ‹[›文档‹](a.md)›。");
     // 嵌套元素只显示被接触的各层。
     assert_eq!(shown("**粗 *斜|* 粗**"), "‹**›粗 ‹*›斜‹*› 粗‹**›");
@@ -69,4 +64,18 @@ fn continuation_lines_drop_container_markers() {
         panic!();
     };
     assert_eq!(inline.text, "- 一\n- 二");
+}
+
+#[test]
+fn highlight_markers_show_when_touched() {
+    // 光标在高亮里：两个 `==` 显示出来。
+    assert_eq!(shown("前面 ==高|亮== 后面"), "前面 ‹==›高亮‹==› 后面");
+    assert_eq!(shown("前面 =|=高亮== 后面"), "前面 ‹==›高亮‹==› 后面");
+    assert_eq!(shown("前面 ==高亮==| 后面"), "前面 ‹==›高亮‹==› 后面");
+    // 光标在别处：标记不显示。
+    assert_eq!(shown("前面| ==高亮== 后面"), "前面 高亮 后面");
+    // 不成对的 `==` 是文字。
+    assert_eq!(shown("前面 == 高|亮 后面"), "前面 == 高亮 后面");
+    // 转义的 `\==` 是文字，不随光标显示为标记。
+    assert_eq!(shown("前面 \\==高|亮== 后面"), "前面 ==高亮== 后面");
 }

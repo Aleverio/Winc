@@ -39,8 +39,7 @@ pub fn reveal(text: &str, caret: Option<usize>, insert: Option<&str>) -> Block {
         _ => return Block::Paragraph(lines.verbatim()),
     };
     let base = parsed.ranges.first().map_or(0, |r| r.start) + inline.source;
-    let mut elements = elements(plain);
-    elements.extend(highlights(inline, base, plain));
+    let elements = elements(plain);
     let mut out = Out {
         insert: caret.zip(insert).map(|(at, text)| (at, text.to_owned())),
         ..Out::default()
@@ -94,56 +93,43 @@ pub fn reveal(text: &str, caret: Option<usize>, insert: Option<&str>) -> Block {
 
 /// 带标记的行内元素在 `plain` 中的字节范围。
 ///
-/// 包括强调、粗体、删除线、链接、图片、行内代码、公式、HTML 标签和脚注引用；荧光笔文字见
-/// [`highlights`]。
+/// 包括强调、粗体、删除线、高亮、链接、图片、行内代码、公式、HTML 标签和脚注引用。
 fn elements(plain: &str) -> Vec<Range<usize>> {
-    Parser::new_ext(plain, options())
-        .into_offset_iter()
-        .filter(|(event, _)| {
-            matches!(
-                event,
-                Event::Start(
-                    Tag::Emphasis
-                        | Tag::Strong
-                        | Tag::Strikethrough
-                        | Tag::Link { .. }
-                        | Tag::Image { .. }
-                ) | Event::Code(_)
-                    | Event::InlineMath(_)
-                    | Event::DisplayMath(_)
-                    | Event::InlineHtml(_)
-                    | Event::FootnoteReference(_)
-            )
-        })
-        .map(|(_, range)| range)
-        .collect()
-}
-
-/// 用 `==` 标出的荧光笔文字在 `plain` 中的字节范围，含两侧的 `==`。
-///
-/// `inline` 是 `plain` 解析出的行内文字，`base` 是它的原文对照相对 `plain` 的起点。HTML 的
-/// `<mark>` 同样带有该样式，两侧不是 `==`，不在此列。
-fn highlights(inline: &Inline, base: usize, plain: &str) -> Vec<Range<usize>> {
-    let mut found = Vec::new();
-    let mut open: Option<Range<usize>> = None;
-    let marked = inline.runs().filter(|(_, style)| style.has(Style::MARK));
-    for (range, _) in marked.chain([(usize::MAX..usize::MAX, Style::default())]) {
-        match &mut open {
-            Some(group) if group.end == range.start => group.end = range.end,
-            _ => {
-                found.extend(open.replace(range));
+    let mut elements = Vec::new();
+    // 行内代码和公式里的 `==` 是文字，不高亮。
+    let mut code = Vec::new();
+    for (event, range) in Parser::new_ext(plain, options()).into_offset_iter() {
+        match &event {
+            Event::Code(_) | Event::InlineMath(_) | Event::DisplayMath(_) => {
+                code.push(range.clone());
             }
+            _ => {}
+        }
+        if matches!(
+            &event,
+            Event::Start(
+                Tag::Emphasis
+                    | Tag::Strong
+                    | Tag::Strikethrough
+                    | Tag::Link { .. }
+                    | Tag::Image { .. }
+            ) | Event::Code(_)
+                | Event::InlineMath(_)
+                | Event::DisplayMath(_)
+                | Event::InlineHtml(_)
+                | Event::FootnoteReference(_)
+        ) {
+            elements.push(range);
         }
     }
-    found
-        .into_iter()
-        .filter_map(|text| {
-            let start = base + inline.map.source(text.start)?;
-            let end = base + inline.map.source(text.end.checked_sub(1)?)? + 1;
-            let marks = |at: usize| plain.get(at..at + 2) == Some("==");
-            (marks(start.checked_sub(2)?) && marks(end)).then(|| start - 2..end + 2)
+    elements.extend(
+        super::mark::pairs(plain, |at| {
+            code.iter().any(|range| range.contains(&at)) || super::mark::escaped(plain, at)
         })
-        .collect()
+        .into_iter()
+        .map(|[open, close]| open.start..close.end),
+    );
+    elements
 }
 
 /// 返回包含位置 `at` 的最内层元素。

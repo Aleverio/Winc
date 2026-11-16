@@ -35,12 +35,6 @@ fn selections_gain_and_lose_marks() {
     assert_eq!(run("a [code] b", "`"), "a `[code]` b");
     assert_eq!(run("a `[code]` b", "`"), "a [code] b");
     assert_eq!(run("[旧]", "~~"), "~~[旧]~~");
-    assert_eq!(run("甲[乙]丙", "=="), "甲==[乙]==丙");
-    assert_eq!(run("甲==[乙]==丙", "=="), "甲[乙]丙");
-    assert_eq!(run("甲[==乙==]丙", "=="), "甲[乙]丙");
-    assert_eq!(run("甲|丙", "=="), "甲==|==丙");
-    // 粗体里的文字可以再加荧光笔，两种标记互不影响。
-    assert_eq!(run("**[乙]**", "=="), "**==[乙]==**");
     // 选区两端的空格留在标记之外：`** 乙 **` 不构成粗体。
     assert_eq!(run("甲[ 乙 ]丙", "**"), "甲 **[乙]** 丙");
 }
@@ -60,4 +54,13 @@ fn a_caret_inserts_leaves_or_removes_a_pair() {
     assert_eq!(run("甲**|**乙", "**"), "甲|乙");
     assert_eq!(run("**粗|**后", "**"), "**粗**|后");
     assert_eq!(run("|", "`"), "`|`");
+}
+
+#[test]
+fn highlight_marks_toggle() {
+    assert_eq!(run("甲[乙]丙", "=="), "甲==[乙]==丙");
+    assert_eq!(run("甲==[乙]==丙", "=="), "甲[乙]丙");
+    assert_eq!(run("甲[==乙==]丙", "=="), "甲[乙]丙");
+    assert_eq!(run("甲|乙", "=="), "甲==|==乙");
+    assert_eq!(run("甲==|==乙", "=="), "甲|乙");
 }

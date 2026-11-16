@@ -265,7 +265,7 @@ pub enum TokenKind {
     Attribute,
     /// 标题：Markdown 的标题行、TOML 的表头、INI 的节名。
     Heading,
-    /// Markdown 的强调（`*a*`）与删除线（`~~a~~`）。
+    /// Markdown 的强调（`*a*`）、删除线（`~~a~~`）与高亮（`==a==`）。
     Emphasis,
     /// Markdown 的加粗（`**a**`）。
     Strong,
