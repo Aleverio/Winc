@@ -553,6 +553,7 @@ impl Palette {
             TokenKind::Link => self.syntax_function,
             TokenKind::Inserted => self.syntax_string,
             TokenKind::Deleted => self.error,
+            TokenKind::Warning => self.warning,
         }
     }
 

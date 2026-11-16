@@ -5,6 +5,7 @@
 //! 在 `markdown`、`markup`、`style` 子模块中。
 
 mod data;
+mod log;
 mod markdown;
 mod markup;
 mod shell;
@@ -270,10 +271,12 @@ pub enum TokenKind {
     Strong,
     /// Markdown 的链接文字与自动链接。
     Link,
-    /// 差异文件中新增的行。
+    /// 差异文件中新增的行，以及日志中的信息级别。
     Inserted,
-    /// 差异文件中删除的行。
+    /// 差异文件中删除的行，以及日志中的错误级别。
     Deleted,
+    /// 日志中的警告级别。
+    Warning,
 }
 
 /// 行内需要着色的一段文本。
@@ -577,6 +580,10 @@ impl Lexer<'_> {
         if i == 0 {
             if self.language.diff_lines {
                 return self.diff_line();
+            }
+
+            if self.language.log_lines {
+                return self.log_line();
             }
 
             if self.language.hash_lines

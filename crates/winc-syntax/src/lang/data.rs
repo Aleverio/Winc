@@ -725,6 +725,15 @@ pub(super) static DIFF: Language = Language {
     ..BASE
 };
 
+/// 日志文件：只为时间戳、级别、地址等可识别的写法着色，其余文字不着色。
+pub(super) static LOG: Language = Language {
+    id: "log",
+    name: "Log",
+    extensions: &["log"],
+    log_lines: true,
+    ..BASE
+};
+
 /// 逗号分隔的表格。
 ///
 /// 不做语法着色；按列着色和对齐由编辑器层处理。
