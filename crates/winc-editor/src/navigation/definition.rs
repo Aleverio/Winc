@@ -50,9 +50,43 @@ impl Definition {
 ///
 /// 例如 `return f(x) {`、`new Foo(a) {`。
 const NOT_RETURN_TYPES: &[&str] = &[
-    "return", "new", "else", "throw", "await", "yield", "case", "go", "defer", "puts", "print",
-    "echo", "not", "and", "or", "in", "of", "typeof", "delete", "raise", "do", "then", "when",
-    "if", "while", "for", "switch", "catch", "using", "lock", "sizeof", "default", "export",
+    "return",
+    "new",
+    "else",
+    "throw",
+    "await",
+    "yield",
+    "case",
+    "go",
+    "defer",
+    "puts",
+    "print",
+    "echo",
+    "not",
+    "and",
+    "or",
+    "in",
+    "of",
+    "typeof",
+    "delete",
+    "raise",
+    "do",
+    "then",
+    "when",
+    "if",
+    "while",
+    "for",
+    "switch",
+    "catch",
+    "using",
+    "lock",
+    "sizeof",
+    "default",
+    "export",
+    "try",
+    "co_await",
+    "co_return",
+    "co_yield",
 ];
 
 /// 出现在名字之前时表明该行是语句而非声明的单词（不区分大小写），如 `return x;`、SQL 的
@@ -200,6 +234,18 @@ fn forms(name: &str, local: bool) -> Vec<(String, Form)> {
         (
             format!(
                 r"^\s*[\w<>\[\],.?*&:]+\s+[*&]*(?P<NAME>{escaped})\s*\([^;]*\)\s*(?:\{{|=>|throws\b|const\b|noexcept\b|override\b|->)"
+            ),
+            Form {
+                kind: Kind::Declaration,
+                check: Check::Statement,
+            },
+        ),
+        // 类型内没有方法体的方法声明（接口、抽象类、C++ 类）：`Token verify(String token);`。
+        // 形参为空，或第一个形参是「类型 名字」，以区别带实参的对象构造 `Guard guard(mutex);`。
+        (
+            format!(
+                r"^\s+{ty}\s+[*&]*(?P<NAME>{escaped})\s*\(\s*(?:\)|(?:(?:final|const|@\w+(?:\([^()]*\))?)\s+)*{ty}(?:\.\.\.)?\s+[*&]*\w+\s*[,)])[^;{{}}]*;\s*$",
+                ty = r"[A-Za-z_][\w.:]*(?:<[^;(){}=]*>)?(?:\[\])*[?*&]*",
             ),
             Form {
                 kind: Kind::Declaration,
@@ -542,6 +588,77 @@ pub(crate) fn in_enum(text: &Rope, line: usize) -> bool {
         }
     }
     false
+}
+
+/// 指当前对象或当前类型的接收者：其后的成员定义在当前文件或它的父类型中。
+const OWN_RECEIVERS: &[&str] = &["this", "self", "Self", "super", "base", "cls", "me"];
+
+/// 第 `line` 行 `col` 列（字符偏移，均从 0 起）处的名字 `name` 是成员访问（`service.name`、
+/// `Type::name`、`ptr->name`）时，返回接收者的类型名；不是成员访问或推断不出类型时返回 `None`。
+///
+/// 接收者以大写字母开头时它本身是类型；否则在 `text` 中找它的声明或赋值（`Type service`、
+/// `service: Type`、`service = new Type(`），取光标之前最近的一处，之前没有时取之后的第一处。
+/// 只认以大写字母开头的类型名。接收者是 `this`、`self` 这类指当前对象的写法时返回 `None`。
+pub fn receiver_type(text: &Rope, line: usize, col: usize, name: &str) -> Option<String> {
+    let content: Vec<char> = text.get_line(line)?.chars().collect();
+    let len = name.chars().count();
+    let is_name = |c: char| c.is_alphanumeric() || c == '_';
+    // 光标所在的那一处名字的开头。
+    let start = (col.saturating_sub(len)..=col.min(content.len())).find(|&at| {
+        content
+            .get(at..at + len)
+            .is_some_and(|w| w.iter().copied().eq(name.chars()))
+            && !at.checked_sub(1).is_some_and(|k| is_name(content[k]))
+    })?;
+    let before = &content[..start];
+    let access = [".", "::", "->"].into_iter().find_map(|mark| {
+        let at = before.len().checked_sub(mark.len())?;
+        before[at..].iter().copied().eq(mark.chars()).then_some(at)
+    })?;
+    // `?.`、`!.` 中的 `?`、`!` 不属于接收者。
+    let end = match before[..access].last() {
+        Some('?' | '!') => access - 1,
+        _ => access,
+    };
+    let from = end
+        - before[..end]
+            .iter()
+            .rev()
+            .take_while(|&&c| is_name(c))
+            .count();
+    let receiver: String = before[from..end].iter().collect();
+    if receiver.is_empty() || OWN_RECEIVERS.contains(&receiver.as_str()) {
+        return None;
+    }
+    if receiver.starts_with(char::is_uppercase) {
+        return Some(receiver);
+    }
+    let escaped = regex::escape(&receiver);
+    let declared = Regex::new(&format!(
+        r"(?:\b(?P<a>[A-Z]\w*)(?:<[^;(){{}}=]*>)?(?:\[\])?[*&\s]+{escaped}\s*(?:[;=,)]|$)|\b{escaped}\s*:\s*(?:&\s*(?:mut\s+)?|\*)?(?:\w+(?:::|\.))*(?P<b>[A-Z]\w*)|\b{escaped}\s*:?=\s*(?:new\s+)?(?:\w+(?:::|\.))*(?P<c>[A-Z]\w*)\s*[(:{{<])"
+    ))
+    .ok()?;
+    let mut found = None;
+    for (index, slice) in text.lines().enumerate() {
+        if index > line && found.is_some() {
+            break;
+        }
+        let content = std::borrow::Cow::<str>::from(slice);
+        if let Some(caps) = declared.captures(&content) {
+            let kind = ["a", "b", "c"]
+                .into_iter()
+                .find_map(|group| caps.name(group));
+            found = kind.map(|m| m.as_str().to_owned()).or(found);
+        }
+    }
+    found
+}
+
+/// 路径 `path` 的文件名（不含扩展名）是否以类型 `type_name` 命名：相同，或包含它
+/// （`LoginServiceImpl`、`DefaultLoginService`）。返回 `None` 表示无关，`Some(true)` 表示相同。
+pub fn named_after(path: &Path, type_name: &str) -> Option<bool> {
+    let stem = path.file_stem()?.to_string_lossy();
+    stem.contains(type_name).then(|| stem == type_name)
 }
 
 /// 返回各处定义的排序键，键越小越靠前。

@@ -1036,3 +1036,85 @@ fn hover_is_checked_again_after_keyboard_changes() {
 
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn a_member_call_goes_to_the_receiver_type_not_the_same_name_here() {
+    let dir = winc_config::files::canonicalize(sample_folder("definition-receiver")).unwrap();
+    let controller = "class LoginController {
+    private final LoginService loginService;
+    private final AuditLog audit;
+    private final Clock clock;
+
+    public Result loginVerify(String token) {
+        audit.record(token);
+        clock.record(token);
+        return Help.ok(loginService.loginVerify(token), this.loginVerify(token));
+    }
+
+    void record(String token) {
+    }
+}
+";
+    for (name, text) in [
+        ("LoginController.java", controller),
+        (
+            "LoginService.java",
+            "interface LoginService {\n    Token loginVerify(String token);\n}\n",
+        ),
+        (
+            "LoginServiceImpl.java",
+            "class LoginServiceImpl implements LoginService {\n    public Token loginVerify(String token) {\n        return null;\n    }\n}\n",
+        ),
+        (
+            "Recorder.java",
+            "class Recorder {\n    public void record(String token) {\n    }\n}\n",
+        ),
+    ] {
+        std::fs::write(dir.join(name), text).unwrap();
+    }
+    let mut app = app_with(&dir, false);
+    let open = |app: &mut App| app.open_path(&dir.join("LoginController.java"));
+    let listed = |app: &App| -> Vec<(String, usize)> {
+        let places = app.overlays.picker.places.as_ref().unwrap();
+        assert_eq!(places.kind, PlacesKind::Definitions);
+        places
+            .items
+            .iter()
+            .map(|p| (p.relative.clone(), p.line))
+            .collect()
+    };
+
+    // 接收者的类型是 `LoginService`：只列以它命名的文件，接口中的声明在前；本类中的同名
+    // 方法不列。
+    open(&mut app);
+    caret_on(&mut app, "loginVerify", 1);
+    app.go_to_definition();
+    assert_eq!(
+        listed(&app),
+        [
+            ("LoginService.java".to_owned(), 1),
+            ("LoginServiceImpl.java".to_owned(), 1),
+        ]
+    );
+    app.close_picker();
+
+    // `this.` 之后的调用仍然跳到本类中的方法。
+    caret_on(&mut app, "loginVerify", 2);
+    app.go_to_definition();
+    assert_eq!(active_name(&app), "LoginController.java");
+    let doc = app.editor.active().unwrap();
+    assert_eq!(doc.text().pos_to_line_col(doc.selection.from()).0, 5);
+
+    // 没有以接收者的类型命名的文件：本类中的同名方法和其他文件中的一并列出，本类的在前。
+    caret_on(&mut app, "record", 0);
+    app.go_to_definition();
+    assert_eq!(
+        listed(&app),
+        [
+            ("LoginController.java".to_owned(), 11),
+            ("Recorder.java".to_owned(), 1),
+        ]
+    );
+    app.close_picker();
+    let _ = std::fs::remove_dir_all(&dir);
+}
