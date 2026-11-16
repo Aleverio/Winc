@@ -169,8 +169,8 @@ settings-terminal-copy-on-select-desc = Copy selected text to the clipboard auto
 settings-terminal-confirm-close-desc = Ask before closing a tab that’s still running a program
 settings-terminal-prompt-desc = Replace the default prompt with the folder, Git branch and exit status
 settings-terminal-shell-integration-desc = { $platform ->
-    [windows] Split WSL zsh, bash and fish output into command blocks to fold and jump between
-   *[other] Split zsh, bash and fish output into command blocks to fold and jump between
+    [windows] Group WSL output by command and load Python environments automatically
+   *[other] Group output by command and load Python environments automatically
 }
 settings-terminal-option-as-meta-desc = Send an Esc prefix instead of typing special characters with the chosen ⌥
 

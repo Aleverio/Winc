@@ -6,6 +6,8 @@
 #![cfg(unix)]
 
 mod common;
+#[path = "shells/python.rs"]
+mod python;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -45,10 +47,17 @@ impl Drop for Temp {
 }
 
 fn find(shell: &str) -> Option<String> {
-    ["/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"]
+    let mut dirs: Vec<PathBuf> = ["/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"]
         .iter()
-        .map(|dir| format!("{dir}/{shell}"))
-        .find(|path| Path::new(path).exists())
+        .map(PathBuf::from)
+        .collect();
+    if let Some(path) = std::env::var_os("PATH") {
+        dirs.extend(std::env::split_paths(&path));
+    }
+    dirs.into_iter()
+        .map(|dir| dir.join(shell))
+        .find(|path| path.is_file())
+        .map(|path| path.to_string_lossy().into_owned())
 }
 
 fn env(home: &Path, extra: &[(&str, &str)]) -> Vec<(Vec<u8>, Vec<u8>)> {

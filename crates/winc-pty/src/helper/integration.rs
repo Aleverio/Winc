@@ -18,7 +18,7 @@ use std::io::Read;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
-use winc_pty::scripts::{BASH, FISH, ZSH};
+use winc_pty::scripts::{BASH, FISH, PYTHON, ZSH};
 
 /// 在 WSL 发行版内启动 shell 并注入集成脚本的脚本。
 #[cfg(any(windows, test))]
@@ -62,7 +62,7 @@ pub fn inject(
         b"fish" => FISH,
         _ => return None,
     };
-    if let Err(error) = write_scripts(dir, scripts) {
+    if let Err(error) = write_scripts(dir, scripts).and_then(|()| write_scripts(dir, PYTHON)) {
         eprintln!(
             "winc-pty: 无法写入 shell 集成脚本（{}）：{error}",
             dir.display()
@@ -154,7 +154,7 @@ pub fn inject_wsl(
     }
     let text = String::from_utf8_lossy(dir).into_owned();
     let path = Path::new(&text);
-    for scripts in [ZSH, BASH, FISH, WSL] {
+    for scripts in [ZSH, BASH, FISH, PYTHON, WSL] {
         if let Err(error) = write_scripts(path, scripts) {
             eprintln!("winc-pty: 无法写入 shell 集成脚本（{text}）：{error}");
             return None;

@@ -169,8 +169,8 @@ settings-terminal-copy-on-select-desc = 选中文字后自动复制到剪贴板
 settings-terminal-confirm-close-desc = 关闭仍有程序运行的标签页前先确认
 settings-terminal-prompt-desc = 替换默认提示符，显示目录、Git 分支和退出状态
 settings-terminal-shell-integration-desc = { $platform ->
-    [windows] 将 WSL 中 zsh、bash、fish 的输出按命令分块，可折叠和跳转
-   *[other] 将 zsh、bash、fish 的输出按命令分块，可折叠和跳转
+    [windows] 按命令分块显示 WSL 输出，自动加载 Python 环境
+   *[other] 按命令分块显示输出，自动加载 Python 环境
 }
 settings-terminal-option-as-meta-desc = 按所选的 ⌥ 时发送 Esc 前缀，不输入特殊字符
 

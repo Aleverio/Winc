@@ -87,6 +87,7 @@ _winc_install() {
   builtin local ret=$?
   precmd_functions=(${precmd_functions:#_winc_install} _winc_precmd)
   _winc_defaults
+  builtin source -- "$_winc_home/../python.sh"
   preexec_functions+=(_winc_preexec)
   () { builtin return $ret }
   _winc_precmd

@@ -3,6 +3,8 @@
 # 用户的 ZDOTDIR 读），交互式的 shell 再挂上命令块的钩子。这个文件由 winc 生成，改了会被覆盖。
 
 builtin typeset -g _winc_dir=${${(%):-%x}:A:h}
+# 记录启动目录；用户配置中的 cd 不改变项目环境的选择。
+builtin typeset -g _winc_python_root=$PWD
 # terminal.prompt 关了时 winc 传 WINC_PROMPT=0：不换默认的提示符（见 winc.zsh）。
 builtin typeset -g _winc_prompt=${WINC_PROMPT-1}
 builtin unset WINC_PROMPT

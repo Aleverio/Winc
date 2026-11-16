@@ -4,6 +4,9 @@
 
 # terminal.prompt 关了时 winc 传 WINC_PROMPT=0：不换默认的提示符（见 _winc_defaults）。
 _winc_prompt_on=${WINC_PROMPT-1}
+# 记录启动目录；用户配置中的 cd 不改变项目环境的选择。
+_winc_python_root=$PWD
+_winc_python_script=${BASH_SOURCE[0]%/*}/../python.sh
 builtin unset WINC_PROMPT
 # 报命令行时带上的随机数（docs/TERMINAL.md §6.3）：放在不导出的变量里，命令看不到。
 _winc_nonce=${WINC_NONCE-}
@@ -52,7 +55,7 @@ if [[ -z $_winc_hooked ]]; then
 
   # 当前目录所在的 Git 仓库的分支：直接读 .git/HEAD，不启动 git。结果（连同颜色）放在 _winc_git。
   _winc_branch() {
-    builtin local dir=$PWD git head
+    builtin local dir="$PWD" git head
     _winc_git=
     while :; do
       if [[ -f $dir/.git/HEAD ]]; then
@@ -95,6 +98,8 @@ if [[ -z $_winc_hooked ]]; then
     PS1='\[\e[1;34m\]\w\[\e[0m\]${_winc_git} ${_winc_mark} '
     builtin export CLICOLOR=1
   fi
+  builtin source "$_winc_python_script"
+  builtin unset _winc_python_script
 
   # PROMPT_COMMAND 的第一条：记下命令的退出码，原样返回，后面用户自己的 PROMPT_COMMAND 看到的
   # 还是命令的退出码。

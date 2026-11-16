@@ -16,8 +16,16 @@ set -e WINC_NONCE
 status is-interactive; or exit
 set -q __winc_hooked; and exit
 set -g __winc_hooked 1
+# 记录启动目录；用户配置中的 cd 不改变项目环境的选择。
+set -g __winc_python_root "$PWD"
+set -g __winc_python_script (string replace -r '/fish/fish/vendor_conf.d/winc.fish$' '/python.fish' -- (status filename))
 
 function __winc_prompt --on-event fish_prompt
+    if set -q __winc_python_script
+        set -l script "$__winc_python_script"
+        set -e __winc_python_script
+        source "$script"
+    end
     printf '\e]7;file://%s%s\a\e]133;A;redraw=1\a' $hostname (string escape --style=url -- $PWD)
 end
 

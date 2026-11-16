@@ -18,6 +18,11 @@ pub const FISH: &[(&str, &str)] = &[(
     "fish/fish/vendor_conf.d/winc.fish",
     include_str!("../shell/winc.fish"),
 )];
+/// Python 环境的加载脚本：在用户配置读完后调整环境，并提供 `deactivate`。
+pub const PYTHON: &[(&str, &str)] = &[
+    ("python.sh", include_str!("../shell/python.sh")),
+    ("python.fish", include_str!("../shell/python.fish")),
+];
 /// 按用户的登录 shell 设置环境变量和参数、启动它并注入上面各脚本的脚本；第一个参数是脚本所在
 /// 的目录。用于 WSL 发行版和远端主机。
 pub const LAUNCH: &[(&str, &str)] = &[("wsl.sh", include_str!("../shell/wsl.sh"))];
@@ -53,7 +58,7 @@ pub fn unix_lines(content: &str) -> Cow<'_, str> {
 /// 返回远端主机上各个集成脚本的相对路径和内容（换行符为 LF，见 [`unix_lines`]），写到那台
 /// 主机的 [`REMOTE_DIR`] 之下。
 pub fn remote() -> impl Iterator<Item = (&'static str, Cow<'static, str>)> {
-    [ZSH, BASH, FISH, LAUNCH]
+    [ZSH, BASH, FISH, PYTHON, LAUNCH]
         .into_iter()
         .flatten()
         .map(|&(name, content)| (name, unix_lines(content)))
@@ -91,6 +96,6 @@ mod tests {
         assert!(REMOTE_START.contains(REMOTE_DIR));
         let names: Vec<_> = remote().map(|(name, _)| name).collect();
         assert!(names.contains(&"wsl.sh") && names.contains(&"zsh/.zshenv"));
-        assert_eq!(names.len(), 5);
+        assert_eq!(names.len(), 7);
     }
 }

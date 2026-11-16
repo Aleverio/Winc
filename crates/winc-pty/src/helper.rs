@@ -12,6 +12,8 @@ mod pty;
 #[cfg(windows)]
 #[path = "helper/conpty.rs"]
 mod pty;
+#[cfg(any(windows, test))]
+mod python;
 
 use std::collections::BTreeMap;
 use std::io::{self, Write};
@@ -503,6 +505,10 @@ impl Helper {
             });
             return;
         };
+        #[cfg(windows)]
+        if integration.is_some() && banner.is_empty() {
+            python::activate(cwd, &path, &args, &mut env);
+        }
         // 集成脚本只适用于 Unix shell。Windows 上仅注入 WSL 发行版内的 shell，其他 shell 不提供命令块。
         #[cfg(unix)]
         let nonce = integration
