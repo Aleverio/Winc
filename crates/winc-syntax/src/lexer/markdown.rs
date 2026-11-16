@@ -173,6 +173,7 @@ impl Lexer<'_> {
             // CommonMark：反斜杠只转义 ASCII 标点，`\*` 不开始强调。
             '\\' if chars.get(i + 1).is_some_and(char::is_ascii_punctuation) => Some(i + 2),
             '*' | '_' | '~' => Some(self.emphasis(i)),
+            '=' => Some(self.highlight(i)),
             '[' => self.link(i, i),
             '!' if chars.get(i + 1) == Some(&'[') => self.link(i, i + 1),
             '<' => self.angle(i),
@@ -240,6 +241,33 @@ impl Lexer<'_> {
             j = run_end;
         }
         open
+    }
+
+    /// 识别 `i` 处开始的 `==高亮==`，返回其后的位置。
+    ///
+    /// 开头的 `==` 之后不能是空白，收尾的 `==` 之前不能是空白，中间不能只有 `=`；本行内找不到
+    /// 收尾时，`=` 是普通文本。
+    fn highlight(&mut self, i: usize) -> usize {
+        let chars = self.chars;
+        let Some(&next) = chars.get(i + 2) else {
+            return i + 1;
+        };
+        if chars.get(i + 1) != Some(&'=') || next == '=' || next.is_whitespace() {
+            return i + 1;
+        }
+        let mut j = i + 2;
+        while j + 1 < chars.len() {
+            if chars[j] == '='
+                && chars[j + 1] == '='
+                && !chars[j - 1].is_whitespace()
+                && chars.get(j + 2) != Some(&'=')
+            {
+                self.push(i, j + 2, TokenKind::Emphasis);
+                return j + 2;
+            }
+            j += 1;
+        }
+        i + 1
     }
 
     /// 识别 `bracket` 处 `[` 开始的链接（`[a](url)`、`[a][ref]`），返回其后的位置。
