@@ -235,6 +235,8 @@ pub enum Action {
     ToggleTerminal,
     /// 显示或隐藏终端面板，与焦点位置无关。
     ToggleTerminalPanel,
+    /// 启用终端模块；模块关闭时列出，使内置终端可以从命令面板找到。
+    EnableTerminal,
     /// 运行当前选中的配置；运行中时重新运行。
     RunConfiguration,
     /// 停止当前选中的配置。
@@ -506,6 +508,7 @@ impl Action {
             GitRevertChange => t!("cmd-git-revert-change"),
             ToggleTerminal => t!("cmd-toggle-terminal"),
             ToggleTerminalPanel => t!("cmd-toggle-terminal-panel"),
+            EnableTerminal => t!("cmd-enable-terminal"),
             RunConfiguration => t!("cmd-run-configuration"),
             StopConfiguration => t!("cmd-stop-configuration"),
             EditRunConfigurations => t!("cmd-edit-run-configurations"),
@@ -734,6 +737,7 @@ impl Action {
             GitRevertChange => "Git: Revert Change",
             ToggleTerminal => "Toggle Terminal",
             ToggleTerminalPanel => "Terminal: Toggle Panel",
+            EnableTerminal => "Terminal: Enable Built-in Terminal",
             RunConfiguration => "Run Configuration",
             StopConfiguration => "Stop Configuration",
             EditRunConfigurations => "Edit Run Configurations",
@@ -927,6 +931,7 @@ impl Action {
             | GitRevertChange
             | ToggleTerminal
             | ToggleTerminalPanel
+            | EnableTerminal
             | RunConfiguration
             | StopConfiguration
             | EditRunConfigurations
@@ -1318,6 +1323,7 @@ pub const ACTIONS: &[Action] = {
         GitRevertChange,
         ToggleTerminal,
         ToggleTerminalPanel,
+        EnableTerminal,
         RunConfiguration,
         StopConfiguration,
         EditRunConfigurations,

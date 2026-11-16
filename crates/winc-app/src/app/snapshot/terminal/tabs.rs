@@ -743,3 +743,18 @@ fn scrolling_to_the_ends_and_closing_the_other_tabs() {
     assert_eq!(app.terminal.tabs.len(), 1);
     assert_eq!(app.terminal.tabs[0].id, keep);
 }
+
+#[test]
+fn the_palette_offers_the_terminal_module_while_it_is_off() {
+    use crate::keymap::Action;
+    let mut app = blank_app(false);
+    // 模块关着：内置终端的命令不列出，只有启用它的入口。
+    app.config.terminal_enabled = Some(false);
+    assert!(app.action_available(Action::EnableTerminal));
+    assert!(!app.action_available(Action::NewTerminal));
+    assert!(app.run_action(Action::EnableTerminal));
+    assert_eq!(app.config.terminal_enabled, Some(true));
+    // 启用之后入口消失，内置终端的命令列出。
+    assert!(!app.action_available(Action::EnableTerminal));
+    assert!(app.action_available(Action::NewTerminal));
+}

@@ -189,6 +189,7 @@ cmd-show-commit = Git: Commit…
 cmd-git-revert-change = Git: Roll Back Change at Cursor
 cmd-toggle-terminal = Focus or Hide Terminal
 cmd-toggle-terminal-panel = Terminal: Show or Hide Panel
+cmd-enable-terminal = Terminal: Enable Built-in Terminal
 cmd-run-configuration = Run Current Configuration
 cmd-stop-configuration = Stop Current Configuration
 cmd-edit-run-configurations = Edit Run Configurations

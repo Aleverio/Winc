@@ -51,6 +51,8 @@ pub struct SettingsState {
     pub languages: ToolLanguages,
     /// 格式化页每一行（格式化工具、修复工具）上显示的内容。
     pub tool_rows: Vec<(Setting, FormatRow)>,
+    /// 正在后台查询 WSL 发行版中装了哪些工具，查完后重新计算各行。
+    pub probing: bool,
     /// 分类栏顶部的搜索框：按设置项的名称和说明搜索，不为空白时正文换成搜索结果。
     pub search: TextField,
     /// 「关于」页顶部的产品图标：渲染时的边长（物理像素）和 RGBA 像素；关闭浮层时释放。
@@ -207,6 +209,8 @@ impl App {
         self.settings.keyboard = false;
         self.settings.hover = None;
         self.settings.languages = ToolLanguages::default();
+        // 每次打开设置重新查询发行版中的工具：其间新安装的能列出来。
+        self.format.formatter.forget_wsl();
         self.refresh_format_rows(true);
         // 列出字体要读取字体文件，先在后台读好，打开字体菜单时不必等待；「默认 Shell」菜单中的
         // shell 同样在后台检测。

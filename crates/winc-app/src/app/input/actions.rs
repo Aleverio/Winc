@@ -441,6 +441,7 @@ impl App {
             ShowOutline => self.show_outline(),
             ToggleTerminal => self.toggle_terminal(),
             ToggleTerminalPanel => self.click_terminal_button(),
+            EnableTerminal => self.settings_toggle(crate::layout::Setting::TerminalModule),
             RunConfiguration => self.run_current_config(),
             StopConfiguration => self.stop_current_config(),
             EditRunConfigurations => self.edit_run_configs(),
@@ -503,6 +504,8 @@ impl App {
             {
                 return false;
             }
+            // 模块已经启用时没有要启用的；启用后内置终端的各条命令列出。
+            Action::EnableTerminal if self.terminal_enabled() => return false,
             // Windows 安装包、deb 包已经把 `winc` 放进 `PATH`，没有要安装的。
             Action::InstallShellCommand | Action::UninstallShellCommand
                 if crate::shell_command::placement().is_none() =>

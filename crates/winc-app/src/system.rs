@@ -314,9 +314,12 @@ pub fn open_terminal(dir: &Path, app: Option<&str>) -> io::Result<()> {
         let app = app.unwrap_or("Terminal");
         spawn(Command::new("open").args(["-a", app]).arg(dir))
     } else if cfg!(windows) {
-        let app = app.unwrap_or("cmd.exe");
+        let (args, cwd) = windows_terminal(dir, app);
         let mut command = Command::new("cmd");
-        command.args(["/C", "start", "", app]).current_dir(dir);
+        command.args(["/C", "start", ""]).args(args);
+        if let Some(cwd) = cwd {
+            command.current_dir(cwd);
+        }
         // 只借用 `cmd` 的 `start` 启动终端：`cmd` 自身不需要窗口，打开的终端有自己的窗口。
         // `0x0800_0000` 是 `CREATE_NO_WINDOW`，即不为 `cmd` 创建控制台窗口。
         #[cfg(windows)]
@@ -335,6 +338,20 @@ pub fn open_terminal(dir: &Path, app: Option<&str>) -> io::Result<()> {
             })
             .unwrap_or_else(|| TERMINALS[0].to_owned());
         spawn(Command::new(app).current_dir(dir))
+    }
+}
+
+/// 返回 Windows 上打开终端时交给 `start` 的程序和参数，以及启动时的工作目录。
+///
+/// `dir` 位于 WSL 发行版中且没有指定终端程序时，启动 `wsl.exe` 进入那个发行版和目录：`cmd.exe`
+/// 不能以发行版的网络路径作为当前目录，会退回到 Windows 的目录。其余情况在 `dir` 下启动 `app`。
+fn windows_terminal<'a>(dir: &'a Path, app: Option<&str>) -> (Vec<String>, Option<&'a Path>) {
+    match winc_editor::wsl::locate(dir).filter(|_| app.is_none()) {
+        Some(place) => {
+            let args = ["wsl.exe", "-d", &place.distro, "--cd", &place.path];
+            (args.map(str::to_owned).into(), None)
+        }
+        None => (vec![app.unwrap_or("cmd.exe").to_owned()], Some(dir)),
     }
 }
 

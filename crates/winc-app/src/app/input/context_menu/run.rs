@@ -600,10 +600,7 @@ impl App {
         let lines: Vec<String> = if relative {
             paths.iter().filter_map(|p| self.relative_path(p)).collect()
         } else {
-            paths
-                .iter()
-                .map(|p| winc_backend::native_lossy(p).into_owned())
-                .collect()
+            paths.iter().map(|p| path_to_copy(p)).collect()
         };
         if lines.is_empty() {
             return;
@@ -957,4 +954,13 @@ fn tree_tool_of(command: MenuCommand) -> Option<TreeTool> {
         MenuCommand::TreeLocate => TreeTool::Locate,
         _ => return None,
     })
+}
+
+/// 返回复制路径时给出的文字：WSL 发行版中的路径给出发行版内的写法（`/home/…`），拿到那个
+/// 发行版的终端里可以直接使用；其余路径照所在系统的写法。
+fn path_to_copy(path: &Path) -> String {
+    match winc_editor::wsl::locate_here(path) {
+        Some(place) => place.path,
+        None => winc_backend::native_lossy(path).into_owned(),
+    }
 }

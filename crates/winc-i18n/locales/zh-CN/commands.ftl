@@ -189,6 +189,7 @@ cmd-show-commit = Git：提交…
 cmd-git-revert-change = Git：回滚光标处的更改
 cmd-toggle-terminal = 聚焦或隐藏终端
 cmd-toggle-terminal-panel = 终端：显示或隐藏面板
+cmd-enable-terminal = 终端：启用内置终端
 cmd-run-configuration = 运行当前配置
 cmd-stop-configuration = 停止当前配置
 cmd-edit-run-configurations = 编辑运行配置
