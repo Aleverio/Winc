@@ -448,6 +448,8 @@ struct Emulator {
     history_erased: bool,
     /// 上一次清屏时移入回滚缓冲的行；之后有其他行滚入回滚缓冲时清除。
     last_kept: Option<Vec<Row>>,
+    /// 最近一次清屏时回滚缓冲末尾的绝对行号：此前的行已被清出屏幕，改尺寸时不拉回屏幕。
+    cleared: u64,
     /// 当前画笔，写入字符时使用。
     pen: Style,
     /// 滚动区域的首末行 `top..bottom`。
@@ -514,6 +516,7 @@ impl Emulator {
             history: History::new(scrollback),
             history_erased: false,
             last_kept: None,
+            cleared: 0,
             pen: Style::default(),
             top: 0,
             bottom: rows,
@@ -660,6 +663,7 @@ impl Emulator {
             modes: state.1,
             keyboard: state.2,
             history: state.3,
+            cleared: self.cleared,
         };
         self.damage.clear(self.rows);
         self.sent = Some(state);

@@ -178,6 +178,8 @@ pub(crate) struct TermTab {
     pub credit_due: bool,
     /// 回滚缓冲里的行号范围（帧里报的）。
     pub history: (u64, u64),
+    /// 最近一次清屏时回滚缓冲末尾的行号（帧里报的）：此前的行改尺寸时不拉回屏幕。
+    pub cleared: u64,
     /// 往上翻了几行；0 表示看着最新的输出。
     pub scroll: usize,
     /// 在 `scroll` 之外继续往上翻的不足一行的部分（行，`0.0..1.0`），滚轮和触控板按像素滚动时使用。
@@ -261,6 +263,7 @@ impl TermTab {
             size,
             credit_due: false,
             history: (0, 0),
+            cleared: 0,
             scroll: 0,
             scroll_frac: 0.0,
             scroll_rest: 0.0,
@@ -285,7 +288,8 @@ impl TermTab {
 
     /// 应用一帧。
     ///
-    /// 往上翻着的时候新输出进了回滚缓冲，翻的行数跟着加，看着的内容不动。
+    /// 往上翻着的时候新输出进了回滚缓冲，翻的行数跟着加，看着的内容不动；宽度变化引起重排时
+    /// 按比例保留位置。
     pub fn apply(&mut self, frame: Frame) {
         let rows = usize::from(frame.rows);
         if frame.full || self.rows.len() != rows {
@@ -295,7 +299,17 @@ impl TermTab {
             self.cache.clear();
             self.requested = None;
             self.selection = None;
-            self.scroll = 0;
+            // 重排后行号重新编排，原来的位置无法逐行对应：按回滚缓冲行数的比例换算往上翻的
+            // 行数，看着的内容大致不动；回滚缓冲被清空时回到底部。
+            let old = self.history.1.saturating_sub(self.history.0).max(1);
+            let new = frame.history.1.saturating_sub(frame.history.0);
+            let same_screen =
+                frame.modes.has(Modes::ALT_SCREEN) == self.modes.has(Modes::ALT_SCREEN);
+            self.scroll = if same_screen {
+                (self.scroll as u128 * u128::from(new) / u128::from(old)) as usize
+            } else {
+                0
+            };
             self.scroll_frac = 0.0;
         } else if frame.modes.has(Modes::ALT_SCREEN) != self.modes.has(Modes::ALT_SCREEN) {
             // 换了一屏：往上翻的位置、选区都是另一屏的，回到底部。
@@ -330,6 +344,7 @@ impl TermTab {
         self.modes = frame.modes;
         self.keyboard = frame.keyboard;
         self.history = frame.history;
+        self.cleared = frame.cleared;
         self.clamp_scroll();
         self.prune();
         if !frame.full {
@@ -639,7 +654,8 @@ impl TermTab {
     }
 
     /// 面板的行数和屏幕不一样时（新的尺寸还没换上，见 `shown`），按辅助进程重排的规则排：主屏
-    /// 下面没有内容的行去掉，从剩下的最后一行往上排，光标那一行不出网格；备用屏顶着上面排。
+    /// 下面没有内容的行去掉，从剩下的最后一行往上排，光标那一行不出网格，清屏前的行不拉回；
+    /// 备用屏顶着上面排。
     ///
     /// 重排好的屏幕回来时每一行都在原来的地方。
     fn preview_end(&self, layout: &Layout) -> u64 {
@@ -661,7 +677,9 @@ impl TermTab {
             .min(self.rows.len());
         let last = layout.display_of(self.history.1 + used as u64 - 1) + 1;
         let cursor = layout.display_of(self.history.1 + cursor as u64);
-        last.min(cursor + grid)
+        // 清屏前的行不拉回屏幕：网格第一行不早于清屏的分界，变高的部分在下方留空。
+        let floor = self.cleared.clamp(self.history.0, self.history.1);
+        last.max(layout.display_of(floor) + grid).min(cursor + grid)
     }
 
     /// 一共有几个显示行。

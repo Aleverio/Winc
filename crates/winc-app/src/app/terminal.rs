@@ -497,6 +497,7 @@ impl App {
         t.active = 0;
         t.client = None;
         t.ready = false;
+        t.crashed = false;
         for id in ids {
             self.forget_terminal_tab(id);
         }
@@ -742,6 +743,10 @@ impl App {
 
     /// 在 `cwd` 用 `shell` 新建一个终端标签（`None` 是默认 shell）。
     pub(super) fn new_terminal_tab_with(&mut self, cwd: Vec<u8>, shell: Option<String>) {
+        // 辅助进程退出了：先恢复原有标签，否则新标签会被当作已退出的标签显示。
+        if self.terminal.crashed {
+            self.restart_terminal_tab();
+        }
         if !self.terminal.open {
             // 打开面板时没有标签、也没有恢复的标签要建，会先放一个默认的：换成这个默认标签。
             // 恢复的那些标签（面板收着时退出的）留着，这个默认标签加在后面。
@@ -816,6 +821,7 @@ impl App {
         if last {
             t.client = None;
             t.ready = false;
+            t.crashed = false;
         }
         self.forget_terminal_tab(tab.id);
         let t = &mut self.terminal;
@@ -864,17 +870,6 @@ impl App {
             }
             self.terminal.active = index;
             self.terminal.tabs[index].unseen = None;
-            // F8 的跳转属于原来那个标签：如果保留，在这里按 ↩ 会去打开那边的报错，不交给 shell。
-            let id = self.terminal.tabs[index].id;
-            if self.terminal.errors.as_ref().is_some_and(|e| e.tab != id) {
-                self.terminal.errors = None;
-            }
-            self.terminal.link = None;
-            self.terminal.find = None;
-            self.terminal.requests.retain(|r| r.2 != Request::Find);
-            if self.focus == Focus::TerminalFind {
-                self.focus = Focus::Terminal;
-            }
             self.terminal_activated();
             self.request_redraw();
         }
@@ -893,8 +888,40 @@ impl App {
         }
     }
 
+    /// 正在看的标签变了：丢掉属于其他标签的查找、报错跳转和链接。
+    ///
+    /// 保留它们时查找条会显示在另一个标签上，↩ 会去打开原标签的报错，不交给 shell。
+    pub(in crate::app::terminal) fn drop_other_tab_state(&mut self) {
+        let id = self.terminal.tab().map(|tab| tab.id);
+        let t = &mut self.terminal;
+        if t.find.as_ref().is_some_and(|find| Some(find.tab) != id) {
+            t.find = None;
+            t.requests.retain(|r| r.2 != Request::Find);
+            if self.focus == Focus::TerminalFind {
+                self.focus = Focus::Terminal;
+            }
+        }
+        let t = &mut self.terminal;
+        if t.errors
+            .as_ref()
+            .is_some_and(|errors| Some(errors.tab) != id)
+        {
+            t.errors = None;
+        }
+        if t.link.as_ref().is_some_and(|link| Some(link.tab) != id) {
+            t.link = None;
+        }
+        // 面板开着时正在看的标签就在眼前，未读点不需要保留。
+        if t.open
+            && let Some(tab) = t.tabs.get_mut(t.active)
+        {
+            tab.unseen = None;
+        }
+    }
+
     /// 换了正在看的标签：把它攒着的额度发出去，马上拿到最新的一帧。
     fn terminal_activated(&mut self) {
+        self.drop_other_tab_state();
         let t = &mut self.terminal;
         let (Some(client), Some(tab)) = (&t.client, t.tabs.get_mut(t.active)) else {
             return;

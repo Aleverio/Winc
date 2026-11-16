@@ -2,16 +2,18 @@
 //! （`路径:行:列`，也认不带行号的路径），画下划线；⌘ 单击打开：网址交给系统，文件在
 //! 编辑区打开到那一行那一列，⌘⇧ 单击在文件树里定位。
 //!
-//! 只看鼠标所在的一行，不扫整屏和回滚缓冲。相对路径按那一行所在的命令运行时的目录解析
-//! （命令块记着 OSC 7 报的目录），没有块时用 shell 最近报的目录，再没有用打开的目录。
+//! 只看鼠标所在的一行（网址连同折行的相邻行），不扫整屏和回滚缓冲。相对路径按那一行所在的
+//! 命令运行时的目录解析（命令块记着 OSC 7 报的目录），没有块时用 shell 最近报的目录，再没有
+//! 用打开的目录。
 
 use std::path::{Path, PathBuf};
 
 use super::App;
 use super::blocks::path_from_bytes;
-use super::locate::{locations, urls};
+use super::locate::{locations, url_across};
 use super::tab::TermTab;
 use crate::system;
+use winc_pty::protocol::Line;
 
 /// 链接指向哪里。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,6 +78,31 @@ fn in_project(root: Option<&Path>, path: PathBuf) -> PathBuf {
     }
 }
 
+/// 向前、向后各查看的折行数上限：128 行在 80 列时约 1 万个字符，超过常见网址的长度上限；
+/// 限制它避免在很长的单行输出上逐行回溯。
+const WRAP_ROWS: usize = 128;
+
+/// 第 `line` 行所在的逻辑行：折行连在一起的各显示行，以及第 `line` 行在其中的下标。
+///
+/// 回滚缓冲中尚未取回的行截断逻辑行。
+fn logical_rows(tab: &TermTab, line: u64) -> (Vec<&Line>, usize) {
+    let wraps = |l: u64| tab.line(l).is_some_and(|row| row.wrapped);
+    let mut first = line;
+    while first > tab.history.0 && line - first < WRAP_ROWS as u64 && wraps(first - 1) {
+        first -= 1;
+    }
+    let mut rows = Vec::new();
+    let mut at = first;
+    while let Some(row) = tab.line(at) {
+        rows.push(row);
+        if !row.wrapped || at >= line + WRAP_ROWS as u64 {
+            break;
+        }
+        at += 1;
+    }
+    (rows, (line - first) as usize)
+}
+
 /// 第 `line` 行第 `col` 格上的链接。
 fn link_at(
     tab: &TermTab,
@@ -109,7 +136,9 @@ fn link_at(
             return Some((start, end, target));
         }
     }
-    if let Some((start, end, url)) = urls(text).into_iter().find(|u| (u.0..u.1).contains(&col)) {
+    // 网址按折行连在一起的逻辑行识别：超过面板宽度的网址取完整的地址。
+    let (rows, at) = logical_rows(tab, line);
+    if let Some((start, end, url)) = url_across(&rows, at, col) {
         let target = match file_url(&url) {
             Some(path) => Target::File {
                 path: in_project(root, path),

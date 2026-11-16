@@ -457,6 +457,7 @@ impl App {
             }
         }
         self.retire_run_tabs(replaced);
+        self.drop_other_tab_state();
         self.fetch_terminal_history();
     }
 

@@ -327,9 +327,12 @@ impl App {
         if let Some((index, id, true)) = old {
             t.active = index;
             t.tabs[index].rerun = true;
+            // 退出后按这一次的配置启动：配置文件在运行期间可能已修改。
+            t.tabs[index].run = Some(config);
             if let Some(client) = &t.client {
                 client.send(&ToHelper::Stop { tab: id });
             }
+            self.drop_other_tab_state();
             self.reveal_run_panel();
             return;
         }

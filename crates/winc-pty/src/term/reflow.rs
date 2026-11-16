@@ -19,6 +19,8 @@ pub(super) struct Reflowed {
     ///
     /// 列等于 `cols` 表示光标停在写满的行尾、等着折行（见 [`reflow`] 的 `pending`）。
     pub cursor: (usize, usize),
+    /// `history` 中开头有多少行属于清屏前的内容（见 [`reflow`] 的 `cleared`）。
+    pub cleared: usize,
 }
 
 /// 重排中的一项：原样留下的回滚行，或一行格子。
@@ -37,11 +39,15 @@ enum Item {
 ///
 /// `pending` 为真时光标停在写满的行尾、等着折行（`cursor` 的列是最后一个字后面那一格）：重排后
 /// 该字仍在行尾时保持等待，不另起一行。
+///
+/// `cleared` 是 `history` 开头属于清屏前内容的行数：这些行不拉回屏幕，清掉的输出不会重新出现。
+#[allow(clippy::too_many_arguments)]
 pub(super) fn reflow(
     history: VecDeque<Line>,
     screen: Vec<Row>,
     cursor: (usize, usize),
     pending: bool,
+    cleared: usize,
     old_cols: usize,
     cols: usize,
     rows: usize,
@@ -50,6 +56,8 @@ pub(super) fn reflow(
     let mut group: Vec<Row> = Vec::new();
     let mut group_cursor = None;
     let mut cursor_at = None;
+    // 清屏前的内容重排后占 `items` 开头的多少项；跨过分界的逻辑行算在分界之后。
+    let mut floor = 0;
 
     let sources = history.into_iter().map(Source::Line).chain(
         screen
@@ -58,7 +66,10 @@ pub(super) fn reflow(
             .map(|(i, row)| Source::Row(i, row)),
     );
 
-    for source in sources {
+    for (index, source) in sources.enumerate() {
+        if index == cleared {
+            floor = items.len();
+        }
         let row = match source {
             Source::Line(line) => {
                 if group.is_empty() && !line.wrapped && line_cells(&line) <= cols {
@@ -99,7 +110,8 @@ pub(super) fn reflow(
     // 屏幕放最后 `rows` 行，光标必须在里面。
     let total = items.len();
     let (cursor_item, cursor_col) = cursor_at.unwrap_or((total.saturating_sub(1), 0));
-    let mut start = total.saturating_sub(rows).min(cursor_item);
+    let floor = floor.min(cursor_item);
+    let mut start = total.saturating_sub(rows).min(cursor_item).max(floor);
     if cursor_item >= start + rows {
         start = cursor_item + 1 - rows;
     }
@@ -126,6 +138,7 @@ pub(super) fn reflow(
         history,
         rows: screen,
         cursor: (cursor_item - start, cursor_col.min(cols)),
+        cleared: floor,
     }
 }
 
@@ -133,17 +146,24 @@ pub(super) fn reflow(
 ///
 /// 回滚缓冲里其余的行不动，面板拖动时每次调整都走这条路径，不必把整份回滚缓冲重新过一遍。
 /// 返回正好 `rows` 行的屏幕和光标，光标列等于 `cols` 表示等着折行。
+///
+/// 绝对行号小于 `cleared` 的行属于清屏前的内容，不拉回屏幕。
 pub(super) fn resize_rows(
     history: &mut History,
     mut screen: Vec<Row>,
     cursor: (usize, usize),
+    cleared: u64,
     cols: usize,
     rows: usize,
 ) -> (Vec<Row>, (usize, usize)) {
     let (first, last) = history.range();
     let kept = (last - first) as usize;
     let cursor_item = kept + cursor.0;
-    let start = (kept + screen.len()).saturating_sub(rows).min(cursor_item);
+    let floor = cleared.clamp(first, last) - first;
+    let start = (kept + screen.len())
+        .saturating_sub(rows)
+        .min(cursor_item)
+        .max(floor as usize);
     if start < kept {
         let mut pulled: Vec<Row> = (start..kept)
             .map_while(|_| history.pop())

@@ -607,3 +607,56 @@ fn snapshot_terminal_tab_position_motion() {
     }
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn find_and_error_state_follow_the_tab_they_belong_to() {
+    let mut app = blank_app(false);
+    show_terminal(&mut app, "error one");
+    add_tab(&mut app, "zsh", "two");
+    app.activate_terminal_tab(0);
+    app.focus = Focus::Terminal;
+    app.open_terminal_find();
+    assert!(app.terminal.find.is_some());
+
+    // 点正在看的标签不关查找条；换到另一个标签时查找条不跟过去。
+    app.activate_terminal_tab(0);
+    assert!(app.terminal.find.is_some());
+    assert_eq!(app.focus, Focus::TerminalFind);
+    app.activate_terminal_tab(1);
+    assert!(app.terminal.find.is_none());
+    assert_eq!(app.focus, Focus::Terminal);
+}
+
+#[test]
+fn a_new_terminal_after_the_helper_exits_is_not_shown_as_exited() {
+    let mut app = blank_app(false);
+    show_terminal(&mut app, "one");
+    add_tab(&mut app, "zsh", "two");
+    app.terminal_helper_gone();
+    assert!(app.terminal.crashed);
+
+    // 新建终端时先恢复原有标签，新标签排在后面，按键不再被当作已退出的标签处理。
+    app.attach_idle_helper();
+    assert!(app.run_action(crate::keymap::Action::NewTerminal));
+    assert!(!app.terminal.crashed);
+    assert_eq!(app.terminal.tabs.len() + app.terminal.want.len(), 3);
+    assert!(app.terminal.tabs.iter().all(|tab| tab.ended.is_none()));
+}
+
+#[test]
+fn confirming_an_unchanged_rename_keeps_the_automatic_name() {
+    let mut app = blank_app(false);
+    show_terminal(&mut app, "$ ");
+    app.terminal.tabs[0].title = "~/winc".into();
+    app.open_terminal_rename(0);
+    app.finish_terminal_rename(true);
+    assert!(app.terminal.tabs[0].name.is_empty());
+    app.terminal.tabs[0].title = "~/other".into();
+    assert_eq!(app.terminal.tabs[0].label(), "~/other");
+
+    // 已有自定名字时输入相同的名字仍然保留。
+    app.terminal.tabs[0].name = "web".into();
+    app.open_terminal_rename(0);
+    app.finish_terminal_rename(true);
+    assert_eq!(app.terminal.tabs[0].name, "web");
+}

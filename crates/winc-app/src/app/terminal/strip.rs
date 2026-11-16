@@ -321,8 +321,8 @@ impl App {
         self.request_redraw();
     }
 
-    /// 改完名字：`keep` 为真时（↩、点其他位置）用输入的名字，去掉首尾空白，空的恢复自动的名字；
-    /// Esc 不改。
+    /// 改完名字：`keep` 为真时（↩、点其他位置）用输入的名字，去掉首尾空白，空的恢复自动的名字，
+    /// 与自动的名字相同时仍按自动处理；Esc 不改。
     ///
     /// 焦点在输入框上时回到终端。
     pub(crate) fn finish_terminal_rename(&mut self, keep: bool) {
@@ -330,7 +330,11 @@ impl App {
             return;
         };
         if keep && let Some(tab) = self.terminal.tabs.iter_mut().find(|t| t.id == id) {
-            tab.name = field.text().trim().to_owned();
+            let name = field.text().trim();
+            // 没有自定名字、输入框里仍是自动的名字：不改，标签继续跟随标题和进程变化。
+            if !tab.name.is_empty() || name != tab.label() {
+                tab.name = name.to_owned();
+            }
         }
         if self.focus == Focus::TerminalRename {
             self.focus = Focus::Terminal;
