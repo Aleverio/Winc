@@ -395,6 +395,17 @@ impl App {
                 let id = t.next_id;
                 let dir = if want.is_empty() { cwd.clone() } else { want };
                 let chosen = shells.get(i).cloned().flatten();
+                // 远端的目录只接受在那台主机上检测到的 shell：本机的命令（设置里的、恢复现场
+                // 时记下的）对远端不适用，不传过去，也不再记到标签上。
+                let host = winc_backend::locate(&bytes_path(&dir)).map(|at| at.target);
+                let chosen = match &host {
+                    Some(host) => chosen.filter(|command| {
+                        let known = crate::app::remote::shells(host);
+                        known.iter().any(|shell| shell.command == *command)
+                    }),
+                    None => chosen,
+                };
+                let shell = if host.is_some() { None } else { shell.clone() };
                 let python = python.get(i).copied().unwrap_or(false);
                 let integrated = match &integration {
                     Some(_) => Integration::On { prompt, python },
@@ -878,7 +889,11 @@ pub(super) fn launch(
 ) -> Launch {
     if let Some(at) = winc_backend::locate(&bytes_path(&cwd)) {
         let ready = crate::app::remote::shell_ready(&at.target);
-        return remote_launch(&at, integration, ready);
+        // 只接受那台主机上的绝对路径（由调用方按检测到的 shell 确认）；本机的命令不适用。
+        let shell = shell
+            .and_then(super::shells::program_path)
+            .filter(|path| path.starts_with('/'));
+        return remote_launch(&at, integration, ready, shell.as_deref());
     }
     // Windows 上 `/` 开头的目录来自 WSL 中的 shell，不是 Windows 程序可用的工作目录。
     let cwd = if windows && cwd.first() == Some(&b'/') {
@@ -927,14 +942,21 @@ pub(super) fn launch(
 /// 终端；`RemoteCommand=none` 使配置中为该主机设置的登录命令不与这里的命令冲突。远端的命令
 /// 先经用户的登录 shell 解释，写法只用各种 shell 共有的部分；目录包在单引号内。设置中的
 /// `shell` 是本机的命令，对远端的目录不适用。
-fn remote_launch(at: &winc_backend::Location, integration: Integration, ready: bool) -> Launch {
+fn remote_launch(
+    at: &winc_backend::Location,
+    integration: Integration,
+    ready: bool,
+    shell: Option<&str>,
+) -> Launch {
     // 集成脚本已写到那台主机上（`ready`）时由其中的启动脚本启动 shell（见
-    // `winc_pty::scripts`），否则直接启动登录 shell。
-    let start = match integration {
-        Integration::On { prompt, python } if ready => {
-            winc_pty::scripts::remote_command(prompt, python)
+    // `winc_pty::scripts`），否则直接启动登录 shell。`shell` 是那台主机上的路径，由调用方
+    // 确认过在那台主机上存在。
+    let start = match (integration, shell) {
+        (Integration::On { prompt, python }, _) if ready => {
+            winc_pty::scripts::remote_command(prompt, python, shell)
         }
-        _ => "exec $SHELL -l".to_owned(),
+        (_, Some(shell)) => format!("exec {} -l", winc_pty::scripts::single_quoted(shell)),
+        (_, None) => "exec $SHELL -l".to_owned(),
     };
     let dir = String::from_utf8_lossy(&at.path).replace('\'', r"'\''");
     let mut args: Vec<String> = ["-t", "-o", "RemoteCommand=none"].map(str::to_owned).into();

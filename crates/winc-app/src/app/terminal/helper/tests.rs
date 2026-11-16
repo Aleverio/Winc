@@ -118,7 +118,7 @@ fn a_remote_shell_gets_the_integration_once_its_scripts_are_there() {
     let target = winc_backend::Target::new("me@integrated").unwrap();
     let at = winc_backend::locate(&winc_backend::virtual_path(&target, b"/srv/app")).unwrap();
     let command = |integration, ready| {
-        let launch = remote_launch(&at, integration, ready);
+        let launch = remote_launch(&at, integration, ready, None);
         String::from_utf8(launch.args.last().unwrap().clone()).unwrap()
     };
     let plain = "cd '/srv/app' && exec $SHELL -l";
@@ -133,11 +133,26 @@ fn a_remote_shell_gets_the_integration_once_its_scripts_are_there() {
     );
     // 随机数的位置留给辅助进程填，其后是「不换提示符」和「加载 Python 环境」。
     assert!(
-        integrated.ends_with("' winc @WINC_NONCE@ 0 1"),
+        integrated.ends_with("' winc @WINC_NONCE@ 0 1 ''"),
         "{integrated}"
     );
     // 用户没有允许加载环境时告诉远端的脚本。
-    assert!(command(on(true, false), true).ends_with("' winc @WINC_NONCE@ 1 0"));
+    assert!(command(on(true, false), true).ends_with("' winc @WINC_NONCE@ 1 0 ''"));
+
+    // 选定的 shell：脚本就绪时作为启动脚本的参数，否则直接以登录方式启动它。
+    let chosen = |integration, ready| {
+        let launch = remote_launch(&at, integration, ready, Some("/usr/bin/fish"));
+        String::from_utf8(launch.args.last().unwrap().clone()).unwrap()
+    };
+    assert!(chosen(on(true, true), true).ends_with("' winc @WINC_NONCE@ 1 1 '/usr/bin/fish'"));
+    assert_eq!(
+        chosen(Integration::Off, true),
+        "cd '/srv/app' && exec '/usr/bin/fish' -l"
+    );
+    assert_eq!(
+        chosen(on(true, true), false),
+        "cd '/srv/app' && exec '/usr/bin/fish' -l"
+    );
 }
 
 #[test]
@@ -236,4 +251,24 @@ fn the_shell_setting_takes_priority() {
         Some(r"C:\Program Files\Git\bin\bash.exe")
     );
     assert_eq!(args, ["--login", "-i"]);
+}
+
+#[test]
+fn a_remote_folder_starts_the_shell_chosen_for_that_host() {
+    use crate::app::terminal::shells::ShellChoice;
+    let target = winc_backend::Target::new("me@shell-host").unwrap();
+    let dir = winc_backend::virtual_path(&target, b"/srv");
+    let fish = ShellChoice {
+        name: "fish".into(),
+        command: "/usr/bin/fish".into(),
+    };
+    assert!(crate::app::remote::shells(&target).is_empty());
+    crate::app::remote::set_shells(&target, vec![fish.clone()]);
+    assert_eq!(crate::app::remote::shells(&target), [fish]);
+
+    // 那台主机上的路径传给 `ssh` 的命令；本机的命令名对远端不适用。
+    let (_, args, _) = launched(Some("/usr/bin/fish"), dir.to_str().unwrap(), false);
+    assert_eq!(args.last().unwrap(), "cd '/srv' && exec '/usr/bin/fish' -l");
+    let (_, args, _) = launched(Some("pwsh.exe"), dir.to_str().unwrap(), true);
+    assert_eq!(args.last().unwrap(), "cd '/srv' && exec $SHELL -l");
 }

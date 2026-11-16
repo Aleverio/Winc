@@ -444,10 +444,14 @@ impl App {
         let tabs = session.tabs.iter();
         t.want = tabs.map(|p| os_bytes(p.as_os_str())).collect();
         t.want_names.clone_from(&session.names);
-        let saved = session.shells.iter();
+        // 远端目录的 shell 是那台主机上的路径，无法在本机检查；建标签时按那台主机上检测到的
+        // shell 确认。
+        let saved = session.shells.iter().zip(&session.tabs);
         t.want_shells = saved
-            .map(|command| {
-                Some(command.clone()).filter(|c| !c.is_empty() && shells::still_usable(c))
+            .map(|(command, dir)| {
+                let usable =
+                    |c: &String| winc_backend::locate(dir).is_some() || shells::still_usable(c);
+                Some(command.clone()).filter(|c| !c.is_empty() && usable(c))
             })
             .collect();
         t.want_active = Some(session.active);
