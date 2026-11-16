@@ -1085,8 +1085,8 @@ fn a_member_call_goes_to_the_receiver_type_not_the_same_name_here() {
             .collect()
     };
 
-    // 接收者的类型是 `LoginService`：只列以它命名的文件，接口中的声明在前；本类中的同名
-    // 方法不列。
+    // 接收者的类型是 `LoginService`：只列出以该类型命名的文件，接口中的声明在前；
+    // 不列出本类中的同名方法。
     open(&mut app);
     caret_on(&mut app, "loginVerify", 1);
     app.go_to_definition();
@@ -1106,7 +1106,7 @@ fn a_member_call_goes_to_the_receiver_type_not_the_same_name_here() {
     let doc = app.editor.active().unwrap();
     assert_eq!(doc.text().pos_to_line_col(doc.selection.from()).0, 5);
 
-    // 没有以接收者的类型命名的文件：本类中的同名方法和其他文件中的一并列出，本类的在前。
+    // 没有以接收者类型命名的文件：本类和其他文件中的同名方法一并列出，本类在前。
     caret_on(&mut app, "record", 0);
     app.go_to_definition();
     assert_eq!(

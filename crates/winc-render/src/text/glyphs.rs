@@ -68,13 +68,12 @@ pub(crate) struct GlyphCache {
     shaper: ShapeContext,
     /// emoji 序列 → 整形结果，分新旧两代；序列无法由 emoji 字体合成时为 `None`。
     ///
-    /// 新一代达到 [`SEQUENCE_ENTRIES`] 项时换代：旧的一代释放，仍在使用的项下次查到时搬回
-    /// 新一代，不必重新整形。
+    /// 新一代达到 [`SEQUENCE_ENTRIES`] 项时换代并释放旧一代；
+    /// 旧一代中被查到的项移入新一代，无需重新整形。
     sequences: [FastMap<Box<str>, Option<Rc<Shaped>>>; 2],
 }
 
-/// 整形结果缓存一代的最大项数（项）。文档中出现的不同 emoji 序列通常只有几十种，一屏之内
-/// 远少于该值。
+/// 整形结果缓存一代的最大项数（项）：文档中不同的 emoji 序列通常只有几十种，远少于该值。
 const SEQUENCE_ENTRIES: usize = 1024;
 
 /// 一个 emoji 序列由 emoji 字体合成的结果，长度以字号为单位（乘以字号得到逻辑像素）。
@@ -89,8 +88,8 @@ pub(crate) struct Shaped {
 impl Shaped {
     /// 整个序列的前进宽度，以字号为单位：各字形右边缘中最靠右的位置。
     ///
-    /// 有的字体把一个图形拆成叠在一起的几层，后一层的偏移退回前一层的位置，各层的前进宽度
-    /// 之和大于图形实际占的宽度。
+    /// 部分字体把一个图形拆成重叠的几层，后一层的偏移回到前一层的位置，
+    /// 各层前进宽度之和大于图形的实际宽度。
     pub(crate) fn advance(&self) -> f32 {
         let mut pen = 0.0;
         let mut right = 0.0f32;

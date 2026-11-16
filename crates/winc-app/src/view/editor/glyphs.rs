@@ -43,7 +43,7 @@ pub(super) fn draw_glyph_run(
     let cell = app.metrics.cell;
     let mut cells = start;
     let mut token = tokens.partition_point(|t| t.end <= range.start);
-    // emoji 序列在第一个字符处整个绘制，`joined` 之前的字符属于已绘制的序列。
+    // emoji 序列随首字符整体绘制；`joined` 之前的字符已经绘制。
     let mut joined = range.start;
     let mut behind = text::Behind::before(chars, range.start);
     for col in range {
@@ -182,7 +182,7 @@ pub(in crate::view) fn draw_glyphs(
     let cell = app.metrics.cell;
     let mut cells = 0;
     let mut token = 0;
-    // emoji 序列在第一个字符处整个绘制，`joined` 之前的字符属于已绘制的序列。
+    // emoji 序列随首字符整体绘制；`joined` 之前的字符已经绘制。
     let mut joined = 0;
     let mut behind = text::Behind::default();
 
@@ -198,7 +198,7 @@ pub(in crate::view) fn draw_glyphs(
         if c == ' ' || c == '\t' || col < joined {
             continue;
         }
-        // 序列的第一个字符在裁剪框左边时仍要绘制：合成的图形可能伸进裁剪框。
+        // 序列的首字符在裁剪框左侧时仍需绘制：合成的图形可能延伸到裁剪框内。
         if x + width as f32 * cell < clip.x && chars.get(col + 1).is_none_or(|&n| n < '\u{200d}') {
             continue;
         }
@@ -302,12 +302,10 @@ impl App {
     }
 }
 
-/// 在等宽网格上绘制 `chars[col]`，返回它连同接在后面的 emoji 序列的字符数，调用方跳过其余
-/// 字符。
+/// 在等宽网格上绘制 `chars[col]`，返回已处理的字符数：该字符及其后属于同一 emoji 序列的字符。
 ///
-/// `chars[col]` 是序列的第一个字符时，整个序列由 emoji 字体合成一个图形，占序列的显示列数
-/// （见 [`text::sequence_cells`]）；无法合成时只绘制第一个字符，其余字符不占列，不绘制。`font`
-/// 是字体、字号和一格的宽度，`at` 是该字符所在格的左边缘和基线。
+/// 序列由 emoji 字体合成一个图形，占 [`text::sequence_cells`] 给出的列数；无法合成时只绘制首字符。
+/// `(font, size, cell)` 是字体、字号和一格的宽度，`(x, baseline)` 是该字符所在格的左边缘和基线。
 pub(in crate::view) fn draw_grid_char(
     frame: &mut Frame<'_>,
     (font, size, cell): (FontKind, f32, f32),
@@ -332,11 +330,10 @@ pub(in crate::view) fn draw_grid_char(
     len
 }
 
-/// 返回 `chars` 中各字符在等宽网格上占的格数，每个字符一项，制表符按 `tab_width` 计。
+/// 返回 `chars` 中各字符在等宽网格上占的格数，制表符按 `tab_width` 计。
 ///
-/// 与 [`text::Behind::cells`] 相同，但不占列的字符（控制字符、单独的组合符号）也占 1 格，
-/// 只有接在 emoji 序列中的字符占 0 格。用于输入法组字和定义列表中的预览：这些地方的每个
-/// 字符都要看得见。
+/// 与 [`text::Behind::cells`] 的区别：控制字符和孤立的组合符号占 1 格，
+/// 只有 emoji 序列的后续字符占 0 格。用于输入法组字和定义列表中的预览，其中每个字符都必须可见。
 pub(in crate::view) fn loose_cells(chars: &[char], tab_width: usize) -> Vec<usize> {
     let mut behind = text::Behind::default();
     let mut cells = 0;

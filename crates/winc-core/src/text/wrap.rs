@@ -343,8 +343,7 @@ fn row_cut<C: RowChars + ?Sized>(
     } else {
         end
     };
-    // 硬断的位置落在 emoji 序列中间时退到序列之前；序列从这一段的开头起就放不下时整个留在
-    // 这一段，不拆开。
+    // 硬断位置落在 emoji 序列内时退到序列之前；序列从段首开始仍放不下时整个留在该段。
     let inside = |at: usize| at < chars.len() && sequence_member(chars, at);
     let mut start = cut;
     while start > earliest && inside(start) {
@@ -361,8 +360,8 @@ fn row_cut<C: RowChars + ?Sized>(
     }
 }
 
-/// 第 `at` 个字符是否与它前面的字符属于同一个 emoji 序列：按 [`winc_emoji::joined`] 接在前面
-/// 的字符之后，或与前一个字符同为区域指示符（国旗）。折行时不在它之前断开。
+/// 第 `at` 个字符是否与前一个字符属于同一个 emoji 序列（见 [`winc_emoji::joined`]，
+/// 或二者同为区域指示符）；折行不在该字符之前断开。
 fn sequence_member<C: RowChars + ?Sized>(chars: &C, at: usize) -> bool {
     let back = |n: usize| at.checked_sub(n).map(|k| chars.at(k));
     let c = chars.at(at);

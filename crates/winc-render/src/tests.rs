@@ -738,7 +738,7 @@ fn hinting_sharpens_horizontal_stems_and_keeps_advances() {
 fn emoji_are_rasterized_once_whatever_the_pen_position() {
     let mut renderer =
         Renderer::offscreen(200.0, 60.0, 1.0, Color::hex(0xffffff), None, None).unwrap();
-    // 没有装彩色 emoji 字体的精简系统中不做比较。
+    // 系统中没有彩色 emoji 字体时不做比较。
     if renderer.glyphs.borrow_mut().fonts.emoji_face().is_none() {
         return;
     }

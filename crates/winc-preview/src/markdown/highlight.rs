@@ -6,14 +6,14 @@ use super::{Inline, Run, Style};
 
 /// 把 `==文字==` 换成带荧光笔底色（[`Style::MARK`]）的文字，去掉两侧的 `==`。
 ///
-/// 规则与删除线相同：开头的 `==` 之后、收尾的 `==` 之前不能是空白，连写三个以上的 `=`
-/// 不算；行内代码和公式中的不算。里面可以有粗体、链接等其他样式。去掉的标记在原文对照中
-/// 留下空隙，可编辑的预览据此显示标记。
+/// 规则与删除线相同：开头的 `==` 之后、收尾的 `==` 之前不能是空白；连续三个以上的 `=`、
+/// 行内代码和公式中的 `==` 不识别；内部可以嵌套其他样式。移除的标记在原文对照中留下空隙，
+/// 可编辑的预览据此显示标记。
 pub(super) fn highlight(inline: &mut Inline) {
     if !inline.text.contains("==") {
         return;
     }
-    // 各处恰好两个 `=` 的位置，以及它能否作开头、收尾。
+    // 恰好两个 `=` 的各个位置，及其能否作为开头、收尾。
     let bytes = inline.text.as_bytes();
     let literal = |at: usize| {
         inline
@@ -34,7 +34,7 @@ pub(super) fn highlight(inline: &mut Inline) {
         }
         at = end;
     }
-    // 从前往后配对：一个开头配它之后最近的收尾，中间至少有一个字符。
+    // 从前向后配对：开头与其后最近的收尾配对，中间至少有一个字符。
     let mut pairs = Vec::new();
     let mut i = 0;
     while i < marks.len() {
@@ -53,7 +53,7 @@ pub(super) fn highlight(inline: &mut Inline) {
             None => i += 1,
         }
     }
-    // 从后往前改：前面的位置不受后面的删除影响。
+    // 从后向前修改，前面的位置不受删除影响。
     for (open, close) in pairs.into_iter().rev() {
         restyle(inline, open + 2..close, Style::MARK);
         cut(inline, close..close + 2);

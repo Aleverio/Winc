@@ -93,7 +93,7 @@ fn widens(base: char) -> bool {
     std::str::from_utf8(&buf[..len + VS16.len_utf8()]).is_ok_and(|text| text.width() == 2)
 }
 
-/// `c` 是否是字素簇里不单独绘制的部分：连接符和连入的 emoji 由渲染器与前面的字合成一个图形。
+/// `c` 是否是字素簇中不单独绘制的部分：连接符和并入的 emoji 由渲染器与前面的字符合成一个图形。
 ///
 /// 只对 [`cells`] 给出宽度 0 的字符有意义；普通的组合字符（重音符号）单独宽度也是 0，仍然绘制。
 pub fn is_emoji_tail(c: char) -> bool {

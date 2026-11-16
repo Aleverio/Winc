@@ -15,7 +15,7 @@ impl GlyphCache {
 fn emoji_sequences_are_composed_by_the_emoji_font() {
     let fonts = Fonts::load(&[], &[], &[], 400).expect("系统里有等宽字体");
     let mut cache = GlyphCache::new(fonts);
-    // 没有装彩色 emoji 字体的精简系统中不做比较。
+    // 系统中没有彩色 emoji 字体时不做比较。
     if cache.fonts.emoji_face().is_none() || cache.shaped("😀\u{fe0f}").is_none() {
         return;
     }

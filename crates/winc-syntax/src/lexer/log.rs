@@ -53,7 +53,7 @@ impl Lexer<'_> {
             self.push(i, i + 2, TokenKind::Keyword);
             i += 2;
         }
-        // 单引号在本行余下的部分已找不到收尾时不再查找，避免每个撇号都扫描到行尾。
+        // 本行余下部分没有收尾的单引号时不再查找，避免每个撇号都扫描到行尾。
         let mut quotes = true;
         while i < n {
             let token = match chars[i] {
@@ -204,7 +204,7 @@ fn ip_end(chars: &[char], i: usize) -> Option<usize> {
         }
         end = stop;
     }
-    // 后面还有 `.数字` 时是版本号这类更长的写法。
+    // 其后还有 `.数字` 时是版本号等更长的写法，不识别为地址。
     let longer = chars.get(end) == Some(&'.') && !ends(chars, end + 1);
     if longer || !ends(chars, end) {
         return None;

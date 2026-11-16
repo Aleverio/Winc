@@ -82,7 +82,8 @@ fn readme(name: &str, dark: bool, mode: PreviewMode) -> (App, PathBuf) {
     (app, dir)
 }
 
-/// 把鼠标移到标题指示条上的 `(x, y)` 并视为已停留够久：标题列表在下一次绘制时展开。
+/// 把鼠标移到标题指示条上的 `(x, y)`，并把停留时间记为已满 `TOC_HOVER_DELAY`：
+/// 标题列表在下一次绘制时展开。
 fn rest_on_toc(app: &mut App, x: f32, y: f32) {
     app.on_mouse_move(x, y);
     let delay = crate::theme::TOC_HOVER_DELAY;

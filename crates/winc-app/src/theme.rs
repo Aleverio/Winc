@@ -745,10 +745,10 @@ pub const SPIN_SPEED: f32 = 1.25;
 ///
 /// 与 macOS 的悬停提示一致：指针停留约 0.5 s 后出现，扫过按钮时不弹出。
 pub const TOOLTIP_DELAY: Duration = Duration::from_millis(500);
-/// 鼠标在 Markdown 预览的标题指示条上停留多久后展开标题列表（毫秒）。
+/// 鼠标在 Markdown 预览的标题指示条上停留至标题列表展开的时长（毫秒）。
 ///
-/// 比 [`TOOLTIP_DELAY`] 短：展开列表是用户有意去做的事，等待应当几乎察觉不到；又要长于鼠标
-/// 从文件树移向正文时扫过指示条（宽约 34 逻辑像素）的时间，扫过时不展开。
+/// 取自调参：短于 [`TOOLTIP_DELAY`]，展开前的等待几乎不可察觉；长于鼠标横向移过指示条（宽约 34
+/// 逻辑像素）所需的时间，移过时列表不展开。
 pub const TOC_HOVER_DELAY: Duration = Duration::from_millis(200);
 /// 悬停提示的最大宽度（逻辑像素，含内边距）。
 ///

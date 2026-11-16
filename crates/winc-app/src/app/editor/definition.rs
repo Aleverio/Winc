@@ -119,9 +119,10 @@ pub struct DefinitionSearch {
     at_caret: bool,
     /// 找的是用法而不是定义时，光标所在的那一行（行号从 0 起）：定义本身在这一行，结果中排除。
     usages_of: Option<usize>,
-    /// 光标处是成员访问、且接收者的类型不在当前文件中定义时：（类型名，当前文件中的同名定义）。
+    /// 成员访问的接收者类型名和当前文件中的同名定义；
+    /// 不是成员访问或接收者的类型定义在当前文件中时为 `None`。
     ///
-    /// 结果中有以该类型命名的文件时只取这些文件；没有时把当前文件中的定义一并列出。
+    /// 结果中有以该类型命名的文件时只取这些文件，否则一并列出当前文件中的定义。
     receiver: Option<(String, Option<Place>)>,
     /// 发起查找时的文档和光标位置（由 `start_place_search` 填入）。
     ///
@@ -234,8 +235,8 @@ impl App {
             .or_else(|| elsewhere.first())
             .copied();
         let root = self.editor.root().map(Path::to_path_buf);
-        // `service.name(…)`：接收者的类型定义在其他文件中时，当前文件中的同名方法不是要找的
-        // 定义，改为在项目中查找。
+        // `service.name(…)`：接收者的类型定义在其他文件中时，
+        // 当前文件中的同名方法不是目标，改为在项目中查找。
         let foreign = root.as_ref().and(doc.text().rope()).and_then(|text| {
             let type_name = definition::receiver_type(text, caret_line, caret_col, &name)?;
             let own = path
@@ -493,7 +494,7 @@ impl App {
             {
                 items.retain(|p| exact(p, name).is_some());
             } else if let Some((_, Some(local))) = &search.receiver {
-                // 没有以接收者的类型命名的文件：类型推断可能有误，当前文件中的定义一并列出。
+                // 没有以接收者类型命名的文件时类型推断可能有误，一并列出当前文件中的定义。
                 items.push(local.clone());
             }
             items.sort_by(|a, b| {

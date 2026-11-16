@@ -42,7 +42,7 @@ const REVEAL_FROM: f32 = 0.7;
 pub(super) const DETAILS_FADE: Duration = Duration::from_millis(120);
 /// Markdown 预览的标题列表展开的时长，取 [`TREE_ANIMATION`]。
 ///
-/// 展开时卡片从指示条处展开并淡入，横线从指示条滑到各行；收起时原路返回，时长相同。
+/// 展开时卡片从指示条处展开并淡入，横线从指示条移到各行；收起时相反，时长相同。
 pub(super) const TOC_FADE: Duration = TREE_ANIMATION;
 /// Markdown 预览的标题列表钉住、取消钉住的过渡时长，取 [`TREE_ANIMATION`]。
 ///

@@ -368,7 +368,7 @@ fn draw_code(app: &App, frame: &mut Frame<'_>, place: &Place, area: Rect) {
         );
     }
     let mut token = 0;
-    // emoji 序列在第一个字符处整个绘制，`joined` 之前的字符属于已绘制的序列。
+    // emoji 序列随首字符整体绘制；`joined` 之前的字符已经绘制。
     let mut joined = 0;
     for (col, c, at, _) in placed {
         if c.is_whitespace() || col < joined {

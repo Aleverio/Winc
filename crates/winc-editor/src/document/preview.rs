@@ -42,8 +42,7 @@ impl Document {
 
     /// 能预览时是哪一种；不能预览时返回 `None`（见 [`Document::can_preview`]）。
     ///
-    /// 按文档当前的语言判断，不看文件名：尚未保存的新文件、扩展名不同的文件在状态栏中选了
-    /// 语言之后同样可以预览。
+    /// 按文档当前的语言判断，与文件名无关：未保存的新文件和扩展名不符的文件选择语言后同样可以预览。
     pub fn preview_kind(&self) -> Option<PreviewKind> {
         if self.unsupported.is_some() || self.title.is_some() || self.is_large() {
             return None;

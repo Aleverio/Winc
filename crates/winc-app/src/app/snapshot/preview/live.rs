@@ -680,7 +680,7 @@ fn format_commands_toggle_inline_marks_in_the_live_preview() {
     assert!(app.run_action(Action::MarkdownBold));
     settle(&mut app);
     assert!(doc_text(&app).starts_with("正文 粗体 字\n"));
-    // 荧光笔同样用一对标记切换，预览中这段文字带上荧光笔的样式。
+    // 荧光笔同样以成对的标记切换，预览中该段文字带有荧光笔样式。
     select(&mut app, "粗体");
     assert!(app.run_action(Action::MarkdownHighlight));
     settle(&mut app);

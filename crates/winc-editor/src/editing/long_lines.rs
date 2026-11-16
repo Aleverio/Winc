@@ -132,7 +132,7 @@ struct LongCols {
     cells: usize,
     /// 第 `k` 项是前 `(k + 1) * COL_STRIDE` 个字符占用的显示列数。
     stops: Vec<usize>,
-    /// 已扫描部分末尾的两个字符：emoji 序列中的字符占几列取决于它们。
+    /// 已扫描部分末尾的两个字符，用于判断其后的字符是否属于 emoji 序列。
     behind: Behind,
 }
 
@@ -424,8 +424,7 @@ impl Document {
         Some(cells)
     }
 
-    /// 返回从行首位置 `start` 起第 `from` 个字符之前的状态：从列索引的记录处继续计算显示列时，
-    /// 该处之前的两个字符决定其后的字符是否属于同一个 emoji 序列。
+    /// 返回从行首位置 `start` 起第 `from` 个字符之前的状态，用于从列索引的记录处继续计算显示列。
     fn behind_at(&self, start: usize, from: usize) -> Behind {
         let back = from.min(2);
         let text = self.text.substring(start + from - back, start + from);

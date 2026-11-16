@@ -95,8 +95,7 @@ const PRESENTATION: &[(u32, u32)] = &[
     (0x1FA70, 0x1FAFF),
 ];
 
-/// 字符 `c` 是否默认按 emoji 显示；`☺`、`✔` 这类默认按文字显示的
-/// 符号不算。
+/// 字符 `c` 是否默认按 emoji 显示；`☺`、`✔` 等默认按文字显示的符号返回假。
 pub fn presentation(c: char) -> bool {
     let code = c as u32;
     code >= PRESENTATION[0].0
@@ -147,15 +146,14 @@ fn ends_emoji(c: char) -> bool {
 /// 字符 `c` 是否接在它前面的两个字符 `before`（较远的在前，没有时为 `None`）之后，与它们属于
 /// 同一个 emoji 序列。
 ///
-/// 规则只看前两个字符，任何位置都可以从文字中直接判断，不需要从头扫描：变体选择符接在任何
-/// 可见字符之后；肤色修饰符接在图形符号之后；键帽接在数字、`#`、`*` 之后；零宽连接符接在
-/// emoji 之后，并把其后的图形符号连进来（印度系文字中的连接符不算）。成对的区域指示符不在
-/// 此列，见 [`sequence_len`]。
+/// 判断只依赖前两个字符，无需从头扫描：变体选择符接在任何可见字符之后；肤色修饰符接在图形符号之后；
+/// 键帽接在数字、`#`、`*` 之后；零宽连接符接在 emoji 之后，并连入其后的图形符号（印度系文字中的
+/// 连接符除外）。成对的区域指示符见 [`sequence_len`]。
 pub fn joined(before: (Option<char>, Option<char>), c: char) -> bool {
     let (Some(previous), earlier) = (before.1, before.0) else {
         return false;
     };
-    // 序列中的字符都不小于零宽连接符；普通文字在这里就排除。
+    // 序列的后续字符均不小于零宽连接符，据此排除普通文字。
     if c < ZWJ {
         return false;
     }
@@ -169,8 +167,7 @@ pub fn joined(before: (Option<char>, Option<char>), c: char) -> bool {
     }
 }
 
-/// 返回 `chars` 开头的 emoji 序列的字符数；开头不是由几个字符组成的序列时返回 1，`chars` 为空
-/// 时返回 0。
+/// 返回 `chars` 开头的 emoji 序列的字符数；开头不是多字符序列时返回 1，`chars` 为空时返回 0。
 ///
 /// 两个连写的区域指示符是一面国旗；其余按 [`joined`] 逐个接上。
 pub fn sequence_len(chars: impl IntoIterator<Item = char>) -> usize {
@@ -193,8 +190,9 @@ pub fn sequence_len(chars: impl IntoIterator<Item = char>) -> usize {
     len
 }
 
-/// 字符 `c` 紧跟在 `previous` 之后时是否可能属于同一个 emoji 序列；逐字符的循环用它排除普通
-/// 文字，为真时再用 [`sequence_len`] 或 [`joined`] 确认。
+/// 字符 `c` 紧跟 `previous` 时是否可能属于同一个 emoji 序列。
+///
+/// 用于在逐字符的循环中排除普通文字；为真时再用 [`sequence_len`] 或 [`joined`] 确认。
 #[inline]
 pub fn may_join(previous: char, c: char) -> bool {
     c >= ZWJ

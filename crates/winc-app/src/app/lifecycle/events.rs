@@ -668,7 +668,7 @@ impl App {
         let copying = self.copy_tick(now);
         earliest(&mut wake, copying);
 
-        // 鼠标在标题指示条上停留够久：展开标题列表并淡入。
+        // 鼠标在标题指示条上停留满 `TOC_HOVER_DELAY`：展开标题列表。
         if let Some(since) = self.preview.markdown.toc_rest
             && !self.preview.markdown.toc_shown
         {

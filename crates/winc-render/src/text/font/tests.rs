@@ -530,7 +530,7 @@ fn emoji_use_the_color_font_before_symbol_fonts() {
     let emoji = fonts.emoji;
     assert!(fonts.fallbacks.contains(&emoji));
     fonts.ensure_loaded(emoji);
-    // 没有装彩色 emoji 字体的精简系统中不做比较。
+    // 系统中没有彩色 emoji 字体时不做比较。
     let Some(face) = fonts.face(emoji) else {
         return;
     };

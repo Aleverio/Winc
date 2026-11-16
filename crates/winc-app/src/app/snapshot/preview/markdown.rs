@@ -830,8 +830,8 @@ fn markdown_images_render_one_size_at_a_time() {
     assert_eq!(drawing, &[(100, 50)]);
 }
 
-/// 预览左侧有标题指示条，每个标题一条；鼠标在指示条上停留片刻后标题列表在原处展开，点击一项
-/// 滚动到该标题。分栏时预览变窄，正文同样给指示条留出位置。
+/// 预览左侧有标题指示条，每个标题一条；鼠标停留满延时后标题列表在原处展开，点击一项滚动到该标题。
+/// 分栏时正文同样为指示条留出位置。
 #[test]
 fn the_preview_shows_a_heading_indicator() {
     use crate::app::preview::markdown::TocTarget;
@@ -848,7 +848,7 @@ fn the_preview_shows_a_heading_indicator() {
     let bars = find(&app, TocTarget::Bars).unwrap();
     assert!(find(&app, TocTarget::Heading(0)).is_none());
 
-    // 鼠标刚移到指示条上（从文件树移向正文时扫过）：列表不展开；停留片刻后展开。
+    // 鼠标刚进入指示条时列表不展开，停留满延时后展开。
     app.on_mouse_move(bars.x + 20.0, bars.y + 10.0);
     paint(&mut app);
     assert!(matches!(app.pointer.hover, Hover::MarkdownToc(_)));
@@ -877,7 +877,7 @@ fn the_preview_shows_a_heading_indicator() {
     paint(&mut app);
     assert_eq!(app.preview.markdown.toc_current, Some(1));
 
-    // 指示条在正文和原文行号的左边，不盖住它们，也不超出预览。
+    // 指示条位于正文和原文行号的左侧，不与二者重叠，也不超出预览区域。
     let left = app.preview.markdown.layout.as_ref().unwrap().left;
     let area = app.preview.markdown.area;
     // 列表展开着时卡片也记作 `Bars`，指示条本身总是最后一项。
@@ -895,7 +895,7 @@ fn the_preview_shows_a_heading_indicator() {
     paint(&mut app);
     assert_eq!(app.preview.markdown.toc_current, Some(1));
 
-    // 分栏时预览较窄：正文同样给指示条留出位置，指示条不盖住正文。
+    // 分栏时预览较窄：正文同样为指示条留出位置，二者不重叠。
     app.set_preview_mode(PreviewMode::Split);
     settle(&mut app);
     let left = app.preview.markdown.layout.as_ref().unwrap().left;
@@ -1156,8 +1156,7 @@ fn down_after_a_trailing_code_block_adds_a_paragraph() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// 展开的标题列表在滚动预览时留在原处：当前所在的一节变了，列表不随之上下移动；钉住的
-/// 列表同样不动。
+/// 滚动预览时，悬停展开的标题列表和钉住的列表位置不变。
 #[test]
 fn the_heading_list_stays_put_while_the_preview_scrolls() {
     use crate::app::preview::markdown::TocTarget;
@@ -1172,7 +1171,7 @@ fn the_heading_list_stays_put_while_the_preview_scrolls() {
     paint(&mut app);
     app.set_preview_mode(PreviewMode::Preview);
     settle(&mut app);
-    // 列表展开着时卡片记作最宽的一个 `Bars` 区域。
+    // 列表展开时，卡片是最宽的 `Bars` 区域。
     let card = |app: &App| {
         (app.hits.markdown_toc.iter())
             .filter(|(_, t)| *t == TocTarget::Bars)
@@ -1196,7 +1195,7 @@ fn the_heading_list_stays_put_while_the_preview_scrolls() {
         scroll_to(&mut app, heading);
         assert_eq!(card(&app), opened, "{heading}");
     }
-    // 移开再展开：位置按这时所在的一节重新确定。
+    // 收起后再次展开：位置按当时所在的一节重新确定。
     let area = app.preview.markdown.area;
     app.on_mouse_move(area.x + area.w / 2.0, area.y + area.h / 2.0);
     paint(&mut app);

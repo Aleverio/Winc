@@ -397,12 +397,11 @@ fn table_cells(c: char) -> usize {
     c.width().unwrap_or(0)
 }
 
-/// 逐字符计算显示列时记下的前两个字符：emoji 序列中的字符占几列取决于它们。
+/// 计算显示列时保存的前两个字符，用于判断其后的字符是否属于 emoji 序列。
 ///
-/// 一个 emoji 序列（见 [`winc_emoji::joined`]）合成一个 2 列宽的图形：接在前面字符之后的
-/// 字符不占列；变体选择符 16、肤色修饰符接在占 1 列的符号之后，以及键帽接在数字之后时
-/// 占 1 列，把图形补到 2 列。
-/// 从一行中间算起时用 [`Behind::after`] 给出该位置之前的两个字符，结果与从行首算起相同。
+/// 一个 emoji 序列（见 [`winc_emoji::joined`]）占 2 列：序列的后续字符不占列；变体选择符 16、
+/// 肤色修饰符接在占 1 列的符号之后，或键帽接在数字之后时占 1 列，补足 2 列。从行中间开始计算时用
+/// [`Behind::after`] 给出该位置之前的两个字符，结果与从行首计算相同。
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Behind {
     /// 前面第二个字符。
@@ -423,7 +422,7 @@ impl Behind {
         Self::after(at(2), at(1))
     }
 
-    /// 记下字符 `c`，不计算它占的列；调用方自己计算一串 ASCII 字符的宽度时用。
+    /// 记录字符 `c` 而不计算其列数，供自行计算 ASCII 字符宽度的调用方使用。
     #[inline]
     pub fn pass(&mut self, c: char) {
         self.earlier = self.previous;
@@ -454,8 +453,8 @@ impl Behind {
         if !winc_emoji::joined((self.earlier, self.previous), c) {
             return table_cells(c);
         }
-        // 占 1 列的符号后面的选择符、修饰符把它补到 2 列；经连接符接进来的符号本身不占列，
-        // 不再补。ASCII 字符只在组成键帽时按 emoji 显示，由键帽补这 1 列。
+        // 选择符、修饰符接在占 1 列的符号之后时补 1 列；经连接符并入的符号不占列，不再补。ASCII
+        // 字符只在组成键帽时按 emoji 显示，由键帽补 1 列。
         let narrow = |p: char| table_cells(p) == 1 && self.earlier != Some(winc_emoji::ZWJ);
         let widens = match c {
             winc_emoji::KEYCAP => true,
@@ -466,10 +465,10 @@ impl Behind {
     }
 }
 
-/// 返回 `chars` 开头的一个字符连同接在它后面的 emoji 序列从显示列 `cell` 起占的显示列数；
+/// 返回 `chars` 的首字符及其后属于同一 emoji 序列的字符从显示列 `cell` 起占的显示列数；
 /// `chars` 为空时返回 0。
 ///
-/// 块状光标和按列选择用它取一个字实际占的宽度：`❤` 加变体选择符占 2 列。
+/// 用于块状光标和按列选择：`❤` 加变体选择符占 2 列。
 ///
 /// # Panics
 ///

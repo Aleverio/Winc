@@ -216,8 +216,8 @@ pub(super) fn draw_line(
         let mut col = part.start;
         // 前一个占格子的字：所在列和占几格，组合字符画在它上面。
         let mut base: Option<(usize, usize)> = None;
-        // 当前字符在 `part.text` 中的字节偏移；emoji 序列在第一个字符处整个绘制，`joined`
-        // 之前的字符属于已绘制的序列。
+        // 当前字符在 `part.text` 中的字节偏移。emoji 序列随首字符整体绘制；
+        // `joined` 之前的字符已经绘制。
         let (mut offset, mut joined) = (0, 0);
         if !attrs.has(Attrs::HIDDEN) {
             for (c, w) in cells(part.text) {
@@ -287,7 +287,7 @@ pub(super) fn draw_line(
     }
 }
 
-/// `text` 开头是由几个字符组成的 emoji 序列时返回这个序列，否则返回 `None`。
+/// `text` 以多字符的 emoji 序列开头时返回该序列，否则返回 `None`。
 fn sequence_prefix(text: &str) -> Option<&str> {
     let mut chars = text.chars();
     let (first, next) = (chars.next()?, chars.next()?);
@@ -642,7 +642,7 @@ pub(super) fn draw_preedit(
     );
     let mut px = x;
     let font = (FontKind::Terminal, app.fonts.terminal, cell);
-    // emoji 序列在第一个字符处整个绘制，`joined` 之前的字符属于已绘制的序列。
+    // emoji 序列随首字符整体绘制；`joined` 之前的字符已经绘制。
     let mut joined = 0;
     for (col, &width) in cells.iter().enumerate() {
         if col >= joined {

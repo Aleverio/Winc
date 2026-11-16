@@ -254,7 +254,7 @@ fn log_files_are_detected_with_rotation_suffixes() {
 
 #[test]
 fn every_markdown_extension_is_detected() {
-    // 与预览认的扩展名相同：按语言决定能否预览，这些文件打开后都能预览。
+    // 扩展名与可预览的文件类型一致：能否预览取决于语言。
     for name in ["a.md", "a.markdown", "a.mdown", "a.mkd", "a.mkdn", "A.MD"] {
         assert_eq!(detect(name).id, "markdown", "{name}");
     }

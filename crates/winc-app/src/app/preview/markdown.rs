@@ -173,20 +173,20 @@ pub(crate) struct MarkdownPreview {
     pub last_table: Option<(usize, usize)>,
     /// 标题列表展开时淡入的时钟；不在淡入中时为 `None`。
     pub toc_fade: Option<crate::app::animation::Clock>,
-    /// 鼠标移到标题指示条上的时刻；不在指示条和标题列表上时为 `None`。停留满
-    /// `TOC_HOVER_DELAY` 后列表展开。
+    /// 鼠标进入标题指示条的时刻，满 `TOC_HOVER_DELAY` 后列表展开；
+    /// 不在指示条和标题列表上时为 `None`。
     pub toc_rest: Option<std::time::Instant>,
-    /// 这次停留是否已经展开了标题列表。
+    /// 本次停留是否已展开标题列表。
     pub toc_shown: bool,
-    /// 正文左边缘在排版中的位置（窗口坐标，逻辑像素）：钉住、取消钉住的过渡结束后所在之处。
+    /// 正文左边缘在钉住过渡结束后的位置（窗口坐标，逻辑像素）。
     pub toc_left: f32,
-    /// 钉住、取消钉住之前正文左边缘的位置（窗口坐标，逻辑像素）：过渡期间正文从这里滑到
+    /// 钉住过渡开始时正文左边缘的位置（窗口坐标，逻辑像素），终点是
     /// [`Self::toc_left`]；不在过渡中时为 `None`。
     pub toc_slide: Option<f32>,
-    /// 鼠标移开后标题列表收起的时钟；不在收起中时为 `None`。
+    /// 标题列表收起过渡的时钟；不在收起中时为 `None`。
     pub toc_close: Option<crate::app::animation::Clock>,
-    /// 鼠标停留展开的标题列表上边缘相对预览区域上边缘的位置（逻辑像素），展开时确定；列表
-    /// 收起后为 `None`。滚动预览时当前所在的一节会变，列表留在原处，不随之上下移动。
+    /// 悬停展开的标题列表上边缘相对预览区域上边缘的位置（逻辑像素）：展开时确定，
+    /// 滚动预览时不变，收起后为 `None`。
     pub toc_top: Option<f32>,
     /// 标题列表钉住（`true`）或取消钉住（`false`）的过渡时钟；不在过渡中时为 `None`。
     pub toc_pin: Option<(bool, crate::app::animation::Clock)>,

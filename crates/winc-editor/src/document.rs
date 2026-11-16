@@ -1067,8 +1067,8 @@ impl Document {
     /// 改用状态栏中选择的语言 `language`：重建高亮状态，并使按内容缓存的结果失效，见
     /// [`Document::set_language`]。
     ///
-    /// 文件之后重命名或另存为时，按新的文件名重新识别。能否预览取决于语言：正在预览或分栏
-    /// 的文档换成预览方式不同的语言时先回到源代码。
+    /// 文件重命名或另存为之后按新文件名重新识别。
+    /// 预览或分栏中的文档换成预览方式不同的语言时先回到源代码。
     pub fn choose_language(&mut self, language: &'static winc_syntax::Language) {
         if self.preview_mode() != PreviewMode::Source
             && PreviewKind::of(language) != self.preview_kind()

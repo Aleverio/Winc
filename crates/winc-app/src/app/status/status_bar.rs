@@ -286,7 +286,7 @@ impl App {
     ///
     /// 文件之后改名、另存为时按新的文件名重新识别。
     pub(in crate::app) fn use_language(&mut self, language: &'static winc_syntax::Language) {
-        // 能否预览取决于语言：正在预览或分栏时换成预览方式不同的语言，先回到源代码。
+        // 预览或分栏中换成预览方式不同的语言时，先回到源代码。
         let leaves = self.editor.active().is_some_and(|doc| {
             doc.preview_mode() != PreviewMode::Source
                 && winc_editor::PreviewKind::of(language) != doc.preview_kind()

@@ -195,7 +195,7 @@ fn emoji_sequences_are_never_split_across_rows() {
         ["ab", "1\u{fe0f}\u{20e3}c"]
     );
     assert_eq!(split("ab🇨🇳c", 3), ["ab", "🇨🇳c"]);
-    // 序列比行宽还宽时整个占一段，其后照常断开。
+    // 序列宽于行宽时独占一段，其后正常断开。
     assert_eq!(
         split("👨\u{200d}👩\u{200d}👧ab", 1),
         ["👨\u{200d}👩\u{200d}👧", "a", "b"]

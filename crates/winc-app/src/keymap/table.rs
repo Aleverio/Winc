@@ -297,7 +297,7 @@ pub fn bindings(os: Os) -> Vec<Binding> {
     t.one(MarkdownItalic, Markdown, c(cmd, 'i'));
     t.one(MarkdownCode, Markdown, c(cmd, 'e'));
     t.one(MarkdownStrikethrough, Markdown, c(cmd | shift, 'x'));
-    // 与在文件中替换同键：范围小于全局，只在可编辑的预览中执行。
+    // 与「在文件中替换」同键：该绑定只在可编辑的预览中生效，在其中优先于全局绑定。
     t.one(MarkdownHighlight, Markdown, c(cmd | shift, 'h'));
     // 复制代码引用（`路径:行`）：⌘I 是相对路径，⌘L 是绝对路径（其他系统上 Ctrl）。
     t.one(CopyReference, Editor, c(cmd, 'i'));

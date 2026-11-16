@@ -514,9 +514,9 @@ impl Frame<'_> {
     /// 在等宽网格上绘制 emoji 序列 `unit`，它占 `cells` 个格子（每格宽 `cell`，逻辑像素）；
     /// 返回是否已绘制。
     ///
-    /// 序列由 emoji 字体合成：比占用的格子窄时在它需要的几格内水平居中，比格子宽时缩小到恰好
-    /// 放下，不盖住后面的字符。按文字显示的序列、系统中没有 emoji 字体时不绘制并返回假，调用方
-    /// 逐字符绘制。
+    /// 序列由 emoji 字体合成：窄于所占的格子时在图形所需的几格内水平居中，
+    /// 宽于格子时缩小到恰好容纳。按文字显示的序列或系统中没有 emoji 字体时返回假，
+    /// 由调用方逐字符绘制。
     #[allow(clippy::too_many_arguments)]
     pub fn cell_sequence(
         &mut self,
@@ -541,8 +541,7 @@ impl Frame<'_> {
             size
         };
         let advance = advance.min(room);
-        // 只在图形实际占用的几格内居中：用连接符连起来的序列占的格数多于图形的宽度，图形靠左，
-        // 其余的格留空。
+        // 连接符序列占的格数可能多于图形的宽度：只在图形所需的几格内居中，其余的格留空。
         let used = (advance / cell).ceil().max(1.0) * cell;
         let at = (x + (used.min(room) - advance) / 2.0, baseline);
         let base = unit.chars().next().unwrap_or(' ');

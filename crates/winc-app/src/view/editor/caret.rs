@@ -18,6 +18,16 @@ pub(super) fn reads_head_only(content: &str) -> bool {
     cut_by(content, MAX_LINE_BYTES)
 }
 
+/// `content` 是否超出一行默认显示的部分：字符数超过 [`MAX_LINE_CHARS`]，或只读到了该行的开头（见
+/// [`reads_head_only`]）。
+///
+/// 这样的行按整行断开时，绘制、定位和缩略图使用行内窗口（`Document::line_window`）。
+pub(super) fn exceeds_head(content: &str) -> bool {
+    // 字节数不超过 `MAX_LINE_CHARS` 时字符数必然不超过，无需计数。
+    reads_head_only(content)
+        || (content.len() > MAX_LINE_CHARS && content.chars().nth(MAX_LINE_CHARS).is_some())
+}
+
 /// 按 `cap` 字节的上限逐行读取时，返回的 `content` 是否可能只是该行的开头部分。
 ///
 /// 截断处不切开字符，截断后的内容最多比上限少 3 个字节（UTF-8 字符最长 4 字节）。
@@ -141,7 +151,7 @@ pub(super) fn draw_wrapped_selection(
             let count = doc.rows_of(line);
             let shown = visible_parts(y, count, clip, lh);
             let parts = shown.start.saturating_sub(1)..(shown.end + 1).min(count);
-            let window = (count > 1 && reads_head_only(content))
+            let window = (count > 1 && exceeds_head(content))
                 .then(|| doc.line_window(line, parts.clone()))
                 .flatten();
             let (chars, breaks, truncated) = match &window {
@@ -374,7 +384,7 @@ pub(in crate::view) fn draw_caret(
     );
     let mut px = x;
     let font = (FontKind::Mono, app.fonts.code, cell);
-    // emoji 序列在第一个字符处整个绘制，`joined` 之前的字符属于已绘制的序列。
+    // emoji 序列随首字符整体绘制；`joined` 之前的字符已经绘制。
     let mut joined = 0;
 
     for (col, &width) in cells.iter().enumerate() {
@@ -396,9 +406,9 @@ pub(in crate::view) fn draw_caret(
 
 /// 绘制 Vim 模式的光标：覆盖字符 `c` 的块、字符下方的横线，或空心的块。
 ///
-/// `(x, y, width)` 是字符所占的位置与宽度，`baseline` 是所在行的基线，`under` 是光标所在的行
-/// 和列（行尾之后为 `None`）。光标在 emoji 序列上时块盖住整个序列。实心块之下的字符用背景色
-/// 重画；实心块与横线随光标闪烁，空心块不闪烁。
+/// `(x, y, width)` 是字符的位置与宽度，`baseline` 是所在行的基线，
+/// `under` 是光标所在的行和列（行尾之后为 `None`）。光标位于 emoji 序列上时块覆盖整个序列。
+/// 实心块之下的字符用背景色重绘；实心块与横线随光标闪烁，空心块不闪烁。
 pub(in crate::view) fn draw_modal_caret(
     app: &App,
     frame: &mut Frame<'_>,
@@ -411,7 +421,7 @@ pub(in crate::view) fn draw_modal_caret(
     let p = app.palette;
     let cell = app.metrics.cell;
     let under = under.filter(|&(chars, col)| col < chars.len());
-    // 光标在 emoji 序列上时块盖住整个序列；不是序列时就是调用方给的宽度。
+    // 光标位于 emoji 序列上时块覆盖整个序列，否则取调用方给出的宽度。
     let width = under.map_or(width, |(chars, col)| {
         let len = winc_emoji::sequence_len(chars[col..].iter().copied());
         let span = text::sequence_cells(chars[col..col + len].iter().copied(), 0, 1);
