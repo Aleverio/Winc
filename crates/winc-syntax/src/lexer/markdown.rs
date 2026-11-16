@@ -172,7 +172,7 @@ impl Lexer<'_> {
             '`' => Some(self.code_span(i)),
             // CommonMark：反斜杠只转义 ASCII 标点，`\*` 不开始强调。
             '\\' if chars.get(i + 1).is_some_and(char::is_ascii_punctuation) => Some(i + 2),
-            '*' | '_' | '~' => Some(self.emphasis(i)),
+            '*' | '_' | '~' | '=' => Some(self.emphasis(i)),
             '[' => self.link(i, i),
             '!' if chars.get(i + 1) == Some(&'[') => self.link(i, i + 1),
             '<' => self.angle(i),
@@ -206,10 +206,10 @@ impl Lexer<'_> {
         open
     }
 
-    /// 识别 `i` 处开始的强调（`*a*`、`**a**`、`_a_`、`~~a~~`），返回其后的位置。
+    /// 识别 `i` 处开始的强调（`*a*`、`**a**`、`_a_`、`~~a~~`、`==a==`），返回其后的位置。
     ///
     /// 开头的标记串之后不能是空白，收尾的标记串与开头等长、之前不能是空白；`_` 在单词内部
-    /// （`snake_case`）不算。本行内找不到收尾时，标记串是普通文本。
+    /// （`snake_case`）不算，`=` 只认恰好两个。本行内找不到收尾时，标记串是普通文本。
     fn emphasis(&mut self, i: usize) -> usize {
         let chars = self.chars;
         let mark = chars[i];
@@ -218,6 +218,7 @@ impl Lexer<'_> {
         let word = |c: Option<&char>| c.is_some_and(|c| c.is_alphanumeric());
         if chars.get(open).is_none_or(|c| c.is_whitespace())
             || (mark == '_' && i > 0 && word(chars.get(i - 1)))
+            || (mark == '=' && len != 2)
         {
             return open;
         }
@@ -231,7 +232,7 @@ impl Lexer<'_> {
                 && !(mark == '_' && word(chars.get(run_end)))
             {
                 let kind = match (mark, len) {
-                    ('~', _) | (_, 1) => TokenKind::Emphasis,
+                    ('~' | '=', _) | (_, 1) => TokenKind::Emphasis,
                     _ => TokenKind::Strong,
                 };
                 self.push(i, run_end, kind);

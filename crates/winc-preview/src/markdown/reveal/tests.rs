@@ -28,6 +28,11 @@ fn only_the_touched_element_shows_its_markers() {
     assert_eq!(shown("|默认 **关** 和 `x`"), "默认 关 和 x");
     assert_eq!(shown("默认 **关|** 和 `x`"), "默认 ‹**›关‹**› 和 x");
     assert_eq!(shown("默认 **关** 和 |`x`"), "默认 关 和 ‹`›x‹`›");
+    // 荧光笔文字同理：光标接触时才显示两侧的 `==`。
+    assert_eq!(shown("|默认 ==关== 和"), "默认 关 和");
+    assert_eq!(shown("默认 ==关|== 和"), "默认 ‹==›关‹==› 和");
+    assert_eq!(shown("默认 ==|关== 和"), "默认 ‹==›关‹==› 和");
+    assert_eq!(shown("默认 ==关== 和|"), "默认 关 和");
     assert_eq!(shown("见 [文档|](a.md)。"), "见 ‹[›文档‹](a.md)›。");
     // 嵌套元素只显示被接触的各层。
     assert_eq!(shown("**粗 *斜|* 粗**"), "‹**›粗 ‹*›斜‹*› 粗‹**›");

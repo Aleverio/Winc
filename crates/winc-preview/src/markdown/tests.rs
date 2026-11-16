@@ -640,3 +640,50 @@ fn a_task_box_without_text_is_already_a_task_item() {
         assert!(paragraph(&items[0].blocks[0]).text.is_empty(), "{text}");
     }
 }
+
+#[test]
+fn double_equals_marks_highlighted_text() {
+    let marked = |text: &str| -> Vec<String> {
+        let doc = parse(text);
+        let inline = paragraph(&doc.blocks[0]);
+        spans(inline)
+            .into_iter()
+            .filter(|(_, flags)| flags & Style::MARK != 0)
+            .map(|(text, _)| text.to_owned())
+            .collect()
+    };
+    let shown = |text: &str| paragraph(&parse(text).blocks[0]).text.clone();
+    assert_eq!(marked("甲 ==乙丙== 丁"), ["乙丙"]);
+    assert_eq!(shown("甲 ==乙丙== 丁"), "甲 乙丙 丁");
+    // 一段里可以有几处；里面可以有粗体、链接，外面也可以包着粗体。
+    assert_eq!(marked("==a== b ==c=="), ["a", "c"]);
+    assert_eq!(marked("==a **b** c=="), ["a ", "b", " c"]);
+    assert_eq!(shown("**==a==** ==[b](https://x.dev)=="), "a b");
+    assert_eq!(marked("**==a==** ==[b](https://x.dev)=="), ["a", "b"]);
+    // 不成对、两侧是空白、三个以上的 `=`、空的一对，以及行内代码和公式中的都不算。
+    for plain in [
+        "a == b",
+        "a == b and c == d",
+        "==a",
+        "a==",
+        "====",
+        "===a===",
+        "`==a==`",
+        "$==a==$",
+        "== a ==",
+    ] {
+        assert!(marked(plain).is_empty(), "{plain}");
+    }
+    assert_eq!(shown("a == b and c == d"), "a == b and c == d");
+    // 文字与原文的对照跳过两侧的标记：「乙」对应原文中 `==` 之后的位置。
+    let doc = parse("甲 ==乙== 丁");
+    let inline = paragraph(&doc.blocks[0]);
+    let at = inline.text.find('乙').unwrap();
+    assert_eq!(inline.map.source(at), Some("甲 ==".len()));
+    assert_eq!(
+        inline.map.source(inline.text.find('丁').unwrap()),
+        Some("甲 ==乙== ".len())
+    );
+    // HTML 的写法同样是这个样式。
+    assert_eq!(marked("甲 <mark>乙</mark> 丁"), ["乙"]);
+}

@@ -39,7 +39,8 @@ pub fn reveal(text: &str, caret: Option<usize>, insert: Option<&str>) -> Block {
         _ => return Block::Paragraph(lines.verbatim()),
     };
     let base = parsed.ranges.first().map_or(0, |r| r.start) + inline.source;
-    let elements = elements(plain);
+    let mut elements = elements(plain);
+    elements.extend(highlights(inline, base, plain));
     let mut out = Out {
         insert: caret.zip(insert).map(|(at, text)| (at, text.to_owned())),
         ..Out::default()
@@ -93,7 +94,8 @@ pub fn reveal(text: &str, caret: Option<usize>, insert: Option<&str>) -> Block {
 
 /// 带标记的行内元素在 `plain` 中的字节范围。
 ///
-/// 包括强调、粗体、删除线、链接、图片、行内代码、公式、HTML 标签和脚注引用。
+/// 包括强调、粗体、删除线、链接、图片、行内代码、公式、HTML 标签和脚注引用；荧光笔文字见
+/// [`highlights`]。
 fn elements(plain: &str) -> Vec<Range<usize>> {
     Parser::new_ext(plain, options())
         .into_offset_iter()
@@ -114,6 +116,33 @@ fn elements(plain: &str) -> Vec<Range<usize>> {
             )
         })
         .map(|(_, range)| range)
+        .collect()
+}
+
+/// 用 `==` 标出的荧光笔文字在 `plain` 中的字节范围，含两侧的 `==`。
+///
+/// `inline` 是 `plain` 解析出的行内文字，`base` 是它的原文对照相对 `plain` 的起点。HTML 的
+/// `<mark>` 同样带有该样式，两侧不是 `==`，不在此列。
+fn highlights(inline: &Inline, base: usize, plain: &str) -> Vec<Range<usize>> {
+    let mut found = Vec::new();
+    let mut open: Option<Range<usize>> = None;
+    let marked = inline.runs().filter(|(_, style)| style.has(Style::MARK));
+    for (range, _) in marked.chain([(usize::MAX..usize::MAX, Style::default())]) {
+        match &mut open {
+            Some(group) if group.end == range.start => group.end = range.end,
+            _ => {
+                found.extend(open.replace(range));
+            }
+        }
+    }
+    found
+        .into_iter()
+        .filter_map(|text| {
+            let start = base + inline.map.source(text.start)?;
+            let end = base + inline.map.source(text.end.checked_sub(1)?)? + 1;
+            let marks = |at: usize| plain.get(at..at + 2) == Some("==");
+            (marks(start.checked_sub(2)?) && marks(end)).then(|| start - 2..end + 2)
+        })
         .collect()
 }
 

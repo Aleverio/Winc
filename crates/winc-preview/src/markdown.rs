@@ -427,7 +427,7 @@ impl Style {
     pub const MATH: u16 = 1 << 7;
     /// 下划线（HTML 的 `<u>`、`<ins>`）。
     pub const UNDERLINE: u16 = 1 << 8;
-    /// 荧光笔底色（HTML 的 `<mark>`）。
+    /// 荧光笔底色（`==文字==`，或 HTML 的 `<mark>`）。
     pub const MARK: u16 = 1 << 9;
     /// 小一号的字（HTML 的 `<small>`）。
     pub const SMALL: u16 = 1 << 10;
@@ -876,6 +876,7 @@ impl Builder<'_> {
         };
         emoji::shortcodes(&mut inline);
         autolink::autolink(&mut inline);
+        highlight::highlight(&mut inline);
         if leaf != Leaf::Cell && inline.align == Align::None {
             inline.align = self.aligns.last().copied().unwrap_or_default();
         }
@@ -1453,6 +1454,7 @@ mod emoji;
 pub mod enter;
 pub mod format;
 mod front;
+mod highlight;
 mod html;
 mod shrink;
 pub(crate) use html::named_entity;

@@ -680,6 +680,23 @@ fn format_commands_toggle_inline_marks_in_the_live_preview() {
     assert!(app.run_action(Action::MarkdownBold));
     settle(&mut app);
     assert!(doc_text(&app).starts_with("正文 粗体 字\n"));
+    // 荧光笔同样用一对标记切换，预览中这段文字带上荧光笔的样式。
+    select(&mut app, "粗体");
+    assert!(app.run_action(Action::MarkdownHighlight));
+    settle(&mut app);
+    assert!(doc_text(&app).starts_with("正文 ==粗体== 字\n"));
+    let parsed = app.preview.markdown.parsed.clone().unwrap();
+    let winc_preview::markdown::Block::Paragraph(inline) = &parsed.blocks[0] else {
+        panic!("{:?}", parsed.blocks[0]);
+    };
+    let marked: Vec<&str> = (inline.runs())
+        .filter(|(_, style)| style.has(winc_preview::markdown::Style::MARK))
+        .map(|(range, _)| &inline.text[range])
+        .collect();
+    assert_eq!(marked, ["粗体"]);
+    assert!(app.run_action(Action::MarkdownHighlight));
+    settle(&mut app);
+    assert!(doc_text(&app).starts_with("正文 粗体 字\n"));
     put_caret(&mut app, "字", true);
     assert!(app.run_action(Action::MarkdownCode));
     assert_eq!(with_caret(&app), "正文 粗体 字`|`\n\n```\ncode\n```\n");

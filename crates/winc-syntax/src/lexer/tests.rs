@@ -1424,3 +1424,16 @@ fn log_lines_color_timestamps_levels_and_locations() {
         assert_eq!(tokens(line), [], "{line}");
     }
 }
+
+#[test]
+fn markdown_highlight_marks_are_colored() {
+    let kinds = |line: &str| lex("a.md", line, LineState::Normal).0;
+    assert_eq!(
+        kinds("甲 ==乙丙== 丁"),
+        vec![("==乙丙==".into(), TokenKind::Emphasis)]
+    );
+    // 两侧是空白、不成对或三个以上的 `=` 不算。
+    for line in ["a == b", "==a", "===a===", "a == b and c == d"] {
+        assert!(kinds(line).is_empty(), "{line}");
+    }
+}

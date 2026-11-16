@@ -248,8 +248,8 @@ fn command_palette_runs_commands_and_remembers_them() {
     // 行内格式只在可编辑的 Markdown 预览中列出。
     let installable = |a: &&crate::keymap::Action| {
         use crate::keymap::Action::{
-            InstallShellCommand, MarkdownBold, MarkdownCode, MarkdownItalic, MarkdownStrikethrough,
-            UninstallShellCommand,
+            InstallShellCommand, MarkdownBold, MarkdownCode, MarkdownHighlight, MarkdownItalic,
+            MarkdownStrikethrough, UninstallShellCommand,
         };
         !matches!(
             a,
@@ -259,6 +259,7 @@ fn command_palette_runs_commands_and_remembers_them() {
                 | MarkdownItalic
                 | MarkdownCode
                 | MarkdownStrikethrough
+                | MarkdownHighlight
         )
     };
     let always = (palette().iter())
