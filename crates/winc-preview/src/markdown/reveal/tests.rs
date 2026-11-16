@@ -76,4 +76,6 @@ fn highlight_markers_show_when_touched() {
     assert_eq!(shown("前面| ==高亮== 后面"), "前面 高亮 后面");
     // 不成对的 `==` 是文字。
     assert_eq!(shown("前面 == 高|亮 后面"), "前面 == 高亮 后面");
+    // 转义的 `\==` 是文字，不随光标显示为标记。
+    assert_eq!(shown("前面 \\==高|亮== 后面"), "前面 ==高亮== 后面");
 }

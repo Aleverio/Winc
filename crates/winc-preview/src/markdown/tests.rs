@@ -713,4 +713,40 @@ fn highlight_skips_code_and_escaped_marks() {
     let inline = paragraph(&doc.blocks[0]);
     assert_eq!(inline.text, "a ==b==");
     assert!(inline.runs().all(|(_, style)| !style.has(Style::MARK)));
+    // 转义的标记不参与配对：其前后的标记仍然成对。
+    let doc = parse("==a\\==b==");
+    assert_eq!(
+        spans(paragraph(&doc.blocks[0])),
+        vec![("a==b", Style::MARK)]
+    );
+    // 两个反斜杠是转义的反斜杠，其后的 `==` 仍是标记。
+    let doc = parse("\\\\==a==");
+    assert_eq!(
+        spans(paragraph(&doc.blocks[0])),
+        vec![("\\", 0), ("a", Style::MARK)]
+    );
+}
+
+#[test]
+fn highlight_leaves_addresses_shown_as_link_text_alone() {
+    // 自动识别的网址和尖括号中的网址：显示的文字就是地址，其中的 `==` 不是标记。
+    for text in ["https://e.com/?q==x==y", "<https://e.com/?q==x==y>"] {
+        let doc = parse(text);
+        let inline = paragraph(&doc.blocks[0]);
+        assert_eq!(inline.text, "https://e.com/?q==x==y", "{text}");
+        assert_eq!(inline.links, ["https://e.com/?q==x==y"], "{text}");
+        assert!(
+            inline.runs().all(|(_, style)| !style.has(Style::MARK)),
+            "{text}"
+        );
+    }
+    // 链接文字不是地址时照常高亮，网址之外的文字不受影响。
+    let doc = parse("[==a==](https://e.com) 与 ==b== https://e.com/?q==x==y");
+    let inline = paragraph(&doc.blocks[0]);
+    assert_eq!(inline.text, "a 与 b https://e.com/?q==x==y");
+    let marked: Vec<&str> = (inline.runs())
+        .filter(|(_, style)| style.has(Style::MARK))
+        .map(|(range, _)| &inline.text[range])
+        .collect();
+    assert_eq!(marked, ["a", "b"]);
 }

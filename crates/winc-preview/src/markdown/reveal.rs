@@ -123,9 +123,11 @@ fn elements(plain: &str) -> Vec<Range<usize>> {
         }
     }
     elements.extend(
-        super::mark::pairs(plain, |at| code.iter().any(|range| range.contains(&at)))
-            .into_iter()
-            .map(|[open, close]| open.start..close.end),
+        super::mark::pairs(plain, |at| {
+            code.iter().any(|range| range.contains(&at)) || super::mark::escaped(plain, at)
+        })
+        .into_iter()
+        .map(|[open, close]| open.start..close.end),
     );
     elements
 }

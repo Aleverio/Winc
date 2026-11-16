@@ -245,29 +245,47 @@ impl Lexer<'_> {
 
     /// 识别 `i` 处开始的 `==高亮==`，返回其后的位置。
     ///
-    /// 开头的 `==` 之后不能是空白，收尾的 `==` 之前不能是空白，中间不能只有 `=`；本行内找不到
-    /// 收尾时，`=` 是普通文本。
+    /// 规则与预览相同：标记是恰好两个 `=`，行内代码中的和被反斜杠转义的不是标记；开头的标记与
+    /// 其后最近的标记配对，中间的文字不为空且两端不是空白。不成对时 `=` 是普通文本，后一个标记
+    /// 仍可作为开头。只在本行内查找收尾。
     fn highlight(&mut self, i: usize) -> usize {
         let chars = self.chars;
-        let Some(&next) = chars.get(i + 2) else {
-            return i + 1;
-        };
-        if chars.get(i + 1) != Some(&'=') || next == '=' || next.is_whitespace() {
-            return i + 1;
+        let run = |at: usize, c: char| chars[at..].iter().take_while(|&&x| x == c).count();
+        let marks = run(i, '=');
+        if marks != 2 {
+            return i + marks;
         }
         let mut j = i + 2;
-        while j + 1 < chars.len() {
-            if chars[j] == '='
-                && chars[j + 1] == '='
-                && !chars[j - 1].is_whitespace()
-                && chars.get(j + 2) != Some(&'=')
-            {
-                self.push(i, j + 2, TokenKind::Emphasis);
-                return j + 2;
+        while j < chars.len() {
+            match chars[j] {
+                '\\' if chars.get(j + 1).is_some_and(char::is_ascii_punctuation) => j += 2,
+                // 行内代码以等长的反引号串收尾；没有收尾时反引号是普通文本。
+                '`' => {
+                    let ticks = run(j, '`');
+                    let mut k = j + ticks;
+                    while k < chars.len() && (chars[k] != '`' || run(k, '`') != ticks) {
+                        k += if chars[k] == '`' { run(k, '`') } else { 1 };
+                    }
+                    j = if k < chars.len() {
+                        k + ticks
+                    } else {
+                        j + ticks
+                    };
+                }
+                '=' if run(j, '=') == 2 => {
+                    let inner = &chars[i + 2..j];
+                    let blank = |c: Option<&char>| c.is_none_or(|c| c.is_whitespace());
+                    if blank(inner.first()) || blank(inner.last()) {
+                        break;
+                    }
+                    self.push(i, j + 2, TokenKind::Emphasis);
+                    return j + 2;
+                }
+                '=' => j += run(j, '='),
+                _ => j += 1,
             }
-            j += 1;
         }
-        i + 1
+        i + 2
     }
 
     /// 识别 `bracket` 处 `[` 开始的链接（`[a](url)`、`[a][ref]`），返回其后的位置。

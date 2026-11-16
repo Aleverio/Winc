@@ -51,31 +51,28 @@ pub(super) fn pairs(text: &str, inside: impl Fn(usize) -> bool) -> Vec<Pair> {
 
 /// 把 `inline` 里的 `==高亮==` 标成 [`Style::MARK`]，并去掉两个标记。
 ///
-/// `source` 是原文；`inline.map` 的位置相对于它。原文里写作 `\==` 的是转义的文字，不当作
-/// 标记（`\=` 解析之后文字里是 `=`，只看文字分不出来）。
+/// `source` 是原文，`inline.map` 的位置相对于它。原文中写作 `\==` 的是转义的文字，不作为标记：
+/// 解析之后文字中同样是 `==`，需要对照原文区分。
 pub(super) fn apply(inline: &mut Inline, source: &str) {
     if !inline.text.contains('=') {
         return;
     }
     let styles: Vec<(Range<usize>, Style)> = inline.runs().collect();
-    let style_at = |at: usize| {
-        styles
-            .iter()
-            .find(|(range, _)| range.contains(&at))
-            .map_or(Style::default(), |&(_, style)| style)
+    // 行内代码、公式和转义的 `==` 是文字。链接文字本身是地址的一部分时（自动识别的网址）
+    // 同样是文字：去掉其中的标记会使显示的地址与实际地址不同。
+    let literal = |at: usize| {
+        let Some((range, style)) = styles.iter().find(|(range, _)| range.contains(&at)) else {
+            return false;
+        };
+        let address = (style.link as usize)
+            .checked_sub(1)
+            .and_then(|k| inline.links.get(k));
+        style.has(Style::CODE)
+            || style.has(Style::MATH)
+            || address.is_some_and(|url| url.contains(&inline.text[range.clone()]))
+            || !in_source(inline, source, at)
     };
-    let found = pairs(&inline.text, |at| {
-        let style = style_at(at);
-        style.has(Style::CODE) || style.has(Style::MATH)
-    });
-    // 转义的标记留在文字里，当作普通文字。
-    let found: Vec<Pair> = found
-        .into_iter()
-        .filter(|pair| {
-            pair.iter()
-                .all(|mark| in_source(inline, source, mark.start))
-        })
-        .collect();
+    let found = pairs(&inline.text, literal);
     if found.is_empty() {
         return;
     }
@@ -167,13 +164,22 @@ pub(super) fn apply(inline: &mut Inline, source: &str) {
     inline.map = map;
 }
 
-/// `at` 处的 `==` 在原文中是否也是紧挨着的两个 `=`，且不是 `\==` 转义出来的。
+/// 文字中 `at` 处的 `==` 在原文中是否同样是相邻的两个 `=`，且未被反斜杠转义。
 fn in_source(inline: &Inline, source: &str, at: usize) -> bool {
     let Some(start) = inline.map.source(at) else {
         return false;
     };
-    let bytes = source.as_bytes();
-    bytes.get(start) == Some(&b'=')
-        && bytes.get(start + 1) == Some(&b'=')
-        && (start == 0 || bytes[start - 1] != b'\\')
+    source.as_bytes().get(start..start + 2) == Some(b"==") && !escaped(source, start)
+}
+
+/// 原文 `source` 中字节偏移 `at` 处的字符是否被反斜杠转义：之前紧邻奇数个反斜杠。
+///
+/// 偶数个反斜杠两两组成转义的反斜杠，其后的字符不受影响。
+pub(super) fn escaped(source: &str, at: usize) -> bool {
+    let slashes = source.as_bytes()[..at]
+        .iter()
+        .rev()
+        .take_while(|&&b| b == b'\\')
+        .count();
+    slashes % 2 == 1
 }
