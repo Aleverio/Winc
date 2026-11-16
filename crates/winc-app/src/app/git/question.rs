@@ -75,19 +75,19 @@ impl QuestionView {
         }
     }
 
-    /// 左侧是菜单所属的提交，右侧输入要比较的版本。
-    pub(super) fn compare_revision(from: &str) -> Self {
+    /// 返回「与指定版本比较」对话框的内容：提交 `commit` 的提交号和一个输入框。
+    pub(super) fn compare_revision(commit: &str) -> Self {
         Self {
             title: t!("git-compare-revision-title").to_owned(),
             message: None,
             message_lines: 0,
             values: vec![QuestionValue {
-                label: t!("git-compare-left"),
-                text: from.to_owned(),
+                label: t!("git-compare-commit"),
+                text: commit.to_owned(),
                 mono: true,
             }],
             inputs: vec![QuestionInput {
-                label: t!("git-compare-right"),
+                label: t!("git-compare-with"),
                 placeholder: t!("git-go-to-placeholder"),
             }],
             confirm: t!("git-compare-button"),

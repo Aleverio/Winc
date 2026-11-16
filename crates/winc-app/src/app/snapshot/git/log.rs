@@ -1322,9 +1322,11 @@ fn log_compares_with_a_revision_missing_from_the_list() {
     open_compare(&mut app);
     app.edit_field(|f| f.insert(&"0".repeat(12)));
     enter(&mut app);
-    let failed = log(&app).compare.as_ref().unwrap();
-    assert!(failed.error.is_some());
-    assert!(failed.files.as_ref().unwrap().is_empty());
+    // 无法解析的版本：只提示原因，不进入比较。
+    paint(&mut app);
+    assert!(log(&app).compare.is_none());
+    let notice = app.notice.text.as_deref().unwrap_or_default();
+    assert!(notice.contains(&"0".repeat(12)), "{notice}");
 
     open_compare(&mut app);
     app.edit_field(|f| f.insert(&new[..12]));
@@ -1343,5 +1345,21 @@ fn log_compares_with_a_revision_missing_from_the_list() {
     assert_eq!(diff.old.text, before);
     assert_eq!(diff.new.text, after);
     assert_eq!(head(), tip);
+
+    // 输入的标签是所选提交的祖先：排在旧的一侧，显示标签名，取数据用解析出的提交号。
+    git_in(&root, &["tag", "base", "HEAD~1"]);
+    git_in(&root, &["checkout", "--quiet", "HEAD~1"]);
+    let base = head();
+    git_in(&root, &["checkout", "--quiet", "-"]);
+    app.run_action(Action::GitShowLog);
+    open_compare(&mut app);
+    app.edit_field(|f| f.insert("base"));
+    enter(&mut app);
+    paint(&mut app);
+    let compare = log(&app).compare.as_ref().unwrap();
+    assert_eq!((&compare.from, &compare.to), (&base, &old));
+    assert_eq!(compare.from_name.as_deref(), Some("base"));
+    assert_eq!(compare.to_name, None);
+    assert_eq!(compare.files.as_ref().unwrap().len(), 1);
     let _ = std::fs::remove_dir_all(&root);
 }

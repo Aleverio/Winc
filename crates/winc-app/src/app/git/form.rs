@@ -41,8 +41,8 @@ pub(crate) enum FormKind {
     Remote { editing: Option<String> },
     /// 在 Git 日志中转到一个提交：输入提交号、分支名或标签名。
     GoToRevision,
-    /// 比较日志中点到的提交与输入的版本。
-    CompareRevision { from: String },
+    /// 把 Git 日志中的提交 `commit` 与输入的提交号、分支名或标签名比较。
+    CompareRevision { commit: String },
     /// 按路径筛选 Git 日志：输入相对仓库根目录的路径或通配。
     LogPath,
     /// 交互式变基。
@@ -93,7 +93,7 @@ impl FormKind {
             FormKind::Remote { editing } => Some(QuestionView::remote(editing.as_deref())),
             FormKind::Connect => Some(QuestionView::connect()),
             FormKind::GoToRevision => Some(QuestionView::go_to_revision()),
-            FormKind::CompareRevision { from } => Some(QuestionView::compare_revision(from)),
+            FormKind::CompareRevision { commit } => Some(QuestionView::compare_revision(commit)),
             FormKind::LogPath => Some(QuestionView::log_path()),
             FormKind::Worktree
             | FormKind::Branch { .. }
@@ -540,11 +540,11 @@ impl App {
             self.go_to_log_revision(revision);
             return;
         }
-        if let FormKind::CompareRevision { from } = &dialog.kind {
-            let from = from.clone();
+        if let FormKind::CompareRevision { commit } = &dialog.kind {
+            let commit = commit.clone();
             let revision = dialog.name.text().trim().to_owned();
             self.close_form_dialog();
-            self.start_log_compare(from, revision, true);
+            self.compare_log_with_revision(commit, revision);
             return;
         }
         if matches!(dialog.kind, FormKind::LogPath) {

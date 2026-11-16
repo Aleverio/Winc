@@ -53,7 +53,7 @@ pub struct LogView {
     pub query: LogQuery,
     /// 正在比较两个版本（两个提交，或者两个分支）：详情一栏换成两者之间改了的文件。
     pub compare: Option<Compare>,
-    /// 最近一次比较请求的编号；后台返回时编号不一致就丢弃。
+    /// 发起或退出比较的次数；与输入的版本比较的结果返回时次数已变即为过时，不再使用。
     pub compare_request: u64,
     /// 重取了、新的第一批还没到。
     ///
@@ -127,6 +127,10 @@ pub struct Compare {
     pub from: String,
     /// 新的一边。
     pub to: String,
+    /// `from` 由输入的分支名或标签名解析而来时的那个名称，显示时代替提交号。
+    pub from_name: Option<String>,
+    /// `to` 由输入的分支名或标签名解析而来时的那个名称，显示时代替提交号。
+    pub to_name: Option<String>,
     /// 改了的文件；取回来之前为 `None`。
     pub files: Option<Vec<CommitFile>>,
     /// 取文件列表失败的原因。

@@ -322,6 +322,7 @@ pub enum MenuCommand {
     LogCompareWithLocal,
     /// 日志：转到提交号、分支或标签。
     LogGoTo,
+    /// 日志里的提交：与输入的提交号、分支或标签比较。
     LogCompareRevision,
     /// 编辑区：开关逐行追溯（开着时打勾）。
     ToggleBlame,

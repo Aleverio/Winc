@@ -333,8 +333,17 @@ enum Loaded {
     /// 比较两个版本时两者之间改动的文件。
     Compare {
         doc: DocumentId,
+        from: String,
+        to: String,
+        files: Result<Vec<CommitFile>, String>,
+    },
+    /// 与输入的版本 `revision` 比较的结果：两侧已按先后排好，文件已取回。
+    CompareRevision {
+        doc: DocumentId,
+        /// 发起时的 `LogView::compare_request`。
         request: u64,
-        result: Result<(String, Vec<CommitFile>), String>,
+        revision: String,
+        result: Result<Compare, String>,
     },
     /// 一个文件在一次提交中的差异，打开为标签。
     Diff {
