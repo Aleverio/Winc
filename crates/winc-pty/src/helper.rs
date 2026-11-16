@@ -959,12 +959,12 @@ fn environment(env: Vec<(Vec<u8>, Vec<u8>)>) -> Vec<(Vec<u8>, Vec<u8>)> {
     ];
     let mut env: Vec<_> = env
         .into_iter()
-        // winc 自己用的变量不给 shell；WINC_PROMPT 留给集成脚本，脚本读完即删除。
+        // winc 自己用的变量不给 shell；WINC_PROMPT、WINC_PYTHON 留给集成脚本，脚本读完即删除。
         .filter(|(key, _)| {
             !REPLACED.contains(&&key[..])
                 && !SESSION.contains(&&key[..])
                 && !SESSION_PREFIXES.iter().any(|p| key.starts_with(p))
-                && (!key.starts_with(b"WINC_") || key == b"WINC_PROMPT")
+                && (!key.starts_with(b"WINC_") || key == b"WINC_PROMPT" || key == b"WINC_PYTHON")
         })
         .collect();
     // 从图形界面启动的应用没有 `LANG`，shell 会把中文当成乱码、算错宽度。Windows 的程序不看这些

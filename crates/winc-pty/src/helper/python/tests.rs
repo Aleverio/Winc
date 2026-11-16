@@ -101,3 +101,18 @@ fn an_environment_without_an_interpreter_is_ignored() {
     t.activate(b"powershell.exe", &[], &mut env);
     assert!(env.is_empty());
 }
+
+#[test]
+fn an_environment_the_user_did_not_allow_is_left_alone() {
+    let t = Temp::new("declined");
+    t.venv(".venv");
+    let mut env = vec![
+        (b"Path".to_vec(), b"C:\\Windows".to_vec()),
+        (b"WINC_PYTHON".to_vec(), b"0".to_vec()),
+    ];
+    t.activate(br"C:\Windows\System32\cmd.exe", &[], &mut env);
+    assert_eq!(value(&env, b"PATH"), Some(&b"C:\\Windows"[..]));
+    assert_eq!(value(&env, b"VIRTUAL_ENV"), None);
+    // 原生 shell 没有集成脚本删除这个变量，由辅助进程删除。
+    assert_eq!(value(&env, b"WINC_PYTHON"), None);
+}

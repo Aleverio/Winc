@@ -503,6 +503,10 @@ struct Emulator {
     blocks: Blocks,
     /// shell 集成脚本附带的随机数（OSC 133 `C` 的 `nonce=`）；为 `None` 时不记录命令行。
     nonce: Option<String>,
+    /// 集成脚本是否声明结束标记附带随机数（OSC 133 `A` 的 `signed=1`）。
+    signed_end: bool,
+    /// 正在运行的命令是否由附带有效随机数的 `C` 开始。
+    verified: bool,
 }
 
 impl Emulator {
@@ -544,6 +548,8 @@ impl Emulator {
             responses: Vec::new(),
             blocks: Blocks::default(),
             nonce: None,
+            signed_end: false,
+            verified: false,
         };
         emu.reset_tabs();
         emu.damage.clear(rows);

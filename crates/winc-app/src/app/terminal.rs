@@ -182,6 +182,10 @@ pub(crate) struct TerminalPanel {
     pub pending_input: Option<Vec<u8>>,
     /// 辅助进程意外退出了：标签和最后一屏还留着，等用户重新启动。
     pub crashed: bool,
+    /// 正在询问是否加载的 Python 环境目录；回答之前等着建的标签不建。
+    pub python_asking: Option<PathBuf>,
+    /// 本次运行中回答了不加载的 Python 环境目录；不写入状态文件，下次启动时重新询问。
+    pub python_declined: Vec<PathBuf>,
     /// 按住 ⌘ 时鼠标下的链接。
     pub link: Option<TermLink>,
     /// 有标签在等新尺寸的一帧、面板又变了时：什么时候不再等（见 [`App::sync_terminal`]）。

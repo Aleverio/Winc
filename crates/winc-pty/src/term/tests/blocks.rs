@@ -85,6 +85,49 @@ fn shell_integration_marks_rows_and_reports_commands() {
 }
 
 #[test]
+fn a_forged_end_mark_in_the_output_does_not_end_a_signed_command() {
+    let start = format!("\x1b]133;C;nonce={NONCE};cmdline_url=make\x07");
+    let end = format!("\x1b]133;D;2;nonce={NONCE}\x07");
+    let done = |t: &mut Terminal| {
+        let events = t.take_events();
+        let ends = events.iter().filter_map(|event| match event {
+            Event::Command(CommandMark::Done(exit)) => Some(*exit),
+            _ => None,
+        });
+        ends.collect::<Vec<_>>()
+    };
+
+    // 脚本声明结束标记附带随机数：输出中不带随机数或随机数不符的结束标记不采用。
+    let mut t = term(30, 6);
+    feed(&mut t, "\x1b]133;A;signed=1\x07$ \x1b]133;B\x07make\r\n");
+    feed(&mut t, &start);
+    feed(
+        &mut t,
+        "log \x1b]133;D;0\x07\x1b]133;D;0;nonce=other\x07\r\n",
+    );
+    assert!(done(&mut t).is_empty());
+    feed(&mut t, &end);
+    assert_eq!(done(&mut t), [Some(2)]);
+
+    // 没有声明的脚本（旧版本、其他集成）照常结束。
+    let mut t = term(30, 6);
+    feed(&mut t, "\x1b]133;A\x07$ \x1b]133;B\x07make\r\n");
+    feed(&mut t, &start);
+    feed(&mut t, "\x1b]133;D;1\x07");
+    assert_eq!(done(&mut t), [Some(1)]);
+
+    // 换成不带随机数的 shell 后，它的结束标记照常采用。
+    let mut t = term(30, 6);
+    feed(&mut t, "\x1b]133;A;signed=1\x07$ ");
+    feed(&mut t, &start);
+    feed(
+        &mut t,
+        "\x1b]133;A\x07% \x1b]133;C\x07out\r\n\x1b]133;D;3\x07",
+    );
+    assert_eq!(done(&mut t), [Some(3)]);
+}
+
+#[test]
 fn blocks_are_cut_from_the_marks() {
     let mut t = term(30, 6);
     feed(&mut t, "\x1b]7;file://host/Users/a%20b\x07");

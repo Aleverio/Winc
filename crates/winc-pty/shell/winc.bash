@@ -7,7 +7,9 @@ _winc_prompt_on=${WINC_PROMPT-1}
 # 记录启动目录，用户配置中的 `cd` 不改变项目环境的选择。
 _winc_python_root=$PWD
 _winc_python_script=${BASH_SOURCE[0]%/*}/../python.sh
-builtin unset WINC_PROMPT
+# `WINC_PYTHON=0` 时不加载启动目录中的 Python 环境：用户没有允许这个目录。
+_winc_python=${WINC_PYTHON-1}
+builtin unset WINC_PROMPT WINC_PYTHON
 # 命令行报告附带的随机数，保存在未导出的变量中，供 OSC 133 验证。
 _winc_nonce=${WINC_NONCE-}
 builtin unset WINC_NONCE
@@ -78,6 +80,8 @@ if [[ -z $_winc_hooked ]]; then
     else
       head=${head:0:7}
     fi
+    # 文件内容直接进入提示符：去掉控制字符，其中的转义序列不会被终端执行。
+    head=${head//[[:cntrl:]]/}
     # 变量里的颜色序列用 \001、\002 包起来，readline 才不把它们算进提示符的宽度。
     _winc_git=$' \001\e[35m\002'"$head"$'\001\e[0m\002'
   }
@@ -98,8 +102,8 @@ if [[ -z $_winc_hooked ]]; then
     PS1='\[\e[1;34m\]\w\[\e[0m\]${_winc_git} ${_winc_mark} '
     builtin export CLICOLOR=1
   fi
-  builtin source "$_winc_python_script"
-  builtin unset _winc_python_script
+  [[ $_winc_python == 0 ]] || builtin source "$_winc_python_script"
+  builtin unset _winc_python_script _winc_python
 
   # PROMPT_COMMAND 的第一条：记下命令的退出码，原样返回，后面用户自己的 PROMPT_COMMAND 看到的
   # 还是命令的退出码。
@@ -111,7 +115,8 @@ if [[ -z $_winc_hooked ]]; then
   # PROMPT_COMMAND 的最后一条：提示符主题（starship 之类）已经设好了 PS1。
   _winc_prompt() {
     if [[ -n $_winc_running ]]; then
-      builtin printf '\e]133;D;%s\a' "$_winc_last"
+      # 结束标记附带随机数：命令的输出中伪造的结束标记不会被采用。
+      builtin printf '\e]133;D;%s;nonce=%s\a' "$_winc_last" "$_winc_nonce"
       _winc_running=
     fi
     if [[ -n $_winc_defaults ]]; then
@@ -123,7 +128,7 @@ if [[ -z $_winc_hooked ]]; then
       fi
     fi
     _winc_urlencode "$PWD"
-    builtin printf '\e]7;file://%s%s\a\e]133;A\a' "$HOSTNAME" "$_winc_reply"
+    builtin printf '\e]7;file://%s%s\a\e]133;A;signed=1\a' "$HOSTNAME" "$_winc_reply"
     case $PS1 in
       *'\[\e]133;B\a\]'*) ;;
       *) PS1=$PS1'\[\e]133;B\a\]' ;;

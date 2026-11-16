@@ -660,3 +660,40 @@ fn confirming_an_unchanged_rename_keeps_the_automatic_name() {
     app.finish_terminal_rename(true);
     assert_eq!(app.terminal.tabs[0].name, "web");
 }
+
+#[test]
+fn a_python_environment_follows_the_recorded_answer() {
+    let dir = sample_folder("terminal-python-choice");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    let dir = app.editor.root().expect("打开了目录").to_path_buf();
+    app.terminal.want = vec![Vec::new()];
+    // 目录里没有环境：没有可加载的，也不需要询问。
+    assert_eq!(app.python_choices(), Some(vec![true]));
+
+    let venv = dir.join(".venv");
+    std::fs::create_dir_all(&venv).unwrap();
+    std::fs::write(venv.join("pyvenv.cfg"), "home = /usr/bin\n").unwrap();
+    // 测试中没有窗口，无法询问：按同意处理。
+    assert_eq!(app.python_choices(), Some(vec![true]));
+
+    // 拒绝只在本次运行中有效，不写入状态；同意长期记录，并覆盖此前的拒绝。
+    app.answered_python_environment(venv.clone(), false);
+    assert_eq!(app.python_choices(), Some(vec![false]));
+    assert_eq!(app.state.trusted_repo(&venv), None);
+    app.terminal.python_declined.clear();
+    assert_eq!(app.python_choices(), Some(vec![true]), "下次启动时重新询问");
+    app.answered_python_environment(venv.clone(), false);
+    app.answered_python_environment(venv.clone(), true);
+    assert_eq!(app.python_choices(), Some(vec![true]));
+    assert_eq!(app.state.trusted_repo(&venv), Some(1));
+
+    // 正在询问时等着建的标签不建。
+    app.terminal.python_asking = Some(venv.clone());
+    assert_eq!(app.python_choices(), None);
+    app.terminal.python_asking = None;
+
+    // 关掉 shell 集成时不加载。
+    app.config.terminal_shell_integration = Some(false);
+    assert_eq!(app.python_choices(), Some(vec![false]));
+    let _ = std::fs::remove_dir_all(&dir);
+}

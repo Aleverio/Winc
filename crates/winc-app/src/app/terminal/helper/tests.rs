@@ -124,17 +124,20 @@ fn a_remote_shell_gets_the_integration_once_its_scripts_are_there() {
     let plain = "cd '/srv/app' && exec $SHELL -l";
     assert_eq!(command(Integration::Off, true), plain);
     // 脚本还没有写到那台主机上：照常启动登录 shell。
-    assert_eq!(command(Integration::On { prompt: true }, false), plain);
-    let integrated = command(Integration::On { prompt: false }, true);
+    let on = |prompt, python| Integration::On { prompt, python };
+    assert_eq!(command(on(true, true), false), plain);
+    let integrated = command(on(false, true), true);
     assert!(
         integrated.starts_with("cd '/srv/app' && exec sh -c '"),
         "{integrated}"
     );
-    // 随机数的位置留给辅助进程填，其后是「不换提示符」。
+    // 随机数的位置留给辅助进程填，其后是「不换提示符」和「加载 Python 环境」。
     assert!(
-        integrated.ends_with("' winc @WINC_NONCE@ 0"),
+        integrated.ends_with("' winc @WINC_NONCE@ 0 1"),
         "{integrated}"
     );
+    // 用户没有允许加载环境时告诉远端的脚本。
+    assert!(command(on(true, false), true).ends_with("' winc @WINC_NONCE@ 1 0"));
 }
 
 #[test]

@@ -343,11 +343,16 @@ impl App {
             self.blur_terminal_tab();
         }
         // 只有新建标签时才用到；每次重绘都会运行到这里，不必每次都读取配置和拼接路径。
-        let spawn = (!self.terminal.want.is_empty()).then(|| {
+        // 待建标签的目录中有尚未询问过的 Python 环境时先询问，回答之后再建。
+        let python = (!self.terminal.want.is_empty())
+            .then(|| self.python_choices())
+            .flatten();
+        let spawn = python.map(|python| {
             (
                 self.terminal_cwd(),
                 self.config.terminal_shell.clone(),
                 integration_dir(&self.config),
+                python,
             )
         });
         let scrollback = self.config.terminal_scrollback.unwrap_or(SCROLLBACK);
@@ -378,7 +383,7 @@ impl App {
                 }
             }
         }
-        if let Some((cwd, shell, integration)) = spawn.filter(|_| t.error.is_none()) {
+        if let Some((cwd, shell, integration, python)) = spawn.filter(|_| t.error.is_none()) {
             let names = std::mem::take(&mut t.want_names);
             let shells = std::mem::take(&mut t.want_shells);
             // 等着送的输入给建好以后要看的那个标签：新建的（排在最后），或者重开时原来看的那个。
@@ -390,8 +395,9 @@ impl App {
                 let id = t.next_id;
                 let dir = if want.is_empty() { cwd.clone() } else { want };
                 let chosen = shells.get(i).cloned().flatten();
+                let python = python.get(i).copied().unwrap_or(false);
                 let integrated = match &integration {
-                    Some(_) => Integration::On { prompt },
+                    Some(_) => Integration::On { prompt, python },
                     None => Integration::Off,
                 };
                 let shell = chosen.as_deref().or(shell.as_deref());
@@ -402,7 +408,7 @@ impl App {
                     args: launch.args,
                     login: launch.login,
                     cwd: launch.cwd,
-                    env: environment(prompt),
+                    env: environment(prompt, python),
                     scrollback,
                     size,
                     integration: integration.clone(),
@@ -484,6 +490,87 @@ impl App {
             .root()
             .map(|root| os_bytes(root.as_os_str()))
             .unwrap_or_default()
+    }
+
+    /// 返回各个待建标签是否加载启动目录中的 Python 环境；有环境尚未询问过时弹出提示并返回
+    /// `None`，回答之后再建。
+    ///
+    /// 环境里的程序排在 `PATH` 最前，会先于系统中的同名命令运行，因此每个环境只在用户同意后加载；
+    /// 回答按环境的目录记录（见 [`App::answered_python_environment`]）。没有窗口（测试）时无法
+    /// 询问，按同意处理。
+    pub(in crate::app) fn python_choices(&mut self) -> Option<Vec<bool>> {
+        let count = self.terminal.want.len();
+        if self.config.terminal_shell_integration == Some(false) {
+            return Some(vec![false; count]);
+        }
+        if self.terminal.python_asking.is_some() {
+            return None;
+        }
+        let root = self.terminal_cwd();
+        let mut choices = Vec::with_capacity(count);
+        for want in &self.terminal.want {
+            let dir = bytes_path(if want.is_empty() { &root } else { want });
+            // 没有打开目录时终端从用户的家目录启动，那里的环境是用户自己的，不询问。
+            if dir.as_os_str().is_empty() {
+                choices.push(true);
+                continue;
+            }
+            let venv = [".venv", "venv"]
+                .into_iter()
+                .map(|name| dir.join(name))
+                .find(|venv| winc_backend::fs::is_file(venv.join("pyvenv.cfg")));
+            let Some(venv) = venv else {
+                choices.push(true);
+                continue;
+            };
+            // 只有同意被长期记录（记为 1）；拒绝只在本次运行中有效，不会永久关闭这个环境的加载。
+            if self.terminal.python_declined.contains(&venv) {
+                choices.push(false);
+            } else if self.state.trusted_repo(&venv) == Some(1) || self.window.handle.is_none() {
+                choices.push(true);
+            } else {
+                self.ask_python_environment(venv);
+                return None;
+            }
+        }
+        Some(choices)
+    }
+
+    /// 询问是否为终端加载 Python 环境 `venv`。
+    fn ask_python_environment(&mut self, venv: PathBuf) {
+        let message = winc_i18n::t!("terminal-python-confirm");
+        let path = venv.display().to_string();
+        let detail = winc_i18n::t!("terminal-python-confirm-detail", path = path);
+        use crate::app::lifecycle::alert::AlertButton;
+        let buttons = vec![
+            AlertButton::new(winc_i18n::t!("terminal-python-confirm-action")),
+            AlertButton::cancel(winc_i18n::t!("terminal-python-confirm-decline")),
+        ];
+        let asked = venv.clone();
+        let shown = self.show_alert(message, &detail, buttons, None, move |index, _| {
+            Some(UserEvent::PythonEnvironment(asked.clone(), index == 0))
+        });
+        // 提示框暂时无法弹出（已有别的提示框）时不记录，下一次排版再问。
+        if shown {
+            self.terminal.python_asking = Some(venv);
+        }
+    }
+
+    /// 提示框中回答了是否加载 Python 环境 `venv`，然后建等着的标签。
+    ///
+    /// 同意长期记录，同一个环境不再询问；拒绝只记到本次运行结束。
+    pub(crate) fn answered_python_environment(&mut self, venv: PathBuf, load: bool) {
+        if load {
+            self.terminal
+                .python_declined
+                .retain(|declined| *declined != venv);
+            self.update_state(|state| state.trust_repo(&venv, 1));
+        } else if !self.terminal.python_declined.contains(&venv) {
+            self.terminal.python_declined.push(venv);
+        }
+        self.terminal.python_asking = None;
+        self.relayout();
+        self.request_redraw();
     }
 
     /// 读线程叫醒了事件循环：把收到的消息取完。
@@ -614,7 +701,12 @@ impl App {
                         tab.title = title;
                     }
                 }
-                Event::Clipboard(text) => self.set_clipboard(text, false),
+                // 只接受正在看的标签写剪贴板：看不见的标签里的输出不能在用户不知情时改写它。
+                Event::Clipboard(text) => {
+                    if t.open && t.index_of(id) == Some(t.active) {
+                        self.set_clipboard(text, false);
+                    }
+                }
                 Event::Link(link, uri) => {
                     if let Some(tab) = t.by_id(id) {
                         tab.set_link(link, uri);
@@ -743,8 +835,9 @@ fn integration_dir(config: &winc_config::Config) -> Option<Vec<u8>> {
 pub(super) enum Integration {
     /// 不注入：设置里关了，或要运行的是一条命令。
     Off,
-    /// 注入；`prompt` 为假时不换上 winc 的提示符（`terminal.prompt`）。
-    On { prompt: bool },
+    /// 注入；`prompt` 为假时不换上 winc 的提示符（`terminal.prompt`），`python` 为假时不加载
+    /// 启动目录中的 Python 环境。
+    On { prompt: bool, python: bool },
 }
 
 /// 新终端的启动方式：程序、参数和工作目录。
@@ -825,7 +918,9 @@ fn remote_launch(at: &winc_backend::Location, integration: Integration, ready: b
     // 集成脚本已写到那台主机上（`ready`）时由其中的启动脚本启动 shell（见
     // `winc_pty::scripts`），否则直接启动登录 shell。
     let start = match integration {
-        Integration::On { prompt } if ready => winc_pty::scripts::remote_command(prompt),
+        Integration::On { prompt, python } if ready => {
+            winc_pty::scripts::remote_command(prompt, python)
+        }
         _ => "exec $SHELL -l".to_owned(),
     };
     let dir = String::from_utf8_lossy(&at.path).replace('\'', r"'\''");
@@ -854,13 +949,18 @@ fn remote_launch(at: &winc_backend::Location, integration: Integration, ready: b
     }
 }
 
-pub(super) fn environment(prompt: bool) -> Vec<(Vec<u8>, Vec<u8>)> {
+/// 返回给终端的环境变量；`prompt`、`python` 为假时分别加上 `WINC_PROMPT=0`、`WINC_PYTHON=0`，
+/// 集成脚本据此不替换默认提示符、不加载启动目录中的 Python 环境。
+pub(super) fn environment(prompt: bool, python: bool) -> Vec<(Vec<u8>, Vec<u8>)> {
     let mut env: Vec<_> = std::env::vars_os()
-        .filter(|(k, _)| k != "WINC_PROMPT")
+        .filter(|(k, _)| k != "WINC_PROMPT" && k != "WINC_PYTHON")
         .map(|(k, v)| (os_bytes(&k), os_bytes(&v)))
         .collect();
     if !prompt {
         env.push((b"WINC_PROMPT".to_vec(), b"0".to_vec()));
+    }
+    if !python {
+        env.push((b"WINC_PYTHON".to_vec(), b"0".to_vec()));
     }
     // 从图形界面启动时没有区域设置：按系统的首选语言补上 `LANG`。系统没有对应的区域数据时
     // 不补，由辅助进程只声明字符编码。

@@ -339,7 +339,8 @@ impl App {
         let Some(root) = self.editor.root().map(Path::to_path_buf) else {
             return;
         };
-        let env = environment(self.config.terminal_prompt != Some(false));
+        // 运行配置不经过交互式 shell 的集成脚本，不涉及 Python 环境的加载。
+        let env = environment(self.config.terminal_prompt != Some(false), true);
         let shell = self.config.terminal_shell.as_deref();
         let (launch, env) = run_launch(&config, &root, shell, cfg!(windows), env);
         let banner = banner(&config, launch_kind(&launch, cfg!(windows)));

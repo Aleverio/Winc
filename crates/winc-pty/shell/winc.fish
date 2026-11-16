@@ -12,6 +12,9 @@ end
 # 命令行报告附带的随机数，保存在未导出的变量中，供 OSC 133 验证。
 set -g __winc_nonce "$WINC_NONCE"
 set -e WINC_NONCE
+# `WINC_PYTHON=0` 时不加载启动目录中的 Python 环境：用户没有允许这个目录。
+set -g __winc_python "$WINC_PYTHON"
+set -e WINC_PYTHON
 
 status is-interactive; or exit
 set -q __winc_hooked; and exit
@@ -24,9 +27,10 @@ function __winc_prompt --on-event fish_prompt
     if set -q __winc_python_script
         set -l script "$__winc_python_script"
         set -e __winc_python_script
-        source "$script"
+        test "$__winc_python" = 0; or source "$script"
+        set -e __winc_python
     end
-    printf '\e]7;file://%s%s\a\e]133;A;redraw=1\a' $hostname (string escape --style=url -- $PWD)
+    printf '\e]7;file://%s%s\a\e]133;A;redraw=1;signed=1\a' $hostname (string escape --style=url -- $PWD)
 end
 
 function __winc_preexec --on-event fish_preexec
@@ -34,5 +38,6 @@ function __winc_preexec --on-event fish_preexec
 end
 
 function __winc_postexec --on-event fish_postexec
-    printf '\e]133;D;%s\a' $status
+    # 结束标记附带随机数：命令的输出中伪造的结束标记不会被采用。
+    printf '\e]133;D;%s;nonce=%s\a' $status "$__winc_nonce"
 end

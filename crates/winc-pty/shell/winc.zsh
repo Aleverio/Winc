@@ -16,11 +16,12 @@ _winc_urlencode() {
 _winc_precmd() {
   builtin local ret=$?
   if [[ -n $_winc_running ]]; then
-    builtin print -n -- "\e]133;D;$ret\a"
+    # 结束标记附带随机数：命令的输出中伪造的结束标记不会被采用。
+    builtin print -n -- "\e]133;D;$ret;nonce=$_winc_nonce\a"
     _winc_running=
   fi
   _winc_urlencode "$PWD"
-  builtin print -n -- "\e]7;file://$HOST$REPLY\a\e]133;A;redraw=1\a"
+  builtin print -n -- "\e]7;file://$HOST$REPLY\a\e]133;A;redraw=1;signed=1\a"
   # 提示符在哪里结束（用户从哪里开始输入）：PS1 末尾加一个不占宽度的标记。提示符主题每次重设
   # PS1 时再加上。
   [[ $PS1 == *$'\e]133;B\a'* ]] || PS1=$PS1$'%{\e]133;B\a%}'
@@ -59,6 +60,8 @@ _winc_branch() {
   else
     head=${head[1,7]}
   fi
+  # 文件内容直接进入提示符：去掉控制字符，其中的转义序列不会被终端执行。
+  head=${head//[[:cntrl:]]/}
   _winc_git=" %F{5}${head//\%/%%}%f"
 }
 
@@ -87,7 +90,8 @@ _winc_install() {
   builtin local ret=$?
   precmd_functions=(${precmd_functions:#_winc_install} _winc_precmd)
   _winc_defaults
-  builtin source -- "$_winc_home/../python.sh"
+  [[ $_winc_python == 0 ]] || builtin source -- "$_winc_home/../python.sh"
+  builtin unset _winc_python
   preexec_functions+=(_winc_preexec)
   () { builtin return $ret }
   _winc_precmd

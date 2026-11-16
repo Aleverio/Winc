@@ -747,6 +747,16 @@ impl Emulator {
             b'B' => (Marks::COMMAND, CommandMark::Command),
             b'C' => (Marks::OUTPUT, CommandMark::Output),
             b'D' => {
+                // 命令的输出可以包含结束标记：命令由附带随机数的 `C` 开始、脚本又声明结束标记
+                // 附带随机数时，只接受带同一随机数的 `D`，伪造的不改变退出码。
+                let signed = self.nonce.as_ref().is_some_and(|nonce| {
+                    let rest = params.get(2..).unwrap_or_default();
+                    (rest.iter()).any(|p| p.strip_prefix(b"nonce=") == Some(nonce.as_bytes()))
+                });
+                if self.verified && self.signed_end && !signed {
+                    return;
+                }
+                self.verified = false;
                 let exit = params.get(2).and_then(|p| lossy(p).parse::<i32>().ok());
                 self.mark(Marks::DONE, exit, None);
                 self.events.push(Event::Command(CommandMark::Done(exit)));
@@ -765,6 +775,9 @@ impl Emulator {
                     _ => {}
                 }
             }
+            // `signed=1` 表示这个 shell 的结束标记附带随机数；换了 shell 后以新的提示符为准。
+            let rest = params.get(2..).unwrap_or_default();
+            self.signed_end = rest.contains(&&b"signed=1"[..]);
         }
         // `C` 之后可以带命令行：`cmdline_url=` 为百分号转义形式，`cmdline=` 为原样形式；命令行
         // 中的分号被 OSC 切开，需要拼接还原。「重新运行」会把命令行原样写入 shell 的输入，因此
@@ -783,6 +796,9 @@ impl Emulator {
             } else {
                 String::new()
             });
+        }
+        if flag == Marks::OUTPUT {
+            self.verified = text.is_some();
         }
         self.mark(flag, None, text);
         self.events.push(Event::Command(mark));

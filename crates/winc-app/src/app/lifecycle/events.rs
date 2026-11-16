@@ -496,6 +496,9 @@ impl App {
             UserEvent::RunApproved(config) => self.approved_run(*config),
             UserEvent::TerminalClose(id) => self.confirmed_terminal_close(id),
             UserEvent::TerminalRestart(id) => self.confirmed_terminal_restart(id),
+            UserEvent::PythonEnvironment(venv, load) => {
+                self.answered_python_environment(venv, load)
+            }
             UserEvent::ShellCommandDone(done) => self.shell_command_done(done),
             UserEvent::TerminalShells(shells) => {
                 self.terminal.shells = shells;

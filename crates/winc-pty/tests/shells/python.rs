@@ -217,3 +217,24 @@ fn disabling_shell_integration_keeps_the_terminal_environment() {
         0
     );
 }
+
+#[test]
+fn an_environment_the_user_did_not_allow_is_not_loaded() {
+    for shell in ["bash", "zsh", "fish"] {
+        let t = Temp::new(&format!("python-declined-{shell}"));
+        let root = project(&t, ".venv");
+        let Some(mut sh) = start(shell, &t, &root, &[("WINC_PYTHON", "0")]) else {
+            continue;
+        };
+        let block = sh.run("printenv VIRTUAL_ENV || echo no-environment");
+        assert_eq!(sh.output(&block), "no-environment", "{shell}");
+        let block = sh.run("command -v python || echo no-python");
+        assert!(
+            !sh.output(&block).contains(root.to_str().unwrap()),
+            "{shell}"
+        );
+        // 这个变量只给集成脚本读，不留在 shell 的环境里。
+        let block = sh.run("printenv WINC_PYTHON || echo unset");
+        assert_eq!(sh.output(&block), "unset", "{shell}");
+    }
+}

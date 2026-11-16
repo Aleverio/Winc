@@ -35,11 +35,13 @@ pub const REMOTE_DIR: &str = ".winc-server/shell";
 pub const REMOTE_NONCE: &str = "@WINC_NONCE@";
 
 /// 在远端启动带集成的登录 shell 的脚本，由 `sh -c` 运行：第一个参数是随机数，第二个是是否
-/// 换上 winc 的提示符（`0` 为不换，与本机一样只在这时设置 `WINC_PROMPT`）。脚本不在（尚未写好、主目录不可写）时启动不带集成的 shell。
+/// 换上 winc 的提示符，第三个是是否加载 Python 环境（`0` 为否，与本机一样只在这时设置
+/// `WINC_PROMPT`、`WINC_PYTHON`）。脚本不在（尚未写好、主目录不可写）时启动不带集成的 shell。
 /// 不含单引号，可以整个包在单引号里交给各种登录 shell。
 const REMOTE_START: &str = concat!(
     r#"d=$HOME/.winc-server/shell; [ -r "$d/wsl.sh" ] && "#,
-    r#"{ [ "$2" = 0 ] && export WINC_PROMPT=0; WINC_NONCE=$1 exec sh "$d/wsl.sh" "$d"; }; "#,
+    r#"{ [ "$2" = 0 ] && export WINC_PROMPT=0; [ "$3" = 0 ] && export WINC_PYTHON=0; "#,
+    r#"WINC_NONCE=$1 exec sh "$d/wsl.sh" "$d"; }; "#,
     r#"exec "${SHELL:-/bin/sh}" -l"#,
 );
 
@@ -65,10 +67,10 @@ pub fn remote() -> impl Iterator<Item = (&'static str, Cow<'static, str>)> {
 }
 
 /// 返回在远端启动带集成的登录 shell 的命令，接在 `cd '目录' &&` 之后交给 `ssh`；`prompt` 为
-/// 假时不换提示符。其中的 [`REMOTE_NONCE`] 由辅助进程替换。
-pub fn remote_command(prompt: bool) -> String {
-    let prompt = u8::from(prompt);
-    format!("exec sh -c '{REMOTE_START}' winc {REMOTE_NONCE} {prompt}")
+/// 假时不换提示符，`python` 为假时不加载 Python 环境。其中的 [`REMOTE_NONCE`] 由辅助进程替换。
+pub fn remote_command(prompt: bool, python: bool) -> String {
+    let (prompt, python) = (u8::from(prompt), u8::from(python));
+    format!("exec sh -c '{REMOTE_START}' winc {REMOTE_NONCE} {prompt} {python}")
 }
 
 #[cfg(test)]
@@ -90,9 +92,10 @@ mod tests {
     fn the_remote_command_survives_any_login_shell() {
         // 整个脚本包在单引号里：其中不能有单引号；`!` 在 tcsh 的单引号里仍然引出历史。
         assert!(!REMOTE_START.contains(['\'', '!', '\n']));
-        let command = remote_command(false);
+        let command = remote_command(false, true);
         assert!(command.starts_with("exec sh -c 'd=$HOME/.winc-server/shell;"));
-        assert!(command.ends_with("' winc @WINC_NONCE@ 0"));
+        assert!(command.ends_with("' winc @WINC_NONCE@ 0 1"));
+        assert!(remote_command(true, false).ends_with("' winc @WINC_NONCE@ 1 0"));
         assert!(REMOTE_START.contains(REMOTE_DIR));
         let names: Vec<_> = remote().map(|(name, _)| name).collect();
         assert!(names.contains(&"wsl.sh") && names.contains(&"zsh/.zshenv"));

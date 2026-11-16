@@ -29,12 +29,13 @@ const WSL: &[(&str, &str)] = winc_pty::scripts::LAUNCH;
 /// 命令写成单行，避免换行符经 `wsl.exe` 的命令行传递时发生变化。脚本不可读时（如发行版未挂载
 /// Windows 磁盘）启动不带集成的 shell，终端仍可使用。
 #[cfg(any(windows, test))]
-const WSL_RUN: &str = r#"d=$(wslpath -u "$0" 2>/dev/null) && [ -r "$d/wsl.sh" ] && exec sh "$d/wsl.sh" "$d"; unset WINC_NONCE; exec "${SHELL:-/bin/sh}" -l"#;
+const WSL_RUN: &str = r#"d=$(wslpath -u "$0" 2>/dev/null) && [ -r "$d/wsl.sh" ] && exec sh "$d/wsl.sh" "$d"; unset WINC_NONCE WINC_PYTHON; exec "${SHELL:-/bin/sh}" -l"#;
 
 /// 通过 `WSLENV` 从 Windows 传给发行版的环境变量：集成脚本用到的变量，以及程序据此判断终端能力的
 /// 变量。
 #[cfg(any(windows, test))]
-const WSL_ENV: &[u8] = b"WINC_NONCE:WINC_PROMPT:COLORTERM:TERM_PROGRAM:TERM_PROGRAM_VERSION";
+const WSL_ENV: &[u8] =
+    b"WINC_NONCE:WINC_PROMPT:WINC_PYTHON:COLORTERM:TERM_PROGRAM:TERM_PROGRAM_VERSION";
 
 /// 环境变量表，每项是（键，值）。
 type Env = Vec<(Vec<u8>, Vec<u8>)>;

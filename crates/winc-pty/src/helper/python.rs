@@ -19,6 +19,14 @@ pub(super) fn activate(cwd: &[u8], program: &[u8], args: &[Vec<u8>], env: &mut E
     if !args.is_empty() || !shell.iter().any(|shell| name.eq_ignore_ascii_case(shell)) {
         return;
     }
+    // `WINC_PYTHON=0` 表示用户没有允许为这个目录加载环境；原生 shell 没有集成脚本删除它。
+    let allowed = !env
+        .iter()
+        .any(|(key, value)| key == b"WINC_PYTHON" && value == b"0");
+    env.retain(|(key, _)| key != b"WINC_PYTHON");
+    if !allowed {
+        return;
+    }
     if [b"VIRTUAL_ENV".as_slice(), b"CONDA_PREFIX"]
         .iter()
         .any(|key| {
