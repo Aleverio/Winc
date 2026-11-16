@@ -405,7 +405,12 @@ impl App {
                     }),
                     None => chosen,
                 };
-                let shell = if host.is_some() { None } else { shell.clone() };
+                // 设置中的默认 shell 是本机的命令：目录在远端主机上或 WSL 发行版中时不适用，
+                // 新终端进入那台主机或发行版。
+                let shell = match default_shell_applies(&dir, cfg!(windows)) {
+                    true => shell.clone(),
+                    false => None,
+                };
                 let python = python.get(i).copied().unwrap_or(false);
                 let integrated = match &integration {
                     Some(_) => Integration::On { prompt, python },
@@ -843,6 +848,14 @@ fn helper_path() -> Option<PathBuf> {
         .parent()?
         .join(format!("winc-pty{}", std::env::consts::EXE_SUFFIX));
     path.exists().then_some(path)
+}
+
+/// 设置中的默认 shell 是否用于在目录 `dir` 新建的终端：目录在远端主机上，或在 Windows 上位于
+/// WSL 发行版中时不用。菜单中明确选择的 shell 不受此限制。
+pub(super) fn default_shell_applies(dir: &[u8], windows: bool) -> bool {
+    let dir = bytes_path(dir);
+    let in_distro = windows && winc_editor::wsl::locate(&dir).is_some();
+    !winc_backend::is_remote(&dir) && !in_distro
 }
 
 /// 把 shell 报告的工作目录 `path` 转换为编辑器使用的路径（见 [`terminal_path`]）。重启标签和

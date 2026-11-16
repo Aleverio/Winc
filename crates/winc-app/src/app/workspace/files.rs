@@ -933,9 +933,12 @@ impl App {
             }
             // 对话框有自己的消息循环，在后台线程上等待关闭，事件循环正常运行。
             std::thread::spawn(move || {
-                // 检查发行版的根目录可能要等发行版启动，不在界面线程上进行。
+                // 从发行版内用户的主目录开始，查不到时从根目录开始。查询可能要等发行版启动，
+                // 不在界面线程上进行。
                 if let Pick::WslFolder(distro) = &kind {
-                    dialog = dialog.set_directory(winc_editor::wsl::distro_root(distro));
+                    let root = winc_editor::wsl::distro_root(distro);
+                    let home = winc_editor::wsl::home_dir(&root);
+                    dialog = dialog.set_directory(home.unwrap_or(root));
                 }
                 let path = match &kind {
                     Pick::Open | Pick::BackgroundImage | Pick::KeyFile => dialog.pick_file(),

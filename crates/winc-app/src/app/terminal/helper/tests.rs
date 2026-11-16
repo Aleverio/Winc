@@ -312,3 +312,17 @@ fn a_path_already_on_the_host_is_not_mapped_again() {
     // 相对路径和空路径不属于任何主机，原样返回。
     assert_eq!(terminal_path(&root, PathBuf::new()), PathBuf::new());
 }
+
+#[test]
+fn the_default_shell_stays_on_this_machine() {
+    // 设置中的默认 shell 是本机的命令：WSL 发行版中的目录和远端主机上的目录不用。
+    let distro = br"\\wsl.localhost\Ubuntu\home\me\project";
+    assert!(!default_shell_applies(distro, true));
+    let target = winc_backend::Target::new("me@shell-default").unwrap();
+    let remote = winc_backend::virtual_path(&target, b"/srv");
+    assert!(!default_shell_applies(&os_bytes(remote.as_os_str()), true));
+    // 本机的目录按设置；其他系统上这种写法不表示发行版中的目录。
+    assert!(default_shell_applies(br"C:\code\project", true));
+    assert!(default_shell_applies(distro, false));
+    assert!(default_shell_applies(b"", true));
+}

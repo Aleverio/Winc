@@ -214,6 +214,10 @@ pub fn move_to_trash(path: &Path) -> io::Result<()> {
 
     #[cfg(windows)]
     {
+        // WSL 发行版中的路径是网络路径，没有回收站：直接删除，不交给系统再询问一次。
+        if has_no_trash(path, true) {
+            return winc_backend::fs::remove_all(path);
+        }
         crate::windows::move_to_recycle_bin(path)
     }
 
@@ -296,6 +300,12 @@ const TERMINALS: [&str; 6] = [
     "mate-terminal",
     "xterm",
 ];
+
+/// `path` 所在的位置是否没有废纸篓，删除后无法恢复：远端主机上的路径，以及 Windows
+/// （`windows`）上 WSL 发行版中的路径。
+pub fn has_no_trash(path: &Path, windows: bool) -> bool {
+    winc_backend::is_remote(path) || windows && winc_editor::wsl::locate(path).is_some()
+}
 
 /// 在外部终端中打开 `dir`。
 ///

@@ -784,8 +784,8 @@ impl App {
         }
 
         if self.window.handle.is_some() {
-            // 远端主机上的文件不经过废纸篓，直接删除：确认时说明无法恢复。
-            let permanent = winc_backend::is_remote(root);
+            // 远端主机上和 WSL 发行版中的文件不经过废纸篓，直接删除：确认时说明无法恢复。
+            let permanent = crate::system::has_no_trash(root, cfg!(windows));
             let message = match paths.as_slice() {
                 [path] => {
                     let name = winc_editor::display_name(path);
@@ -849,7 +849,7 @@ impl App {
     fn entries_deleted(&mut self, paths: Vec<PathBuf>, results: Vec<std::io::Result<()>>) {
         let permanent = paths
             .first()
-            .is_some_and(|path| winc_backend::is_remote(path));
+            .is_some_and(|path| crate::system::has_no_trash(path, cfg!(windows)));
         let mut deleted = Vec::new();
         for (path, result) in paths.into_iter().zip(results) {
             match result {

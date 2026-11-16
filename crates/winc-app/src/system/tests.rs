@@ -54,3 +54,17 @@ fn a_folder_in_a_wsl_distro_opens_a_terminal_inside_the_distro() {
     let (args, cwd) = windows_terminal(local, None);
     assert_eq!((args, cwd), (vec!["cmd.exe".to_owned()], Some(local)));
 }
+
+#[test]
+fn folders_without_a_trash_are_deleted_for_good() {
+    // WSL 发行版中的路径在 Windows 上是网络路径，没有回收站；远端主机上的路径同样没有。
+    let distro = Path::new(r"\\wsl.localhost\Ubuntu\home\me\a.txt");
+    assert!(has_no_trash(distro, true));
+    assert!(!has_no_trash(distro, false));
+    assert!(!has_no_trash(Path::new(r"C:\code\a.txt"), true));
+    let target = winc_backend::Target::new("me@no-trash").unwrap();
+    assert!(has_no_trash(
+        &winc_backend::virtual_path(&target, b"/srv/a"),
+        false
+    ));
+}
