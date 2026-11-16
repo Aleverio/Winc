@@ -81,6 +81,17 @@ impl App {
             return;
         }
 
+        // 中键点终端的标签：关闭它，与编辑区的标签相同。
+        if button == MouseButton::Middle
+            && let Some(&(_, hit)) =
+                (self.hits.terminal.iter()).find(|(rect, _)| rect.contains(x, y))
+            && let crate::app::terminal::HeaderHit::Tab(index)
+            | crate::app::terminal::HeaderHit::Close(index) = hit
+        {
+            self.close_terminal_tab(index);
+            return;
+        }
+
         if button == MouseButton::Middle {
             // 标签栏的位置取自上一帧的绘制：其间可能用快捷键关闭了标签，序号可能已不存在，
             // 因此用 `get` 取文档。
@@ -342,12 +353,16 @@ impl App {
                         self.activate_terminal_tab(i);
                         self.open_terminal_rename(i);
                     }
-                    HeaderHit::Tab(i) => self.press_terminal_tab(i, x),
+                    HeaderHit::Tab(i) => {
+                        let at = self.terminal.strip.along((x, y));
+                        self.press_terminal_tab(i, at);
+                    }
                     HeaderHit::Close(i) => self.close_terminal_tab(i),
                     HeaderHit::New => self.new_terminal_tab(),
                     HeaderHit::ShellMenu => self.open_terminal_shell_menu(),
                     HeaderHit::Restart => self.request_terminal_restart(),
                     HeaderHit::Position => self.toggle_terminal_position(),
+                    HeaderHit::Maximize => self.toggle_terminal_maximized(),
                     HeaderHit::Hide => self.click_terminal_button(),
                     HeaderHit::Run(_) | HeaderHit::Find(_) => {}
                 }
@@ -369,8 +384,7 @@ impl App {
                 self.pointer.drag = Drag::OutlineDivider { start: y, size };
             }
             Target::TerminalDivider => {
-                // 拖动分隔条时取消最大化，从当前大小开始拖。
-                self.terminal.maximized = false;
+                // 最大化、还原途中按下时停在终点，从当前大小开始拖。
                 self.terminal.grow = None;
                 let l = self.layout.terminal;
                 let (start, size) = if self.terminal_right() {

@@ -138,16 +138,25 @@ impl ApplicationHandler<UserEvent> for App {
 
         // 配置中的字体找不到或无法绘制时仍使用默认字体启动，并提示用户；否则手动修改配置时写错
         // 字体名，用户只能看到设置未生效而不知道原因。仅在配置了字体时才解析字体。
+        // 列表中的字体逐个检查，提示第一个不可用的；终端字体与编辑区字体相同时不重复提示。
         let missing: Vec<String> = [
-            ("editor.font", &mono, &self.config.editor_font),
-            ("ui.font", &ui, &self.config.ui_font),
-            ("terminal.font", &terminal, &self.config.terminal_font),
+            ("editor.font", &self.config.editor_font, true),
+            ("ui.font", &self.config.ui_font, true),
+            (
+                "terminal.font",
+                &self.config.terminal_font,
+                !terminal.is_empty(),
+            ),
         ]
         .into_iter()
-        .filter(|(_, spec, _)| spec.as_ref().is_some_and(|s| s.check().is_err()))
-        .map(|(key, _, name)| {
-            let name = name.as_deref().unwrap_or_default();
-            winc_i18n::t!("workspace-font-missing-item", key = key, name = name)
+        .filter(|&(_, _, own)| own)
+        .filter_map(|(key, value, _)| {
+            let (_, name, _) = unusable_font(value)?;
+            Some(winc_i18n::t!(
+                "workspace-font-missing-item",
+                key = key,
+                name = name
+            ))
         })
         .collect();
 
@@ -157,9 +166,9 @@ impl ApplicationHandler<UserEvent> for App {
             None => Renderer::new(
                 window.clone(),
                 self.palette.frame_bg,
-                mono.as_ref(),
-                ui.as_ref(),
-                terminal.as_ref(),
+                &mono,
+                &ui,
+                &terminal,
                 self.font_weight(),
             ),
         };
@@ -292,11 +301,11 @@ impl ApplicationHandler<UserEvent> for App {
                 // 抬手事件可能不再送达，因此在此结束触摸。
                 self.pointer.title_click = None;
                 self.cancel_touch();
-                self.note_window_frame();
+                self.window_frame_changed();
             }
             WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
                 self.cancel_touch();
-                self.note_window_frame();
+                self.window_frame_changed();
                 if let Some(renderer) = &mut self.frame.renderer {
                     renderer.resize();
                 }
@@ -487,6 +496,9 @@ impl App {
             UserEvent::RunApproved(config) => self.approved_run(*config),
             UserEvent::TerminalClose(id) => self.confirmed_terminal_close(id),
             UserEvent::TerminalRestart(id) => self.confirmed_terminal_restart(id),
+            UserEvent::PythonEnvironment(venv, load) => {
+                self.answered_python_environment(venv, load)
+            }
             UserEvent::ShellCommandDone(done) => self.shell_command_done(done),
             UserEvent::TerminalShells(shells) => {
                 self.terminal.shells = shells;
@@ -638,6 +650,8 @@ impl App {
 
         let resize = self.terminal_resize_tick(now);
         earliest(&mut wake, resize);
+        let find = self.terminal_find_wake(now);
+        earliest(&mut wake, find);
         let mapping = self.vim_tick(now);
         earliest(&mut wake, mapping);
         // 当前标签正在读取且保留上一帧未绘制时，到期仍未读取完成则绘制「正在读取」。
@@ -724,6 +738,8 @@ impl App {
         earliest(&mut wake, self.tree_drag_tick(now));
 
         earliest(&mut wake, self.file_hover_tick(now));
+
+        earliest(&mut wake, self.window_frame_tick(now));
 
         earliest(&mut wake, self.backup_tick(now));
 

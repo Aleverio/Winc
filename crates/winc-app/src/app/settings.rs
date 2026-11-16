@@ -51,6 +51,8 @@ pub struct SettingsState {
     pub languages: ToolLanguages,
     /// 格式化页每一行（格式化工具、修复工具）上显示的内容。
     pub tool_rows: Vec<(Setting, FormatRow)>,
+    /// 正在后台查询 WSL 发行版中装了哪些工具，查完后重新计算各行。
+    pub probing: bool,
     /// 分类栏顶部的搜索框：按设置项的名称和说明搜索，不为空白时正文换成搜索结果。
     pub search: TextField,
     /// 「关于」页顶部的产品图标：渲染时的边长（物理像素）和 RGBA 像素；关闭浮层时释放。
@@ -153,9 +155,8 @@ fn tool_setting(setting: Setting) -> Option<(Task, &'static str)> {
 
 /// 返回字体设置值 `value` 不能用的原因；未设置或能用时返回 `None`。
 fn font_error(value: &Option<String>) -> Option<String> {
-    let spec = configured_font(value)?;
-    let error = spec.check().err()?;
-    let name = value.as_deref().unwrap_or_default().trim();
+    let (spec, name, error) = unusable_font(value)?;
+    let name = name.as_str();
     Some(match (error, spec) {
         (FontError::NotFound, FontSpec::Name(_)) => t!("settings-font-not-installed", name = name),
         (FontError::NotFound, FontSpec::Path(_)) => t!("settings-font-file-not-found", name = name),
@@ -208,6 +209,8 @@ impl App {
         self.settings.keyboard = false;
         self.settings.hover = None;
         self.settings.languages = ToolLanguages::default();
+        // 每次打开设置重新查询发行版中的工具：其间新安装的能列出来。
+        self.format.formatter.forget_wsl();
         self.refresh_format_rows(true);
         // 列出字体要读取字体文件，先在后台读好，打开字体菜单时不必等待；「默认 Shell」菜单中的
         // shell 同样在后台检测。
@@ -765,6 +768,9 @@ impl App {
             Setting::TerminalCopyOnSelect => self.config.terminal_copy_on_select == Some(true),
             Setting::TerminalConfirmClose => self.config.terminal_confirm_close != Some(false),
             Setting::TerminalPrompt => self.config.terminal_prompt != Some(false),
+            Setting::TerminalApplicationPriority => {
+                self.config.terminal_application_priority == Some(true)
+            }
             Setting::TerminalShellIntegration => {
                 self.config.terminal_shell_integration != Some(false)
             }
@@ -830,6 +836,9 @@ impl App {
             Setting::TerminalCopyOnSelect => self.config.terminal_copy_on_select = Some(on),
             Setting::TerminalConfirmClose => self.config.terminal_confirm_close = Some(on),
             Setting::TerminalPrompt => self.config.terminal_prompt = Some(on),
+            Setting::TerminalApplicationPriority => {
+                self.config.terminal_application_priority = Some(on)
+            }
             Setting::TerminalShellIntegration => self.config.terminal_shell_integration = Some(on),
             _ => return,
         }
@@ -928,14 +937,16 @@ impl App {
         [Setting::EditorFont, Setting::UiFont, Setting::TerminalFont]
             .into_iter()
             .filter(|setting| setting.page() == page)
-            .find_map(|setting| {
-                let value = match setting {
-                    Setting::UiFont => &self.config.ui_font,
-                    Setting::TerminalFont => &self.config.terminal_font,
-                    _ => &self.config.editor_font,
-                };
-                font_error(value).map(|error| (setting, error))
-            })
+            .find_map(|setting| font_error(self.font_value(setting)).map(|error| (setting, error)))
+    }
+
+    /// 字体设置项 `setting` 在配置中的值：以逗号分隔的字体列表，未设置时为 `None`。
+    pub(in crate::app) fn font_value(&self, setting: Setting) -> &Option<String> {
+        match setting {
+            Setting::UiFont => &self.config.ui_font,
+            Setting::TerminalFont => &self.config.terminal_font,
+            _ => &self.config.editor_font,
+        }
     }
 
     fn font_setting(&mut self, setting: Setting) -> &mut Option<String> {
@@ -1082,6 +1093,30 @@ impl App {
         self.settings.editing_original = self.font_setting(setting).clone();
         self.settings_commit_font(setting, value);
         self.settings.editing_original = None;
+    }
+
+    /// 字体菜单中选中字体 `name`：换掉列表中的第一个字体，其后的后备字体保留（`name` 原在其中
+    /// 时从中移去）。
+    pub(in crate::app) fn settings_choose_primary_font(&mut self, setting: Setting, name: &str) {
+        let current = self.font_value(setting).clone();
+        let list = winc_config::font_list(current.as_deref());
+        let rest = list.into_iter().skip(1).filter(|&n| n != name);
+        let list: Vec<&str> = std::iter::once(name).chain(rest).collect();
+        self.settings_choose_font(setting, Some(list.join(", ")));
+    }
+
+    /// 「后备字体」中点击字体 `name`：不在列表中时加到末尾，已在其中时移去。第一个字体不变。
+    pub(in crate::app) fn settings_toggle_fallback_font(&mut self, setting: Setting, name: &str) {
+        let current = self.font_value(setting).clone();
+        let mut list = winc_config::font_list(current.as_deref());
+        if list.first().is_none_or(|&first| first == name) {
+            return;
+        }
+        match list.iter().position(|&n| n == name) {
+            Some(at) => _ = list.remove(at),
+            None => list.push(name),
+        }
+        self.settings_choose_font(setting, Some(list.join(", ")));
     }
 
     /// 放大或缩小字号（`⌘+` `⌘−`），`⌘0` 还原（`up` 为 `None`）。
@@ -1328,6 +1363,18 @@ impl App {
         if right != self.terminal_right() {
             self.toggle_terminal_position();
         }
+    }
+
+    /// 设置终端标签的位置：`right` 为右侧，否则为顶部。
+    pub(in crate::app) fn set_terminal_tab_position(&mut self, right: bool) {
+        self.settings.selected = Setting::TerminalTabPosition;
+        if right == (self.config.terminal_vertical_tabs == Some(true)) {
+            return;
+        }
+        self.config.terminal_vertical_tabs = Some(right);
+        self.relayout();
+        self.save_config();
+        self.request_redraw();
     }
 
     /// 设置终端中用作 Meta 键的 ⌥。

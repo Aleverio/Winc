@@ -4,28 +4,6 @@ use winc_i18n::t;
 
 use super::*;
 
-/// 菜单项上显示的文字：标题、标题下方的一行小字，以及悬停提示。
-#[derive(Debug, Clone, PartialEq)]
-pub struct MenuLabel {
-    /// 标题。
-    pub title: String,
-    /// 标题下方的小字。
-    pub subtitle: Option<String>,
-    /// 悬停提示。
-    pub tooltip: Option<String>,
-}
-
-impl MenuLabel {
-    /// 只有标题的文字。
-    pub(crate) fn plain(title: &str) -> MenuLabel {
-        MenuLabel {
-            title: title.to_owned(),
-            subtitle: None,
-            tooltip: None,
-        }
-    }
-}
-
 /// 菜单中一项需要的数据，由 `Prepared` 持有，弹出菜单时借给系统菜单。
 #[cfg(target_os = "macos")]
 struct Prepared {
@@ -352,8 +330,9 @@ impl App {
             MenuTarget::BackgroundFit => background_fit_menu(),
             MenuTarget::TextWidth => text_width_menu(),
             MenuTarget::TerminalPosition => terminal_position_menu(),
+            MenuTarget::TerminalTabPosition => terminal_tab_position_menu(),
             MenuTarget::OptionAsMeta => option_as_meta_menu(),
-            &MenuTarget::Font(setting) => font_menu(setting),
+            &MenuTarget::Font(setting) => font_menu(setting, self.font_value(setting).as_deref()),
             &MenuTarget::Tool(task, id) => {
                 let row = self.settings.tool_row(tool_setting(task, id));
                 let install = row.is_some_and(|r| !r.install.is_empty());
@@ -491,6 +470,10 @@ impl App {
                 MenuEntry::Item(MenuCommand::RenameTerminal, true),
                 MenuEntry::Separator,
                 MenuEntry::Item(MenuCommand::CloseTerminal, true),
+                MenuEntry::Item(
+                    MenuCommand::CloseOtherTerminals,
+                    self.terminal.tabs.len() > 1,
+                ),
             ],
             &MenuTarget::Terminal(block) => {
                 let Some(tab) = self.terminal.tab() else {
@@ -571,12 +554,12 @@ impl App {
                 document_language_menu(doc.path.is_some())
             }
             MenuTarget::CommitFile(_) if self.commit_multi_selected() => {
-                let any_exists = self.commit_selection().iter().any(winc_backend::fs::exists);
+                let any_exists = (self.commit_selection().iter()).any(|path| self.may_exist(path));
                 commit_selection_menu(any_exists)
             }
             MenuTarget::CommitFile(path) => {
                 let mut menu = commit_file_menu(
-                    winc_backend::fs::exists(path),
+                    self.may_exist(path),
                     self.relative_path(path).is_some(),
                     &self.ignore_kinds(path),
                 );
@@ -629,10 +612,9 @@ impl App {
                 .filter(|(_, remote)| !remote.starts_with('-'))
                 .map(|(i, _)| MenuEntry::Item(MenuCommand::FormRemote(i), true))
                 .collect(),
-            MenuTarget::LogFile(_, path) => log_file_menu(
-                winc_backend::fs::exists(path),
-                self.relative_path(path).is_some(),
-            ),
+            MenuTarget::LogFile(_, path) => {
+                log_file_menu(self.may_exist(path), self.relative_path(path).is_some())
+            }
             MenuTarget::LogCommit(oid) => {
                 let commit = self.log_commit(oid);
                 let tags: Vec<&str> = (commit.iter().flat_map(|c| &c.refs))
@@ -714,6 +696,7 @@ impl App {
                 | MenuTarget::BackgroundFit
                 | MenuTarget::TextWidth
                 | MenuTarget::TerminalPosition
+                | MenuTarget::TerminalTabPosition
                 | MenuTarget::OptionAsMeta
                 | MenuTarget::Font(_)
         );
@@ -727,6 +710,7 @@ impl App {
             MenuTarget::BackgroundFit => Some(Setting::BackgroundFit),
             MenuTarget::TextWidth => Some(Setting::TextWidth),
             MenuTarget::TerminalPosition => Some(Setting::TerminalPosition),
+            MenuTarget::TerminalTabPosition => Some(Setting::TerminalTabPosition),
             MenuTarget::OptionAsMeta => Some(Setting::TerminalOptionAsMeta),
             MenuTarget::Font(setting) => Some(setting),
             _ => None,
@@ -1310,6 +1294,9 @@ impl App {
                 (self.terminal.shells.iter()).all(|shell| shell.command != configured.command)
             }),
             MenuCommand::TerminalPosition(right) => self.terminal_right() == right,
+            MenuCommand::TerminalTabPosition(right) => {
+                (self.config.terminal_vertical_tabs == Some(true)) == right
+            }
             MenuCommand::Zoom(i) => {
                 crate::app::settings::ZOOM_STEPS.get(i) == Some(&self.config.ui_zoom.unwrap_or(100))
             }
@@ -1327,7 +1314,7 @@ impl App {
                     (self.config.option_as_meta).unwrap_or(winc_config::OptionAsMeta::Left);
                 winc_config::OptionAsMeta::ALL.get(i) == Some(&current)
             }
-            MenuCommand::FontDefault | MenuCommand::Font(_) => {
+            MenuCommand::FontDefault | MenuCommand::Font(_) | MenuCommand::FallbackFont(_) => {
                 let Some(ContextMenu {
                     target: MenuTarget::Font(setting),
                     ..
@@ -1335,16 +1322,15 @@ impl App {
                 else {
                     return false;
                 };
-                let current = match setting {
-                    Setting::UiFont => &self.config.ui_font,
-                    Setting::TerminalFont => &self.config.terminal_font,
-                    _ => &self.config.editor_font,
-                };
+                // 字体菜单只看列表中的第一个字体，「后备字体」看其余的字体。
+                let list = winc_config::font_list(self.font_value(*setting).as_deref());
+                let name = |i: usize| winc_render::installed_fonts().get(i).map(|f| &*f.name);
                 match command {
-                    MenuCommand::Font(i) => winc_render::installed_fonts()
-                        .get(i)
-                        .is_some_and(|family| current.as_deref() == Some(family.name.as_str())),
-                    _ => current.is_none(),
+                    MenuCommand::Font(i) => name(i).is_some_and(|n| list.first() == Some(&n)),
+                    MenuCommand::FallbackFont(i) => {
+                        name(i).is_some_and(|n| list.iter().skip(1).any(|&m| m == n))
+                    }
+                    _ => list.is_empty(),
                 }
             }
             MenuCommand::ToolAuto => language.is_some() && configured.is_none(),
