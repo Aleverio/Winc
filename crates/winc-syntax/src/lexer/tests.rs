@@ -330,10 +330,77 @@ fn comment_rules() {
 
 #[test]
 fn hash_lines_and_tokens_are_ordered() {
-    let (tokens, _) = lex("a.c", "  #include <stdio.h>", LineState::Normal);
+    use TokenKind::*;
+    let c = |line: &str| lex("a.h", line, LineState::Normal);
+    let own = |items: &[(&str, TokenKind)]| -> Vec<(std::string::String, TokenKind)> {
+        items
+            .iter()
+            .map(|(text, kind)| ((*text).to_owned(), *kind))
+            .collect()
+    };
+    // 指令、宏名、值和行尾注释各自着色。
     assert_eq!(
-        tokens,
-        vec![("#include <stdio.h>".into(), TokenKind::Decorator)]
+        c("  #include <stdio.h> // io").0,
+        own(&[
+            ("#include", Decorator),
+            ("<stdio.h>", String),
+            ("// io", Comment)
+        ])
+    );
+    assert_eq!(
+        c("#include \"app/config.h\"").0,
+        own(&[("#include", Decorator), ("\"app/config.h\"", String)])
+    );
+    assert_eq!(c("#ifndef APP_CONFIG_H").0, own(&[("#ifndef", Decorator)]));
+    assert_eq!(
+        c("#define APP_CONFIG_H").0,
+        own(&[("#define", Decorator), ("APP_CONFIG_H", Function)])
+    );
+    assert_eq!(
+        c("# define BOARD_ETH_MDC_PIN   GPIO_PIN_1").0,
+        own(&[("# define", Decorator), ("BOARD_ETH_MDC_PIN", Function)])
+    );
+    assert_eq!(
+        c("#define BOARD_ETH_CLK_EN()  __HAL_RCC_ETH_CLK_ENABLE()").0,
+        own(&[
+            ("#define", Decorator),
+            ("BOARD_ETH_CLK_EN", Function),
+            ("__HAL_RCC_ETH_CLK_ENABLE", Function),
+        ])
+    );
+    assert_eq!(
+        c("#define TIMEOUT_MS 1500U /* per try */").0,
+        own(&[
+            ("#define", Decorator),
+            ("TIMEOUT_MS", Function),
+            ("1500U", Number),
+            ("/* per try */", Comment),
+        ])
+    );
+    assert_eq!(
+        c("#if defined(DEBUG) && VERSION >= 2").0,
+        own(&[("#if", Decorator), ("defined", Function), ("2", Number)])
+    );
+    assert_eq!(
+        c("#endif // APP_CONFIG_H").0,
+        own(&[("#endif", Decorator), ("// APP_CONFIG_H", Comment)])
+    );
+    // 指令行上开始的块注释延续到下一行。
+    let (_, next) = c("#define LIMIT 8 /* the");
+    assert!(matches!(next, LineState::BlockComment { .. }));
+    // 之后是自由文字的指令整行着色，其中的撇号不开始字符。
+    for line in ["#pragma mark - Don't", "#error can't build", "#"] {
+        let (tokens, next) = c(line);
+        assert_eq!(tokens, own(&[(line, Decorator)]));
+        assert_eq!(next, LineState::Normal);
+    }
+    assert_eq!(
+        lex("a.cs", "#region Don't touch", LineState::Normal).0,
+        own(&[("#region Don't touch", Decorator)])
+    );
+    assert_eq!(
+        lex("a.cs", "#if DEBUG // dev", LineState::Normal).0,
+        own(&[("#if", Decorator), ("// dev", Comment)])
     );
 
     let chars: Vec<char> = "x = foo(1, \"a\")  # c".chars().collect();
