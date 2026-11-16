@@ -601,19 +601,28 @@ impl TermTab {
         if self.cache.is_empty() {
             return;
         }
-        let keep = self.wanted(CACHE_SCREENS as u64 + 1);
-        let (keep_from, keep_to) = match self.selection {
-            Some(s) => (
+        let mut keep = self.wanted(CACHE_SCREENS as u64 + 1);
+        if let Some(s) = self.selection {
+            let (from, to) = (
                 s.anchor.line.min(s.head.line),
                 s.anchor.line.max(s.head.line),
-            ),
-            None => (u64::MAX, 0),
-        };
-        self.cache.retain(|&line, _| {
-            keep.iter()
-                .any(|&(start, end)| (start..end).contains(&line))
-                || (keep_from..=keep_to).contains(&line)
-        });
+            );
+            keep.push((from, to.saturating_add(1)));
+        }
+        keep.sort_unstable();
+        // 只查看保留范围之间的空隙：每一帧都会运行到这里，选区很大时不逐行检查保留下来的行。
+        let mut stale = Vec::new();
+        let mut from = 0;
+        for (start, end) in keep {
+            if start > from {
+                stale.extend(self.cache.range(from..start).map(|(&line, _)| line));
+            }
+            from = from.max(end);
+        }
+        stale.extend(self.cache.range(from..).map(|(&line, _)| line));
+        for line in stale {
+            self.cache.remove(&line);
+        }
     }
 
     /// 当前折起来的各段，按位置排好。

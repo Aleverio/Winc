@@ -382,3 +382,35 @@ fn a_taller_grid_does_not_preview_rows_from_before_a_clear() {
     tab.cleared = 101;
     assert_eq!(tab.top(), 101, "清屏之后滚出去的行仍然拉回");
 }
+
+#[test]
+fn pruning_keeps_the_selection_and_the_rows_near_the_view() {
+    let lines = || -> Vec<Line> {
+        let line = |i| Line {
+            text: format!("h{i}"),
+            ..Line::default()
+        };
+        (0..400).map(line).collect()
+    };
+    // 没有选区：取回的行只留网格附近的，远处的都移除。
+    let mut tab = tab_with(&["a", "b"], &[]);
+    tab.history = (100, 500);
+    tab.store_history(100, lines());
+    tab.prune();
+    assert!(tab.cache.contains_key(&499) && !tab.cache.contains_key(&130));
+
+    // 选区用到的行不移除，选区之外远离网格的行照常移除。
+    let mut tab = tab_with(&["a", "b"], &[]);
+    tab.history = (100, 500);
+    let point = |line| Point { line, col: 0 };
+    tab.selection = Some(Selection {
+        anchor: point(150),
+        head: point(120),
+        unit: Unit::Char,
+    });
+    tab.store_history(100, lines());
+    tab.prune();
+    assert!((120..=150).all(|line| tab.cache.contains_key(&line)));
+    assert!(!tab.cache.contains_key(&119) && !tab.cache.contains_key(&151));
+    assert!(tab.cache.contains_key(&499));
+}
