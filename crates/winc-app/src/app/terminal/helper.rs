@@ -754,6 +754,19 @@ impl App {
                 }
                 if let Some(config) = again {
                     self.start_run(config);
+                    return;
+                }
+                // shell 正常退出（`exit`、⌃D）时关掉标签，不留一个等回车的空标签；异常退出的
+                // 和运行配置的标签留着，用户要看退出码和输出。
+                let t = &self.terminal;
+                let shell = t
+                    .tabs
+                    .iter()
+                    .position(|tab| tab.id == id && tab.run.is_none());
+                if code == 0
+                    && let Some(index) = shell
+                {
+                    self.close_terminal_tab_now(index);
                 }
             }
             FromHelper::Disconnected { tab: id } => {

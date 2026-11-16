@@ -79,7 +79,12 @@ impl App {
                 }
                 (!application || terminal_reserved(action))
                     && (!terminal_content(action) || prompt)
-                    && (action != Action::ClearTerminal || !alternate)
+                    && (!matches!(
+                        action,
+                        Action::ClearTerminal
+                            | Action::ScrollTerminalTop
+                            | Action::ScrollTerminalBottom
+                    ) || !alternate)
                     && (binding.second.is_none() || prompt)
             },
         )

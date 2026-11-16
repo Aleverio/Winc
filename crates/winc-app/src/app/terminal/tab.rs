@@ -71,6 +71,10 @@ impl ViewRow {
     }
 }
 
+/// 沿软换行向上、向下各查看的显示行数上限：1024 行在 80 列时约 8 万个字符，超过常见的单条
+/// 命令和路径；限制它避免在很长的单行输出上逐行回溯，选择范围每帧都会计算。
+const WRAP_ROWS: u64 = 1024;
+
 /// 一段折起来的行：`start..end`（绝对行号），属于第 `block` 个块。
 #[derive(Debug, Clone, Copy)]
 struct Fold {
@@ -904,13 +908,14 @@ impl TermTab {
                 );
                 (start, end)
             }
+            // 按逻辑行选：折成几个显示行的一条命令整条选中。
             Unit::Line => (
                 Point {
-                    line: from.line,
+                    line: self.logical_rows(from.line).0,
                     col: 0,
                 },
                 Point {
-                    line: to.line,
+                    line: self.logical_rows(to.line).1,
                     col: usize::MAX,
                 },
             ),
@@ -1062,17 +1067,72 @@ impl TermTab {
         while end + 1 < cells.len() && is_word(cells[end + 1].2) {
             end += 1;
         }
+        let mut from = Point {
+            line: point.line,
+            col: cells[start].0,
+        };
         let (col, w, _) = cells[end];
-        Some((
-            Point {
-                line: point.line,
-                col: cells[start].0,
-            },
-            Point {
-                line: point.line,
+        let mut to = Point {
+            line: point.line,
+            col: col + w,
+        };
+        // 词折到了相邻的行：沿软换行向上、向下延伸，折行的路径和长参数一次选中。
+        let mut reached = start == 0;
+        while reached && from.line > self.history.0 && point.line - from.line < WRAP_ROWS {
+            let Some(above) = self.line(from.line - 1).filter(|line| line.wrapped) else {
+                break;
+            };
+            let cells = cell_chars(&above.text);
+            let word = cells
+                .iter()
+                .rev()
+                .take_while(|cell| is_word(cell.2))
+                .count();
+            if word == 0 {
+                break;
+            }
+            from = Point {
+                line: from.line - 1,
+                col: cells[cells.len() - word].0,
+            };
+            reached = word == cells.len();
+        }
+        let mut row = line;
+        let mut reached = end + 1 == cells.len();
+        while reached && row.wrapped && to.line - point.line < WRAP_ROWS {
+            let Some(below) = self.line(to.line + 1) else {
+                break;
+            };
+            let cells = cell_chars(&below.text);
+            let word = cells.iter().take_while(|cell| is_word(cell.2)).count();
+            if word == 0 {
+                break;
+            }
+            let (col, w, _) = cells[word - 1];
+            to = Point {
+                line: to.line + 1,
                 col: col + w,
-            },
-        ))
+            };
+            reached = word == cells.len();
+            row = below;
+        }
+        Some((from, to))
+    }
+
+    /// 第 `line` 行所在逻辑行的首行和末行：软换行连在一起的各显示行。
+    ///
+    /// 尚未取回的历史行截断逻辑行。
+    pub fn logical_rows(&self, line: u64) -> (u64, u64) {
+        let wraps = |l: u64| self.line(l).is_some_and(|row| row.wrapped);
+        let mut first = line;
+        while first > self.history.0 && line - first < WRAP_ROWS && wraps(first - 1) {
+            first -= 1;
+        }
+        let mut last = line;
+        while last - line < WRAP_ROWS && wraps(last) && self.line(last + 1).is_some() {
+            last += 1;
+        }
+        (first, last)
     }
 }
 

@@ -425,6 +425,8 @@ pub enum MenuCommand {
     /// 终端标签：改名字。
     RenameTerminal,
     CloseTerminal,
+    /// 终端标签：关闭其他终端标签。
+    CloseOtherTerminals,
     /// 终端：右键点着的命令块的命令行。
     CopyCommand,
     /// 终端：右键点着的命令块的整段输出。
@@ -580,6 +582,7 @@ impl MenuCommand {
             MenuCommand::NewTerminal => t!("cmd-new-terminal"),
             MenuCommand::RenameTerminal => t!("cmd-rename-file"),
             MenuCommand::CloseTerminal => t!("menu-terminal-close"),
+            MenuCommand::CloseOtherTerminals => t!("cmd-close-other-tabs"),
             MenuCommand::CopyCommand => t!("menu-terminal-copy-command"),
             MenuCommand::CopyOutput => t!("menu-terminal-copy-output"),
             MenuCommand::Rerun => t!("menu-terminal-rerun"),

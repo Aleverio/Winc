@@ -470,6 +470,10 @@ impl App {
                 MenuEntry::Item(MenuCommand::RenameTerminal, true),
                 MenuEntry::Separator,
                 MenuEntry::Item(MenuCommand::CloseTerminal, true),
+                MenuEntry::Item(
+                    MenuCommand::CloseOtherTerminals,
+                    self.terminal.tabs.len() > 1,
+                ),
             ],
             &MenuTarget::Terminal(block) => {
                 let Some(tab) = self.terminal.tab() else {

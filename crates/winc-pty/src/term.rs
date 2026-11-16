@@ -507,6 +507,10 @@ struct Emulator {
     signed_end: bool,
     /// 正在运行的命令是否由附带有效随机数的 `C` 开始。
     verified: bool,
+    /// 程序设置的窗口标题。
+    title: String,
+    /// 程序保存的窗口标题（`CSI 22 t`），供退出时恢复（`CSI 23 t`）。
+    titles: Vec<String>,
 }
 
 impl Emulator {
@@ -550,6 +554,8 @@ impl Emulator {
             nonce: None,
             signed_end: false,
             verified: false,
+            title: String::new(),
+            titles: Vec::new(),
         };
         emu.reset_tabs();
         emu.damage.clear(rows);

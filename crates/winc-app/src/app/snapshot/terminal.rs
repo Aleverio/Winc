@@ -1098,9 +1098,9 @@ fn the_shell_menu_starts_the_chosen_shell_and_remembers_it() {
     let session = app.terminal_session().unwrap();
     assert_eq!(session.shells, ["", "/bin/bash"]);
 
-    // 退出后重新启动：还是这个 shell。
+    // 异常退出的标签留着，重新启动后还是这个 shell（正常退出的标签直接关闭）。
     let id = app.terminal.tab().unwrap().id;
-    app.terminal_message(FromHelper::Exited { tab: id, code: 0 });
+    app.terminal_message(FromHelper::Exited { tab: id, code: 1 });
     app.restart_terminal_tab();
     app.relayout();
     assert_eq!(started(&app, &log, b"/bin/bash"), 2);

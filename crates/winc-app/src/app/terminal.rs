@@ -774,6 +774,19 @@ impl App {
         self.request_redraw();
     }
 
+    /// 关掉编号是 `keep` 的标签以外的各个标签；其中还有程序在运行的照常先确认。
+    pub(in crate::app) fn close_other_terminal_tabs(&mut self, keep: u16) {
+        let others: Vec<u16> = (self.terminal.tabs.iter())
+            .map(|tab| tab.id)
+            .filter(|&id| id != keep)
+            .collect();
+        for id in others {
+            if let Some(index) = self.terminal.index_of(id) {
+                self.close_terminal_tab(index);
+            }
+        }
+    }
+
     /// 关掉一个标签（⌘W、标签上的 ×）。
     ///
     /// 里面还有程序在运行时先确认（`terminal.confirmClose`）。

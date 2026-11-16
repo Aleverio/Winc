@@ -81,6 +81,17 @@ impl App {
             return;
         }
 
+        // 中键点终端的标签：关闭它，与编辑区的标签相同。
+        if button == MouseButton::Middle
+            && let Some(&(_, hit)) =
+                (self.hits.terminal.iter()).find(|(rect, _)| rect.contains(x, y))
+            && let crate::app::terminal::HeaderHit::Tab(index)
+            | crate::app::terminal::HeaderHit::Close(index) = hit
+        {
+            self.close_terminal_tab(index);
+            return;
+        }
+
         if button == MouseButton::Middle {
             // 标签栏的位置取自上一帧的绘制：其间可能用快捷键关闭了标签，序号可能已不存在，
             // 因此用 `get` 取文档。

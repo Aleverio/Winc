@@ -460,6 +460,8 @@ impl App {
             FindInTerminal if self.terminal.tab().is_some() => self.open_terminal_find(),
             FindInTerminal => return false,
             MaximizeTerminal => self.toggle_terminal_maximized(),
+            ScrollTerminalTop => self.scroll_terminal(isize::MAX),
+            ScrollTerminalBottom => self.scroll_terminal(isize::MIN),
             ToggleTerminalPosition => self.toggle_terminal_position(),
             InstallShellCommand => self.install_shell_command(),
             UninstallShellCommand => self.uninstall_shell_command(),

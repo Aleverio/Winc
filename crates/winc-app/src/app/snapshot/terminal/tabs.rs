@@ -697,3 +697,49 @@ fn a_python_environment_follows_the_recorded_answer() {
     assert_eq!(app.python_choices(), Some(vec![false]));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_shell_that_exits_cleanly_closes_its_tab() {
+    let mut app = blank_app(false);
+    show_terminal(&mut app, "one");
+    add_tab(&mut app, "zsh", "two");
+    let (first, second) = (app.terminal.tabs[0].id, app.terminal.tabs[1].id);
+
+    // 异常退出：标签留着，用户要看退出码和输出。
+    app.terminal_message(FromHelper::Exited {
+        tab: second,
+        code: 1,
+    });
+    assert_eq!(app.terminal.tabs.len(), 2);
+    assert!(app.terminal.tabs[1].ended.is_some());
+
+    // 正常退出：标签直接关闭；最后一个关闭时面板收起。
+    app.terminal_message(FromHelper::Exited {
+        tab: first,
+        code: 0,
+    });
+    assert_eq!(app.terminal.tabs.len(), 1);
+    assert_eq!(app.terminal.tabs[0].id, second);
+}
+
+#[test]
+fn scrolling_to_the_ends_and_closing_the_other_tabs() {
+    let mut app = blank_app(false);
+    let mut lines = String::new();
+    for i in 0..200 {
+        lines.push_str(&format!("line {i}\r\n"));
+    }
+    show_terminal(&mut app, &lines);
+    assert!(app.run_action(crate::keymap::Action::ScrollTerminalTop));
+    let tab = app.terminal.tab().unwrap();
+    assert!(tab.scroll > 0 && tab.scroll == tab.max_scroll());
+    assert!(app.run_action(crate::keymap::Action::ScrollTerminalBottom));
+    assert_eq!(app.terminal.tab().unwrap().scroll, 0);
+
+    add_tab(&mut app, "zsh", "two");
+    add_tab(&mut app, "zsh", "three");
+    let keep = app.terminal.tabs[1].id;
+    app.close_other_terminal_tabs(keep);
+    assert_eq!(app.terminal.tabs.len(), 1);
+    assert_eq!(app.terminal.tabs[0].id, keep);
+}

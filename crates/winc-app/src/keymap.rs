@@ -116,6 +116,8 @@ pub enum KeyCode {
     Right,
     PageUp,
     PageDown,
+    Home,
+    End,
 }
 
 /// 返回物理键 `key` 在美式键盘上的字符（字母为小写）；不是字母、数字或标点键时返回 `None`。
@@ -224,6 +226,8 @@ impl Stroke {
                 NamedKey::ArrowRight => KeyCode::Right,
                 NamedKey::PageUp => KeyCode::PageUp,
                 NamedKey::PageDown => KeyCode::PageDown,
+                NamedKey::Home => KeyCode::Home,
+                NamedKey::End => KeyCode::End,
                 NamedKey::Process if m.control_key() => KeyCode::Char(us_char(physical)?),
                 named => {
                     let n = function_key(named)?;
@@ -274,6 +278,8 @@ impl Stroke {
             KeyCode::Right => "→".into(),
             KeyCode::PageUp => "PageUp".into(),
             KeyCode::PageDown => "PageDown".into(),
+            KeyCode::Home => "Home".into(),
+            KeyCode::End => "End".into(),
         };
         let m = self.mods;
         if os == Os::Mac {

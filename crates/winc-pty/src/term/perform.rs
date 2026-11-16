@@ -28,6 +28,8 @@ const MAX_CLIPBOARD: usize = 1 << 20;
 ///
 /// 超出的部分截掉：标签栏一项无法完整显示更长的标题，该上限同时限制程序刷出的超长标题。
 const MAX_TITLE: usize = 1024;
+/// 标题栈的深度上限：16 层，与键盘协议标志栈相同，超过常见的嵌套层数。
+const MAX_TITLE_STACK: usize = 16;
 /// 通知（OSC 9、777）标题与正文各自保留的最大字符数（字符，按码点个数计）。
 ///
 /// 通知只显示一两行，与标题用同一上限；超长正文不会整段留在内存里，也不会整段发给主程序。
@@ -281,7 +283,7 @@ impl Perform for Emulator {
                     None => stack.push(next),
                 }
             }
-            ([], 't') => self.window_report(args.get(0, 0)),
+            ([], 't') => self.window_report(args.get(0, 0), args.get(1, 0)),
             _ => {}
         }
     }
@@ -345,11 +347,7 @@ impl Perform for Emulator {
                 if let Some((cut, _)) = title.char_indices().nth(MAX_TITLE) {
                     title.truncate(cut);
                 }
-                // 程序在循环中改标题时只保留最后一个，事件不会持续累积。
-                match self.events.last_mut() {
-                    Some(Event::Title(last)) => *last = title,
-                    _ => self.events.push(Event::Title(title)),
-                }
+                self.set_title(title);
             }
             b"7" => {
                 if let Some(path) = params.get(1).and_then(|url| file_url_path(url)) {
@@ -586,8 +584,9 @@ impl Emulator {
 
     /// 回答 `CSI t` 的查询：14 为窗口像素尺寸，16 为单元格像素尺寸，18 为行列数。
     ///
-    /// 其余请求（修改窗口大小、标题栈）忽略。
-    fn window_report(&mut self, op: u16) {
+    /// 22、23 保存和恢复窗口标题（`which` 为 1 时只针对图标标题，忽略）：程序退出时把标题
+    /// 恢复成启动前的值。其余请求（修改窗口大小）忽略。
+    fn window_report(&mut self, op: u16, which: u16) {
         let (width, height) = (usize::from(self.pixels.0), usize::from(self.pixels.1));
         match op {
             14 => self.respond(&format!("\x1b[4;{height};{width}t")),
@@ -599,7 +598,29 @@ impl Emulator {
                 let (rows, cols) = (self.rows, self.cols);
                 self.respond(&format!("\x1b[8;{rows};{cols}t"));
             }
+            22 if which != 1 => {
+                // 栈满时丢弃最旧的一项，嵌套保存不会持续占用内存。
+                if self.titles.len() >= MAX_TITLE_STACK {
+                    self.titles.remove(0);
+                }
+                self.titles.push(self.title.clone());
+            }
+            23 if which != 1 => {
+                if let Some(title) = self.titles.pop() {
+                    self.set_title(title);
+                }
+            }
             _ => {}
+        }
+    }
+
+    /// 记下窗口标题并通知主程序。
+    fn set_title(&mut self, title: String) {
+        self.title.clone_from(&title);
+        // 程序在循环中改标题时只保留最后一个，事件不会持续累积。
+        match self.events.last_mut() {
+            Some(Event::Title(last)) => *last = title,
+            _ => self.events.push(Event::Title(title)),
         }
     }
 

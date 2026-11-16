@@ -123,6 +123,7 @@ impl App {
                 match command {
                     MenuCommand::RenameTerminal => self.open_terminal_rename(index),
                     MenuCommand::CloseTerminal => self.close_terminal_tab(index),
+                    MenuCommand::CloseOtherTerminals => self.close_other_terminal_tabs(id),
                     _ => {}
                 }
             }

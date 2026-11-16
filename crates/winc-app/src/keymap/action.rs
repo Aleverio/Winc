@@ -257,6 +257,10 @@ pub enum Action {
     FocusTerminal9,
     FindInTerminal,
     MaximizeTerminal,
+    /// 把终端翻到回滚缓冲的最上面。
+    ScrollTerminalTop,
+    /// 把终端翻回最新的输出。
+    ScrollTerminalBottom,
     ToggleTerminalPosition,
     InstallShellCommand,
     UninstallShellCommand,
@@ -521,6 +525,8 @@ impl Action {
             FocusTerminal9 => t!("cmd-terminal-9"),
             FindInTerminal => t!("cmd-find-in-terminal"),
             MaximizeTerminal => t!("cmd-maximize-terminal"),
+            ScrollTerminalTop => t!("cmd-scroll-terminal-top"),
+            ScrollTerminalBottom => t!("cmd-scroll-terminal-bottom"),
             ToggleTerminalPosition => t!("cmd-toggle-terminal-position"),
             InstallShellCommand => t!("cmd-install-shell-command"),
             UninstallShellCommand => t!("cmd-uninstall-shell-command"),
@@ -747,6 +753,8 @@ impl Action {
             FocusTerminal9 => "Terminal: Focus Tab 9",
             FindInTerminal => "Terminal: Find",
             MaximizeTerminal => "Terminal: Maximize Panel",
+            ScrollTerminalTop => "Terminal: Scroll to Top",
+            ScrollTerminalBottom => "Terminal: Scroll to Bottom",
             ToggleTerminalPosition => "Terminal: Toggle Panel Position",
             InstallShellCommand => "Shell Command: Install winc Command",
             UninstallShellCommand => "Shell Command: Uninstall winc Command",
@@ -938,6 +946,8 @@ impl Action {
             | FocusTerminal9
             | FindInTerminal
             | MaximizeTerminal
+            | ScrollTerminalTop
+            | ScrollTerminalBottom
             | ToggleTerminalPosition
             | RenameTerminal
             | PreviousCommand
@@ -1063,6 +1073,8 @@ impl Action {
             | Action::FocusTerminal9
             | Action::FindInTerminal
             | Action::MaximizeTerminal
+            | Action::ScrollTerminalTop
+            | Action::ScrollTerminalBottom
             | Action::ToggleTerminalPosition
             | Action::RenameTerminal
             | Action::PreviousCommand
@@ -1313,6 +1325,8 @@ pub const ACTIONS: &[Action] = {
         ClearTerminal,
         FindInTerminal,
         MaximizeTerminal,
+        ScrollTerminalTop,
+        ScrollTerminalBottom,
         ToggleTerminalPosition,
         InstallShellCommand,
         UninstallShellCommand,

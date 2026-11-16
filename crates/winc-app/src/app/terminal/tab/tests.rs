@@ -414,3 +414,30 @@ fn pruning_keeps_the_selection_and_the_rows_near_the_view() {
     assert!(!tab.cache.contains_key(&119) && !tab.cache.contains_key(&151));
     assert!(tab.cache.contains_key(&499));
 }
+
+#[test]
+fn words_and_lines_are_selected_across_soft_wraps() {
+    let mut tab = tab_with(&["see src/ver", "y/long/pa", "th.rs:3 ok", "next"], &[]);
+    tab.rows[0].wrapped = true;
+    tab.rows[1].wrapped = true;
+    let p = |line, col| Point { line, col };
+    // 双击折成三行的路径中间一行：整条路径选中。
+    assert_eq!(tab.word_at(p(101, 2)), Some((p(100, 4), p(102, 7))));
+    // 词在行内结束时不越过软换行。
+    assert_eq!(tab.word_at(p(100, 1)), Some((p(100, 0), p(100, 3))));
+    assert_eq!(tab.word_at(p(102, 8)), Some((p(102, 8), p(102, 10))));
+    assert_eq!(tab.word_at(p(103, 1)), Some((p(103, 0), p(103, 4))));
+
+    // 三击其中任意一行：折行连在一起的整条逻辑行选中，不带下一行。
+    assert_eq!(tab.logical_rows(101), (100, 102));
+    assert_eq!(tab.logical_rows(103), (103, 103));
+    tab.selection = Some(Selection {
+        anchor: p(101, 2),
+        head: p(101, 2),
+        unit: Unit::Line,
+    });
+    assert_eq!(
+        tab.selected_text().unwrap().unwrap(),
+        "see src/very/long/path.rs:3 ok"
+    );
+}

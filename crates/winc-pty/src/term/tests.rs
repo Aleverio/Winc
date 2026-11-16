@@ -476,6 +476,20 @@ fn resizing_after_a_clear_does_not_bring_the_cleared_output_back() {
 }
 
 #[test]
+fn a_program_restores_the_title_it_found() {
+    let mut t = term(20, 4);
+    feed(&mut t, "\x1b]2;~/winc\x07");
+    // 保存标题、换成自己的，退出时恢复。
+    feed(&mut t, "\x1b[22;2t\x1b]2;main.rs - VIM\x07");
+    t.take_events();
+    feed(&mut t, "\x1b[23;2t");
+    assert_eq!(t.take_events(), [Event::Title("~/winc".into())]);
+    // 没有保存过时恢复不改标题；只针对图标标题的请求忽略。
+    feed(&mut t, "\x1b[23;2t\x1b[22;1t\x1b[23;1t");
+    assert!(t.take_events().is_empty());
+}
+
+#[test]
 fn only_a_width_change_renumbers_the_history() {
     let mut t = term(10, 4);
     feed(&mut t, "1\r\n2\r\n3\r\n4\r\n5\r\n$ ");

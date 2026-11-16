@@ -81,6 +81,9 @@ pub fn bindings(os: Os) -> Vec<Binding> {
     t.one(CloseTerminal, Terminal, c(term, 'w'));
     t.one(FindInTerminal, Terminal, c(term, 'f'));
     t.one(MaximizeTerminal, Terminal, key(cmd | shift, Enter));
+    // 翻到回滚缓冲的两端，与编辑区到文件首尾的键对应。
+    t.one(ScrollTerminalTop, Terminal, key(term, Home));
+    t.one(ScrollTerminalBottom, Terminal, key(term, End));
     t.one(Copy, Terminal, c(term, 'c'));
     t.one(SelectAll, Terminal, c(term, 'a'));
     if !mac {
