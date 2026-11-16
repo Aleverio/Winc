@@ -162,7 +162,7 @@ pub(crate) fn restore_tabs(
         let index = match tab {
             Tab::File(path) => take(&mut saved, |b| b.path.as_deref() == Some(path.as_path()))
                 .and_then(|backup| put_back(editor, backup))
-                // 远端的文件在界面线程上查不到：照常恢复标签，文件不在时由读取报告。
+                // 远端的文件在界面线程上无法查询：仍然恢复标签，文件不存在时由读取报告。
                 .or_else(|| {
                     let found = winc_backend::is_remote(path) || winc_backend::fs::is_file(path);
                     found.then(|| editor.open_pending(path))

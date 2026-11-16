@@ -51,6 +51,7 @@ fn a_folder_on_a_connected_host_opens_as_the_workspace() {
     // 测试线程相当于界面线程：不允许等待远端的应答，后台任务就地执行时除外。
     remote::forbid_blocking();
     folders_on_a_remote_host_are_not_taken_for_files();
+    features_work_in_a_remote_workspace();
 
     // 模块默认关闭：状态栏上没有连接的按钮，命令不可用，按下也不打开面板。
     paint(&mut app);
@@ -696,8 +697,8 @@ fn measure_remote_round_trips() {
     remote::disconnect(&target);
 }
 
-/// 回归：界面线程上查询远端路径的类别一律得到「不是目录」，远端的目录曾被当成文件，「在终端中
-/// 打开」和「在目录中查找」作用到它的上一级。
+/// 回归：界面线程上查询远端路径的类别一律得到「不是目录」，据此取上一级时，「在终端中打开」
+/// 和「在目录中查找」会作用到远端目录的上一级。
 ///
 /// 由 [`a_folder_on_a_connected_host_opens_as_the_workspace`] 调用：已连接的主机是进程内共有的
 /// 状态，另起一个测试会与它列出主机的检查相互干扰。
@@ -773,7 +774,7 @@ fn folders_on_a_remote_host_are_not_taken_for_files() {
     let want = root.join("src");
     assert_eq!(app.terminal.want, [want.as_os_str().as_bytes().to_vec()]);
 
-    // 打开之前的检查：远端的文件查不到时照常打开，由读取报告结果；目录不当作文件。
+    // 打开之前的检查：远端的文件无法查询时仍然打开，由读取报告结果；目录不当作文件。
     assert!(app.may_be_file(&root.join("src/main.rs")));
     assert!(app.may_be_file(&root.join("src/deep/unlisted.rs")));
     assert!(!app.may_be_file(&root.join("src")));
@@ -800,10 +801,127 @@ fn folders_on_a_remote_host_are_not_taken_for_files() {
     let outside = winc_backend::virtual_path(&target, b"/no/such/place.rs");
     assert!(!app.terminal_target(&outside, true));
 
-    // Python 环境：远端的目录按文件树上看得到的判断。看得到环境的目录照常经过询问（测试中没有
+    // 现场中远端终端的目录可以只有那台主机上的路径：恢复时换算到打开的目录所在的主机，
+    // 不在本机启动 shell；已经换算过的不再换算。
+    app.terminal = Default::default();
+    let host_path = dir.join("src");
+    let session = winc_config::TerminalSession {
+        tabs: vec![host_path, root.join("src/deep"), PathBuf::new()],
+        open: true,
+        ..Default::default()
+    };
+    app.restore_terminal(&session);
+    let wanted: Vec<PathBuf> = (app.terminal.want.iter())
+        .map(|dir| PathBuf::from(std::ffi::OsStr::from_bytes(dir)))
+        .collect();
+    assert_eq!(
+        wanted,
+        [root.join("src"), root.join("src/deep"), PathBuf::new()]
+    );
+    app.terminal = Default::default();
+
+    // 远端的 shell 上报当前目录：标签记下的、现场里保存的都是那台主机上的路径，重启标签和
+    // 重新打开目录时仍回到那里。
+    super::terminal::show_terminal(&mut app, "$ ");
+    let id = app.terminal.tab().unwrap().id;
+    let reported = dir.join("src").as_os_str().as_bytes().to_vec();
+    app.terminal_message(winc_pty::protocol::FromHelper::Event {
+        tab: id,
+        event: winc_pty::protocol::Event::Cwd(reported),
+    });
+    let saved = app.terminal_session().expect("有终端标签");
+    assert_eq!(saved.tabs, [root.join("src")]);
+    app.terminal = Default::default();
+
+    // Python 环境：远端的目录按文件树上看得到的判断。看得到环境的目录同样经过询问（测试中没有
     // 窗口，按同意处理）；看不到的不加载，不会不经询问就加载远端的环境。
     app.terminal.want = vec![Vec::new(), want.as_os_str().as_bytes().to_vec()];
     assert_eq!(app.python_choices(), Some(vec![true, false]));
+
+    remote::disconnect(&target);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 远端工作区中不经文件树的各项功能：快速打开、全局搜索、跳转定义、查找引用、复制路径、
+/// 外部修改后的重读和打开不存在的文件。由 [`a_folder_on_a_connected_host_opens_as_the_workspace`]
+/// 调用，原因同 [`folders_on_a_remote_host_are_not_taken_for_files`]。
+fn features_work_in_a_remote_workspace() {
+    let dir = search_folder("remote-features").canonicalize().unwrap();
+    let target = loopback("app-remote-features");
+    let root = winc_backend::virtual_path(&target, dir.as_os_str().as_bytes());
+    let mut app = blank_app(false);
+    app.config.remote_enabled = Some(true);
+    app.open_folder(&root);
+
+    // 快速打开：文件表在后台线程上经连接列出。测试中没有事件循环，这里显式在后台建立。
+    app.overlays.picker.index = winc_editor::FileIndex::spawn(&root, || {});
+    app.open_picker();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while app.overlays.picker.index.is_empty() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        app.picker_indexed();
+    }
+    app.overlays.picker.input.set_text("cfg");
+    app.picker_refresh();
+    let picker = &app.overlays.picker;
+    let first = picker.index.file(picker.hits[0]).unwrap().path.to_owned();
+    assert!(first.ends_with("config.rs"), "{first}");
+    app.close_picker();
+
+    // 全局搜索在那台主机上的文件中进行。
+    app.set_sidebar_view(SidebarView::Search);
+    app.panels.global.query.insert("load_config");
+    app.run_global_search();
+    finish_search(&mut app);
+    assert_eq!(app.panels.global.engine.error(), None);
+    assert_eq!(app.panels.global.engine.total(), 2);
+
+    // 跳转定义：定义在另一个文件中时打开它；查找引用是一次全字的全局搜索。
+    app.open_path(&root.join("src/main.rs"));
+    let text = app
+        .editor
+        .active()
+        .unwrap()
+        .text_range(0, usize::MAX)
+        .unwrap();
+    let at = text[..text.find("load_config").unwrap()].chars().count() + 1;
+    app.select(at, at);
+    app.go_to_definition();
+    assert_eq!(app.editor.active().unwrap().name(), "config.rs");
+    app.find_references();
+    finish_search(&mut app);
+    assert_eq!(app.panels.global.engine.total(), 2);
+
+    // 复制路径给出那台主机上的写法，可以直接用在那里的终端中。
+    app.copy_path(&root.join("src/main.rs"), false);
+    let copied = dir.join("src/main.rs").to_string_lossy().into_owned();
+    assert_eq!(app.clipboard_text(), Some(copied));
+    app.copy_path(&root.join("src/main.rs"), true);
+    assert_eq!(app.clipboard_text().as_deref(), Some("src/main.rs"));
+
+    // 其他程序修改了已打开的文件：窗口重新获得焦点时重读。
+    app.open_path(&root.join("src/config.rs"));
+    std::fs::write(dir.join("src/config.rs"), "pub struct Changed;\n").unwrap();
+    app.check_disk();
+    let now = app
+        .editor
+        .active()
+        .unwrap()
+        .text_range(0, usize::MAX)
+        .unwrap();
+    assert!(now.contains("Changed"), "{now}");
+
+    // 不存在的文件：标签中说明原因，不是一个可以编辑的空文档。
+    app.open_path(&root.join("src/missing.rs"));
+    let missing = app.editor.active().unwrap();
+    assert!(
+        matches!(
+            missing.unsupported,
+            Some(winc_editor::Unsupported::Unreadable(_))
+        ),
+        "{:?}",
+        missing.unsupported
+    );
 
     remote::disconnect(&target);
     let _ = std::fs::remove_dir_all(&dir);

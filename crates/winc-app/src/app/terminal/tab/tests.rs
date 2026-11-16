@@ -399,7 +399,7 @@ fn pruning_keeps_the_selection_and_the_rows_near_the_view() {
     tab.prune();
     assert!(tab.cache.contains_key(&499) && !tab.cache.contains_key(&130));
 
-    // 选区用到的行不移除，选区之外远离网格的行照常移除。
+    // 选区用到的行不移除，选区之外远离网格的行同样移除。
     let mut tab = tab_with(&["a", "b"], &[]);
     tab.history = (100, 500);
     let point = |line| Point { line, col: 0 };

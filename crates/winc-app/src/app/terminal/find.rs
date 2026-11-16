@@ -429,7 +429,7 @@ impl App {
             rescan.splice(0..0, found);
             if find.scan.is_none() {
                 let keep = find.current.and_then(|i| find.matches.get(i)).copied();
-                // 没有重新找的行沿用原来的匹配：终点在这一轮停下的行之前、仍在回滚缓冲里的。
+                // 没有重新查找的行沿用已有的匹配：终点在这一轮停下的行之前、仍在回滚缓冲里的。
                 let (first, stop) = (tab.history.0, next);
                 let mut matches = std::mem::take(&mut find.matches);
                 matches.retain(|m| m.0.line >= first && m.1.line < stop);

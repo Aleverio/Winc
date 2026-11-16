@@ -436,17 +436,25 @@ impl App {
     ///
     /// 终端里已经有标签了不动；面板上次收着时等打开面板再建。
     pub(super) fn restore_terminal(&mut self, session: &TerminalSession) {
+        let root = self.editor.root().map(PathBuf::from);
         let t = &mut self.terminal;
         let enabled = self.config.terminal_enabled.unwrap_or(false);
         if !enabled || !t.tabs.is_empty() || !t.want.is_empty() {
             return;
         }
-        let tabs = session.tabs.iter();
-        t.want = tabs.map(|p| os_bytes(p.as_os_str())).collect();
+        // 目录按打开的目录所在的主机换算：现场中远端终端的目录可以只有那台主机上的路径，
+        // 不换算会在本机启动 shell。
+        let dirs: Vec<PathBuf> = (session.tabs.iter())
+            .map(|dir| match &root {
+                Some(root) => helper::terminal_path(root, dir.clone()),
+                None => dir.clone(),
+            })
+            .collect();
+        t.want = dirs.iter().map(|p| os_bytes(p.as_os_str())).collect();
         t.want_names.clone_from(&session.names);
         // 远端目录的 shell 是那台主机上的路径，无法在本机检查；建标签时按那台主机上检测到的
         // shell 确认。
-        let saved = session.shells.iter().zip(&session.tabs);
+        let saved = session.shells.iter().zip(&dirs);
         t.want_shells = saved
             .map(|(command, dir)| {
                 let usable =
@@ -778,7 +786,7 @@ impl App {
         self.request_redraw();
     }
 
-    /// 关掉编号是 `keep` 的标签以外的各个标签；其中还有程序在运行的照常先确认。
+    /// 关掉编号是 `keep` 的标签以外的各个标签；其中仍有程序在运行的同样先确认。
     pub(in crate::app) fn close_other_terminal_tabs(&mut self, keep: u16) {
         let others: Vec<u16> = (self.terminal.tabs.iter())
             .map(|tab| tab.id)

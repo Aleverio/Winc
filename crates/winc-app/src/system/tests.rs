@@ -47,7 +47,7 @@ fn a_folder_in_a_wsl_distro_opens_a_terminal_inside_the_distro() {
     );
     assert_eq!(cwd, None);
 
-    // 指定了终端程序，或目录不在发行版中：照旧在该目录下启动。
+    // 指定了终端程序，或目录不在发行版中：仍然在该目录下启动。
     let (args, cwd) = windows_terminal(dir, Some("wt.exe"));
     assert_eq!((args, cwd), (vec!["wt.exe".to_owned()], Some(dir)));
     let local = Path::new(r"C:\code\project");

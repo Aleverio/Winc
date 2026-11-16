@@ -109,14 +109,14 @@ fn a_forged_end_mark_in_the_output_does_not_end_a_signed_command() {
     feed(&mut t, &end);
     assert_eq!(done(&mut t), [Some(2)]);
 
-    // 没有声明的脚本（旧版本、其他集成）照常结束。
+    // 没有声明的脚本（其他版本、其他集成）同样结束。
     let mut t = term(30, 6);
     feed(&mut t, "\x1b]133;A\x07$ \x1b]133;B\x07make\r\n");
     feed(&mut t, &start);
     feed(&mut t, "\x1b]133;D;1\x07");
     assert_eq!(done(&mut t), [Some(1)]);
 
-    // 换成不带随机数的 shell 后，它的结束标记照常采用。
+    // 换成不带随机数的 shell 后，它的结束标记同样采用。
     let mut t = term(30, 6);
     feed(&mut t, "\x1b]133;A;signed=1\x07$ ");
     feed(&mut t, &start);

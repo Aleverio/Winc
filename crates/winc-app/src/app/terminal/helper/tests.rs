@@ -297,3 +297,18 @@ fn terminal_paths_belong_to_the_host_the_folder_is_on() {
         PathBuf::from("/tmp/x")
     );
 }
+
+#[test]
+fn a_path_already_on_the_host_is_not_mapped_again() {
+    let target = winc_backend::Target::new("me@again-host").unwrap();
+    let root = winc_backend::virtual_path(&target, b"/srv");
+    // 标签记下的目录、恢复的现场都是换算过的：再经过一次仍是同一个路径，随后在那台主机上
+    // 启动，而不是本机的 shell。
+    let once = terminal_path(&root, PathBuf::from("/srv/app"));
+    assert_eq!(terminal_path(&root, once.clone()), once);
+    let (program, args, _) = launched(None, once.to_str().unwrap(), true);
+    assert_eq!(program.as_deref(), Some("ssh"));
+    assert_eq!(args.last().unwrap(), "cd '/srv/app' && exec $SHELL -l");
+    // 相对路径和空路径不属于任何主机，原样返回。
+    assert_eq!(terminal_path(&root, PathBuf::new()), PathBuf::new());
+}

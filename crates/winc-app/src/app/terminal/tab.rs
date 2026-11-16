@@ -303,7 +303,7 @@ impl TermTab {
             self.cache.clear();
             self.requested = None;
             self.selection = None;
-            // 重排后行号重新编排，原来的位置无法逐行对应：按回滚缓冲行数的比例换算往上翻的
+            // 重排后行号重新编排，重排前的位置无法逐行对应：按回滚缓冲行数的比例换算往上翻的
             // 行数，看着的内容大致不动；回滚缓冲被清空时回到底部。
             let old = self.history.1.saturating_sub(self.history.0).max(1);
             let new = frame.history.1.saturating_sub(frame.history.0);

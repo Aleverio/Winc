@@ -125,7 +125,7 @@ fn link_at(
         {
             let target = match file_url(uri) {
                 Some(path) => Target::File {
-                    path,
+                    path: in_project(root, path),
                     line: None,
                     col: None,
                 },

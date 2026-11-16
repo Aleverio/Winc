@@ -412,7 +412,7 @@ impl App {
                     None => Integration::Off,
                 };
                 let shell = chosen.as_deref().or(shell.as_deref());
-                let launch = launch(shell, dir, cfg!(windows), integrated);
+                let launch = launch(shell, dir.clone(), cfg!(windows), integrated);
                 client.send(&ToHelper::Spawn {
                     tab: id,
                     program: launch.program,
@@ -438,6 +438,9 @@ impl App {
                 tab.slack = slack;
                 tab.name = names.get(i).cloned().unwrap_or_default();
                 tab.shell = chosen;
+                // shell 报告当前目录之前先记下启动目录：此时重启标签或保存现场仍回到这里，
+                // 远端的终端不会因目录为空而换成本机的 shell。
+                tab.cwd = dir;
                 t.tabs.push(tab);
                 t.active = t.tabs.len() - 1;
                 t.focus_sent = false;
@@ -853,7 +856,13 @@ fn local_cwd(root: Option<&std::path::Path>, path: Vec<u8>) -> Vec<u8> {
 
 /// 把终端中的路径 `path` 转换为编辑器使用的路径：打开的目录 `root` 在远端主机上时，`/` 开头的
 /// 路径是那台主机上的路径；位于 WSL 发行版中时属于同一发行版。其余路径原样返回。
-pub(super) fn terminal_path(root: &std::path::Path, path: PathBuf) -> PathBuf {
+///
+/// 已经是远端主机上的路径时原样返回：标签记下的目录、恢复的现场都是换算过的，Unix 上这种路径
+/// 同样以 `/` 开头，再换算一次会指向错误的位置。
+pub(in crate::app) fn terminal_path(root: &std::path::Path, path: PathBuf) -> PathBuf {
+    if winc_backend::is_remote(&path) {
+        return path;
+    }
     let bytes = os_bytes(path.as_os_str());
     match winc_backend::locate(root) {
         Some(at) if bytes.first() == Some(&b'/') => winc_backend::virtual_path(&at.target, &bytes),
