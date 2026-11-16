@@ -176,11 +176,10 @@ fn a_native_shell_receives_the_project_python_environment() {
         rest: 0,
     });
     let expected = format!("env={}", venv.display());
-    let python = venv
-        .join("Scripts")
-        .join("python.exe")
-        .display()
-        .to_string();
+    // 临时目录在环境变量中可以是 8.3 短名，`where` 输出的是长名：只比较与上级目录的写法无关的
+    // 末尾部分。
+    let folder = root.file_name().unwrap().to_str().unwrap();
+    let python = format!(r"{folder}\.venv\Scripts\python.exe");
     assert_eq!(
         c.until_exit_showing(|text| text.contains(&expected) && text.contains(&python)),
         0
