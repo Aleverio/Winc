@@ -103,6 +103,7 @@ fn terminal_reserved(action: Action) -> bool {
     matches!(
         action,
         Action::ToggleTerminal
+            | Action::ToggleTerminalPanel
             | Action::NewTerminal
             | Action::CloseTerminal
             | Action::NextTerminal

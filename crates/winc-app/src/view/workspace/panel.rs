@@ -892,7 +892,7 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
             let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
             Some((
                 rect,
-                with_key(t!("terminal-hide-panel"), Some(Action::ToggleTerminal)),
+                with_key(t!("terminal-hide-panel"), Some(Action::ToggleTerminalPanel)),
             ))
         }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Run(button)) => {
@@ -921,7 +921,7 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
             } else {
                 t!("terminal-show-panel")
             };
-            Some((rect, with_key(label, Some(Action::ToggleTerminal))))
+            Some((rect, with_key(label, Some(Action::ToggleTerminalPanel))))
         }
         Hover::Status(item @ crate::app::StatusItem::Remote) => {
             let rect = app.hits.status.iter().find(|(_, i)| *i == item)?.0;

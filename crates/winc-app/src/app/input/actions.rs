@@ -440,6 +440,7 @@ impl App {
             ShowCommit => self.show_commit(),
             ShowOutline => self.show_outline(),
             ToggleTerminal => self.toggle_terminal(),
+            ToggleTerminalPanel => self.click_terminal_button(),
             RunConfiguration => self.run_current_config(),
             StopConfiguration => self.stop_current_config(),
             EditRunConfigurations => self.edit_run_configs(),

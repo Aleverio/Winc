@@ -1,7 +1,7 @@
 //! 终端输入策略的回归测试：主屏程序、备用屏、未知状态、组合键和数字直达。
 
 use super::*;
-use crate::keymap::{Action, KeyCode, Mods, Os, Stroke};
+use crate::keymap::{Action, KeyCode, Lookup, Mods, Os, Stroke};
 use winc_pty::protocol::{Block, Modes};
 
 fn key(mods: Mods, key: KeyCode) -> Stroke {
@@ -16,14 +16,14 @@ fn cmd() -> Mods {
     }
 }
 
-/// 直达第 N 个终端的按键：macOS 上是 ⌘ 加数字，其他系统上是 Ctrl+Shift 加数字。
+/// 直达第 N 个终端的按键：macOS 上是 ⌃ 加数字，其他系统上是 Ctrl+Shift 加数字。
 fn digit(ch: char) -> Stroke {
     let shift = if Os::CURRENT == Os::Mac {
         Mods::NONE
     } else {
         Mods::SHIFT
     };
-    key(cmd() | shift, KeyCode::Char(ch))
+    key(Mods::CTRL | shift, KeyCode::Char(ch))
 }
 
 /// 已完成一条命令，并明确回到 shell 提示符的快照。
@@ -224,4 +224,46 @@ fn terminal_focus_commands_reveal_an_existing_tab_in_a_hidden_panel() {
     assert_eq!(app.terminal.active, 0);
     assert_eq!(app.focus, Focus::Terminal);
     assert_eq!(app.terminal.tabs.len(), 2);
+}
+
+#[test]
+fn the_panel_toggle_closes_in_one_press_wherever_the_focus_is() {
+    let mut app = blank_app(false);
+    show_terminal(&mut app, "one");
+    let toggle = key(cmd(), KeyCode::Char('j'));
+
+    // 焦点在面板外：进出终端的键先把焦点放进去，面板开关直接收起，焦点留在原处。
+    app.focus = Focus::Editor;
+    assert!(app.run_action(Action::ToggleTerminal));
+    assert!(app.terminal.open);
+    assert_eq!(app.focus, Focus::Terminal);
+    app.focus = Focus::Editor;
+    assert!(app.on_shortcut(toggle));
+    assert!(!app.terminal.open);
+    assert_eq!(app.focus, Focus::Editor);
+
+    // 面板关着时打开并聚焦，标签不增加。
+    assert!(app.on_shortcut(toggle));
+    assert!(app.terminal.open);
+    assert_eq!(app.focus, Focus::Terminal);
+    assert_eq!(app.terminal.tabs.len(), 1);
+
+    // 终端应用优先时仍保留面板开关；macOS 以外的系统上 Ctrl+J 在终端里交给 shell。
+    app.config.terminal_application_priority = Some(true);
+    assert_eq!(app.binds(toggle), Os::CURRENT == Os::Mac);
+    assert!(app.run_action(Action::ToggleTerminalPanel));
+    assert!(!app.terminal.open);
+    assert_eq!(app.focus, Focus::Editor);
+}
+
+#[test]
+fn terminal_numbers_leave_the_tool_view_keys_alone() {
+    let mut app = blank_app(false);
+    show_terminal(&mut app, "one");
+    // 焦点在终端时，打开工具视图的数字键不被终端编号占用。
+    for digit in ['7', '9'] {
+        if let Lookup::Run(actions) = app.lookup_shortcut(key(cmd(), KeyCode::Char(digit)), None) {
+            assert!(actions.iter().all(|a| a.terminal_index().is_none()));
+        }
+    }
 }

@@ -643,7 +643,8 @@ impl App {
             });
     }
 
-    /// 状态栏上的终端按钮、标签栏右端的收起按钮：面板开着就收起，收着就打开（没有标签时开一个）。
+    /// 状态栏上的终端按钮、标签栏右端的收起按钮和 ⌘J：面板开着就收起，收着就打开（没有标签时
+    /// 开一个）。与焦点位置无关，收起时焦点在面板外的留在原处。
     pub(super) fn click_terminal_button(&mut self) {
         if self.terminal.open {
             self.set_terminal_open(false);

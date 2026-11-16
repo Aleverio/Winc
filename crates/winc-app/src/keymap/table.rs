@@ -72,8 +72,10 @@ pub fn bindings(os: Os) -> Vec<Binding> {
     // 终端管理与查找在 macOS 上使用 ⌘，其他系统上使用 Ctrl+Shift，
     // 将 Ctrl+C 中断、Ctrl+W 删词、Ctrl+A 到行首等组合留给程序。
     let term = if mac { cmd } else { ctrl | shift };
+    // macOS 上 ⌘ 加数字用于打开工具视图，按编号聚焦终端使用 ⌃ 加数字。
+    let number = if mac { ctrl } else { ctrl | shift };
     for (index, action) in Action::TERMINAL_FOCUS.into_iter().enumerate() {
-        t.one(action, Terminal, c(term, char::from(b'1' + index as u8)));
+        t.one(action, Terminal, c(number, char::from(b'1' + index as u8)));
     }
     t.one(NewTerminal, Terminal, c(term, 't'));
     t.one(CloseTerminal, Terminal, c(term, 'w'));
@@ -413,11 +415,12 @@ pub fn bindings(os: Os) -> Vec<Binding> {
     t.one(ShowOutline, Global, c(cmd, '7'));
     // 打开 Git 工具窗口（日志）的键。
     t.one(GitShowLog, Global, c(cmd, '9'));
-    // ⌃` 开关终端；在终端里按也要先给它，所以是 `Everywhere`。
+    // ⌃` 在编辑区和终端之间往返：焦点在面板外时进入终端，在面板内时收起面板；在终端里
+    // 按也要先给它，所以是 `Everywhere`。
     t.one(ToggleTerminal, Everywhere, c(ctrl, '`'));
-    // ⌘J 也开关底部面板。是全局的：macOS 上带 ⌘，在终端里也生效；其他系统上是
-    // Ctrl+J，焦点在终端时交给 shell（Ctrl+J 是换行）。
-    t.one(ToggleTerminal, Global, c(cmd, 'j'));
+    // ⌘J 显示或隐藏面板，与焦点位置无关。是全局的：macOS 上带 ⌘，在终端里也生效；
+    // 其他系统上是 Ctrl+J，焦点在终端时交给 shell（Ctrl+J 是换行）。
+    t.one(ToggleTerminalPanel, Global, c(cmd, 'j'));
     t.one(RunConfiguration, Global, key(none, F(5)));
     t.one(StopConfiguration, Global, key(shift, F(5)));
     t.one(ClearTerminal, Terminal, c(term, 'k'));

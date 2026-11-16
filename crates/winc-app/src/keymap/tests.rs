@@ -37,9 +37,9 @@ fn terminal_switching_uses_one_key_set_and_leaves_program_paging() {
                 runs(
                     os,
                     if os == Os::Mac {
-                        cmd
+                        Mods::CTRL
                     } else {
-                        cmd | Mods::SHIFT
+                        Mods::CTRL | Mods::SHIFT
                     },
                     KeyCode::Char(char::from(b'1' + index as u8)),
                     Context::Terminal
@@ -260,16 +260,16 @@ fn default_key_labels_per_system() {
         Some(Action::NextBookmark)
     );
 
-    // ⌘J 开关终端，在终端里也生效；其他系统上 Ctrl+J 在终端里是 shell 的换行。
+    // ⌘J 显示或隐藏面板，在终端里也生效；其他系统上 Ctrl+J 在终端里是 shell 的换行。
     for context in [Context::Editor, Context::Terminal] {
         assert_eq!(
             runs(Os::Mac, Mods::META, KeyCode::Char('j'), context),
-            Some(Action::ToggleTerminal)
+            Some(Action::ToggleTerminalPanel)
         );
     }
     assert_eq!(
         runs(Os::Linux, Mods::CTRL, KeyCode::Char('j'), Context::Editor),
-        Some(Action::ToggleTerminal)
+        Some(Action::ToggleTerminalPanel)
     );
     assert_eq!(
         runs(Os::Linux, Mods::CTRL, KeyCode::Char('j'), Context::Terminal),

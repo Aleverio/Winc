@@ -233,6 +233,8 @@ pub enum Action {
     ShowCommit,
     GitRevertChange,
     ToggleTerminal,
+    /// 显示或隐藏终端面板，与焦点位置无关。
+    ToggleTerminalPanel,
     /// 运行当前选中的配置；运行中时重新运行。
     RunConfiguration,
     /// 停止当前选中的配置。
@@ -499,6 +501,7 @@ impl Action {
             ShowCommit => t!("cmd-show-commit"),
             GitRevertChange => t!("cmd-git-revert-change"),
             ToggleTerminal => t!("cmd-toggle-terminal"),
+            ToggleTerminalPanel => t!("cmd-toggle-terminal-panel"),
             RunConfiguration => t!("cmd-run-configuration"),
             StopConfiguration => t!("cmd-stop-configuration"),
             EditRunConfigurations => t!("cmd-edit-run-configurations"),
@@ -724,6 +727,7 @@ impl Action {
             ShowCommit => "Git: Commit",
             GitRevertChange => "Git: Revert Change",
             ToggleTerminal => "Toggle Terminal",
+            ToggleTerminalPanel => "Terminal: Toggle Panel",
             RunConfiguration => "Run Configuration",
             StopConfiguration => "Stop Configuration",
             EditRunConfigurations => "Edit Run Configurations",
@@ -914,6 +918,7 @@ impl Action {
             | ShowCommit
             | GitRevertChange
             | ToggleTerminal
+            | ToggleTerminalPanel
             | RunConfiguration
             | StopConfiguration
             | EditRunConfigurations
@@ -1038,6 +1043,7 @@ impl Action {
             | Action::ShowCommit
             | Action::GitRevertChange => Some(Module::Git),
             Action::ToggleTerminal
+            | Action::ToggleTerminalPanel
             | Action::RunConfiguration
             | Action::StopConfiguration
             | Action::EditRunConfigurations
@@ -1299,6 +1305,7 @@ pub const ACTIONS: &[Action] = {
         GitBlame,
         GitRevertChange,
         ToggleTerminal,
+        ToggleTerminalPanel,
         RunConfiguration,
         StopConfiguration,
         EditRunConfigurations,
