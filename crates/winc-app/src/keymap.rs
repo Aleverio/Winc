@@ -526,6 +526,17 @@ pub fn lookup(
     pending: Option<Stroke>,
     context: Context,
 ) -> Lookup {
+    lookup_allowed(table, stroke, pending, context, |_| true)
+}
+
+/// 按上下文和当前输入状态查找按键；被 `allowed` 排除的绑定不占用组合键第一段。
+pub fn lookup_allowed(
+    table: &[Binding],
+    stroke: Stroke,
+    pending: Option<Stroke>,
+    context: Context,
+    allowed: impl Fn(&Binding) -> bool,
+) -> Lookup {
     // 焦点在终端时，全局快捷键中只有带 ⌘ 的（macOS）或带 Ctrl+Shift 的
     // （其他系统）不交给终端程序，其余组合留给终端程序使用；
     // 单按 Ctrl 的组合由终端程序处理。
@@ -537,29 +548,30 @@ pub fn lookup(
             && (context != Context::Terminal
                 || b.when != When::Global
                 || reaches(b.first.mods) && b.action.reaches_terminal())
+            && allowed(b)
     };
     match pending {
         Some(first) => Lookup::Run(
             table
                 .iter()
-                .filter(applies)
                 .filter(|b| b.first == first && b.second == Some(stroke))
+                .filter(applies)
                 .map(|b| b.action)
                 .collect(),
         ),
         None => {
             let run: Vec<Action> = table
                 .iter()
-                .filter(applies)
                 .filter(|b| b.first == stroke && b.second.is_none())
+                .filter(applies)
                 .map(|b| b.action)
                 .collect();
             if !run.is_empty() {
                 Lookup::Run(run)
             } else if table
                 .iter()
-                .filter(applies)
-                .any(|b| b.first == stroke && b.second.is_some())
+                .filter(|b| b.first == stroke && b.second.is_some())
+                .any(|b| applies(&b))
             {
                 Lookup::Chord
             } else {

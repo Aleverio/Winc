@@ -193,9 +193,11 @@ impl App {
             }
             return;
         }
-        // ⇧PageUp、⇧PageDown 翻回滚缓冲（备用屏上没有回滚缓冲，交给程序）。
+        // Shift+PageUp/PageDown 翻回滚缓冲；备用屏上没有回滚缓冲，交给程序。
         let page = tab.grid_rows().saturating_sub(1).max(1) as isize;
-        if self.pointer.modifiers.shift_key() && !tab.modes.has(Modes::ALT_SCREEN) {
+        if self.pointer.modifiers == winit::keyboard::ModifiersState::SHIFT
+            && self.terminal_scroll_keys()
+        {
             match event.logical_key {
                 Key::Named(NamedKey::PageUp) => return self.scroll_terminal(page),
                 Key::Named(NamedKey::PageDown) => return self.scroll_terminal(-page),

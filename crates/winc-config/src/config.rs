@@ -187,6 +187,8 @@ pub struct Config {
     pub terminal_right: Option<bool>,
     /// 是否在面板右侧使用竖向列表管理终端，默认为否。
     pub terminal_vertical_tabs: Option<bool>,
+    /// 暂停终端内容增强的快捷键，保留终端管理和复制、粘贴；默认关闭。
+    pub terminal_application_priority: Option<bool>,
     /// 是否启用远程模块（经 `ssh` 打开其他主机上的目录），默认为否。
     pub remote_enabled: Option<bool>,
     /// 是否启用 Git 模块（文件状态、分支、变更视图），默认为否。

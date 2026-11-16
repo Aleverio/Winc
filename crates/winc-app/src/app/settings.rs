@@ -764,6 +764,9 @@ impl App {
             Setting::TerminalCopyOnSelect => self.config.terminal_copy_on_select == Some(true),
             Setting::TerminalConfirmClose => self.config.terminal_confirm_close != Some(false),
             Setting::TerminalPrompt => self.config.terminal_prompt != Some(false),
+            Setting::TerminalApplicationPriority => {
+                self.config.terminal_application_priority == Some(true)
+            }
             Setting::TerminalShellIntegration => {
                 self.config.terminal_shell_integration != Some(false)
             }
@@ -829,6 +832,9 @@ impl App {
             Setting::TerminalCopyOnSelect => self.config.terminal_copy_on_select = Some(on),
             Setting::TerminalConfirmClose => self.config.terminal_confirm_close = Some(on),
             Setting::TerminalPrompt => self.config.terminal_prompt = Some(on),
+            Setting::TerminalApplicationPriority => {
+                self.config.terminal_application_priority = Some(on)
+            }
             Setting::TerminalShellIntegration => self.config.terminal_shell_integration = Some(on),
             _ => return,
         }

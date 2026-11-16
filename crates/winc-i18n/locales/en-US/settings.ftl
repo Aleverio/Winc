@@ -98,6 +98,7 @@ settings-git-confirm-push = Confirm Before Pushing
 settings-git-staging-area = Staging Area
 settings-terminal-prompt = Winc Prompt
 settings-terminal-shell-integration = Shell Integration
+settings-terminal-application-priority = Terminal Application Priority
 settings-terminal-option-as-meta = Meta Key
 settings-key-search = Search Shortcuts
 
@@ -173,6 +174,7 @@ settings-terminal-shell-integration-desc = { $platform ->
     [windows] Group WSL output by command and load Python environments automatically
    *[other] Group output by command and load Python environments automatically
 }
+settings-terminal-application-priority-desc = Pass shortcuts to the terminal application, keeping terminal management, copy and paste
 settings-terminal-option-as-meta-desc = Send an Esc prefix instead of typing special characters with the chosen ⌥
 
 ## Setting values and hints.

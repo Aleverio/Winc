@@ -3,6 +3,78 @@
 
 use super::*;
 
+#[test]
+fn terminal_switching_uses_one_key_set_and_leaves_program_paging() {
+    for os in ALL_OS {
+        let cmd = if os == Os::Mac {
+            Mods::META
+        } else {
+            Mods::CTRL
+        };
+        for (ch, action) in [('[', Action::PreviousTerminal), (']', Action::NextTerminal)] {
+            assert_eq!(
+                runs(os, cmd | Mods::SHIFT, KeyCode::Char(ch), Context::Terminal),
+                Some(action)
+            );
+        }
+        // macOS 上编辑区沿用同一组键切换编辑区标签；其他系统上这组键在编辑区用于折叠。
+        for (ch, tab, fold) in [
+            ('[', Action::PreviousTab, Action::Fold),
+            (']', Action::NextTab, Action::Unfold),
+        ] {
+            assert_eq!(
+                runs(os, cmd | Mods::SHIFT, KeyCode::Char(ch), Context::Editor),
+                Some(if os == Os::Mac { tab } else { fold })
+            );
+        }
+        for key in [KeyCode::PageUp, KeyCode::PageDown] {
+            assert_eq!(press(os, Mods::CTRL, key, Context::Terminal), Lookup::None);
+        }
+        for (index, action) in Action::TERMINAL_FOCUS.into_iter().enumerate() {
+            assert_eq!(action.terminal_index(), Some(index));
+            assert!(ACTIONS.contains(&action));
+            assert_eq!(
+                runs(
+                    os,
+                    if os == Os::Mac {
+                        cmd
+                    } else {
+                        cmd | Mods::SHIFT
+                    },
+                    KeyCode::Char(char::from(b'1' + index as u8)),
+                    Context::Terminal
+                ),
+                Some(action)
+            );
+        }
+    }
+}
+
+#[test]
+fn filtered_bindings_do_not_reserve_a_chord_prefix() {
+    let first = Stroke {
+        key: KeyCode::Char('k'),
+        mods: Mods::META,
+    };
+    let table = [Binding {
+        action: Action::KeyboardShortcuts,
+        first,
+        second: Some(Stroke {
+            key: KeyCode::Char('s'),
+            mods: Mods::META,
+        }),
+        when: When::Global,
+    }];
+    assert_eq!(
+        lookup(&table, first, None, Context::Terminal),
+        Lookup::Chord
+    );
+    assert_eq!(
+        lookup_allowed(&table, first, None, Context::Terminal, |_| false),
+        Lookup::None
+    );
+}
+
 const ALL_OS: [Os; 3] = [Os::Mac, Os::Windows, Os::Linux];
 
 fn press(os: Os, mods: Mods, key: KeyCode, context: Context) -> Lookup {

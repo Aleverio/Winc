@@ -448,6 +448,12 @@ impl App {
             CloseTerminal => self.close_terminal_tab(self.terminal.active),
             NextTerminal => self.cycle_terminal_tab(true),
             PreviousTerminal => self.cycle_terminal_tab(false),
+            FocusTerminal1 | FocusTerminal2 | FocusTerminal3 | FocusTerminal4 | FocusTerminal5
+            | FocusTerminal6 | FocusTerminal7 | FocusTerminal8 | FocusTerminal9 => {
+                if let Some(index) = action.terminal_index() {
+                    self.focus_terminal_number(index);
+                }
+            }
             // 焦点在查找框里时关闭；否则打开，或者回到开着的查找框。
             FindInTerminal if self.focus == Focus::TerminalFind => self.close_terminal_find(),
             FindInTerminal if self.terminal.tab().is_some() => self.open_terminal_find(),

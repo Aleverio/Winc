@@ -129,6 +129,7 @@ fn the_terminal_font_size_and_switches_write_the_config() {
         (Setting::TerminalConfirmClose, true),
         (Setting::TerminalPrompt, true),
         (Setting::TerminalShellIntegration, true),
+        (Setting::TerminalApplicationPriority, false),
     ] {
         assert_eq!(app.switch_on(setting), on, "{setting:?}");
         app.settings_toggle(setting);
@@ -138,6 +139,7 @@ fn the_terminal_font_size_and_switches_write_the_config() {
     assert_eq!(app.config.terminal_confirm_close, Some(false));
     assert_eq!(app.config.terminal_prompt, Some(false));
     assert_eq!(app.config.terminal_shell_integration, Some(false));
+    assert_eq!(app.config.terminal_application_priority, Some(true));
     let _ = std::fs::remove_dir_all(&dir);
 }
 

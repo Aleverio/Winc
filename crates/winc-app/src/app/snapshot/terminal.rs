@@ -6,6 +6,7 @@ mod editor;
 mod find;
 mod input;
 mod run;
+mod shortcuts;
 mod tabs;
 
 use super::editor::navigation::press;
@@ -326,19 +327,10 @@ fn tabs_switch_close_and_take_the_panel_with_the_last_one() {
     let _ = add_tab(&mut app, "vim", "three");
     assert_eq!(app.terminal.active, 2);
 
-    // ⌘⇧] 和 ⌘⇧[（其他系统 Ctrl+PageDown、Ctrl+PageUp）在终端里切终端的标签，到头绕回去；
+    // ⌘⇧] 和 ⌘⇧[（其他系统 Ctrl+Shift+]、Ctrl+Shift+[）在终端里切终端的标签，到头绕回去；
     // 编辑区的标签不动。
     let step = |app: &mut App, next: bool| {
-        if cfg!(target_os = "macos") {
-            press(app, &["cmd", "shift"], Char(if next { ']' } else { '[' }))
-        } else {
-            let key = if next {
-                crate::keymap::KeyCode::PageDown
-            } else {
-                crate::keymap::KeyCode::PageUp
-            };
-            press(app, &["ctrl"], key)
-        }
+        press(app, &["cmd", "shift"], Char(if next { ']' } else { '[' }))
     };
     let doc = app.editor.active;
     assert!(step(&mut app, true));

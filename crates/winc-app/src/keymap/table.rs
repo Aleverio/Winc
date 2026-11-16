@@ -68,10 +68,13 @@ pub fn bindings(os: Os) -> Vec<Binding> {
 
     let mut t = Table(Vec::new());
 
-    // 范围小的绑定写在前面：终端、快捷键那一页、文件树、搜索面板、查找条、编辑区。终端里的
-    // 标签和查找在 macOS 上沿用编辑区标签的键（⌘ 不与 shell 冲突），其他系统上单按 Ctrl 的
-    // 组合要留给 shell（Ctrl+C 中断、Ctrl+W 删词、Ctrl+A 到行首），终端自己的命令加 Shift。
+    // 范围小的绑定写在前面：终端、快捷键页、文件树、搜索面板、查找条、编辑区。
+    // 终端管理与查找在 macOS 上使用 ⌘，其他系统上使用 Ctrl+Shift，
+    // 将 Ctrl+C 中断、Ctrl+W 删词、Ctrl+A 到行首等组合留给程序。
     let term = if mac { cmd } else { ctrl | shift };
+    for (index, action) in Action::TERMINAL_FOCUS.into_iter().enumerate() {
+        t.one(action, Terminal, c(term, char::from(b'1' + index as u8)));
+    }
     t.one(NewTerminal, Terminal, c(term, 't'));
     t.one(CloseTerminal, Terminal, c(term, 'w'));
     t.one(FindInTerminal, Terminal, c(term, 'f'));
@@ -81,26 +84,22 @@ pub fn bindings(os: Os) -> Vec<Binding> {
     if !mac {
         t.one(Paste, Terminal, c(term, 'v'));
     }
+    // 终端标签在各系统上使用同一组键，将 Ctrl+PageUp/PageDown 留给程序；macOS 上与编辑区
+    // 标签使用相同的键，焦点在终端时切换终端标签。
+    t.one(NextTerminal, Terminal, c(cmd | shift, ']'));
+    t.one(PreviousTerminal, Terminal, c(cmd | shift, '['));
     if mac {
         t.one(NextTerminal, Terminal, key(cmd | alt, Right));
-        t.one(NextTerminal, Terminal, c(cmd | shift, ']'));
         t.one(PreviousTerminal, Terminal, key(cmd | alt, Left));
-        t.one(PreviousTerminal, Terminal, c(cmd | shift, '['));
-    } else {
-        t.one(NextTerminal, Terminal, key(ctrl, PageDown));
-        t.one(PreviousTerminal, Terminal, key(ctrl, PageUp));
     }
-    // 命令块：跳到上一条、下一条命令，折起输出（与编辑区折叠使用同样的键），在最后一条
-    // 失败命令的报错之间跳。
-    let (jump, fold) = if mac {
-        (cmd, cmd | alt)
-    } else {
-        (ctrl, ctrl | shift)
-    };
+    let jump = if mac { cmd } else { ctrl };
     t.one(PreviousCommand, Terminal, key(jump, Up));
     t.one(NextCommand, Terminal, key(jump, Down));
-    t.one(FoldOutput, Terminal, c(fold, '['));
-    t.one(UnfoldOutput, Terminal, c(fold, ']'));
+    // Windows/Linux 的 Ctrl+Shift+[/] 用于标签切换，输出折叠通过命令面板执行。
+    if mac {
+        t.one(FoldOutput, Terminal, c(cmd | alt, '['));
+        t.one(UnfoldOutput, Terminal, c(cmd | alt, ']'));
+    }
     t.one(NextError, Terminal, key(none, F(8)));
     t.one(PreviousError, Terminal, key(shift, F(8)));
     // 把编辑区选中的代码发到终端执行。
@@ -190,6 +189,7 @@ pub fn bindings(os: Os) -> Vec<Binding> {
     t.chord(ChangeLanguageMode, Global, chord_k, c(none, 'm'));
     // 折叠：macOS 上 ⌥⌘[ / ⌥⌘]，其他系统上 Ctrl+Shift+[ / ]；其余折叠命令都在两段组合键
     // ⌘K 之后。
+    let fold = if mac { cmd | alt } else { ctrl | shift };
     t.one(Fold, Editor, c(fold, '['));
     t.one(Unfold, Editor, c(fold, ']'));
     t.chord(ToggleFold, Editor, chord_k, c(cmd, 'l'));

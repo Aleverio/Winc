@@ -98,6 +98,7 @@ settings-git-confirm-push = 推送前确认
 settings-git-staging-area = 暂存区
 settings-terminal-prompt = Winc 提示符
 settings-terminal-shell-integration = Shell 集成
+settings-terminal-application-priority = 终端应用优先
 settings-terminal-option-as-meta = Meta 键
 settings-key-search = 搜索快捷键
 
@@ -173,6 +174,7 @@ settings-terminal-shell-integration-desc = { $platform ->
     [windows] 按命令分块显示 WSL 输出，自动加载 Python 环境
    *[other] 按命令分块显示输出，自动加载 Python 环境
 }
+settings-terminal-application-priority-desc = 将快捷键交给终端应用，保留终端管理和复制、粘贴
 settings-terminal-option-as-meta-desc = 按所选的 ⌥ 时发送 Esc 前缀，不输入特殊字符
 
 ## 设置项的值和提示。
