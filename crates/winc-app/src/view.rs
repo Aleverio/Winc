@@ -174,8 +174,7 @@ pub fn draw(app: &mut App, frame: &mut Frame<'_>) {
     // 合并冲突的卡片排在磁盘冲突卡片下面。
     let top = match &app.hits.conflict_card {
         Some((card, _)) => card.bottom(),
-        None if app.layout.search.h > 0.0 => app.layout.search.bottom(),
-        None => app.layout.editor.y,
+        None => app.overlay_top(),
     } + 8.0;
     let mut hits = std::mem::take(&mut app.hits.merge);
     app.hits.merge_card = git::merge::draw_merge_card(app, frame, top, &mut hits);

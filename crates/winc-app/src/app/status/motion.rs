@@ -239,8 +239,8 @@ impl<K: Copy + Ord> StatusMotion<K> {
             .collect()
     }
 
-    /// 返回项 `key` 显示的文字；没有该项或该项正在消失时为 `None`。
-    #[cfg(test)]
+    /// 返回项 `key` 显示的文字；没有该项或该项正在消失时为 `None`。只有 PDF 预览的测试使用。
+    #[cfg(all(test, any(target_os = "macos", windows)))]
     pub(crate) fn text(&self, key: K) -> Option<&str> {
         let row = self.rows.iter().find(|r| r.key == key)?;
         (!matches!(row.presence, Presence::Leaving(_))).then_some(row.text.as_str())
