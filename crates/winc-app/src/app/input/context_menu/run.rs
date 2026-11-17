@@ -656,7 +656,7 @@ impl App {
         let path = (!absolute)
             .then(|| self.relative_path(&path))
             .flatten()
-            .unwrap_or_else(|| path.to_string_lossy().into_owned());
+            .unwrap_or_else(|| path_to_copy(&path));
         let reference = if last > first {
             format!("{path}:{}-{}", first + 1, last + 1)
         } else {

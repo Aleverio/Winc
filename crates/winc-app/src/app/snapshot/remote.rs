@@ -900,6 +900,25 @@ fn features_work_in_a_remote_workspace() {
     app.copy_path(&root.join("src/main.rs"), true);
     assert_eq!(app.clipboard_text().as_deref(), Some("src/main.rs"));
 
+    // 代码引用同样给出那台主机上的路径：绝对路径不带连接目标，相对路径不变，多行带行号范围。
+    let active = app.editor.active().unwrap().path.clone().unwrap();
+    assert_eq!(active, root.join("src/config.rs"));
+    let remote = dir.join("src/config.rs").to_string_lossy().into_owned();
+    app.select(0, 0);
+    app.copy_reference(true);
+    assert_eq!(app.clipboard_text(), Some(format!("{remote}:1")));
+    app.copy_reference(false);
+    assert_eq!(app.clipboard_text().as_deref(), Some("src/config.rs:1"));
+    let second = app.editor.active().unwrap().text().line_start(1);
+    app.select(0, second + 1);
+    app.copy_reference(true);
+    assert_eq!(app.clipboard_text(), Some(format!("{remote}:1-2")));
+    // 文件不在打开的目录内时，相对的引用退回完整路径，同样是那台主机上的写法。
+    let inside = app.editor.workspace.take();
+    app.copy_reference(false);
+    assert_eq!(app.clipboard_text(), Some(format!("{remote}:1-2")));
+    app.editor.workspace = inside;
+
     // 其他程序修改了已打开的文件：窗口重新获得焦点时重读。
     app.open_path(&root.join("src/config.rs"));
     std::fs::write(dir.join("src/config.rs"), "pub struct Changed;\n").unwrap();
