@@ -2,6 +2,7 @@
 
 #![allow(unsafe_code, reason = "凭据管理器只有 C 接口")]
 
+use std::mem::MaybeUninit;
 use std::ptr::null_mut;
 
 use windows_sys::Win32::Foundation::FILETIME;
@@ -26,10 +27,15 @@ pub(super) fn available() -> bool {
 
 pub(super) fn get(name: &str) -> Option<String> {
     let target = target(name);
-    let mut found: *mut CREDENTIALW = null_mut();
+    let mut found = MaybeUninit::<*mut CREDENTIALW>::uninit();
     // SAFETY: `target` 以 NUL 结尾，`found` 是有效的输出指针。
-    let read = unsafe { CredReadW(target.as_ptr(), CRED_TYPE_GENERIC, 0, &mut found) };
-    if read == 0 || found.is_null() {
+    let read = unsafe { CredReadW(target.as_ptr(), CRED_TYPE_GENERIC, 0, found.as_mut_ptr()) };
+    if read == 0 {
+        return None;
+    }
+    // SAFETY: 调用成功时系统已写入 `found`。
+    let found = unsafe { found.assume_init() };
+    if found.is_null() {
         return None;
     }
     // SAFETY: `found` 非空，指向系统分配的凭据，其中的指针和长度描述同一块内存。
@@ -83,10 +89,15 @@ pub(super) fn delete(name: &str) {
 pub(super) fn names() -> Vec<String> {
     let filter = target("*");
     let mut count = 0;
-    let mut found: *mut *mut CREDENTIALW = null_mut();
+    let mut found = MaybeUninit::<*mut *mut CREDENTIALW>::uninit();
     // SAFETY: `filter` 以 NUL 结尾，`count`、`found` 是有效的输出指针。
-    let listed = unsafe { CredEnumerateW(filter.as_ptr(), 0, &mut count, &mut found) };
-    if listed == 0 || found.is_null() {
+    let listed = unsafe { CredEnumerateW(filter.as_ptr(), 0, &mut count, found.as_mut_ptr()) };
+    if listed == 0 {
+        return Vec::new();
+    }
+    // SAFETY: 调用成功时系统已写入 `found`。
+    let found = unsafe { found.assume_init() };
+    if found.is_null() {
         return Vec::new();
     }
     let prefix = format!("{SERVICE}:");
