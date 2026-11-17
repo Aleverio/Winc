@@ -115,7 +115,7 @@ impl App {
     }
 
     /// 返回当前标签中表格的滚动位置（逻辑像素），已限制在可滚动的范围内；没有表格时为零。
-    pub(crate) fn table_scroll(&self) -> (f32, f32) {
+    pub(crate) fn table_scroll(&self) -> (f32, f64) {
         let (max_x, max_y) = self.preview.table_layout.max_scroll;
         let view = self.editor.active().and_then(|doc| doc.table.as_deref());
         view.map_or((0.0, 0.0), |view| {
@@ -132,20 +132,21 @@ impl App {
     pub(crate) fn drag_table_scrollbar(&mut self, horizontal: bool, (x, y): (f32, f32), grab: f32) {
         let layout = &self.preview.table_layout;
         let (body, (max_x, max_y)) = (layout.body, layout.max_scroll);
-        let to = if horizontal {
+        // 滑块的位置先换算成 0 到 1 的比例，再乘以最大滚动距离。
+        let part = if horizontal {
             hscrollbar_thumb(body, 0.0, body.w + max_x)
-                .map(|thumb| scroll_for_thumb(body.x, body.w, thumb.w, x, grab, max_x))
+                .map(|thumb| scroll_for_thumb(body.x, body.w, thumb.w, x, grab, 1.0))
         } else {
-            scrollbar_thumb(body, 0.0, body.h + max_y)
-                .map(|thumb| scroll_for_thumb(body.y, body.h, thumb.h, y, grab, max_y))
+            scrollbar_thumb(body, 0.0, body.h + max_y as f32)
+                .map(|thumb| scroll_for_thumb(body.y, body.h, thumb.h, y, grab, 1.0))
         };
-        let (Some(to), Some(view)) = (to, self.active_table_mut()) else {
+        let (Some(part), Some(view)) = (part, self.active_table_mut()) else {
             return;
         };
         if horizontal {
-            view.scroll.0 = to;
+            view.scroll.0 = part * max_x;
         } else {
-            view.scroll.1 = to;
+            view.scroll.1 = f64::from(part) * max_y;
         }
         self.request_redraw();
     }
@@ -166,7 +167,7 @@ impl App {
         } else if dx.abs() > dy.abs() {
             view.scroll.0 = (view.scroll.0 - dx).clamp(0.0, max_x);
         } else {
-            view.scroll.1 = (view.scroll.1 - dy).clamp(0.0, max_y);
+            view.scroll.1 = (view.scroll.1 - f64::from(dy)).clamp(0.0, max_y);
         }
         self.request_redraw();
     }
@@ -413,7 +414,7 @@ pub(crate) struct TableLayout {
     /// 底部各张工作表标签的矩形，按工作表的顺序。
     pub(crate) sheets: Vec<Rect>,
     /// 横向、纵向的最大滚动距离（逻辑像素）。
-    pub(crate) max_scroll: (f32, f32),
+    pub(crate) max_scroll: (f32, f64),
     /// 表格所在的区域：编辑区，或分栏时的右边。
     pub(crate) area: Rect,
     /// 当前格的卡片；没有显示时宽高为 0。
@@ -460,7 +461,7 @@ impl TableLayout {
     ///
     /// `scroll` 是表格的滚动位置（逻辑像素）；点不在表格上时返回 `None`，`clamp` 时表格之外的
     /// 点算作最近的一格（拖选时鼠标移出表格）。
-    pub(crate) fn hit(&self, x: f32, y: f32, scroll: (f32, f32), clamp: bool) -> Option<TableHit> {
+    pub(crate) fn hit(&self, x: f32, y: f32, scroll: (f32, f64), clamp: bool) -> Option<TableHit> {
         let (rows, columns) = self.size;
         if rows == 0 || columns == 0 || self.row_h <= 0.0 {
             return None;
@@ -480,7 +481,7 @@ impl TableLayout {
             .partition_point(|&edge| edge <= cx)
             .saturating_sub(1)
             .min(columns - 1);
-        let down = f64::from(y - self.body.y) + f64::from(scroll.1);
+        let down = f64::from(y - self.body.y) + scroll.1;
         let row = ((down / f64::from(self.row_h)).max(0.0) as usize).min(rows - 1);
         Some(match () {
             () if clamp => TableHit::Cell(row, column),
@@ -491,14 +492,14 @@ impl TableLayout {
     }
 
     /// 让第 `row` 行第 `column` 列完整显示时的滚动位置（从 `scroll` 出发，移动得最少）。
-    pub(crate) fn reveal(&self, (row, column): (usize, usize), scroll: (f32, f32)) -> (f32, f32) {
+    pub(crate) fn reveal(&self, (row, column): (usize, usize), scroll: (f32, f64)) -> (f32, f64) {
         let (Some(&left), Some(&right)) = (self.edges.get(column), self.edges.get(column + 1))
         else {
             return scroll;
         };
-        let top = row as f32 * self.row_h;
-        let bottom = top + self.row_h;
-        let fit = |start: f32, end: f32, at: f32, span: f32| {
+        let top = row as f64 * f64::from(self.row_h);
+        let bottom = top + f64::from(self.row_h);
+        let fit = |start: f64, end: f64, at: f64, span: f64| {
             if start < at {
                 start
             } else if end > at + span {
@@ -508,8 +509,14 @@ impl TableLayout {
             }
         };
         (
-            fit(left, right, scroll.0, self.body.w).clamp(0.0, self.max_scroll.0),
-            fit(top, bottom, scroll.1, self.body.h).clamp(0.0, self.max_scroll.1),
+            (fit(
+                left.into(),
+                right.into(),
+                scroll.0.into(),
+                self.body.w.into(),
+            ) as f32)
+                .clamp(0.0, self.max_scroll.0),
+            fit(top, bottom, scroll.1, self.body.h.into()).clamp(0.0, self.max_scroll.1),
         )
     }
 }

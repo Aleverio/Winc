@@ -403,3 +403,62 @@ fn a_long_document_is_laid_out_over_several_frames_after_its_width_changes() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn zz_probe_mem() {
+    let rss = || {
+        let out = std::process::Command::new("ps")
+            .args(["-o", "rss=", "-p", &std::process::id().to_string()])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().parse::<u64>().unwrap_or(0) / 1024
+    };
+    let dir = sample_folder("probe-mem");
+    let path = dir.join("big.md");
+    let text: String = (0..20_000usize)
+        .map(|i| {
+            let head = if i % 20 == 0 { format!("## Chapter {}\n\n", i / 20) } else { String::new() };
+            format!("{head}Paragraph {i} with **bold**, `code`, a [link](https://example.com) and enough plain words to wrap across a couple of lines when the column is narrow, 再加一些中文字符用来测试混排的情况。\n\n")
+        })
+        .collect();
+    std::fs::write(&path, &text).unwrap();
+    drop(text);
+    let r0 = rss();
+    let mut app = app_with(&path, false);
+    paint(&mut app);
+    let r1 = rss();
+    app.set_preview_mode(PreviewMode::Preview);
+    app.wait_for_markdown();
+    let r2 = rss();
+    let t = std::time::Instant::now();
+    paint(&mut app);
+    let first = t.elapsed();
+    let r3 = rss();
+    settle(&mut app);
+    let r4 = rss();
+    let laid = app.preview.markdown.layout.as_ref().unwrap();
+    let (mut items, mut texts, mut advances, mut runs, mut held) = (0usize, 0usize, 0usize, 0usize, 0usize);
+    for (_, block) in &laid.blocks {
+        items += block.items.len();
+        held += block.text.len();
+        for item in &block.items {
+            if let winc_typeset::Item::Text { text, span, .. } = item {
+                runs += 1;
+                texts += text.len();
+                advances += span.as_ref().map_or(0, |s| s.advances.len() * 4);
+            }
+        }
+    }
+    eprintln!(
+        "PROBE rss: open+source={}MB parse={}MB first-layout={}MB settle={}MB first={first:?}",
+        r1 - r0, r2.saturating_sub(r1), r3.saturating_sub(r2), r4.saturating_sub(r3)
+    );
+    eprintln!(
+        "PROBE items={items} x {}B = {}MB; text runs={runs} text={}MB advances={}MB block-text={}MB memo={}",
+        std::mem::size_of::<winc_typeset::Item>(),
+        items * std::mem::size_of::<winc_typeset::Item>() / 1_000_000,
+        texts / 1_000_000, advances / 1_000_000, held / 1_000_000,
+        app.preview.markdown.memo.len()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

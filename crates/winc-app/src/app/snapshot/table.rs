@@ -441,7 +441,8 @@ fn cells_are_selected_copied_and_merged_cells_read_in_full() {
     assert!(head.0 > 10 && view.scroll.1 > 0.0);
     let (_, y) = cell_center(&app, head.0, head.1);
     let body = app.preview.table_layout.body;
-    assert!(y - view.scroll.1 < body.bottom() && y - view.scroll.1 > body.y);
+    let shown = y - view.scroll.1 as f32;
+    assert!(shown < body.bottom() && shown > body.y);
 
     std::fs::remove_dir_all(&dir).unwrap();
 }

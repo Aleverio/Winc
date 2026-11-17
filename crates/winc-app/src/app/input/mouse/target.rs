@@ -643,9 +643,12 @@ impl App {
             if !body.contains(x, y) {
                 return None;
             }
-            let content = (body.w + layout.max_scroll.0, body.h + layout.max_scroll.1);
+            let content = (
+                body.w + layout.max_scroll.0,
+                body.h + layout.max_scroll.1 as f32,
+            );
             if x >= body.right() - SCROLLBAR_HIT {
-                let thumb = scrollbar_thumb(body, scroll.1, content.1)?;
+                let thumb = scrollbar_thumb(body, scroll.1 as f32, content.1)?;
                 return Some((Scrollbar::Table, grab(y, thumb.y, thumb.h)));
             }
             if y >= body.bottom() - SCROLLBAR_HIT {

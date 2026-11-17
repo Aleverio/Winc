@@ -15,6 +15,33 @@ const NS: &str = "xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/m
 const REL: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
 /// 构造一个工作簿：两张显示的工作表（「数据」「空表」）、一张隐藏的工作表，带共享字符串和样式。
+/// 只有一张工作表、内容为 `sheet` 的工作簿。
+fn single_sheet(sheet: &str) -> Vec<u8> {
+    let root = format!(
+        "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\
+         <Relationship Id=\"rId1\" Type=\"{REL}/officeDocument\" Target=\"xl/workbook.xml\"/>\
+         </Relationships>"
+    );
+    let workbook = format!(
+        "<workbook {NS}><sheets><sheet name=\"表\" sheetId=\"1\" r:id=\"rId1\"/></sheets>\
+         </workbook>"
+    );
+    let relations = format!(
+        "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\
+         <Relationship Id=\"rId1\" Type=\"{REL}/worksheet\" Target=\"worksheets/sheet1.xml\"/>\
+         </Relationships>"
+    );
+    zip(
+        &[
+            ("_rels/.rels", &root),
+            ("xl/workbook.xml", &workbook),
+            ("xl/_rels/workbook.xml.rels", &relations),
+            ("xl/worksheets/sheet1.xml", sheet),
+        ],
+        false,
+    )
+}
+
 fn workbook(deflate: bool) -> Vec<u8> {
     let root_rels = format!(
         "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\
@@ -288,4 +315,49 @@ fn delimited_files_are_read_from_disk_up_to_the_row_limit() {
     );
     assert!(load_delimited(&dir.join("missing.csv"), false).is_err());
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// 行号、列号不按升序写出的工作表：各行、各单元格仍在所写的位置上。
+#[test]
+fn rows_and_cells_written_out_of_order_keep_their_places() {
+    let sheet = format!(
+        "<worksheet {NS}><sheetData>\
+         <row r=\"3\"><c r=\"B3\" t=\"str\"><v>三乙</v></c><c r=\"A3\" t=\"str\"><v>三甲</v></c></row>\
+         <row r=\"1\"><c r=\"A1\" t=\"str\"><v>a &amp; b &#x4E2D;</v></c></row>\
+         <row r=\"5\"/><row><c t=\"inlineStr\"><is><t><![CDATA[<六>]]></t></is></c></row>\
+         </sheetData><mergeCells><mergeCell ref=\"A3:B3\"/></mergeCells></worksheet>"
+    );
+    let table = read_workbook(&single_sheet(&sheet)).unwrap();
+    let sheet = &table.sheets[0];
+    assert_eq!(sheet.row_count(), 6);
+    assert_eq!(sheet.row(0).collect::<Vec<_>>(), ["a & b 中"]);
+    assert!(sheet.row(1).next().is_none());
+    assert_eq!(sheet.row(2).collect::<Vec<_>>(), ["三甲", "三乙"]);
+    assert_eq!(sheet.cell(5, 0), "<六>");
+    assert_eq!(sheet.merges.len(), 1);
+}
+
+#[test]
+fn the_pull_reader_reports_malformed_xml() {
+    use super::pull::{Token, Tokens, attribute};
+    let xml = "<?xml version=\"1.0\"?><!-- c --><x:a k='1 > 0' r:id=\"&lt;\"><b/>t</x:a>";
+    let mut tokens = Tokens::new(xml);
+    let Some(Token::Open {
+        name: "a",
+        attributes,
+        empty: false,
+    }) = tokens.next()
+    else {
+        panic!("应为开始标签");
+    };
+    assert_eq!(attribute(attributes, "k").as_deref(), Some("1 > 0"));
+    assert_eq!(attribute(attributes, "id").as_deref(), Some("<"));
+    assert_eq!(attribute(attributes, "missing"), None);
+    assert_eq!(tokens.by_ref().count(), 3);
+    assert!(tokens.well_formed());
+    for broken in ["<a><b></a>", "<a>", "<a", "<a></b>", "</a>"] {
+        let mut tokens = Tokens::new(broken);
+        tokens.by_ref().for_each(drop);
+        assert!(!tokens.well_formed(), "{broken}");
+    }
 }

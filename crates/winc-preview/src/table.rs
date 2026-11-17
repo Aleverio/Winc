@@ -7,6 +7,7 @@
 
 use std::path::Path;
 
+mod pull;
 mod xlsx;
 
 /// 每张工作表最多读的行数（行）：xlsx 格式规定的行数上限，csv、tsv 取同一个值。
@@ -147,6 +148,20 @@ impl Sheet {
     /// 返回第 `row` 行（从 0 起）各单元格的文字，不含行末的空单元格；没有这一行时为空。
     pub fn row(&self, row: usize) -> impl Iterator<Item = &str> {
         self.span(row).map(|i| self.text_at(i))
+    }
+
+    /// 返回把 `rows` 中各行（键为行号）换成给出的内容后的工作表；合并区域不保留。
+    pub(crate) fn with_rows(&self, rows: &std::collections::BTreeMap<usize, Vec<String>>) -> Sheet {
+        let last = rows.keys().next_back().map_or(0, |&row| row + 1);
+        let mut out = Rows::default();
+        for row in 0..self.row_count().max(last) {
+            match rows.get(&row) {
+                Some(cells) => cells.iter().for_each(|cell| out.push(cell)),
+                None => self.row(row).for_each(|cell| out.push(cell)),
+            }
+            out.end_row();
+        }
+        out.finish(self.name.clone(), self.truncated)
     }
 
     /// 返回第 `row` 行的单元格在 `ends` 中的范围；没有这一行时为空。
