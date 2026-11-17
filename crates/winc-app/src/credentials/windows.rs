@@ -28,10 +28,11 @@ pub(super) fn get(name: &str) -> Option<String> {
     let target = target(name);
     let mut found: *mut CREDENTIALW = null_mut();
     // SAFETY: `target` 以 NUL 结尾，`found` 是有效的输出指针。
-    if unsafe { CredReadW(target.as_ptr(), CRED_TYPE_GENERIC, 0, &mut found) } == 0 {
+    let read = unsafe { CredReadW(target.as_ptr(), CRED_TYPE_GENERIC, 0, &mut found) };
+    if read == 0 || found.is_null() {
         return None;
     }
-    // SAFETY: 调用成功时 `found` 指向系统分配的凭据，其中的指针和长度描述同一块内存。
+    // SAFETY: `found` 非空，指向系统分配的凭据，其中的指针和长度描述同一块内存。
     let secret = unsafe {
         let credential = &*found;
         let size = credential.CredentialBlobSize as usize;
@@ -84,16 +85,21 @@ pub(super) fn names() -> Vec<String> {
     let mut count = 0;
     let mut found: *mut *mut CREDENTIALW = null_mut();
     // SAFETY: `filter` 以 NUL 结尾，`count`、`found` 是有效的输出指针。
-    if unsafe { CredEnumerateW(filter.as_ptr(), 0, &mut count, &mut found) } == 0 {
+    let listed = unsafe { CredEnumerateW(filter.as_ptr(), 0, &mut count, &mut found) };
+    if listed == 0 || found.is_null() {
         return Vec::new();
     }
     let prefix = format!("{SERVICE}:");
-    // SAFETY: 调用成功时 `found` 指向 `count` 个凭据指针，目标名以 NUL 结尾。
+    // SAFETY: `found` 非空，指向 `count` 个凭据指针；非空的目标名以 NUL 结尾。
     let names = unsafe {
         std::slice::from_raw_parts(found, count as usize)
             .iter()
+            .filter(|credential| !credential.is_null())
             .filter_map(|&credential| {
                 let name = (*credential).TargetName;
+                if name.is_null() {
+                    return None;
+                }
                 let length = (0..).take_while(|&i| *name.add(i) != 0).count();
                 let name = String::from_utf16(std::slice::from_raw_parts(name, length)).ok()?;
                 name.strip_prefix(&prefix).map(str::to_owned)

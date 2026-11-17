@@ -1,11 +1,16 @@
 //! 凭据存取规则的测试，使用进程内的表。
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use super::*;
 
-fn credential(username: &str, password: &str) -> Credential {
+/// 返回用户名为 `username` 的凭据；密码在运行时生成，每次调用都不同。
+fn credential(username: &str) -> Credential {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let serial = NEXT.fetch_add(1, Ordering::Relaxed);
     Credential {
         username: username.to_owned(),
-        password: password.to_owned(),
+        password: format!("{}-{serial}", std::process::id()),
     }
 }
 
@@ -13,10 +18,11 @@ fn credential(username: &str, password: &str) -> Credential {
 #[test]
 fn a_saved_credential_is_found_by_origin_and_by_username() {
     let origin = "https://find.credentials.test";
+    let alice = credential("alice");
     assert!(find(origin, None).is_none());
-    assert!(save(origin, &credential("alice", "token-1")));
-    assert!(find(origin, None) == Some(credential("alice", "token-1")));
-    assert!(find(origin, Some("alice")) == Some(credential("alice", "token-1")));
+    assert!(save(origin, &alice));
+    assert!(find(origin, None).as_ref() == Some(&alice));
+    assert!(find(origin, Some("alice")).as_ref() == Some(&alice));
     assert!(find(origin, Some("bob")).is_none());
 }
 
@@ -24,14 +30,15 @@ fn a_saved_credential_is_found_by_origin_and_by_username() {
 #[test]
 fn two_usernames_on_one_host_are_kept_apart() {
     let origin = "https://two.credentials.test";
-    save(origin, &credential("alice", "a"));
-    save(origin, &credential("bob", "b"));
-    assert!(find(origin, Some("alice")) == Some(credential("alice", "a")));
-    assert!(find(origin, None) == Some(credential("bob", "b")));
+    let (alice, bob) = (credential("alice"), credential("bob"));
+    save(origin, &alice);
+    save(origin, &bob);
+    assert!(find(origin, Some("alice")).as_ref() == Some(&alice));
+    assert!(find(origin, None).as_ref() == Some(&bob));
     // 删除 alice 的凭据：不指定用户名时仍取到 bob 的。
     forget(origin, Some("alice"));
     assert!(find(origin, Some("alice")).is_none());
-    assert!(find(origin, None) == Some(credential("bob", "b")));
+    assert!(find(origin, None).as_ref() == Some(&bob));
     forget(origin, Some("bob"));
     assert!(find(origin, None).is_none());
 }
@@ -39,12 +46,9 @@ fn two_usernames_on_one_host_are_kept_apart() {
 /// 用户名含换行符时不保存；不是 `协议://主机` 的地址没有条目。
 #[test]
 fn malformed_input_is_not_stored() {
-    assert!(!save(
-        "https://bad.credentials.test",
-        &credential("a\nb", "x")
-    ));
+    assert!(!save("https://bad.credentials.test", &credential("a\nb")));
     assert!(find("https://bad.credentials.test", None).is_none());
-    assert!(!save("bad.credentials.test", &credential("a", "x")));
+    assert!(!save("bad.credentials.test", &credential("a")));
 }
 
 /// 同一地址的两个条目只计一次。
