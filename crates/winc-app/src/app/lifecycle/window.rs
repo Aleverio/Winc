@@ -17,7 +17,8 @@ impl App {
     pub(crate) fn under_cursor(&self) -> bool {
         #[cfg(target_os = "macos")]
         if let Some(window) = &self.window.handle {
-            return crate::macos::under_cursor(window);
+            let log = &self.frame.frame_log;
+            return log.time_query(|| crate::macos::under_cursor(window));
         }
         true
     }
@@ -640,6 +641,7 @@ impl App {
         let elapsed = started.elapsed();
         self.frame.renderer = Some(renderer);
         if !drawn {
+            self.frame.frame_log.frame_skipped();
             self.retry_frame(started);
             return;
         }
@@ -648,7 +650,9 @@ impl App {
         {
             let size = window.inner_size();
             let refresh = frame_interval(window);
-            (self.frame.frame_log).record(elapsed, refresh, (size.width, size.height));
+            let reclaimed = (self.frame.renderer.as_mut()).map_or(0, Renderer::take_reclaimed);
+            let size = (size.width, size.height);
+            (self.frame.frame_log).record(elapsed, refresh, size, reclaimed);
         }
         self.refresh_hover();
         // 命中测试区域随本帧的布局更新；两帧之间的落指与抬手由 `on_touch` 另行同步。
