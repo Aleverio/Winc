@@ -355,6 +355,9 @@ impl App {
             name = session.name.clone();
         }
         let sidebar_hidden = !self.panels.sidebar.visible;
+        let locked = (self.editor.documents.iter()).filter(|doc| doc.is_locked());
+        let readonly = locked.filter_map(|doc| doc.path.clone()).collect();
+        let readonly_all = self.editor.all_locked();
         let bookmarks = self
             .editor
             .all_bookmarks()
@@ -379,6 +382,8 @@ impl App {
                 run,
                 folders,
                 name,
+                readonly,
+                readonly_all,
                 sidebar_hidden,
             });
         });

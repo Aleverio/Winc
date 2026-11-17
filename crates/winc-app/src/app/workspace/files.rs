@@ -347,6 +347,34 @@ impl App {
         self.request_redraw();
     }
 
+    /// 把当前标签设为只读或恢复为可以编辑；因自身的状态而只读的标签给出原因。
+    pub(in crate::app) fn toggle_read_only(&mut self) {
+        let Some(doc) = self.editor.active() else {
+            return;
+        };
+        match doc.unwritable_reason() {
+            Some(reason) => self.flash(reason),
+            None => self.set_read_only(doc.id, !doc.is_locked()),
+        }
+    }
+
+    /// 把文档 `id` 设为只读（`on`）或恢复为可以编辑，并记入会话。
+    pub(in crate::app) fn set_read_only(&mut self, id: DocumentId, on: bool) {
+        let Some(doc) = self.editor.document_mut(id) else {
+            return;
+        };
+        doc.set_locked(on);
+        self.remember_session();
+        self.request_redraw();
+    }
+
+    /// 把窗口里的全部标签设为只读（`on`）或恢复，并记入会话。
+    pub(in crate::app) fn set_read_only_all(&mut self, on: bool) {
+        self.editor.set_all_locked(on);
+        self.remember_session();
+        self.request_redraw();
+    }
+
     /// 当前文档只读时，在状态栏说明原因；无法打开的文件已在编辑区说明，不重复提示。
     pub(in crate::app) fn announce_readonly(&mut self) {
         if let Some(reason) = self
@@ -354,7 +382,7 @@ impl App {
             .active()
             // 尚未读取完成的文档不提示：读取完成后再判断（`loading.rs`）。
             .filter(|d| d.shows_text() && !d.is_pending())
-            .and_then(|d| d.readonly_reason())
+            .and_then(|d| d.unwritable_reason())
         {
             self.flash(reason);
         }
@@ -601,7 +629,7 @@ impl App {
 
         if doc.title.is_some() {
             // 格式化工具的输出标签只用于查看，不可保存。
-            if let Some(reason) = doc.readonly_reason() {
+            if let Some(reason) = doc.unwritable_reason() {
                 self.flash(reason);
             }
         } else if doc.path.is_none() {
@@ -653,7 +681,7 @@ impl App {
                 continue;
             };
             let candidate =
-                doc.is_dirty() && doc.title.is_none() && doc.readonly_reason().is_none();
+                doc.is_dirty() && doc.title.is_none() && doc.unwritable_reason().is_none();
             // 文件已从磁盘上删除：不自动写回，改为提示一次重新创建的方法；文件恢复后被再次删除时
             // 重新提示。
             if candidate && doc.deleted_on_disk() {

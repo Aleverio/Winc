@@ -181,6 +181,10 @@ pub enum Action {
     /// 全部显示或不显示空白符。
     ToggleWhitespace,
     TogglePreview,
+    /// 把当前标签设为只读或恢复为可以编辑。
+    ToggleReadOnly,
+    /// 把窗口里的全部标签设为只读或恢复。
+    ToggleReadOnlyAll,
     NextDifference,
     PreviousDifference,
     /// 差异里的下一个文件。
@@ -548,6 +552,8 @@ impl Action {
             PreviousError => t!("cmd-previous-error"),
             SendToTerminal => t!("cmd-send-to-terminal"),
             TogglePreview => t!("cmd-toggle-preview"),
+            ToggleReadOnly => t!("cmd-toggle-read-only"),
+            ToggleReadOnlyAll => t!("cmd-toggle-read-only-all"),
         }
     }
 
@@ -779,6 +785,8 @@ impl Action {
             PreviousError => "Terminal: Previous Error",
             SendToTerminal => "Terminal: Run Selected Text",
             TogglePreview => "Toggle Preview",
+            ToggleReadOnly => "Toggle Read-Only",
+            ToggleReadOnlyAll => "Toggle Read-Only for All Files",
         }
     }
 
@@ -904,6 +912,8 @@ impl Action {
             | ToggleStatusBar
             | ToggleWhitespace
             | TogglePreview
+            | ToggleReadOnly
+            | ToggleReadOnlyAll
             | NextDifference
             | PreviousDifference
             | NextDiffFile
@@ -1304,6 +1314,8 @@ pub const ACTIONS: &[Action] = {
         ToggleStatusBar,
         ToggleWhitespace,
         TogglePreview,
+        ToggleReadOnly,
+        ToggleReadOnlyAll,
         ShowCommit,
         GitShowChanges,
         ChangesShowDiff,

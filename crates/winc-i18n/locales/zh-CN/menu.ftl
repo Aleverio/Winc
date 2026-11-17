@@ -191,3 +191,7 @@ menu-commit-check-todo = 检查 TODO
 menu-commit-recent-messages = 最近的提交信息
 menu-commit-co-author = 添加共同作者
 menu-commit-no-verify = 本次提交跳过钩子
+menu-set-read-only = 设为只读
+menu-clear-read-only = 取消只读
+menu-set-read-only-all = 全部设为只读
+menu-clear-read-only-all = 全部取消只读
