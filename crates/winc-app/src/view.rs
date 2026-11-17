@@ -512,7 +512,7 @@ fn draw_tooltip(app: &App, frame: &mut Frame<'_>) {
         };
         Rect::new(
             (button.x + (button.w - width) / 2.0)
-                .clamp(4.0, app.layout.window.right() - width - 4.0),
+                .clamp(4.0, (app.layout.window.right() - width - 4.0).max(4.0)),
             y,
             width,
             height,
