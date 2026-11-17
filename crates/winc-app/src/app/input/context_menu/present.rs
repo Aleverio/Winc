@@ -527,6 +527,11 @@ impl App {
                     path.is_some_and(|p| self.relative_path(p).is_some()),
                     docs.iter().any(|d| !d.is_dirty()),
                 );
+                let doc = &docs[index];
+                if doc.can_lock() && doc.shows_text() {
+                    let command = MenuCommand::ReadOnly(!doc.is_locked());
+                    menu.extend([MenuEntry::Separator, MenuEntry::Item(command, true)]);
+                }
                 if let Some(path) = path.filter(|p| self.in_repo(p)) {
                     menu.extend([
                         MenuEntry::Separator,
@@ -566,6 +571,10 @@ impl App {
                     return;
                 };
                 document_language_menu(doc.path.is_some())
+            }
+            MenuTarget::ReadOnly(id) => {
+                let own = self.editor.document(*id).is_some_and(|doc| doc.is_locked());
+                read_only_menu(own, self.editor.all_locked())
             }
             MenuTarget::CommitFile(_) if self.commit_multi_selected() => {
                 let any_exists = (self.commit_selection().iter()).any(|path| self.may_exist(path));

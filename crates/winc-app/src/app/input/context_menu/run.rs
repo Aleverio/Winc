@@ -290,6 +290,7 @@ impl App {
             MenuTarget::Indent(id)
             | MenuTarget::LineEnding(id)
             | MenuTarget::Encoding(id)
+            | MenuTarget::ReadOnly(id)
             | MenuTarget::Language(id) => self.run_status_command(command, id),
             MenuTarget::BranchOps(_) => {
                 if let MenuCommand::GitBranch(op, i) = command
@@ -518,6 +519,7 @@ impl App {
                 }
             }
             MenuCommand::Close => self.close_tab(index),
+            MenuCommand::ReadOnly(on) => self.set_read_only(id, on),
             MenuCommand::CloseOthers => {
                 let ids = docs.iter().filter(|d| d.id != id).map(|d| d.id).collect();
                 self.close_tabs(ids);

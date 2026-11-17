@@ -197,3 +197,7 @@ menu-commit-check-todo = Check TODOs
 menu-commit-recent-messages = Recent Commit Messages
 menu-commit-co-author = Add Co-Author
 menu-commit-no-verify = Skip Hooks for This Commit
+menu-set-read-only = Set Read-Only
+menu-clear-read-only = Clear Read-Only
+menu-set-read-only-all = Set All Read-Only
+menu-clear-read-only-all = Clear Read-Only for All

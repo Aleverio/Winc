@@ -230,6 +230,8 @@ cmd-unfold-output = 终端：展开命令的输出
 cmd-next-error = 终端：下一处错误
 cmd-previous-error = 终端：上一处错误
 cmd-send-to-terminal = 终端：运行选中的代码
+cmd-toggle-read-only-all = 切换全部只读
+cmd-toggle-read-only = 切换只读
 cmd-toggle-preview = 切换预览
 
 ## 执行命令时的提示

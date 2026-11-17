@@ -132,6 +132,10 @@ pub enum MenuCommand {
     /// 关闭所有没有未保存修改的标签。
     CloseSaved,
     CloseAll,
+    /// 把标签设为只读（`true`）或恢复为可以编辑。
+    ReadOnly(bool),
+    /// 把窗口里的全部标签设为只读（`true`）或恢复。
+    ReadOnlyAll(bool),
     /// 在文件树中显示并选中该文件。
     RevealInTree,
     /// 标签列表：切换到指定标签，参数为 `documents` 的下标。
@@ -507,6 +511,10 @@ impl MenuCommand {
             MenuCommand::CommitCheck(true) => t!("menu-commit-check"),
             MenuCommand::CommitCheck(false) => t!("menu-commit-uncheck"),
             MenuCommand::CloseSaved => t!("menu-close-saved-tabs"),
+            MenuCommand::ReadOnly(true) => t!("menu-set-read-only"),
+            MenuCommand::ReadOnly(false) => t!("menu-clear-read-only"),
+            MenuCommand::ReadOnlyAll(true) => t!("menu-set-read-only-all"),
+            MenuCommand::ReadOnlyAll(false) => t!("menu-clear-read-only-all"),
             MenuCommand::CloseAll => t!("cmd-close-all-tabs"),
             MenuCommand::RevealInTree => t!("menu-reveal-in-tree"),
             MenuCommand::RunEdit => t!("cmd-edit-run-configurations"),
@@ -740,6 +748,8 @@ impl MenuCommand {
             MenuCommand::Delete => Action::DeleteFile,
             MenuCommand::Close => Action::CloseTab,
             MenuCommand::CloseOthers => Action::CloseOtherTabs,
+            MenuCommand::ReadOnly(_) => Action::ToggleReadOnly,
+            MenuCommand::ReadOnlyAll(_) => Action::ToggleReadOnlyAll,
             MenuCommand::CloseAll => Action::CloseAllTabs,
             MenuCommand::NewWindow => Action::NewWindow,
             MenuCommand::OpenFolder => Action::OpenFolder,
@@ -852,6 +862,8 @@ pub enum MenuTarget {
     LineEnding(DocumentId),
     /// 状态栏中一个文档的编码。
     Encoding(DocumentId),
+    /// 状态栏中一个文档的只读标记。
+    ReadOnly(DocumentId),
     /// 状态栏中一个文档的语言。
     Language(DocumentId),
     /// 分支选择器里第几个分支（[`crate::app::git::GitState::branches`] 的下标）的操作。
