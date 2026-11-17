@@ -596,6 +596,28 @@ const GIT: &[Field] = &[
     },
     string_field!("worktreeRoot", git_worktree_root),
     Field {
+        key: "openWorktree",
+        read: |config, value, name, problems| {
+            config.git_open_worktree = match value.as_str() {
+                Some("ask") => Some(WorktreeOpen::Ask),
+                Some("newWindow") => Some(WorktreeOpen::NewWindow),
+                Some("currentWindow") => Some(WorktreeOpen::CurrentWindow),
+                _ => {
+                    problems.push(t!("config-open-worktree-invalid", name = name));
+                    None
+                }
+            };
+        },
+        write: |config| {
+            let value = match config.git_open_worktree? {
+                WorktreeOpen::Ask => "ask",
+                WorktreeOpen::NewWindow => "newWindow",
+                WorktreeOpen::CurrentWindow => "currentWindow",
+            };
+            Some(Json::String(value.into()))
+        },
+    },
+    Field {
         key: "worktreeCopy",
         read: |config, value, name, problems| {
             let Some(items) = value.as_array() else {

@@ -17,7 +17,7 @@ use super::super::popup_menu::band_ink;
 use super::commit::draw_count_pill_in;
 use crate::app::git::branch::local_name;
 use crate::app::git::branch::picker::{BranchRow, GIT_PICKER_ACTION_LIST, GIT_PICKER_ACTIONS_TOP};
-use crate::app::git::location_picker::{LocationRow, Place};
+use crate::app::git::location_picker::Place;
 use crate::app::git::log::display_local;
 use crate::app::{Focus, PICKER_ROW, PickerPart};
 use crate::layout::PickerParts;
@@ -464,22 +464,15 @@ fn draw_empty(app: &App, frame: &mut Frame<'_>, list: Rect, text: &str) {
     ui_text(frame, app, x, row, text, app.palette.text_dim, list);
 }
 
-/// 绘制位置选择器的各行：可以展开的仓库和各个位置。
+/// 绘制位置选择器的各行：每个位置一行。
 fn draw_location_rows(
     app: &App,
     frame: &mut Frame<'_>,
     parts: &PickerParts,
     hits: &mut Vec<(Rect, PickerPart)>,
 ) {
-    let rows = match &app.overlays.picker.fold {
-        Some(fold) if !fold.expanding => fold.before.locations.as_slice(),
-        _ => app
-            .overlays
-            .picker
-            .location_rows
-            .as_deref()
-            .unwrap_or_default(),
-    };
+    let rows = app.overlays.picker.location_rows.as_deref();
+    let rows = rows.unwrap_or_default();
     if rows.is_empty() {
         let none = if app.git.location_all {
             t!("git-location-picker-empty")
@@ -491,25 +484,7 @@ fn draw_location_rows(
     }
     for i in drawn_rows(app, parts, rows.len()) {
         let line = Line::begin(app, frame, parts, i);
-        match &rows[i] {
-            LocationRow::Repository {
-                label,
-                count,
-                changes,
-                open,
-                ..
-            } => {
-                line.draw_group_fold(app, frame, (i, *open));
-                let mut right = line.right();
-                let note = t!("git-location-count", count = *count);
-                line.draw_meta(app, frame, &mut right, &note);
-                let at = (line.columns(0).1, right - NAME_GAP);
-                // 展开时各行有自己的圆点。
-                let dotted = !*open && *changes > 0;
-                line.draw_dotted_name(app, frame, at, label, line.text, dotted);
-            }
-            LocationRow::Place(place) => draw_place_row(app, frame, &line, i, place, hits),
-        }
+        draw_place_row(app, frame, &line, i, &rows[i], hits);
     }
 }
 
@@ -780,7 +755,7 @@ fn draw_branch_row(
     line.draw_name(app, frame, at, row.label, line.text);
 }
 
-/// 绘制位置选择器列表下方的底栏：上沿一条分隔线，里面是新建工作树，图标和字的位置与各行相同。
+/// 绘制工作树选择器列表下方的底栏：上沿一条分隔线，里面是新建工作树，图标和字的位置与各行相同。
 /// 分支选择器没有底栏：新建的入口在搜索框下面的操作里（见 [`draw_actions`]）。
 fn draw_footer(
     app: &App,
@@ -796,8 +771,10 @@ fn draw_footer(
     draw_divider(frame, p, foot, foot.y, foot);
 
     let size = app.fonts.ui_small;
-    let in_repository = app.location_new_worktree_label();
-    let entries = [(PickerPart::NewWorktree, in_repository.as_str())];
+    let entries = [(
+        PickerPart::NewWorktree,
+        t!("git-branch-picker-new-worktree"),
+    )];
     let mut x = foot.x + GUTTER;
     let y = foot.bottom() - GUTTER - BUTTON_SMALL;
     for (part, text) in entries {

@@ -306,6 +306,7 @@ impl App {
             Setting::Language
             | Setting::RenderWhitespace
             | Setting::VimClipboard
+            | Setting::GitOpenWorktree
             | Setting::Zoom
             | Setting::BackgroundImage
             | Setting::BackgroundFit
@@ -320,6 +321,7 @@ impl App {
                     Setting::Language => MenuTarget::Locale,
                     Setting::RenderWhitespace => MenuTarget::Whitespace,
                     Setting::VimClipboard => MenuTarget::VimClipboard,
+                    Setting::GitOpenWorktree => MenuTarget::OpenWorktree,
                     Setting::Zoom => MenuTarget::Zoom,
                     Setting::BackgroundImage => MenuTarget::BackgroundImage,
                     Setting::BackgroundFit => MenuTarget::BackgroundFit,

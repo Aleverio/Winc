@@ -176,6 +176,7 @@ impl SettingsPage {
                     Setting::GitAutoFetch,
                     Setting::GitSystemProxy,
                 ]),
+                plain(vec![Setting::GitOpenWorktree]),
             ],
             SettingsPage::Modules => vec![plain(vec![
                 Setting::GitModule,
@@ -399,6 +400,8 @@ pub enum Setting {
     GitTree,
     /// 提交视图显示暂存区（`git.stagingArea`）；关闭时用勾选决定提交的内容。
     GitStagingArea,
+    /// 点击工作树时在哪个窗口打开它（`git.openWorktree`）。
+    GitOpenWorktree,
     /// 终端模块的开关。
     TerminalModule,
     /// 远程模块的开关。
@@ -509,6 +512,7 @@ impl Setting {
             | Setting::TerminalApplicationPriority
             | Setting::TerminalOptionAsMeta => SettingsPage::Terminal,
             Setting::GitStagingArea
+            | Setting::GitOpenWorktree
             | Setting::GitConfirmPush
             | Setting::GitSystemProxy
             | Setting::GitInlineBlame
@@ -596,6 +600,7 @@ impl Setting {
             Setting::GitAutoFetch => t!("settings-git-auto-fetch"),
             Setting::GitTree => t!("settings-git-tree"),
             Setting::GitStagingArea => t!("settings-git-staging-area"),
+            Setting::GitOpenWorktree => t!("settings-git-open-worktree"),
             Setting::TerminalModule => t!("settings-terminal-module"),
             Setting::RemoteModule => t!("settings-remote-module"),
             Setting::KeySearch => t!("settings-key-search"),
@@ -656,6 +661,7 @@ impl Setting {
             Setting::GitAutoFetch => Some(t!("settings-git-auto-fetch-desc")),
             Setting::GitTree => Some(t!("settings-git-tree-desc")),
             Setting::GitStagingArea => Some(t!("settings-git-staging-area-desc")),
+            Setting::GitOpenWorktree => Some(t!("settings-git-open-worktree-desc")),
             Setting::TerminalCopyOnSelect => Some(t!("settings-terminal-copy-on-select-desc")),
             Setting::TerminalConfirmClose => Some(t!("settings-terminal-confirm-close-desc")),
             Setting::TerminalPrompt => Some(t!("settings-terminal-prompt-desc")),
@@ -734,7 +740,8 @@ impl Setting {
             | Setting::VimClipboard
             | Setting::TerminalPosition
             | Setting::TerminalTabPosition
-            | Setting::TerminalOptionAsMeta => SettingControl::Choice,
+            | Setting::TerminalOptionAsMeta
+            | Setting::GitOpenWorktree => SettingControl::Choice,
             Setting::AddLanguage | Setting::AddFixLanguage => SettingControl::Action,
             Setting::KeySearch => SettingControl::Search,
             Setting::Version => SettingControl::Product,
@@ -799,6 +806,16 @@ pub fn text_width_label(choice: winc_config::TextWidth) -> &'static str {
         Standard => t!("settings-text-width-standard"),
         Wide => t!("settings-text-width-wide"),
         Full => t!("settings-text-width-full"),
+    }
+}
+
+/// 返回「打开工作树」设置中选项 `choice` 的名字。
+pub fn open_worktree_label(choice: winc_config::WorktreeOpen) -> &'static str {
+    use winc_config::WorktreeOpen::{Ask, CurrentWindow, NewWindow};
+    match choice {
+        Ask => t!("settings-git-open-worktree-ask"),
+        NewWindow => t!("settings-git-open-worktree-new"),
+        CurrentWindow => t!("settings-git-open-worktree-current"),
     }
 }
 

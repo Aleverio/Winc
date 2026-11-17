@@ -324,6 +324,7 @@ impl App {
                 .collect(),
             MenuTarget::Whitespace => whitespace_menu(),
             MenuTarget::VimClipboard => vim_clipboard_menu(),
+            MenuTarget::OpenWorktree => open_worktree_menu(),
             MenuTarget::DefaultShell => default_shell_menu(self.terminal.shells.len()),
             MenuTarget::Zoom => zoom_menu(),
             MenuTarget::BackgroundImage => background_menu(),
@@ -634,31 +635,7 @@ impl App {
             }
             // 目录菜单不经过这里（`App::open_crumb_menu`）。
             MenuTarget::Folder => return,
-            MenuTarget::Location(_, worktree) => {
-                let missing = worktree
-                    .and_then(|i| self.git.worktrees.get(i))
-                    .is_some_and(|w| w.prunable);
-                let removable = worktree.is_some_and(|i| {
-                    i > 0
-                        && self.git.current_worktree() != Some(i)
-                        && self.git.worktrees.get(i).is_some_and(|w| !w.locked)
-                        && self.git.branch.running.is_none()
-                });
-                let idle = self.git.branch.running.is_none();
-                let mut menu = vec![
-                    MenuEntry::Item(MenuCommand::LocationNewWindow, true),
-                    MenuEntry::Item(MenuCommand::LocationReveal, true),
-                ];
-                if worktree.is_some_and(|i| i > 0) {
-                    menu.push(MenuEntry::Separator);
-                    menu.push(MenuEntry::Item(MenuCommand::LocationRemove, removable));
-                }
-                // 目录已不在：打不开，也没有东西可以移除，只能清理。
-                if missing {
-                    menu = vec![MenuEntry::Item(MenuCommand::LocationPrune, idle)];
-                }
-                menu
-            }
+            MenuTarget::Location(path, worktree) => self.location_row_menu(path, *worktree),
             MenuTarget::BranchOps(index) => crate::app::git::branch::branch_ops(
                 *index,
                 &self.git.branches,
@@ -691,6 +668,7 @@ impl App {
                 | MenuTarget::NamedTheme(_)
                 | MenuTarget::Whitespace
                 | MenuTarget::VimClipboard
+                | MenuTarget::OpenWorktree
                 | MenuTarget::Zoom
                 | MenuTarget::BackgroundImage
                 | MenuTarget::BackgroundFit
@@ -705,6 +683,7 @@ impl App {
             MenuTarget::Locale => Some(Setting::Language),
             MenuTarget::Whitespace => Some(Setting::RenderWhitespace),
             MenuTarget::VimClipboard => Some(Setting::VimClipboard),
+            MenuTarget::OpenWorktree => Some(Setting::GitOpenWorktree),
             MenuTarget::Zoom => Some(Setting::Zoom),
             MenuTarget::BackgroundImage => Some(Setting::BackgroundImage),
             MenuTarget::BackgroundFit => Some(Setting::BackgroundFit),
@@ -1284,6 +1263,10 @@ impl App {
             MenuCommand::VimClipboard(i) => {
                 winc_config::VimClipboard::ALL.get(i)
                     == Some(&self.config.vim_clipboard.unwrap_or_default())
+            }
+            MenuCommand::OpenWorktree(i) => {
+                winc_config::WorktreeOpen::ALL.get(i)
+                    == Some(&self.config.git_open_worktree.unwrap_or_default())
             }
             MenuCommand::DefaultShell(i) => {
                 let configured = self.configured_shell().map(|shell| shell.command);

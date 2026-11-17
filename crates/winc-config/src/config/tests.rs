@@ -293,6 +293,7 @@ fn round_trips_through_json() {
         git_staging_area: Some(true),
         repository_scan_depth: Some(4),
         git_worktree_root: Some("~/worktrees".to_string()),
+        git_open_worktree: Some(WorktreeOpen::NewWindow),
         remote_enabled: Some(true),
         git_worktree_copy: vec![".env*".to_string(), "config/local.toml".to_string()],
         format_on_save: Some(false),
@@ -634,4 +635,21 @@ fn vim_mappings_are_read_in_order_and_bad_items_are_reported() {
     assert_eq!(config.vim_keys.len(), 1);
     let (config, problems) = Config::parse(r#"{ "vim": { "keys": {} } }"#);
     assert_eq!((problems.len(), config.vim_keys.len()), (1, 0));
+}
+
+#[test]
+fn open_worktree_reads_its_three_values_and_rejects_others() {
+    for (text, expected) in [
+        ("ask", WorktreeOpen::Ask),
+        ("newWindow", WorktreeOpen::NewWindow),
+        ("currentWindow", WorktreeOpen::CurrentWindow),
+    ] {
+        let json = format!(r#"{{ "git": {{ "openWorktree": "{text}" }} }}"#);
+        let (config, problems) = Config::parse(&json);
+        assert_eq!(config.git_open_worktree, Some(expected));
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+    let (config, problems) = Config::parse(r#"{ "git": { "openWorktree": "tab" } }"#);
+    assert_eq!(config.git_open_worktree, None);
+    assert_eq!(problems.len(), 1);
 }

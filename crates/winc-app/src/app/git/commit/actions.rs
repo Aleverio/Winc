@@ -852,6 +852,21 @@ impl App {
         self.git.commit.other_stage_running = old.other_stage_running;
         self.git.commit.collapsed = old.collapsed;
         self.git.commit.drafts = old.drafts;
+        // 底部各组的展开状态和高度、卡片和「上一次提交」露出的多少照旧：换仓库以后从原来的样子
+        // 过渡到新的样子。
+        self.git.commit.quiet_open = old.quiet_open;
+        self.git.commit.stashes = Drawer {
+            motion: None,
+            ..old.stashes
+        };
+        self.git.commit.worktrees = Drawer {
+            motion: None,
+            ..old.worktrees
+        };
+        self.git.commit.card = old.card;
+        self.git.commit.undo = old.undo;
+        self.git.commit.undo_drawn = old.undo_drawn;
+        self.git.commit.sections_known = old.sections_known;
     }
 
     /// 在后台对打开的仓库做一件提交视图的事（提交、回滚），做完以 [`UserEvent::GitCommit`] 收

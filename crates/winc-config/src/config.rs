@@ -216,6 +216,8 @@ pub struct Config {
     /// 开头的 `~/` 指仓库所在系统（本机或 WSL 发行版）中用户的主目录，相对路径相对于主工作树。
     /// 未设置，或者该目录与仓库不在同一系统中时，存放在仓库旁边的 `<仓库名>.worktrees` 中。
     pub git_worktree_root: Option<String>,
+    /// 点击工作树时在哪个窗口打开它，默认每次询问。
+    pub git_open_worktree: Option<WorktreeOpen>,
     /// 新建工作树时复制过去的被忽略的文件（gitignore 写法的 glob，如 `.env*`），默认不复制。
     pub git_worktree_copy: Vec<String>,
     /// 保存时先格式化，默认为否。
@@ -282,6 +284,23 @@ pub enum VimClipboard {
 impl VimClipboard {
     /// 全部取值，按设置菜单中的顺序排列。
     pub const ALL: [Self; 3] = [Self::Register, Self::Yank, Self::Always];
+}
+
+/// 点击工作树时在哪个窗口打开它。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WorktreeOpen {
+    /// 每次询问。
+    #[default]
+    Ask,
+    /// 在新窗口中打开，当前窗口不变。
+    NewWindow,
+    /// 在当前窗口中打开，替换当前打开的目录。
+    CurrentWindow,
+}
+
+impl WorktreeOpen {
+    /// 全部取值，按设置菜单中的顺序排列。
+    pub const ALL: [Self; 3] = [Self::Ask, Self::NewWindow, Self::CurrentWindow];
 }
 
 /// Vim 模式下映射生效的模式。

@@ -439,6 +439,9 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
             } else if row.setting == Setting::RenderWhitespace {
                 let choice = app.config.render_whitespace.unwrap_or_default();
                 (crate::layout::whitespace_label(choice).to_owned(), false)
+            } else if row.setting == Setting::GitOpenWorktree {
+                let choice = app.config.git_open_worktree.unwrap_or_default();
+                (crate::layout::open_worktree_label(choice).to_owned(), false)
             } else if row.setting == Setting::VimClipboard {
                 let choice = app.config.vim_clipboard.unwrap_or_default();
                 (crate::layout::vim_clipboard_label(choice).to_owned(), false)

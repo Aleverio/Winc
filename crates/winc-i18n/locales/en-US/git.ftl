@@ -164,12 +164,23 @@ git-op-failed = Error { $what }: { $error }
 git-op-failed-in = Error { $what } in “{ $name }”: { $error }
 
 ## Worktrees
+git-worktree-group = Worktrees
+git-worktree-more = { $count ->
+    [one] 1 more worktree…
+   *[other] { $count } more worktrees…
+}
+git-worktree-merged = Merged
 git-worktree-detached = { $oid } (detached HEAD)
 git-worktree-missing = Folder no longer exists
 git-worktree-copied-ignored = { $count ->
     [one] Copied { $count } ignored file
    *[other] Copied { $count } ignored files
 }
+git-worktree-open-ask = Open worktree “{ $name }” in which window?
+git-worktree-open-ask-detail = Opening it in this window closes the current tabs and terminals and replaces them with the worktree’s.
+git-worktree-open-new-window = New Window
+git-worktree-open-this-window = This Window
+git-worktree-open-remember = Don’t ask again
 git-worktree-open-elsewhere = Worktree “{ $name }” is open in another window
 git-worktree-open-elsewhere-detail = Close that window first, then remove this worktree.
 git-worktree-switch-to-window = Switch to Window
@@ -446,7 +457,8 @@ git-trust-allow = Trust
 git-commit-view-problem = { $problem }. Click Refresh to try again
 git-commit-view-loading = Reading repository status…
 git-commit-view-empty = Nothing to Commit
-git-commit-repository-clean = No changes
+git-commit-repository-current = Current
+git-commit-group-quiet = Repositories Without Changes
 git-commit-empty-in-sync = Up to date with the upstream branch
 git-commit-empty-ahead = { $count ->
     [one] 1 commit ahead of the upstream branch
@@ -472,20 +484,16 @@ git-branch-picker-new = New Branch
 git-branch-picker-new-worktree = New Worktree
 git-branch-picker-create-row = Create branch “{ $name }”
 git-branch-picker-current = Current
-git-location-picker-placeholder = Search repositories and worktrees
-git-location-picker-empty = No matching repositories or worktrees
+git-location-picker-placeholder = Search repositories
+git-location-picker-empty = No matching repositories
 git-worktree-picker-placeholder = Search worktrees
 git-worktree-picker-empty = No matching worktrees
 git-location-main-worktree = Main worktree
 git-location-only-one = This folder has only one repository and worktree
+git-location-this-window = Open in This Window
 git-location-new-window = Open in New Window
 git-location-remove = Remove Worktree…
 git-location-prune = Prune Stale Worktrees
-git-location-new-worktree-in = New Worktree in “{ $repository }”
-git-location-count = { $count ->
-    [one] 1 worktree
-   *[other] { $count } worktrees
-}
 git-tip-other-worktrees = { $count ->
     [one] 1 other worktree has uncommitted changes
    *[other] { $count } other worktrees have uncommitted changes

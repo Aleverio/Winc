@@ -197,6 +197,14 @@ pub(crate) struct GitState {
     summaries_version: Arc<std::sync::atomic::AtomicU64>,
     /// 各仓库最近一次读取的工作树；位置选择器据此在仓库下列出工作树。
     summary_worktrees: Arc<Mutex<HashMap<PathBuf, Vec<Worktree>>>>,
+    /// 离开各仓库时它的分支、储藏、工作树和上一次提交：切换回去时先显示这些，后台读取完成
+    /// 后再更新，提交视图底部的各组不会先消失再出现。
+    kept: HashMap<PathBuf, location_picker::KeptRefs>,
+    /// 排好的全部位置，见 `App::cached_places`。
+    places: std::cell::RefCell<Option<location_picker::PlacesCache>>,
+    /// 当前仓库的各个工作树相对当前 `HEAD` 落后和领先的提交数，与 `summaries` 一起读取；连同
+    /// 算出它的两个提交号，两者都没变时不重新计算。
+    summary_divergence: Arc<Mutex<HashMap<PathBuf, location_picker::Divergence>>>,
     /// 正在运行的读取；重新读取时取消。
     summaries_running: Option<Cancel>,
     /// 后台深层查找（[`App::git_scan_repositories`]）的结果。
@@ -270,8 +278,6 @@ pub(crate) struct GitState {
     pub branch: branch::BranchState,
     /// 文件内合并冲突的解决状态：识别出的冲突与可点击区域。
     pub merge: merge::MergeState,
-    /// 位置选择器里改变过默认展开状态的仓库（主工作树的目录）。
-    pub location_toggled: HashSet<PathBuf>,
     /// 位置选择器是否列出全部仓库和它们的工作树；否则只列当前仓库的工作树。
     pub location_all: bool,
     /// 后台读到的、等着确认的推送：要做的推送、会送出的提交的标题和总数（见
@@ -312,6 +318,9 @@ impl Default for GitState {
             summaries: Arc::default(),
             summaries_version: Arc::default(),
             summary_worktrees: Arc::default(),
+            kept: HashMap::new(),
+            places: std::cell::RefCell::new(None),
+            summary_divergence: Arc::default(),
             summaries_running: None,
             scanned: Arc::default(),
             scan_running: None,
@@ -346,7 +355,6 @@ impl Default for GitState {
             blame: Default::default(),
             branch: Default::default(),
             merge: Default::default(),
-            location_toggled: HashSet::new(),
             location_all: false,
             output_shown: 0,
             push_preview: Arc::default(),
@@ -548,6 +556,7 @@ impl App {
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .clear();
+            self.git.kept.clear();
         }
         self.git_discover();
         let root = self.git.repositories.first().cloned();
@@ -654,58 +663,6 @@ impl App {
         self.git_read_summaries();
     }
 
-    /// 在后台读取各仓库的工作树以及每个工作树的分支和改动数，供位置选择器和位置行显示。
-    ///
-    /// 只有一个位置时不读取。
-    ///
-    /// 最多读 [`SUMMARY_REPOSITORIES`] 个位置。
-    pub(in crate::app) fn git_read_summaries(&mut self) {
-        if let Some(cancel) = self.git.summaries_running.take() {
-            cancel.cancel();
-        }
-        if !self.git_has_locations() {
-            return;
-        }
-        let cancel = Cancel::default();
-        self.git.summaries_running = Some(cancel.clone());
-        let repositories = self.git.repositories.clone();
-        let summaries = Arc::clone(&self.git.summaries);
-        let version = Arc::clone(&self.git.summaries_version);
-        let worktrees = Arc::clone(&self.git.summary_worktrees);
-        self.spawn_git(UserEvent::GitStatus, move |tool| {
-            let Ok(git) = tool else {
-                return;
-            };
-            let mut left = SUMMARY_REPOSITORIES;
-            for root in repositories {
-                let trees = git.worktrees(&root, &cancel).unwrap_or_default();
-                let paths: Vec<PathBuf> = if trees.is_empty() {
-                    vec![root.clone()]
-                } else {
-                    let usable = trees.iter().filter(|w| w.head.is_some() && !w.prunable);
-                    usable.map(|w| w.path.clone()).collect()
-                };
-                worktrees
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .insert(root, trees);
-                for path in paths {
-                    if cancel.is_cancelled() || left == 0 {
-                        return;
-                    }
-                    left -= 1;
-                    if let Ok(status) = git.status(&path, &cancel) {
-                        summaries
-                            .lock()
-                            .unwrap_or_else(PoisonError::into_inner)
-                            .insert(path, status);
-                        version.fetch_add(1, std::sync::atomic::Ordering::Release);
-                    }
-                }
-            }
-        });
-    }
-
     /// 返回第 `index` 个仓库在菜单中显示的名字：相对打开的目录的路径，目录本身使用目录名。
     pub(crate) fn git_repository_name(&self, index: usize) -> String {
         let Some(repo) = self.git.repositories.get(index) else {
@@ -785,6 +742,16 @@ impl App {
             self.git.commit.keep_draft(old);
         }
         // 保存即将离开的仓库的状态，切换回来时可立即显示。
+        if let Some(old) = self.git.root.clone() {
+            // 分支和储藏随后就要清空，直接移走；工作树列表还要用来判断是否换到同一仓库。
+            let kept = location_picker::KeptRefs {
+                branches: std::mem::take(&mut self.git.branches),
+                stashes: std::mem::take(&mut self.git.stashes),
+                worktrees: self.git.worktrees.clone(),
+                last: self.git.commit.last.clone(),
+            };
+            self.git.kept.insert(old, kept);
+        }
         if let (Some(old), Some(status)) = (self.git.root.clone(), self.git.status.take()) {
             self.git
                 .summaries
@@ -807,6 +774,7 @@ impl App {
         self.git.branch.finished = None;
         self.reset_commit_view();
         self.git.root = root;
+        self.restore_kept_refs();
         // 换到的仓库的状态读到以后（下面已知的，或稍后刷新读到的），把它的勾选带回来。
         self.git.commit.carry_in = carrying;
         match carried {

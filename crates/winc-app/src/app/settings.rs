@@ -1334,6 +1334,13 @@ impl App {
         self.request_redraw();
     }
 
+    /// 设置点击工作树时在哪个窗口打开它。
+    pub(in crate::app) fn set_open_worktree(&mut self, choice: winc_config::WorktreeOpen) {
+        self.config.git_open_worktree = Some(choice);
+        self.save_config();
+        self.request_redraw();
+    }
+
     /// 设置 Vim 模式下无名寄存器与系统剪贴板的同步方式。
     pub(in crate::app) fn set_vim_clipboard(&mut self, choice: winc_config::VimClipboard) {
         self.config.vim_clipboard = Some(choice);

@@ -477,13 +477,21 @@ impl App {
         }
     }
 
+    /// 把分支 `name` 合并到当前分支。
+    pub(in crate::app) fn git_merge_branch(&mut self, name: String) {
+        self.git_operate(
+            t!("git-op-merge", name = name.as_str()),
+            move |git, root| git.operate(root, &["merge", "--no-edit", "--end-of-options", &name]),
+        );
+    }
+
     /// 对分支 `branch` 执行操作菜单中的 `op`。
     pub(in crate::app) fn run_branch_op(&mut self, op: BranchOp, branch: Branch) {
         let name = branch.name.clone();
         match op {
             // 分支已经在其他工作树里签出：git 不允许重复签出，改为切到该工作树。
             BranchOp::Checkout if let Some(i) = self.git.worktree_holding(local_name(&branch)) => {
-                self.open_worktree(i, false);
+                self.open_worktree_asking(i);
             }
             BranchOp::NewWorktree => self.new_worktree_for(&branch),
             BranchOp::Checkout if branch.remote => {
@@ -513,12 +521,7 @@ impl App {
             BranchOp::NewFrom => {
                 self.open_branch_dialog(Some(name), None);
             }
-            BranchOp::Merge => self.git_operate(
-                t!("git-op-merge", name = name.as_str()),
-                move |git, root| {
-                    git.operate(root, &["merge", "--no-edit", "--end-of-options", &name])
-                },
-            ),
+            BranchOp::Merge => self.git_merge_branch(name),
             BranchOp::Rebase => self.git_operate(
                 t!("git-op-rebase-onto", name = name.as_str()),
                 move |git, root| git.operate(root, &["rebase", "--end-of-options", &name]),
