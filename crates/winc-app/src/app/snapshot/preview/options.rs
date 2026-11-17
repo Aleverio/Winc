@@ -239,3 +239,90 @@ fn the_preview_follows_the_chosen_language() {
     assert_eq!(kind(&app), Some(PreviewKind::Markdown));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 标题多到列表放不下时只列出一段：滚轮在列表上时逐行移动列表，不滚动正文；正文滚到另一节后
+/// 列表回到当前所在的一节。
+#[test]
+fn a_heading_list_too_long_for_the_view_scrolls_by_the_wheel() {
+    let dir = sample_folder("md-toc-scroll");
+    let path = dir.join("book.md");
+    let text: String = (0..120)
+        .map(|i| format!("## Chapter {i}\n\nText of chapter {i}.\n\n"))
+        .collect();
+    std::fs::write(&path, text).unwrap();
+    let mut app = app_with(&path, false);
+    paint(&mut app);
+    app.set_preview_mode(PreviewMode::Preview);
+    settle(&mut app);
+    let find = |app: &App, target| {
+        (app.hits.markdown_toc.iter())
+            .find(|(_, t)| *t == target)
+            .map(|h| h.0)
+    };
+    let listed = |app: &App| {
+        let rows = app.hits.markdown_toc.iter().filter_map(|(_, t)| match t {
+            TocTarget::Heading(i) => Some(*i),
+            _ => None,
+        });
+        rows.collect::<Vec<_>>()
+    };
+    let bars = find(&app, TocTarget::Bars).unwrap();
+    rest_on_toc(&mut app, bars.x + 10.0, bars.y + 10.0);
+    paint(&mut app);
+    let first = listed(&app);
+    assert!(first.len() < 120 && first[0] == 0, "{first:?}");
+
+    // 滚轮在列表上：列表下移三行，正文不动。
+    let row = find(&app, TocTarget::Heading(2)).unwrap();
+    app.on_mouse_move(row.x + 30.0, row.y + row.h / 2.0);
+    // 滚轮位移是物理像素。
+    let scale = app.frame.renderer.as_ref().unwrap().scale_factor();
+    let wheel = |app: &mut App, dy: f64| {
+        let dy = dy * f64::from(scale);
+        app.on_wheel(MouseScrollDelta::PixelDelta(PhysicalPosition::new(0.0, dy)));
+        paint(app);
+    };
+    wheel(&mut app, -3.0 * f64::from(row.h));
+    assert_eq!(listed(&app)[0], 3);
+    assert_eq!(app.preview.markdown.scroll(), 0.0);
+    shoot(&mut app, "md-toc-scroll");
+
+    // 滚到尽头为止：最后一行是最后一个标题。
+    wheel(&mut app, -1.0e5);
+    assert_eq!(listed(&app).last(), Some(&119));
+    wheel(&mut app, 1.0e5);
+    assert_eq!(listed(&app), first);
+
+    // 滚动条和其他区域的一样：鼠标在列表右边缘时显示，按住滑块拖到底列到最后一个标题，
+    // 拖动期间列表不收起。
+    let track = app.preview.markdown.toc_list.track;
+    let x = track.right() - 4.0;
+    app.on_mouse_move(x, track.y + track.h / 2.0);
+    paint(&mut app);
+    assert_eq!(
+        app.scrollbar_shown(crate::app::ScrollArea::MarkdownToc),
+        1.0
+    );
+    app.on_mouse_move(x, track.y + track.h * 0.1);
+    app.on_mouse_down(MouseButton::Left);
+    app.on_mouse_move(x, track.bottom() + 40.0);
+    paint(&mut app);
+    assert_eq!(listed(&app).last(), Some(&119));
+    app.on_mouse_move(x, track.bottom() - 4.0);
+    app.on_mouse_up(MouseButton::Left);
+    app.on_mouse_move(row.x + 30.0, row.y + row.h / 2.0);
+    paint(&mut app);
+    assert_eq!(listed(&app).last(), Some(&119));
+    wheel(&mut app, 1.0e5);
+
+    // 点列表里的标题跳到那一节，列表回到以它为中心的位置。
+    wheel(&mut app, -40.0 * f64::from(row.h));
+    let far = listed(&app)[5];
+    let at = find(&app, TocTarget::Heading(far)).unwrap();
+    click(&mut app, (at.x + 30.0, at.y + at.h / 2.0));
+    settle(&mut app);
+    assert!(app.preview.markdown.scroll() > 0.0);
+    assert_eq!(app.preview.markdown.toc_list.shift, 0);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -318,6 +318,14 @@ impl App {
                 grab,
             } => self.drag_markdown_table_scrollbar(x, grab),
             Drag::Scrollbar {
+                bar: Scrollbar::MarkdownToc,
+                grab,
+            } => self.drag_toc_scrollbar(y, grab),
+            Drag::Scrollbar {
+                bar: bar @ (Scrollbar::Table | Scrollbar::TableHorizontal),
+                grab,
+            } => self.drag_table_scrollbar(bar == Scrollbar::TableHorizontal, (x, y), grab),
+            Drag::Scrollbar {
                 bar: Scrollbar::PdfStrip,
                 grab,
             } => {

@@ -851,7 +851,8 @@ fn draw_toc(app: &mut App, frame: &mut Frame<'_>, area: Rect, pad: f32) {
     // 停留满 `TOC_HOVER_DELAY` 后展开；鼠标移过指示条时不展开。
     let rested = (app.preview.markdown.toc_rest)
         .is_some_and(|since| since.elapsed() >= crate::theme::TOC_HOVER_DELAY);
-    let hovered = rested && matches!(app.pointer.hover, Hover::MarkdownToc(_));
+    let on_bar = app.scrollbar_active(crate::layout::Scrollbar::MarkdownToc);
+    let hovered = rested && (on_bar || matches!(app.pointer.hover, Hover::MarkdownToc(_)));
     let pinned = app.state.markdown_toc_pinned;
     // 收起过渡中的列表仍然绘制，展开程度从 1 降到 0。
     let closing = (app.preview.markdown.toc_close).map(|clock| 1.0 - clock.progress());
@@ -896,6 +897,7 @@ fn draw_toc(app: &mut App, frame: &mut Frame<'_>, area: Rect, pad: f32) {
     let open = hovered || stays || closing.is_some();
     if !open {
         app.preview.markdown.toc_top = None;
+        app.preview.markdown.toc_list = Default::default();
     }
     let bar_y = |i: usize| y0 + i as f32 * step + TOC_BAR / 2.0;
     for i in (0..shown).filter(|_| !open) {
@@ -915,11 +917,13 @@ fn draw_toc(app: &mut App, frame: &mut Frame<'_>, area: Rect, pad: f32) {
     if let Some(w) = card_w.filter(|_| open) {
         let fit = ((area.h - 16.0 - TOC_PAD * 2.0) / TOC_ROW).floor().max(1.0) as usize;
         let rows = headings.len().min(fit);
-        // 放不下全部标题时，列出当前那一节附近的一段。
-        let start = current
+        // 放不下全部标题时，列出当前那一节附近的一段；滚轮在列表上时逐行移动。
+        let natural = current
             .unwrap_or(0)
             .saturating_sub(rows / 2)
             .min(headings.len() - rows);
+        let list = &mut app.preview.markdown.toc_list;
+        let start = list.start(natural, current, (rows, headings.len()));
         let h = rows as f32 * TOC_ROW + TOC_PAD * 2.0;
         // 列表展开时，当前所在一节那一行的横线落在指示条里同一条的位置上，其余各行向上下展开，
         // 横线看起来没有移动；没有当前所在的一节时以第一行对齐第一条。超出预览时再挪进来。
@@ -939,6 +943,8 @@ fn draw_toc(app: &mut App, frame: &mut Frame<'_>, area: Rect, pad: f32) {
         let docked = bar_y(0) - (TOC_PAD + TOC_ROW / 2.0);
         let y = fit_in(floating + (docked - floating) * pinning);
         let card = Rect::new(x, y, w.max(0.0), h);
+        app.preview.markdown.toc_list.card = card;
+        app.preview.markdown.toc_list.row = TOC_ROW;
         // 展开时卡片从指示条处展开并淡入，各行的横线从指示条中对应的位置移到所在的行；收起时相反。
         // 钉住的列表始终显示，不参与悬停展开。
         let progress = match (stays, hovered, closing) {
@@ -1024,6 +1030,15 @@ fn draw_toc(app: &mut App, frame: &mut Frame<'_>, area: Rect, pad: f32) {
                 hits.insert(0, (pin, TocTarget::Pin));
             }
         });
+        // 没有列全时可以滚动：滚动条与其他区域的一样，平时隐藏，滚动、悬停时显示，可以拖动。
+        let track = Rect::new(card.x, card.y + TOC_PAD, card.w, rows as f32 * TOC_ROW);
+        app.preview.markdown.toc_list.track = track;
+        if let Some((scroll, content)) = app.preview.markdown.toc_list.scrollbar().filter(|_| live)
+        {
+            let owner = app.editor.active().map_or(0, |doc| doc.id.0);
+            let area = ScrollArea::MarkdownToc;
+            crate::view::draw_scrollbar(app, frame, area, owner, track, scroll, content);
+        }
         // 横线不随卡片淡入，始终不透明：展开的第一帧与指示条完全重合。
         for (i, mid) in dashes {
             let (color, thick) = toc_dash(p, i, current);

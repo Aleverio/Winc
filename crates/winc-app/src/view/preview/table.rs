@@ -17,7 +17,7 @@ use winc_render::{FontKind, Frame, Rect};
 
 use crate::app::App;
 use crate::theme::{RADIUS_POPUP, RADIUS_ROW};
-use crate::view::{fit, ui_baseline};
+use crate::view::{ScrollArea, fit, ui_baseline};
 
 /// 单元格左右的留白（逻辑像素，经验值）。
 const PAD: f32 = 8.0;
@@ -296,6 +296,16 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, index: usize, 
             (current.top, current.left),
         );
         draw_cell_card(app, frame, (body, cell), (id, key), text, card_scroll);
+    }
+
+    // 和编辑区的滚动条一样：平时隐藏，滚动、悬停时显示，可以拖动。
+    let content = (body.w + max_scroll.0, body.h + max_scroll.1);
+    crate::view::draw_scrollbar(app, frame, ScrollArea::Table, id.0, body, sy, content.1);
+    let thumb = crate::layout::hscrollbar_thumb(body, sx, content.0);
+    let area = ScrollArea::TableHorizontal;
+    let look = app.scrollbar_look(area, id.0, sx, thumb.map(|_| body));
+    if let Some(thumb) = thumb {
+        crate::view::draw_thumb(frame, app.palette, thumb, look);
     }
 
     app.preview.table_layout.edges = edges;

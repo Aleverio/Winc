@@ -11,6 +11,7 @@ use winc_render::Rect;
 use winit::keyboard::{Key, NamedKey};
 
 use crate::app::{App, Drag, Focus, UserEvent};
+use crate::layout::{hscrollbar_thumb, scroll_for_thumb, scrollbar_thumb};
 
 /// 后台读好的表格：文档、读取依据的文档版本号、读取结果。
 type Done = (DocumentId, u64, Result<Table, String>);
@@ -106,6 +107,40 @@ impl App {
             .and_then(|d| d.table.as_deref())
             .is_some_and(|v| v.table().is_some());
         shown && self.preview.table_layout.area.contains(x, y)
+    }
+
+    /// 返回当前标签的表格的滚动位置（逻辑像素），限制在可以滚动的范围内；没有表格时为零。
+    pub(crate) fn table_scroll(&self) -> (f32, f32) {
+        let (max_x, max_y) = self.preview.table_layout.max_scroll;
+        let view = self.editor.active().and_then(|doc| doc.table.as_deref());
+        view.map_or((0.0, 0.0), |view| {
+            (
+                view.scroll.0.clamp(0.0, max_x),
+                view.scroll.1.clamp(0.0, max_y),
+            )
+        })
+    }
+
+    /// 拖动表格的滚动条：鼠标在 (`x`, `y`)，按下时离滑块起点 `grab`；`horizontal` 为水平的一条。
+    pub(crate) fn drag_table_scrollbar(&mut self, horizontal: bool, (x, y): (f32, f32), grab: f32) {
+        let layout = &self.preview.table_layout;
+        let (body, (max_x, max_y)) = (layout.body, layout.max_scroll);
+        let to = if horizontal {
+            hscrollbar_thumb(body, 0.0, body.w + max_x)
+                .map(|thumb| scroll_for_thumb(body.x, body.w, thumb.w, x, grab, max_x))
+        } else {
+            scrollbar_thumb(body, 0.0, body.h + max_y)
+                .map(|thumb| scroll_for_thumb(body.y, body.h, thumb.h, y, grab, max_y))
+        };
+        let (Some(to), Some(view)) = (to, self.active_table_mut()) else {
+            return;
+        };
+        if horizontal {
+            view.scroll.0 = to;
+        } else {
+            view.scroll.1 = to;
+        }
+        self.request_redraw();
     }
 
     /// 按滚轮位移滚动当前标签的表格。

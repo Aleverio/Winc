@@ -2,7 +2,84 @@
 
 use super::*;
 
+/// 展开的标题列表列出的一段：标题放不下时只列出其中连续的几行，滚轮在卡片上时逐行移动。
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TocList {
+    /// 上一帧卡片的位置；列表收起时为空。
+    pub card: winc_render::Rect,
+    /// 上一帧各行所在的区域，滚动条的轨道。
+    pub track: winc_render::Rect,
+    /// 列出的第一行、行数和标题的总数。
+    pub first: usize,
+    pub rows: usize,
+    pub total: usize,
+    /// 一行的高度（逻辑像素）。
+    pub row: f32,
+    /// 列出的第一行相对默认位置（当前所在一节居中）移动的行数。
+    pub shift: isize,
+    /// `shift` 对应的当前所在一节：正文滚到另一节时列表回到默认位置。
+    pub at: Option<usize>,
+    /// 滚轮位移中不足一行的部分（逻辑像素）。
+    pub wheel: f32,
+}
+
+impl TocList {
+    /// 返回本帧列出的第一行：默认位置 `natural` 加上滚轮移动的行数，`rows` 行不超出 `total`。
+    pub fn start(
+        &mut self,
+        natural: usize,
+        current: Option<usize>,
+        (rows, total): (usize, usize),
+    ) -> usize {
+        if self.at != current {
+            (self.at, self.shift, self.wheel) = (current, 0, 0.0);
+        }
+        let start = natural.saturating_add_signed(self.shift).min(total - rows);
+        self.shift = start as isize - natural as isize;
+        (self.first, self.rows, self.total) = (start, rows, total);
+        start
+    }
+}
+
+impl TocList {
+    /// 返回滚动条的（滚动位置，内容高度）（逻辑像素）；标题都列出了时为 `None`。
+    pub fn scrollbar(&self) -> Option<(f32, f32)> {
+        (self.rows < self.total)
+            .then_some((self.first as f32 * self.row, self.total as f32 * self.row))
+    }
+}
+
 impl App {
+    /// 拖动标题列表的滚动条：鼠标的纵坐标为 `y`，按下时离滑块上边 `grab`。
+    pub(crate) fn drag_toc_scrollbar(&mut self, y: f32, grab: f32) {
+        let list = &mut self.preview.markdown.toc_list;
+        let Some((_, content)) = list.scrollbar() else {
+            return;
+        };
+        let track = list.track;
+        if let Some(thumb) = crate::layout::scrollbar_thumb(track, 0.0, content) {
+            let max = content - track.h;
+            let to = crate::layout::scroll_for_thumb(track.y, track.h, thumb.h, y, grab, max);
+            let first = (to / list.row).round() as isize;
+            list.shift += first - list.first as isize;
+            self.request_redraw();
+        }
+    }
+
+    /// 鼠标 (`x`, `y`) 在没有列全的标题列表上时，按滚轮位移 `dy` 逐行移动列表，返回是否处理了。
+    pub(crate) fn scroll_toc(&mut self, (x, y): (f32, f32), dy: f32) -> bool {
+        let list = &mut self.preview.markdown.toc_list;
+        if list.rows >= list.total || list.row <= 0.0 || !list.card.contains(x, y) {
+            return false;
+        }
+        list.wheel -= dy;
+        let steps = (list.wheel / list.row).trunc();
+        list.wheel -= steps * list.row;
+        list.shift += steps as isize;
+        self.request_redraw();
+        true
+    }
+
     /// 排版完成后，若有属于该文档的待跳转标题（见 [`App::open_markdown_file`]），滚动到该标题。
     pub(crate) fn scroll_to_pending_anchor(&mut self) {
         let md = &mut self.preview.markdown;

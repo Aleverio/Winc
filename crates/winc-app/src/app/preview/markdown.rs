@@ -197,6 +197,8 @@ pub(crate) struct MarkdownPreview {
     pub toc_picked: Option<(usize, f32)>,
     /// 上一帧标题指示条标出的当前所在一节（`toc_tops` 的序号）；没有时为 `None`。
     pub toc_current: Option<usize>,
+    /// 展开的标题列表列出的一段，供滚轮滚动。
+    pub toc_list: scroll::TocList,
     /// 点击过的标题在正文中的底色：标题的序号与淡出的时钟。
     pub toc_flash: Option<(usize, crate::app::animation::Clock)>,
     /// 跳转到的脚注或脚注引用在正文中的底色：范围（上边缘和高度，相对内容顶部，逻辑像素）与
@@ -333,6 +335,7 @@ impl Default for MarkdownPreview {
             toc_pin: None,
             toc_picked: None,
             toc_current: None,
+            toc_list: scroll::TocList::default(),
             toc_flash: None,
             anchor_flash: None,
             diagram: None,

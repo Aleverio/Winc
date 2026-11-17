@@ -512,3 +512,71 @@ fn tables_without_cells_are_previewed() {
     paint(&mut app);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn tables_larger_than_the_view_scroll_by_their_scrollbars() {
+    use crate::app::ScrollArea;
+    let dir = search_folder("table-scrollbars");
+    let path = dir.join("wide.csv");
+    let row = |r: usize| {
+        let cells: Vec<String> = (0..40).map(|c| format!("row {r} column {c}")).collect();
+        cells.join(",") + "\n"
+    };
+    std::fs::write(&path, (0..300).map(row).collect::<String>()).unwrap();
+    let mut app = app_with(&path, false);
+    paint(&mut app);
+    app.set_preview_mode(PreviewMode::Preview);
+    app.wait_for_tables();
+    paint(&mut app);
+    let layout = &app.preview.table_layout;
+    let (body, max) = (layout.body, layout.max_scroll);
+    assert!(max.0 > 0.0 && max.1 > 0.0);
+
+    // 没有滚动过时不显示；滚动后显示。
+    app.on_mouse_move(body.x + body.w / 2.0, body.y + body.h / 2.0);
+    paint(&mut app);
+    assert_eq!(app.scrollbar_shown(ScrollArea::Table), 0.0);
+    app.on_wheel(MouseScrollDelta::PixelDelta(PhysicalPosition::new(
+        0.0, -200.0,
+    )));
+    paint(&mut app);
+    assert_eq!(app.scrollbar_shown(ScrollArea::Table), 1.0);
+    assert_eq!(app.scrollbar_shown(ScrollArea::TableHorizontal), 0.0);
+
+    // 按住竖直的滑块拖到底：滚动到最后一行。
+    let x = body.right() - 4.0;
+    app.on_mouse_move(x, body.y + 8.0);
+    assert_eq!(app.pointer.hover, Hover::Scrollbar(Scrollbar::Table));
+    app.on_mouse_down(MouseButton::Left);
+    app.on_mouse_move(x, body.bottom());
+    app.on_mouse_up(MouseButton::Left);
+    assert!((app.table_scroll().1 - max.1).abs() < 1.0);
+
+    // 按住水平的滑块拖到右端：滚动到最后一列。
+    paint(&mut app);
+    let y = body.bottom() - 4.0;
+    app.on_mouse_move(body.x + 8.0, y);
+    assert_eq!(
+        app.pointer.hover,
+        Hover::Scrollbar(Scrollbar::TableHorizontal)
+    );
+    paint(&mut app);
+    assert_eq!(app.scrollbar_shown(ScrollArea::TableHorizontal), 1.0);
+    app.on_mouse_down(MouseButton::Left);
+    app.on_mouse_move(body.right(), y);
+    app.on_mouse_up(MouseButton::Left);
+    assert!((app.table_scroll().0 - max.0).abs() < 1.0);
+    shoot(&mut app, "table-scrollbars");
+
+    // 放得下的表格没有滑块，右边缘的格子照常点选。
+    std::fs::write(dir.join("small.csv"), "a,b\n1,2\n").unwrap();
+    app.open_path(&dir.join("small.csv"));
+    app.set_preview_mode(PreviewMode::Preview);
+    app.wait_for_tables();
+    paint(&mut app);
+    let body = app.preview.table_layout.body;
+    app.on_mouse_move(body.right() - 4.0, body.y + 8.0);
+    assert_ne!(app.pointer.hover, Hover::Scrollbar(Scrollbar::Table));
+
+    std::fs::remove_dir_all(&dir).unwrap();
+}
