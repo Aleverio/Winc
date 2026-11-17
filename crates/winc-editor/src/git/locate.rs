@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 
-use super::{Git, PROBE_TIMEOUT, Unavailable};
+use super::{CREDENTIAL_HELPER_ARG, Git, PROBE_TIMEOUT, Unavailable};
 use crate::tools::shell::Shell;
 use crate::tools::shell::process::{self, Cancel};
 
@@ -80,4 +80,37 @@ fn developer_tools_installed() -> bool {
         process::run(&mut command, Vec::new(), PROBE_TIMEOUT, &Cancel::default()),
         Ok(output) if output.status.success()
     )
+}
+
+/// 仓库 `root` 的 `git` 是否在本机运行：远端主机和 WSL 发行版中的仓库使用各自系统中的 `git`。
+pub fn runs_here(root: &Path) -> bool {
+    !winc_backend::is_remote(root) && crate::wsl::locate_here(root).is_none()
+}
+
+/// 把 `program` 追加为 `command` 的凭据助手，排在用户配置的助手之后。
+///
+/// 经环境变量 `GIT_CONFIG_COUNT`、`GIT_CONFIG_KEY_<n>`、`GIT_CONFIG_VALUE_<n>` 追加配置（Git
+/// 2.31 起支持，更早的版本忽略这些变量），保留环境中已有的条目。只用于本机的仓库：远端主机
+/// 和发行版中的 `git` 无法访问本机的凭据存储。
+pub(super) fn add_credential_helper(command: &mut Command, program: &Path) {
+    let count = std::env::var("GIT_CONFIG_COUNT")
+        .ok()
+        .and_then(|count| count.parse::<usize>().ok())
+        .unwrap_or(0);
+    command
+        .env("GIT_CONFIG_COUNT", (count + 1).to_string())
+        .env(format!("GIT_CONFIG_KEY_{count}"), "credential.helper")
+        .env(
+            format!("GIT_CONFIG_VALUE_{count}"),
+            credential_helper_value(&program.to_string_lossy()),
+        );
+}
+
+/// 返回 `credential.helper` 的取值：以 `!` 开头，`git` 交给 shell 执行并在末尾追加动作。
+///
+/// 路径放在单引号中，其中的单引号写作 `'\''`；反斜杠换成斜杠，Git for Windows 的 shell 两种
+/// 写法都接受。
+pub(super) fn credential_helper_value(program: &str) -> String {
+    let program = program.replace('\\', "/").replace('\'', r"'\''");
+    format!("!'{program}' {CREDENTIAL_HELPER_ARG}")
 }

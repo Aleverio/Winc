@@ -758,6 +758,7 @@ impl App {
             Setting::SystemTitleBar => self.config.ui_native_title_bar == Some(true),
             Setting::GitModule => self.git_enabled(),
             Setting::GitConfirmPush => self.config.git_confirm_push != Some(false),
+            Setting::GitRememberCredentials => self.config.git_remember_credentials != Some(false),
             Setting::GitSystemProxy => self.config.git_system_proxy != Some(false),
             Setting::GitInlineBlame => self.config.git_inline_blame != Some(false),
             Setting::GitAutoFetch => self.config.git_auto_fetch == Some(true),
@@ -822,6 +823,12 @@ impl App {
             Setting::SystemTitleBar => self.config.ui_native_title_bar = Some(on),
             Setting::GitModule => self.config.git_enabled = Some(on),
             Setting::GitConfirmPush => self.config.git_confirm_push = Some(on),
+            Setting::GitRememberCredentials => {
+                self.config.git_remember_credentials = Some(on);
+                if !on {
+                    crate::app::git::question::forget_credentials();
+                }
+            }
             Setting::GitTree if on == self.git.commit.flat() => self.toggle_commit_layout(),
             Setting::GitTree => {}
             Setting::GitSystemProxy => {

@@ -136,6 +136,7 @@ git-question-origin = 来自远端
 git-question-account = 账户
 git-question-username = 用户名
 git-question-password = 密码
+git-question-remember = 记住密码
 git-question-password-placeholder = 密码或访问令牌
 git-question-key = 私钥
 git-question-passphrase = 口令

@@ -142,6 +142,7 @@ git-question-origin = Asked by
 git-question-account = Account
 git-question-username = Username
 git-question-password = Password
+git-question-remember = Remember password
 git-question-password-placeholder = Password or access token
 git-question-key = Key
 git-question-passphrase = Passphrase

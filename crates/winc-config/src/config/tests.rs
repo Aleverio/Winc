@@ -287,6 +287,7 @@ fn round_trips_through_json() {
         terminal_application_priority: Some(true),
         git_enabled: Some(true),
         git_confirm_push: Some(false),
+        git_remember_credentials: Some(false),
         git_system_proxy: Some(false),
         git_inline_blame: Some(false),
         git_auto_fetch: Some(true),

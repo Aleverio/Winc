@@ -568,6 +568,7 @@ const TERMINAL: &[Field] = &[
 const GIT: &[Field] = &[
     bool_field!("enabled", git_enabled),
     bool_field!("confirmPush", git_confirm_push),
+    bool_field!("rememberCredentials", git_remember_credentials),
     bool_field!("systemProxy", git_system_proxy),
     bool_field!("inlineBlame", git_inline_blame),
     bool_field!("autoFetch", git_auto_fetch),

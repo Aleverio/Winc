@@ -24,6 +24,7 @@ pub use remote::{Remote, TagTarget, repository_dir_name};
 pub use sync::{Carried, MINIMUM_VERSION, Outgoing, Synced};
 mod history;
 mod locate;
+pub use locate::runs_here;
 mod trust;
 mod worktree;
 
@@ -630,6 +631,9 @@ pub struct Git {
     askpass: Option<Askpass>,
 }
 
+/// askpass 程序作为凭据助手运行时的第一个参数，其后是 `git` 给出的动作。
+pub const CREDENTIAL_HELPER_ARG: &str = "git-credential";
+
 /// 传递 [`Askpass::endpoint`] 的环境变量名。
 pub const ASKPASS_ENDPOINT: &str = "WINC_GIT_ASKPASS";
 
@@ -640,6 +644,8 @@ pub struct Askpass {
     pub program: PathBuf,
     /// 程序连接的本地端点，由环境变量 [`ASKPASS_ENDPOINT`] 传递。
     pub endpoint: OsString,
+    /// 是否同时把该程序配置为排在最后的凭据助手（[`CREDENTIAL_HELPER_ARG`]）。
+    pub credential_helper: bool,
 }
 
 impl Git {
@@ -843,6 +849,7 @@ impl Git {
     ///
     /// `git` 自己的提示已经由 `GIT_TERMINAL_PROMPT` 关掉；`ssh` 还会从控制终端读口令（从终端
     /// 启动时），这里让它只用 askpass，而 askpass 程序是总是失败的 `false`（不存在时同样失败）。
+    /// [`Git::with_askpass`] 指定的程序此时只作为凭据助手提供已保存的凭据。
     ///
     /// # Errors
     ///
@@ -852,6 +859,7 @@ impl Git {
         let args = ["fetch", "--all", "--prune"];
         self.run_prepared(root, &args, OPERATION_TIMEOUT, |command| {
             command
+                .env("GIT_ASKPASS", "false")
                 .env("SSH_ASKPASS", "false")
                 .env("SSH_ASKPASS_REQUIRE", "force");
         })
@@ -975,6 +983,8 @@ impl Git {
         if crate::wsl::locate_here(root).is_some() {
             let list = format!("{}:{}", crate::wsl::GIT_ENV, crate::wsl::ASKPASS_ENV);
             command.env("WSLENV", list);
+        } else if askpass.credential_helper && locate::runs_here(root) {
+            locate::add_credential_helper(command, &askpass.program);
         }
     }
 

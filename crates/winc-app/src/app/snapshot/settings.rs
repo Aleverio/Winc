@@ -1010,6 +1010,7 @@ fn the_git_page_is_listed_only_when_the_module_is_on() {
         Setting::DiffInline,
         Setting::GitInlineBlame,
         Setting::GitConfirmPush,
+        Setting::GitRememberCredentials,
         Setting::GitAutoFetch,
         Setting::GitSystemProxy,
     ];

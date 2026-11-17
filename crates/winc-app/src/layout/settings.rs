@@ -174,6 +174,7 @@ impl SettingsPage {
                 plain(vec![Setting::DiffInline, Setting::GitInlineBlame]),
                 plain(vec![
                     Setting::GitConfirmPush,
+                    Setting::GitRememberCredentials,
                     Setting::GitAutoFetch,
                     Setting::GitSystemProxy,
                 ]),
@@ -390,6 +391,8 @@ pub enum Setting {
     GitModule,
     /// 发布、推送或同步分支前确认（`git.confirmPush`）。
     GitConfirmPush,
+    /// 允许记住 HTTP(S) 密码（`git.rememberCredentials`）。
+    GitRememberCredentials,
     /// `git` 跟随系统的代理设置（`git.systemProxy`）。
     GitSystemProxy,
     /// 光标所在行末尾的追溯提示（`git.inlineBlame`）。
@@ -517,6 +520,7 @@ impl Setting {
             | Setting::GitOpenWorktree
             | Setting::GitPath
             | Setting::GitConfirmPush
+            | Setting::GitRememberCredentials
             | Setting::GitSystemProxy
             | Setting::GitInlineBlame
             | Setting::GitAutoFetch
@@ -598,6 +602,7 @@ impl Setting {
             Setting::TerminalOptionAsMeta => t!("settings-terminal-option-as-meta"),
             Setting::GitModule => "Git",
             Setting::GitConfirmPush => t!("settings-git-confirm-push"),
+            Setting::GitRememberCredentials => t!("settings-git-remember-credentials"),
             Setting::GitSystemProxy => t!("settings-git-system-proxy"),
             Setting::GitInlineBlame => t!("settings-git-inline-blame"),
             Setting::GitAutoFetch => t!("settings-git-auto-fetch"),
@@ -660,6 +665,7 @@ impl Setting {
             Setting::GitModule => Some(t!("settings-git-module-desc")),
             Setting::RemoteModule => Some(t!("settings-remote-module-desc")),
             Setting::GitConfirmPush => Some(t!("settings-git-confirm-push-desc")),
+            Setting::GitRememberCredentials => Some(t!("settings-git-remember-credentials-desc")),
             Setting::GitSystemProxy => Some(t!("settings-git-system-proxy-desc")),
             Setting::GitInlineBlame => Some(t!("settings-git-inline-blame-desc")),
             Setting::GitAutoFetch => Some(t!("settings-git-auto-fetch-desc")),
@@ -721,6 +727,7 @@ impl Setting {
             | Setting::FixOnSave
             | Setting::GitModule
             | Setting::GitConfirmPush
+            | Setting::GitRememberCredentials
             | Setting::GitSystemProxy
             | Setting::GitInlineBlame
             | Setting::GitAutoFetch
