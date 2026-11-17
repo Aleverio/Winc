@@ -182,6 +182,10 @@ pub struct Session {
     pub terminal: Option<TerminalSession>,
     /// 选中的运行配置的名字。
     pub run: Option<String>,
+    /// 附加的目录，按添加的顺序。
+    pub folders: Vec<PathBuf>,
+    /// 用户给这组目录起的名字；没有起名时为 `None`。
+    pub name: Option<String>,
     /// 侧栏是否收起；没有记录过的目录为 `false`，打开时显示文件树。
     pub sidebar_hidden: bool,
 }
@@ -386,6 +390,14 @@ impl State {
                     maximized: t.get("maximized").and_then(Json::as_bool).unwrap_or(false),
                 })
             });
+            let folders = (s
+                .get("folders")
+                .and_then(Json::as_array)
+                .into_iter()
+                .flatten())
+            .filter_map(Json::as_str)
+            .map(PathBuf::from)
+            .collect();
             Some(Session {
                 folder,
                 tabs,
@@ -397,6 +409,8 @@ impl State {
                 book_places,
                 terminal,
                 run: s.get("run").and_then(Json::as_str).map(str::to_owned),
+                folders,
+                name: s.get("name").and_then(Json::as_str).map(str::to_owned),
                 sidebar_hidden: (s.get("sidebarHidden").and_then(Json::as_bool)).unwrap_or(false),
             })
         };
@@ -767,6 +781,13 @@ impl State {
             }
             if let Some(run) = &session.run {
                 items.push(("run", Json::String(run.clone())));
+            }
+            if !session.folders.is_empty() {
+                let folders = session.folders.iter().map(&path);
+                items.push(("folders", Json::Array(folders.collect())));
+            }
+            if let Some(name) = &session.name {
+                items.push(("name", Json::String(name.clone())));
             }
             // 展开是默认状态，不写。
             if session.sidebar_hidden {

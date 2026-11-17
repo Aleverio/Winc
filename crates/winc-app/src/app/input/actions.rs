@@ -117,6 +117,7 @@ impl App {
             NewWindow => self.new_window(None),
             OpenFile => self.pick(Pick::Open),
             OpenFolder => self.pick(Pick::OpenFolder),
+            AddFolder => self.ask_add_folder(),
             RemoteConnect => self.open_remote_picker(),
             RemoteDisconnect => self.remote_disconnect(),
             OpenRecent => self.open_recent_folders(),
