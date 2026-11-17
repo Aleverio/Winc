@@ -404,61 +404,86 @@ fn a_long_document_is_laid_out_over_several_frames_after_its_width_changes() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// 很长的文档只保留视口附近的块的排版结果：其余的块释放要画的项，滚动、查找、移动光标到
+/// 那里时重新排版，文档的总高度不变。
 #[test]
-fn zz_probe_mem() {
-    let rss = || {
-        let out = std::process::Command::new("ps")
-            .args(["-o", "rss=", "-p", &std::process::id().to_string()])
-            .output()
-            .unwrap();
-        String::from_utf8_lossy(&out.stdout).trim().parse::<u64>().unwrap_or(0) / 1024
-    };
-    let dir = sample_folder("probe-mem");
-    let path = dir.join("big.md");
-    let text: String = (0..20_000usize)
+fn a_long_document_keeps_layout_only_near_the_viewport() {
+    let dir = sample_folder("md-shed");
+    let path = dir.join("long.md");
+    let text: String = (0..1500)
         .map(|i| {
-            let head = if i % 20 == 0 { format!("## Chapter {}\n\n", i / 20) } else { String::new() };
-            format!("{head}Paragraph {i} with **bold**, `code`, a [link](https://example.com) and enough plain words to wrap across a couple of lines when the column is narrow, 再加一些中文字符用来测试混排的情况。\n\n")
+            format!(
+                "Paragraph {i} [link](#p{i}) {}\n\n",
+                "with some more words. ".repeat(5)
+            )
         })
         .collect();
-    std::fs::write(&path, &text).unwrap();
-    drop(text);
-    let r0 = rss();
+    std::fs::write(&path, text).unwrap();
     let mut app = app_with(&path, false);
     paint(&mut app);
-    let r1 = rss();
     app.set_preview_mode(PreviewMode::Preview);
-    app.wait_for_markdown();
-    let r2 = rss();
-    let t = std::time::Instant::now();
-    paint(&mut app);
-    let first = t.elapsed();
-    let r3 = rss();
     settle(&mut app);
-    let r4 = rss();
+    // （释放了要画的项的块数，视口内是否都排好了，总高度）
+    let state = |app: &App| {
+        let laid = app.preview.markdown.layout.as_ref().unwrap();
+        let y = app.preview.markdown.scroll() - laid.pad;
+        let seen = laid.blocks_in(y, y + app.preview.markdown.area.h);
+        let shed = laid.blocks.iter().filter(|b| b.1.is_shed()).count();
+        let drawn = seen.clone().all(|i| !laid.blocks[i].1.is_shed());
+        (shed, drawn, laid.height, seen)
+    };
+    let (shed, drawn, height, seen) = state(&app);
+    assert!(shed > 1000 && drawn && seen.start == 0, "{shed} {seen:?}");
     let laid = app.preview.markdown.layout.as_ref().unwrap();
-    let (mut items, mut texts, mut advances, mut runs, mut held) = (0usize, 0usize, 0usize, 0usize, 0usize);
-    for (_, block) in &laid.blocks {
-        items += block.items.len();
-        held += block.text.len();
-        for item in &block.items {
-            if let winc_typeset::Item::Text { text, span, .. } = item {
-                runs += 1;
-                texts += text.len();
-                advances += span.as_ref().map_or(0, |s| s.advances.len() * 4);
-            }
-        }
-    }
-    eprintln!(
-        "PROBE rss: open+source={}MB parse={}MB first-layout={}MB settle={}MB first={first:?}",
-        r1 - r0, r2.saturating_sub(r1), r3.saturating_sub(r2), r4.saturating_sub(r3)
+    assert!(laid.blocks[1400].1.is_shed() && laid.blocks[1400].1.links_to("#p1400"));
+    assert!(app.preview.markdown.memo.len() < 600);
+
+    // 滚到中间：视口内的块重新排好，开头的块释放，总高度不变。
+    app.preview.markdown.scroll_to(height / 2.0);
+    paint(&mut app);
+    let (shed, drawn, now, seen) = state(&app);
+    assert!(shed > 1000 && drawn && seen.start > 500, "{shed} {seen:?}");
+    assert_eq!(now, height);
+    assert!(
+        app.preview.markdown.layout.as_ref().unwrap().blocks[0]
+            .1
+            .is_shed()
     );
-    eprintln!(
-        "PROBE items={items} x {}B = {}MB; text runs={runs} text={}MB advances={}MB block-text={}MB memo={}",
-        std::mem::size_of::<winc_typeset::Item>(),
-        items * std::mem::size_of::<winc_typeset::Item>() / 1_000_000,
-        texts / 1_000_000, advances / 1_000_000, held / 1_000_000,
-        app.preview.markdown.memo.len()
-    );
+
+    // 查找跳到靠后的一处：选中的文字所在的块排好，滚动到它附近。
+    let full = crate::app::preview::markdown::laid::full_text(&app).unwrap();
+    let at = full
+        .find("Paragraph 1450 ")
+        .map(|byte| full[..byte].chars().count())
+        .unwrap();
+    app.select_in_markdown(at, at + 14);
+    settle(&mut app);
+    let (_, drawn, now, seen) = state(&app);
+    assert!(drawn && seen.contains(&1450), "{seen:?}");
+    assert_eq!(now, height);
+    let laid = app.preview.markdown.layout.as_ref().unwrap();
+    assert!(!laid.blocks[1450].1.is_shed());
+
+    // 改变宽度后分帧重排，排完后离视口远的块仍然释放。
+    app.set_text_width(winc_config::TextWidth::Full);
+    settle(&mut app);
+    let (shed, drawn, ..) = state(&app);
+    assert!(shed > 1000 && drawn, "{shed}");
+    assert!(!app.preview.markdown.catch_up.pending);
+
+    // 可编辑的预览里光标跳到文末：光标所在的块排好，预览滚动到那里；回到开头同样如此。
+    assert!(app.markdown_live());
+    app.focus = Focus::Editor;
+    app.run(winc_editor::Command::DocEnd { extend: false });
+    settle(&mut app);
+    let (_, drawn, _, seen) = state(&app);
+    assert!(drawn && seen.end >= 1499, "{seen:?}");
+    let laid = app.preview.markdown.layout.as_ref().unwrap();
+    assert!(!laid.blocks[1499].1.is_shed() && laid.blocks[0].1.is_shed());
+    app.run(winc_editor::Command::DocStart { extend: false });
+    settle(&mut app);
+    let (shed, drawn, _, seen) = state(&app);
+    assert!(shed > 1000 && drawn && seen.start == 0, "{shed} {seen:?}");
+
     let _ = std::fs::remove_dir_all(&dir);
 }

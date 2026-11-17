@@ -65,6 +65,8 @@ pub(crate) struct Laid {
     pub(crate) followed: Option<usize>,
     /// 各顶层块是否仍沿用旧条件下的排版结果（见 [`Later`]）；全部按当前条件排好时为空。
     pub(crate) stale: Vec<bool>,
+    /// 排版时保留了排版结果的范围（见 [`Near`]）；文档不长、全部保留时为 `None`。
+    pub(crate) near: Option<Near>,
 }
 
 /// 分帧排版的依据：排版条件变化而文字未变时，视口内的块立即重排，其余的块在超过时限后沿用
@@ -76,6 +78,43 @@ pub(crate) struct Later<'a> {
     pub(crate) window: std::ops::Range<usize>,
     /// 截止时刻：此后 `window` 之外的块沿用旧结果。
     pub(crate) deadline: std::time::Instant,
+}
+
+/// 顶层块超过该数量（块）的文档只保留 [`Near`] 范围内的块的排版结果，其余的块释放要画的项
+/// （见 [`LaidBlock::shed`]），排版缓存也只保留这些块用到的条目。
+///
+/// 取自调参：512 块以内的文档全部保留时，排版结果与缓存合计不超过几 MB。在 Apple M 系列芯片上
+/// 实测，2 万段、4 MB 的文档全部保留时二者占用 91 MB 堆内存。
+pub(crate) const SHED_BLOCKS: usize = 512;
+
+/// 需要保留排版结果的块：内容坐标在 `rows` 范围内的块，以及序号在 `blocks` 范围内的块（光标和
+/// 选区所在的块及其前后）。
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Near {
+    pub(crate) rows: (f32, f32),
+    pub(crate) blocks: Vec<std::ops::Range<usize>>,
+}
+
+/// 光标所在的块前后各保留排版结果的块数。取自调参：32 块超过一屏能显示的段数，光标上下移动、
+/// 翻页时落到的块都已排好。
+pub(crate) const NEAR_BLOCKS: usize = 32;
+
+impl Near {
+    /// 按本范围保留的排版结果是否够 `wanted` 使用：`wanted` 的各块都在其中，视口（高 `view`）
+    /// 前后各有半屏以上。
+    pub(crate) fn covers(&self, wanted: &Near, view: f32) -> bool {
+        let rows = (wanted.rows.0 + view * 1.5, wanted.rows.1 - view * 1.5);
+        let inside = |want: &std::ops::Range<usize>| {
+            (self.blocks.iter()).any(|kept| kept.start <= want.start && want.end <= kept.end)
+        };
+        self.rows.0 <= rows.0 && rows.1 <= self.rows.1 && wanted.blocks.iter().all(inside)
+    }
+
+    /// 上边缘在 `top`、高 `height` 的第 `i` 块是否在范围内。
+    fn holds(&self, i: usize, top: f32, height: f32) -> bool {
+        (top < self.rows.1 && top + height > self.rows.0)
+            || self.blocks.iter().any(|blocks| blocks.contains(&i))
+    }
 }
 
 /// 一帧中排版 [`Later::window`] 之外的块的时限：4 毫秒，约为 60 Hz 下一帧间隔的四分之一。
@@ -297,6 +336,7 @@ pub(crate) fn lay_out(
     live: Option<&crate::app::preview::markdown::LiveLeaf>,
     reuse: Vec<(u64, Arc<LaidBlock>)>,
     later: Option<Later<'_>>,
+    near: Option<Near>,
 ) -> Laid {
     let reuse: HashMap<u64, Arc<LaidBlock>> = reuse.into_iter().collect();
     // 光标所在顶层块现在的原文，和叶子块在其中的范围。
@@ -365,6 +405,8 @@ pub(crate) fn lay_out(
     let mut starts = Vec::with_capacity(parsed.blocks.len());
     let (mut y, mut below, mut chars) = (0.0, None, 0);
     let mut stale = Vec::new();
+    let near = near.filter(|_| parsed.blocks.len() > SHED_BLOCKS);
+    let mut fresh = 0usize;
     for (i, (block, &hash)) in parsed.blocks.iter().zip(&parsed.hashes).enumerate() {
         let raw = raw.as_ref().filter(|r| r.0 == i);
         // 显示原文的块换一个键存：光标离开后同样内容的块要重新按排版显示。
@@ -389,7 +431,23 @@ pub(crate) fn lay_out(
             stale.resize(parsed.blocks.len(), false);
             stale[i] = true;
         }
-        let laid = reuse.get(&hash).cloned().or(kept).unwrap_or_else(|| {
+        // 沿用的结果已经释放了要画的项，而这一块在需要保留的范围内：重新排版。
+        let (margin, _) = margins(block, key.base, false);
+        let top = y + below.map_or(0.0, |below: f32| below.max(margin));
+        let wanted = |laid: &LaidBlock| {
+            let needed = near
+                .as_ref()
+                .is_none_or(|near| near.holds(i, top, laid.height));
+            !(needed && laid.is_shed())
+        };
+        let reused = reuse.get(&hash).filter(|laid| wanted(laid)).cloned();
+        let kept = kept.filter(|laid| wanted(laid));
+        let laid = reused.or(kept).unwrap_or_else(|| {
+            // 很长的文档每排完 [`SHED_BLOCKS`] 块清空一次排版缓存，排版期间缓存不随文档增长。
+            fresh += 1;
+            if near.is_some() && fresh.is_multiple_of(SHED_BLOCKS) {
+                cx.memo.keep_only(std::iter::empty());
+            }
             let mut out = Out::default();
             cx.text.clear();
             cx.chars = 0;
@@ -431,6 +489,15 @@ pub(crate) fn lay_out(
             laid.scrolls = out.scrolls;
             Arc::new(laid)
         });
+        // 不在需要保留的范围内的块释放要画的项；显示原文的块（光标所在）总是保留。
+        let far = near
+            .as_ref()
+            .is_some_and(|near| !near.holds(i, top, laid.height));
+        let laid = if far && raw.is_none() && !laid.is_shed() {
+            Arc::new(laid.shed())
+        } else {
+            laid
+        };
         starts.push(chars);
         chars += laid.chars;
         let (margin_top, margin_bottom) = margins(block, key.base, false);
@@ -485,6 +552,7 @@ pub(crate) fn lay_out(
         hscroll: HashMap::new(),
         followed: None,
         stale,
+        near,
     }
 }
 
@@ -1035,6 +1103,12 @@ pub(crate) fn offset_top(app: &App, offset: usize) -> Option<f32> {
         .starts
         .partition_point(|&s| s <= offset)
         .saturating_sub(1);
+    let (_, block) = laid.blocks.get(i)?;
+    // 要画的项已经释放的块按字符在块中的比例估计，滚动到附近后重新排版。
+    if block.is_shed() {
+        let part = (offset - laid.starts[i]) as f32 / block.chars.max(1) as f32;
+        return Some(laid.pad + laid.tops[i] + block.height * part.min(1.0));
+    }
     laid.spans(i..i + 1)
         .find(|(_, start, _, _, _, span, _, _)| offset < start + span.advances.len())
         .map(|(top, _, _, baseline, size, ..)| laid.pad + line_box(top + baseline, size).0)
@@ -1079,10 +1153,7 @@ pub(crate) fn anchor_box(app: &App, anchor: &str) -> Option<(f32, f32)> {
         .zip(&laid.tops)
         .find_map(|((_, block), top)| {
             let (y, h) = match &reference {
-                Some(url) => block.items.iter().find_map(|item| match item {
-                    Item::Link { rect, url: u } if **u == **url => Some((rect.y, rect.h)),
-                    _ => None,
-                }),
+                Some(url) => block.link_box(url),
                 None => block
                     .anchors
                     .iter()

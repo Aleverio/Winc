@@ -87,6 +87,21 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
     let mut still = None;
     // 记录重排之前各块的绘制位置，重排后各块从该位置滑动到新位置（见 `BlockMotion`）。
     let mut before = None;
+    // 很长的文档只保留这个范围内的块的排版结果：视口前后各两屏，以及光标、选区所在的块前后。
+    let near = {
+        let view = app.preview.markdown.scroll() - pad;
+        let around = |block: usize| block.saturating_sub(NEAR_BLOCKS)..block + NEAR_BLOCKS + 1;
+        let chosen = app.preview.markdown.selection;
+        let picked = (app.preview.markdown.layout.as_ref().zip(chosen)).map(|(laid, (a, b))| {
+            let block = |at: usize| laid.starts.partition_point(|&s| s <= at).saturating_sub(1);
+            block(a.min(b)).saturating_sub(1)..block(a.max(b)) + 2
+        });
+        let caret = live.as_ref().map(|live| around(live.block));
+        Near {
+            rows: (view - area.h * 2.0, view + area.h * 3.0),
+            blocks: caret.into_iter().chain(picked).collect(),
+        }
+    };
     let mut laid = match app.preview.markdown.layout.take() {
         Some(laid)
             if laid.key == key
@@ -94,16 +109,17 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
                 && laid.live == live_key
                 && loaded.is_empty()
                 && toggled.is_none()
-                && !laid.pending() =>
+                && !laid.pending()
+                && (laid.near.as_ref()).is_none_or(|kept| kept.covers(&near, area.h)) =>
         {
             laid
         }
         old => {
             let hscroll = old.as_ref().map(|l| l.hscroll.clone()).unwrap_or_default();
-            // 继续上一帧未完成的排版：排版条件和文字都未变，选区、查找结果和光标位置保留。
+            // 继续上一帧未完成的排版，或视口移到了保留的范围之外：排版条件和文字都未变，选区、
+            // 查找结果和光标位置保留。
             let resumed = old.as_ref().is_some_and(|l| {
-                l.pending()
-                    && l.key == key
+                l.key == key
                     && l.source == source
                     && l.live == live_key
                     && loaded.is_empty()
@@ -159,6 +175,7 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
                     live.as_ref(),
                     fresh,
                     later,
+                    Some(near.clone()),
                 );
                 let y = held.map_or(top - pad, |(i, off)| {
                     laid.tops[i] + off.min(laid.blocks[i].1.height)
@@ -178,6 +195,11 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
                 still = None;
             }
             app.preview.markdown.catch_up.pending = laid.pending();
+            // 释放了要画的项的块不再使用排版缓存，缓存只保留其余的块用到的条目。
+            if laid.near.is_some() {
+                let used = laid.blocks.iter().map(|(_, block)| &*block.memo);
+                app.preview.markdown.memo.keep_only(used);
+            }
             laid.hscroll = hscroll;
             laid
         }
