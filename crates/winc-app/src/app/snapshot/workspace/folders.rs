@@ -27,8 +27,8 @@ fn listed(app: &mut App, path: Option<PathBuf>) -> Vec<MenuCommand> {
 
 #[test]
 fn a_folder_can_be_added_to_the_window_and_removed() {
-    let main = sample_folder("folders-main").canonicalize().unwrap();
-    let other = search_folder("folders-other").canonicalize().unwrap();
+    let main = winc_config::files::canonicalize(sample_folder("folders-main")).unwrap();
+    let other = winc_config::files::canonicalize(search_folder("folders-other")).unwrap();
     let mut app = app_with(&main.join("short.rs"), false);
     paint(&mut app);
     let single = rows(&app);
@@ -225,7 +225,7 @@ fn a_folder_can_be_added_to_the_window_and_removed() {
     // 单独打开着时再添加目录：先恢复这一组，再加入新的。
     let extra = main.with_file_name("folders-extra");
     std::fs::create_dir_all(&extra).unwrap();
-    let extra = extra.canonicalize().unwrap();
+    let extra = winc_config::files::canonicalize(&extra).unwrap();
     elsewhere.add_folder(&extra);
     assert_eq!(elsewhere.extra_folders(), [other.clone(), extra.clone()]);
     let _ = std::fs::remove_dir_all(&extra);
@@ -240,7 +240,7 @@ fn a_folder_can_be_added_to_the_window_and_removed() {
     // 上次附加的目录已不存在：不恢复，说明是哪一个；这一组随之不再成组。
     let gone = main.with_file_name("folders-gone");
     std::fs::create_dir_all(&gone).unwrap();
-    let gone = gone.canonicalize().unwrap();
+    let gone = winc_config::files::canonicalize(&gone).unwrap();
     again.add_folder(&gone);
     again.remove_folder(&other);
     assert_eq!(again.extra_folders(), std::slice::from_ref(&gone));
@@ -270,8 +270,8 @@ fn a_folder_can_be_added_to_the_window_and_removed() {
 /// 仓库列表；移除后不再列出。
 #[test]
 fn extra_folders_take_part_in_quick_open_search_and_git() {
-    let main = sample_folder("folders-find-main").canonicalize().unwrap();
-    let other = search_folder("folders-find-other").canonicalize().unwrap();
+    let main = winc_config::files::canonicalize(sample_folder("folders-find-main")).unwrap();
+    let other = winc_config::files::canonicalize(search_folder("folders-find-other")).unwrap();
     if !git_in_quiet(&other, &["init", "-q"]) {
         return;
     }
@@ -340,9 +340,9 @@ fn git_in_quiet(dir: &Path, args: &[&str]) -> bool {
 fn a_dropped_folder_is_added_or_opened_as_configured() {
     use winc_config::FolderDrop;
 
-    let main = sample_folder("folders-drop-main").canonicalize().unwrap();
-    let other = search_folder("folders-drop-other").canonicalize().unwrap();
-    let third = search_folder("folders-drop-third").canonicalize().unwrap();
+    let main = winc_config::files::canonicalize(sample_folder("folders-drop-main")).unwrap();
+    let other = winc_config::files::canonicalize(search_folder("folders-drop-other")).unwrap();
+    let third = winc_config::files::canonicalize(search_folder("folders-drop-third")).unwrap();
     let mut app = app_with(&main.join("short.rs"), false);
     paint(&mut app);
     let editor = app.layout.editor;
@@ -366,7 +366,7 @@ fn a_dropped_folder_is_added_or_opened_as_configured() {
     assert_eq!(app.config.drop_folder, Some(FolderDrop::Add));
 
     // 拖到文件树上同样按设置处理：设为添加时成为附加目录，不复制进去。
-    let fourth = search_folder("folders-drop-fourth").canonicalize().unwrap();
+    let fourth = winc_config::files::canonicalize(search_folder("folders-drop-fourth")).unwrap();
     let tree = app.layout.tree;
     app.drop_file_at(&fourth, tree.x + 20.0, tree.bottom() - 6.0);
     assert!(app.extra_folders().contains(&fourth));
