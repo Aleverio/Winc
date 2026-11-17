@@ -253,7 +253,7 @@ fn switching_folders_keeps_each_folders_tabs() {
     assert_eq!(names(&app), ["main.rs", "Cargo.toml"]);
     assert_eq!(app.editor.active().unwrap().name(), "Cargo.toml");
 
-    // 项目名菜单：最近的目录（不含当前目录）、新建窗口、打开目录、关闭目录。菜单开着时项目名
+    // 项目名菜单：最近的目录（不含当前目录）、新建窗口、打开目录、添加目录、关闭目录。菜单开着时项目名
     // 按钮处于按下状态，关掉菜单后放开。
     app.open_project_menu();
     assert_eq!(
@@ -276,6 +276,7 @@ fn switching_folders_keeps_each_folders_tabs() {
             MenuCommand::OpenRecent(b_index),
             MenuCommand::NewWindow,
             MenuCommand::OpenFolder,
+            MenuCommand::AddFolder,
             MenuCommand::CloseFolder
         ]
     );
@@ -309,7 +310,7 @@ fn switching_folders_keeps_each_folders_tabs() {
         })
         .collect();
     let folder_icon = crate::app::input::context_menu::MenuIcon::Folder;
-    assert_eq!(icons, [Some(folder_icon), None, None, None]);
+    assert_eq!(icons, [Some(folder_icon), None, None, None, None]);
     let row = popup.row_rects[0];
     let image = app.frame.renderer.as_ref().unwrap().image().unwrap();
     let scale = image.width as f32 / app.layout.window.w;

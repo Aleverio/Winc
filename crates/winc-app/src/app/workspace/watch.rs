@@ -198,7 +198,33 @@ impl App {
         if let Some(changes) = self.disk.watcher.as_ref().map(Watcher::take) {
             self.apply_changes(changes);
         }
+        let extra: Vec<Changes> = self.disk.extra_watchers.iter().map(Watcher::take).collect();
+        for changes in extra {
+            self.apply_changes(changes);
+        }
         None
+    }
+
+    /// 使附加目录的监视与工作区一致：新添加的开始监视，已移除的停止。
+    ///
+    /// 没有事件循环（测试中）时不监视。监视启动失败的目录在窗口重新获得焦点时由 `check_disk`
+    /// 检查。
+    pub(in crate::app) fn watch_extra_folders(&mut self) {
+        let folders = self.extra_folders();
+        (self.disk.extra_watchers).retain(|watcher| folders.iter().any(|f| f == watcher.root()));
+        let Some(proxy) = self.link.proxy.clone() else {
+            return;
+        };
+        for folder in folders {
+            if self.disk.extra_watchers.iter().any(|w| w.root() == folder) {
+                continue;
+            }
+            let proxy = proxy.clone();
+            let started = Watcher::start(&folder, move || {
+                let _ = proxy.send_event(UserEvent::FilesChanged);
+            });
+            self.disk.extra_watchers.extend(started);
+        }
     }
 
     /// 按 `changes` 更新界面。

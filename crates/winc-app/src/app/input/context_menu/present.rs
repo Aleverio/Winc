@@ -353,6 +353,13 @@ impl App {
                     (self.remote_enabled()).then(crate::app::remote::refresh_hosts),
                     root.is_some_and(winc_backend::is_remote),
                 ));
+                // 打开了本机的目录时，「打开目录…」之后是「添加目录到窗口…」。
+                let open = MenuEntry::Item(MenuCommand::OpenFolder, true);
+                if self.can_add_folder()
+                    && let Some(at) = menu.iter().position(|entry| *entry == open)
+                {
+                    menu.insert(at + 1, MenuEntry::Item(MenuCommand::AddFolder, true));
+                }
                 menu
             }
             MenuTarget::Tree(Some(_))
@@ -365,12 +372,19 @@ impl App {
                 tree_selection_menu(self.tree_selected_files().len())
             }
             MenuTarget::Tree(path) => {
-                let kind = path.as_ref().and_then(|p| {
+                // 目录自己的一行和空白处一样：不能改名、剪切、删除。
+                let folder = path.as_deref().filter(|p| {
+                    (self.editor.workspace.as_ref()).is_some_and(|ws| ws.is_folder_row(p))
+                });
+                let kind = path.as_ref().filter(|_| folder.is_none()).and_then(|p| {
                     let ws = self.editor.workspace.as_ref()?;
                     ws.row_of(p).map(|i| ws.rows()[i].kind)
                 });
                 let can_paste = self.can_paste_into_tree();
                 let mut menu = tree_menu(kind, can_paste);
+                if kind.is_none() {
+                    menu.extend(self.folder_items(folder));
+                }
                 // Git 模块开着、文件在仓库里：最后加「显示文件历史」，有更改的文件再加暂存与回滚。
                 if let Some(path) = path.as_deref()
                     && kind == Some(EntryKind::File)

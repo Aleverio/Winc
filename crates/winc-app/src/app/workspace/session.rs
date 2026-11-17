@@ -155,6 +155,13 @@ impl App {
             return;
         };
         let session = self.state.session_for(&root).cloned();
+        // 上次附加的目录：已不存在的跳过。
+        for folder in session.iter().flat_map(|session| &session.folders) {
+            if let Some(workspace) = &mut self.editor.workspace {
+                let _ = workspace.add_folder(folder);
+            }
+        }
+        self.watch_extra_folders();
         let restored = restore_tabs(
             &mut self.editor,
             session.as_ref(),
@@ -336,6 +343,7 @@ impl App {
 
         let terminal = self.terminal_session();
         let run = self.run.selected.clone();
+        let folders = self.extra_folders();
         let sidebar_hidden = !self.panels.sidebar.visible;
         let bookmarks = self
             .editor
@@ -359,6 +367,7 @@ impl App {
                 book_places,
                 terminal,
                 run,
+                folders,
                 sidebar_hidden,
             });
         });

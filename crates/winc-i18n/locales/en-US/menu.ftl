@@ -73,6 +73,7 @@ menu-git-fetch-desc = Download remote updates without changing local branches
 
 menu-new-file = New File…
 menu-new-folder = New Folder…
+menu-remove-folder = Remove from Window
 menu-open-in-terminal = Open in Terminal
 menu-close-tabs-right = Close Tabs to the Right
 menu-close-tabs-left = Close Tabs to the Left

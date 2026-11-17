@@ -64,6 +64,7 @@ fn sample() -> State {
                     maximized: true,
                 }),
                 run: Some("后端".into()),
+                folders: vec![PathBuf::from("/tmp/extra"), PathBuf::from("/tmp/另一个")],
                 sidebar_hidden: true,
             },
             Session {
@@ -77,6 +78,7 @@ fn sample() -> State {
                 book_places: Vec::new(),
                 terminal: None,
                 run: None,
+                folders: Vec::new(),
                 sidebar_hidden: false,
             },
         ],
@@ -281,6 +283,7 @@ fn sessions_are_kept_per_folder() {
         book_places: Vec::new(),
         terminal: None,
         run: None,
+        folders: Vec::new(),
         sidebar_hidden: false,
     });
     assert_eq!(state.sessions.len(), 2);

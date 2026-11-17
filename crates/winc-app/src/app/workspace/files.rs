@@ -21,6 +21,8 @@ pub enum Pick {
     SaveAs(DocumentId),
     /// 新建工作树对话框「位置」右端的目录按钮：选工作树放在哪个目录下面。
     WorktreeFolder,
+    /// 选择要加为附加目录的目录。
+    AddFolder,
     /// 设置中选择窗口的背景图片。
     BackgroundImage,
     /// 连接远端主机对话框中密钥文件右端的按钮：选密钥文件，从 `~/.ssh` 开始。
@@ -848,6 +850,7 @@ impl App {
             | Pick::OpenFolder
             | Pick::WslFolder(_)
             | Pick::WorktreeFolder
+            | Pick::AddFolder
             | Pick::BackgroundImage => (String::new(), None),
         };
 
@@ -863,10 +866,12 @@ impl App {
                     files: true,
                     dir: dir.as_deref(),
                 },
-                Pick::OpenFolder | Pick::WslFolder(_) | Pick::WorktreeFolder => Panel::Open {
-                    files: false,
-                    dir: None,
-                },
+                Pick::OpenFolder | Pick::WslFolder(_) | Pick::WorktreeFolder | Pick::AddFolder => {
+                    Panel::Open {
+                        files: false,
+                        dir: None,
+                    }
+                }
                 Pick::SaveAs(_) => Panel::Save {
                     name: &name,
                     dir: dir.as_deref(),
@@ -902,7 +907,7 @@ impl App {
                     };
                     (choose, t!("workspace-remote-dialog-key-choose"))
                 }
-                Pick::OpenFolder | Pick::WslFolder(_) | Pick::WorktreeFolder => {
+                Pick::OpenFolder | Pick::WslFolder(_) | Pick::WorktreeFolder | Pick::AddFolder => {
                     let choose = Choose::Open {
                         directory: true,
                         dir: None,
@@ -934,7 +939,7 @@ impl App {
             let title = match &kind {
                 Pick::Open | Pick::BackgroundImage => t!("cmd-open-file"),
                 Pick::KeyFile => t!("workspace-remote-dialog-key-choose"),
-                Pick::OpenFolder | Pick::WorktreeFolder => t!("cmd-open-folder"),
+                Pick::OpenFolder | Pick::WorktreeFolder | Pick::AddFolder => t!("cmd-open-folder"),
                 Pick::WslFolder(_) => t!("cmd-open-wsl-folder"),
                 Pick::SaveAs(_) => t!("cmd-save-as"),
             };
@@ -957,9 +962,10 @@ impl App {
                 }
                 let path = match &kind {
                     Pick::Open | Pick::BackgroundImage | Pick::KeyFile => dialog.pick_file(),
-                    Pick::OpenFolder | Pick::WslFolder(_) | Pick::WorktreeFolder => {
-                        dialog.pick_folder()
-                    }
+                    Pick::OpenFolder
+                    | Pick::WslFolder(_)
+                    | Pick::WorktreeFolder
+                    | Pick::AddFolder => dialog.pick_folder(),
                     Pick::SaveAs(_) => dialog.set_file_name(&name).save_file(),
                 };
                 let _ = proxy.send_event(UserEvent::Picked(kind, path));
@@ -993,6 +999,7 @@ impl App {
             | Pick::OpenFolder
             | Pick::WslFolder(_)
             | Pick::WorktreeFolder
+            | Pick::AddFolder
             | Pick::BackgroundImage
             | Pick::KeyFile => None,
         };
@@ -1002,6 +1009,7 @@ impl App {
         match kind {
             Pick::Open | Pick::OpenFolder | Pick::WslFolder(_) => self.open_path(&path),
             Pick::WorktreeFolder => self.worktree_folder_picked(path),
+            Pick::AddFolder => self.add_folder(&path),
             Pick::BackgroundImage => self.set_background_image(Some(path)),
             Pick::KeyFile => self.key_file_picked(&path),
             Pick::SaveAs(id) => {

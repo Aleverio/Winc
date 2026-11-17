@@ -26,6 +26,8 @@ pub enum Action {
     NewWindow,
     OpenFile,
     OpenFolder,
+    /// 把一个目录加为窗口的附加目录。
+    AddFolder,
     RemoteConnect,
     RemoteDisconnect,
     OpenRecent,
@@ -332,6 +334,7 @@ impl Action {
             NewWindow => t!("cmd-new-window"),
             OpenFile => t!("cmd-open-file"),
             OpenFolder => t!("cmd-open-folder"),
+            AddFolder => t!("cmd-add-folder"),
             RemoteConnect => t!("cmd-remote-connect"),
             RemoteDisconnect => t!("cmd-remote-disconnect"),
             OpenRecent => t!("cmd-open-recent"),
@@ -568,6 +571,7 @@ impl Action {
             NewWindow => "New Window",
             OpenFile => "Open",
             OpenFolder => "Open Folder",
+            AddFolder => "Add Folder to Window",
             RemoteConnect => "Remote: Connect to SSH Host…",
             RemoteDisconnect => "Remote: Disconnect",
             OpenRecent => "Open Recent Folder",
@@ -796,12 +800,11 @@ impl Action {
             | RecordKeys
             | InstallShellCommand
             | UninstallShellCommand => Group::General,
-            NewFile | OpenFile | OpenFolder | RemoteConnect | RemoteDisconnect | Save | SaveAs
-            | CloseTab | CloseOtherTabs | CloseAllTabs | ReopenClosed | NextTab | PreviousTab
-            | CloseFolder | CloseWindow | CopyPath | CopyRelativePath | RevealInFinder
-            | CopyActivePath | CopyKeyPath | RevealActiveFile | OpenInTerminal | Quit => {
-                Group::File
-            }
+            NewFile | OpenFile | OpenFolder | AddFolder | RemoteConnect | RemoteDisconnect
+            | Save | SaveAs | CloseTab | CloseOtherTabs | CloseAllTabs | ReopenClosed | NextTab
+            | PreviousTab | CloseFolder | CloseWindow | CopyPath | CopyRelativePath
+            | RevealInFinder | CopyActivePath | CopyKeyPath | RevealActiveFile | OpenInTerminal
+            | Quit => Group::File,
             NewWindow | OpenRecent | CopyReference | CopyAbsoluteReference => Group::File,
             Undo
             | Redo
@@ -1182,6 +1185,7 @@ pub const ACTIONS: &[Action] = {
         NewWindow,
         OpenFile,
         OpenFolder,
+        AddFolder,
         RemoteConnect,
         RemoteDisconnect,
         OpenRecent,

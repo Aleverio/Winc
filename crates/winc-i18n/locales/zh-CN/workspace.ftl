@@ -344,6 +344,10 @@ workspace-compare-identical = 「{ $left }」与「{ $right }」相同
 
 workspace-open-default-app-failed = 无法用默认应用打开：{ $error }
 workspace-reveal-failed = 无法{ $action }：{ $error }
+workspace-add-folder-none = 先打开一个目录
+workspace-add-folder-remote = 远端主机上的目录暂不支持添加其他目录
+workspace-add-folder-overlaps = 该目录已在窗口中，或包含窗口中的目录
+workspace-add-folder-failed = 无法添加「{ $name }」：{ $error }
 workspace-remote-local-only = 远端主机上的文件无法用本机程序打开
 workspace-remote-terminal = 远端主机上的目录只能在内置终端中打开，请先在设置中启用终端
 workspace-terminal-app-fallback = 终端

@@ -99,6 +99,10 @@ pub enum MenuButton {
 pub enum MenuCommand {
     NewFile,
     NewFolder,
+    /// 把一个目录加为窗口的附加目录。
+    AddFolder,
+    /// 从窗口中移除附加的目录，不改动磁盘上的内容。
+    RemoveFolder,
     /// 在系统文件管理器中显示。
     Reveal,
     OpenInTerminal,
@@ -472,6 +476,8 @@ impl MenuCommand {
             }
             MenuCommand::NewFile => t!("menu-new-file"),
             MenuCommand::NewFolder => t!("menu-new-folder"),
+            MenuCommand::AddFolder => t!("cmd-add-folder"),
+            MenuCommand::RemoveFolder => t!("menu-remove-folder"),
             MenuCommand::Reveal | MenuCommand::LocationReveal => crate::system::reveal_label(),
             MenuCommand::OpenInTerminal => t!("menu-open-in-terminal"),
             MenuCommand::FindInFolder => t!("cmd-find-in-folder"),

@@ -13,6 +13,7 @@ pub(super) mod copying;
 pub(super) mod file_drop;
 pub(super) mod file_work;
 pub(super) mod files;
+pub(super) mod folders;
 pub(super) mod global;
 pub(super) mod loading;
 pub(super) mod outline;
@@ -55,6 +56,8 @@ impl Default for Sidebar {
 pub(crate) struct DiskState {
     /// 已打开目录的文件监视器；目录内的文件被外部修改时发出通知。
     pub(in crate::app) watcher: Option<winc_editor::Watcher>,
+    /// 各个附加目录的文件监视器。
+    pub(in crate::app) extra_watchers: Vec<winc_editor::Watcher>,
     /// 已收到目录变化通知后，统一处理变化的时刻。
     pub(in crate::app) changes_due: Option<Instant>,
     /// 正在后台重读的、被其他程序修改的文件。

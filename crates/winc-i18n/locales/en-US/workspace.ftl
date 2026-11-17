@@ -419,6 +419,10 @@ workspace-compare-identical = “{ $left }” and “{ $right }” are identical
 
 workspace-open-default-app-failed = Couldn’t open with the default app: { $error }
 workspace-reveal-failed = { $action } failed: { $error }
+workspace-add-folder-none = Open a folder first
+workspace-add-folder-remote = Adding folders isn’t supported for a folder on a remote host yet
+workspace-add-folder-overlaps = That folder is already in the window, or contains a folder that is
+workspace-add-folder-failed = Couldn’t add “{ $name }”: { $error }
 workspace-remote-local-only = Files on a remote host can’t be opened with programs on this computer
 workspace-remote-terminal = Folders on a remote host open only in the built-in terminal; enable Terminal in Settings first
 workspace-terminal-app-fallback = Terminal
