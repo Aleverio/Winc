@@ -70,9 +70,16 @@ impl App {
     /// 从窗口中移除附加的目录 `path`。
     pub(in crate::app) fn remove_folder(&mut self, path: &Path) {
         let removed = (self.editor.workspace.as_mut()).is_some_and(|ws| ws.remove_folder(path));
-        if removed {
-            self.folders_changed();
+        if !removed {
+            return;
         }
+        // 其中的仓库不再属于这个窗口；正在看的是其中之一时换到剩下的第一个。
+        self.git.repositories.retain(|repo| !repo.starts_with(path));
+        if (self.git.root.as_deref()).is_some_and(|root| root.starts_with(path)) {
+            let next = self.git.repositories.first().cloned();
+            self.git_set_root(next);
+        }
+        self.folders_changed();
     }
 
     /// 返回 `path` 所在的目录（打开的目录或附加的目录）；不在其中时返回打开的目录。
@@ -130,6 +137,9 @@ impl App {
     /// 附加的目录或这一组的名字变化后：重新监视，记下会话，更新窗口标题，重新布局。
     fn folders_changed(&mut self) {
         self.watch_extra_folders();
+        self.git_discover();
+        self.git_scan_repositories();
+        self.index_folder();
         self.remember_session();
         self.update_window_title();
         self.relayout();
@@ -172,6 +182,40 @@ impl App {
                 .map(|parent| winc_editor::display_path(parent, None)),
             tooltip: Some(winc_editor::display_path(folder, None)),
             title,
+        }
+    }
+
+    /// 返回第 `index` 个仓库在菜单中显示的名字：相对打开的目录的路径，目录本身使用目录名；
+    /// 附加的目录里的仓库是目录名加其中的相对路径。
+    pub(crate) fn git_repository_name(&self, index: usize) -> String {
+        let Some(repo) = self.git.repositories.get(index) else {
+            return String::new();
+        };
+        let relative = self
+            .editor
+            .root()
+            .and_then(|root| repo.strip_prefix(root).ok());
+        let own = || {
+            repo.file_name().map_or_else(
+                || repo.display().to_string(),
+                |name| name.to_string_lossy().into_owned(),
+            )
+        };
+        match relative {
+            Some(path) if !path.as_os_str().is_empty() => path.display().to_string(),
+            Some(_) => own(),
+            // 附加的目录里的仓库：目录名加其中的相对路径。
+            None => {
+                let folder = (self.editor.workspace.as_ref())
+                    .and_then(|ws| ws.folder_of(repo))
+                    .filter(|folder| *folder != repo.as_path());
+                match folder.and_then(|folder| Some((folder, repo.strip_prefix(folder).ok()?))) {
+                    Some((folder, inner)) => {
+                        format!("{}/{}", winc_editor::display_name(folder), inner.display())
+                    }
+                    None => own(),
+                }
+            }
         }
     }
 }

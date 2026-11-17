@@ -179,3 +179,72 @@ fn a_folder_can_be_added_to_the_window_and_removed() {
     let _ = std::fs::remove_dir_all(&main);
     let _ = std::fs::remove_dir_all(&other);
 }
+
+/// 附加的目录参与查找：快速打开和全局搜索列出其中的文件（路径以目录名开头），其中的仓库进入
+/// 仓库列表；移除后不再列出。
+#[test]
+fn extra_folders_take_part_in_quick_open_search_and_git() {
+    let main = sample_folder("folders-find-main").canonicalize().unwrap();
+    let other = search_folder("folders-find-other").canonicalize().unwrap();
+    if !git_in_quiet(&other, &["init", "-q"]) {
+        return;
+    }
+    let mut app = app_with(&main.join("short.rs"), false);
+    app.config.git_enabled = Some(true);
+    paint(&mut app);
+    app.add_folder(&other);
+
+    // 快速打开：按附加目录中的文件名能找到，打开的是那个目录里的文件。
+    app.open_picker();
+    app.overlays.picker.input.set_text("config.rs");
+    app.picker_refresh();
+    let picker = &app.overlays.picker;
+    let hit = picker.index.file(picker.hits[0]).unwrap().path.to_owned();
+    assert_eq!(hit, "folders-find-other/src/config.rs");
+    let absolute = picker.index.absolute(picker.hits[0]).unwrap();
+    assert_eq!(absolute, other.join("src/config.rs"));
+    app.close_picker();
+
+    // 全局搜索：结果里有附加目录中的文件，相对路径以目录名开头。
+    app.set_sidebar_view(SidebarView::Search);
+    app.panels.global.query.insert("load_config");
+    app.run_global_search();
+    finish_search(&mut app);
+    let found: Vec<&str> = (app.panels.global.engine.results.iter())
+        .map(|file| file.relative.as_str())
+        .collect();
+    let inside = |path: &&str| path.starts_with("folders-find-other/src/");
+    assert!(found.iter().any(inside), "{found:?}");
+
+    // Git：附加目录里的仓库进入仓库列表，名字是目录名。
+    app.git_discover();
+    let at = app.git.repositories.iter().position(|repo| *repo == other);
+    let at = at.expect("附加目录里的仓库被发现");
+    assert_eq!(app.git_repository_name(at), "folders-find-other");
+
+    // 移除后三处都不再包含它；正在看的仓库是它时换走。
+    app.git_set_root(Some(other.clone()));
+    app.remove_folder(&other);
+    assert!(!app.git.repositories.contains(&other));
+    assert_ne!(app.git.root.as_deref(), Some(other.as_path()));
+    app.open_picker();
+    app.overlays.picker.input.set_text("config.rs");
+    app.picker_refresh();
+    assert!(app.overlays.picker.hits.is_empty());
+    app.close_picker();
+    app.run_global_search();
+    finish_search(&mut app);
+    assert_eq!(app.panels.global.engine.total(), 0);
+    let _ = std::fs::remove_dir_all(&main);
+    let _ = std::fs::remove_dir_all(&other);
+}
+
+/// 在 `dir` 里运行 `git`，返回是否成功；没有 `git` 时返回 `false`。
+fn git_in_quiet(dir: &Path, args: &[&str]) -> bool {
+    #[allow(clippy::disallowed_methods, reason = "测试中直接运行本机的 git")]
+    let status = std::process::Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .status();
+    status.is_ok_and(|status| status.success())
+}

@@ -112,3 +112,30 @@ impl Workspace {
         Some(rows.collect())
     }
 }
+
+/// 返回各个附加目录 `extra` 在相对路径中使用的前缀，与 `extra` 一一对应：快速打开的文件表和全局
+/// 搜索的结果用它标明文件所在的目录。
+///
+/// 前缀是目录名；与根目录 `root` 下的同名项或其他前缀相同时加上上级目录的名字，仍相同时改为
+/// 加序号。
+pub(crate) fn folder_prefixes(root: &Path, extra: &[PathBuf]) -> Vec<String> {
+    let mut labels: Vec<String> = Vec::with_capacity(extra.len());
+    for folder in extra {
+        let name = segment_name(folder).into_owned();
+        let taken = |label: &str, labels: &[String]| {
+            labels.iter().any(|other| other == label) || winc_backend::fs::exists(root.join(label))
+        };
+        let mut label = name.clone();
+        if taken(&label, &labels) {
+            let parent = folder.parent().map(segment_name).unwrap_or_default();
+            label = format!("{name} ({parent})");
+        }
+        let mut n = 2;
+        while taken(&label, &labels) {
+            label = format!("{name} ({n})");
+            n += 1;
+        }
+        labels.push(label);
+    }
+    labels
+}
