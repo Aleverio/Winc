@@ -124,6 +124,8 @@ pub(in crate::view) fn draw_commit(
             draw_other_rows(app, frame, parts.list, 0.0, &mut hits);
         }
         (Some(_), _) => draw_empty(app, frame, &parts, &mut hits),
+        // 没有可用的 `git` 时原因里已经写明处理办法，刷新不能解决。
+        (None, Some(problem)) if app.git.missing => draw_note(app, frame, &parts, problem, true),
         (None, Some(problem)) => {
             let text = t!("git-commit-view-problem", problem = problem.as_str());
             draw_note(app, frame, &parts, &text, true);

@@ -216,6 +216,9 @@ pub struct Config {
     /// 开头的 `~/` 指仓库所在系统（本机或 WSL 发行版）中用户的主目录，相对路径相对于主工作树。
     /// 未设置，或者该目录与仓库不在同一系统中时，存放在仓库旁边的 `<仓库名>.worktrees` 中。
     pub git_worktree_root: Option<String>,
+    /// `git` 程序：完整路径，或在 `PATH` 里查找的程序名；未设置时在 `PATH` 里找 `git`。只用于
+    /// 本机的仓库。
+    pub git_path: Option<String>,
     /// 点击工作树时在哪个窗口打开它，默认每次询问。
     pub git_open_worktree: Option<WorktreeOpen>,
     /// 新建工作树时复制过去的被忽略的文件（gitignore 写法的 glob，如 `.env*`），默认不复制。

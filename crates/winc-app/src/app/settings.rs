@@ -915,6 +915,7 @@ impl App {
         let current = match tool_setting(setting) {
             Some((task, id)) => task_commands(&self.config, task).get(id).cloned(),
             None if setting == Setting::TerminalShell => self.config.terminal_shell.clone(),
+            None if setting == Setting::GitPath => self.config.git_path.clone(),
             None => self.font_setting(setting).clone(),
         };
         let mut field = TextField::default();
@@ -1027,6 +1028,13 @@ impl App {
                 self.settings.error = None;
                 self.focus = Focus::Settings;
                 self.set_terminal_shell(value);
+            }
+            None if setting == Setting::GitPath => {
+                self.settings.editing = None;
+                self.settings.editing_original = None;
+                self.settings.error = None;
+                self.focus = Focus::Settings;
+                self.set_git_path(value);
             }
             None => self.settings_commit_font(setting, value),
         }
@@ -1331,6 +1339,17 @@ impl App {
             let _ = self.apply_fonts();
         }
         self.save_config();
+        self.request_redraw();
+    }
+
+    /// 设置 `git` 程序的路径；`None` 表示在 `PATH` 里查找。随后重新查找 `git` 并刷新。
+    pub(in crate::app) fn set_git_path(&mut self, path: Option<String>) {
+        if self.config.git_path == path {
+            return;
+        }
+        self.config.git_path = path;
+        self.save_config();
+        self.git_program_changed();
         self.request_redraw();
     }
 

@@ -1,6 +1,7 @@
 ## Git 命令行：查找、运行和读取结果
 
-git-unavailable-not-installed = 未找到 Git
+git-unavailable-not-installed = 未找到 Git，请安装 Git 或在设置中指定 Git 程序
+git-unavailable-not-found = 找不到设置的 Git 程序「{ $program }」，请检查设置中的 Git 程序
 git-unavailable-no-developer-tools = 尚未安装命令行开发者工具
 git-version-too-old = Git { $version } 版本过低，部分操作需要 { $minimum } 或更高版本
 git-status-unreadable = 无法读取 git status 的输出

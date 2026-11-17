@@ -294,6 +294,7 @@ fn round_trips_through_json() {
         repository_scan_depth: Some(4),
         git_worktree_root: Some("~/worktrees".to_string()),
         git_open_worktree: Some(WorktreeOpen::NewWindow),
+        git_path: Some("C:\\Tools\\wslgit.exe".to_string()),
         remote_enabled: Some(true),
         git_worktree_copy: vec![".env*".to_string(), "config/local.toml".to_string()],
         format_on_save: Some(false),

@@ -418,7 +418,10 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
 
     match row.setting.control() {
         SettingControl::Font => draw_field(app, frame, row, clip),
-        SettingControl::Command if editing => draw_field(app, frame, row, clip),
+        // 「Git 程序」是填写的路径，没有可选的菜单：始终画成输入框。
+        SettingControl::Command if editing || row.setting == Setting::GitPath => {
+            draw_field(app, frame, row, clip)
+        }
         SettingControl::Command => {
             let (text, dim) = match app.settings.tool_row(row.setting) {
                 Some(r) => (r.tool.clone(), r.unset),
@@ -695,6 +698,7 @@ fn draw_field(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect
             (None, t!("settings-command-placeholder"))
         }
         Setting::TerminalShell => (None, t!("settings-terminal-shell-placeholder")),
+        Setting::GitPath => (app.config.git_path.clone(), t!("settings-git-path-auto")),
         _ => (app.config.editor_font.clone(), t!("settings-font-default")),
     };
     // 字体输入框的文字不进入右端的下拉按钮。
@@ -769,7 +773,13 @@ fn draw_field(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect
         ellipsize(frame, main, size, room)
     };
     let w = frame.measure(FontKind::Ui, size, &main) + more_w;
-    let x = area.right() - w;
+    // 没有下拉按钮时文字的右缘与组内分隔线的右端对齐。
+    let (right, area) = if font {
+        (area.right(), area)
+    } else {
+        (rect.right() - SETTINGS_GLYPH_PAD, rect)
+    };
+    let x = right - w;
     let end = ui_text(frame, app, x, area, &main, color, area);
     if !more.is_empty() {
         ui_text(frame, app, end, area, &more, p.text_dim, area);

@@ -1003,6 +1003,8 @@ fn the_git_page_is_listed_only_when_the_module_is_on() {
         .map(|row| row.setting)
         .collect();
     let expected = [
+        Setting::GitPath,
+        Setting::GitOpenWorktree,
         Setting::GitStagingArea,
         Setting::GitTree,
         Setting::DiffInline,
@@ -1010,7 +1012,6 @@ fn the_git_page_is_listed_only_when_the_module_is_on() {
         Setting::GitConfirmPush,
         Setting::GitAutoFetch,
         Setting::GitSystemProxy,
-        Setting::GitOpenWorktree,
     ];
     assert_eq!(rows, expected);
     // 「树形显示更改」与提交视图「⋯」菜单里的是同一个开关，记在状态文件里。

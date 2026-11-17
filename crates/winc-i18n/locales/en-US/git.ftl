@@ -1,6 +1,7 @@
 ## Git command line: locating, running and reading output
 
-git-unavailable-not-installed = Git not found
+git-unavailable-not-installed = Git not found. Install Git, or set the Git program in Settings
+git-unavailable-not-found = The configured Git program “{ $program }” was not found. Check the Git program in Settings
 git-unavailable-no-developer-tools = Command Line Developer Tools aren’t installed
 git-version-too-old = Git { $version } is too old; some operations need { $minimum } or later
 git-status-unreadable = Couldn’t read the output of git status

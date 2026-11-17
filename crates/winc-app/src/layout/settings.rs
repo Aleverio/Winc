@@ -169,6 +169,7 @@ impl SettingsPage {
                 ]
             }
             SettingsPage::Git => vec![
+                plain(vec![Setting::GitPath, Setting::GitOpenWorktree]),
                 plain(vec![Setting::GitStagingArea, Setting::GitTree]),
                 plain(vec![Setting::DiffInline, Setting::GitInlineBlame]),
                 plain(vec![
@@ -176,7 +177,6 @@ impl SettingsPage {
                     Setting::GitAutoFetch,
                     Setting::GitSystemProxy,
                 ]),
-                plain(vec![Setting::GitOpenWorktree]),
             ],
             SettingsPage::Modules => vec![plain(vec![
                 Setting::GitModule,
@@ -402,6 +402,8 @@ pub enum Setting {
     GitStagingArea,
     /// 点击工作树时在哪个窗口打开它（`git.openWorktree`）。
     GitOpenWorktree,
+    /// `git` 程序的路径（`git.path`）；未设置时在 `PATH` 里查找。
+    GitPath,
     /// 终端模块的开关。
     TerminalModule,
     /// 远程模块的开关。
@@ -513,6 +515,7 @@ impl Setting {
             | Setting::TerminalOptionAsMeta => SettingsPage::Terminal,
             Setting::GitStagingArea
             | Setting::GitOpenWorktree
+            | Setting::GitPath
             | Setting::GitConfirmPush
             | Setting::GitSystemProxy
             | Setting::GitInlineBlame
@@ -601,6 +604,7 @@ impl Setting {
             Setting::GitTree => t!("settings-git-tree"),
             Setting::GitStagingArea => t!("settings-git-staging-area"),
             Setting::GitOpenWorktree => t!("settings-git-open-worktree"),
+            Setting::GitPath => t!("settings-git-path"),
             Setting::TerminalModule => t!("settings-terminal-module"),
             Setting::RemoteModule => t!("settings-remote-module"),
             Setting::KeySearch => t!("settings-key-search"),
@@ -662,6 +666,8 @@ impl Setting {
             Setting::GitTree => Some(t!("settings-git-tree-desc")),
             Setting::GitStagingArea => Some(t!("settings-git-staging-area-desc")),
             Setting::GitOpenWorktree => Some(t!("settings-git-open-worktree-desc")),
+            Setting::GitPath => Some(t!("settings-git-path-desc")),
+            Setting::TerminalShell => Some(t!("settings-terminal-shell-desc")),
             Setting::TerminalCopyOnSelect => Some(t!("settings-terminal-copy-on-select-desc")),
             Setting::TerminalConfirmClose => Some(t!("settings-terminal-confirm-close-desc")),
             Setting::TerminalPrompt => Some(t!("settings-terminal-prompt-desc")),
@@ -727,9 +733,10 @@ impl Setting {
             | Setting::TerminalPrompt
             | Setting::TerminalShellIntegration
             | Setting::TerminalApplicationPriority => SettingControl::Switch,
-            Setting::FormatCommand(_) | Setting::FixCommand(_) | Setting::TerminalShell => {
-                SettingControl::Command
-            }
+            Setting::FormatCommand(_)
+            | Setting::FixCommand(_)
+            | Setting::TerminalShell
+            | Setting::GitPath => SettingControl::Command,
             Setting::SkipOnSave
             | Setting::Language
             | Setting::BackgroundImage
@@ -1367,7 +1374,11 @@ fn row_height(
             let tile = theme_tile_size((row.w - SETTINGS_INSET * 2.0).max(0.0));
             rows * tile.1 + (rows - 1.0) * THEME_GRID_GAP + THEME_GRID_PAD * 2.0
         }
-        SettingControl::Command if setting != Setting::TerminalShell => SETTINGS_ROW_TALL,
+        SettingControl::Command
+            if !matches!(setting, Setting::TerminalShell | Setting::GitPath) =>
+        {
+            SETTINGS_ROW_TALL
+        }
         SettingControl::Product => SETTINGS_PRODUCT_H,
         _ => match setting.description() {
             Some(text) => {

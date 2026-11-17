@@ -58,11 +58,11 @@ impl SharedGit {
     /// 返回共用的 `git`，尚未找到时就地查找并写入；两个任务同时找到时保留先写入的结果。
     ///
     /// 第一次查找需要等待读取用户 shell 的环境，因此只在后台线程上调用。
-    fn resolve(&self, shell: &Shell) -> Result<Git, Unavailable> {
+    fn resolve(&self, shell: &Shell, program: Option<&str>) -> Result<Git, Unavailable> {
         if let Some(git) = self.get() {
             return Ok(git);
         }
-        let found = Git::find(shell)?;
+        let found = Git::find_with(shell, program)?;
         let mut slot = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         Ok(slot.get_or_insert(found).clone())
     }
@@ -89,6 +89,8 @@ struct Outcome {
     root: PathBuf,
     /// 读取到的状态；失败时为原因。
     status: Result<Status, String>,
+    /// 失败的原因是否为没有可用的 `git`。
+    missing: bool,
     /// 分支、储藏与工作树列表。
     ///
     /// 状态读取失败，或本次只刷新状态（[`App::git_refresh_status`]）时不读取。
@@ -233,6 +235,8 @@ pub(crate) struct GitState {
     pub home: Option<PathBuf>,
     /// 最近一次刷新失败的原因（找不到 `git`、`git` 报错）；刷新成功后清除。
     pub problem: Option<String>,
+    /// `problem` 是否为没有可用的 `git`：这时提交视图不写「点击刷新按钮重试」。
+    pub missing: bool,
     /// 状态的版本号，每更新一次加 1；提交视图据此判断绘制时记录的行是否仍然有效。
     pub generation: u64,
     /// 文件树使用的各路径状态（[`Status::decorations`]）。
@@ -334,6 +338,7 @@ impl Default for GitState {
             worktrees: Vec::new(),
             home: None,
             problem: None,
+            missing: false,
             generation: 0,
             decorations: HashMap::new(),
             ignored_paths: HashSet::new(),
@@ -438,6 +443,7 @@ impl GitState {
         self.my_email.clear();
         self.authors_for = None;
         self.problem = None;
+        self.missing = false;
         self.generation += 1;
         self.decorations.clear();
         self.ignored_paths.clear();
@@ -531,6 +537,12 @@ impl App {
     /// Git 模块是否已开启。
     pub(crate) fn git_enabled(&self) -> bool {
         self.config.git_enabled.unwrap_or(false)
+    }
+
+    /// 设置的 `git` 程序（`git.path`）变化后重新查找 `git`，并刷新一次。
+    pub(super) fn git_program_changed(&mut self) {
+        self.git.tool.forget();
+        self.git_refresh();
     }
 
     /// 在打开的目录或模块开关变化后重新确定仓库，并刷新一次。
@@ -874,6 +886,9 @@ impl App {
         }
         // 上次未找到 `git` 时本次在后台重新查找（用户可能刚安装）。
         self.spawn_git(UserEvent::GitStatus, move |tool| {
+            let usable = |git: Git| git.reaches(&root).then_some(git);
+            let tool = tool.and_then(|git| usable(git).ok_or(Unavailable::NotInstalled));
+            let missing = tool.is_err();
             let (status, refs) = match &tool {
                 Err(e) => (Err(e.to_string()), None),
                 Ok(git) if !refs => (git.status(&root, &cancel), None),
@@ -929,7 +944,12 @@ impl App {
                     (status, Some(refs))
                 }),
             };
-            let _ = sender.send(Outcome { root, status, refs });
+            let _ = sender.send(Outcome {
+                root,
+                status,
+                missing,
+                refs,
+            });
         });
     }
 
@@ -965,7 +985,8 @@ impl App {
         work: impl FnOnce(Result<Git, Unavailable>) + Send + 'static,
     ) {
         let (tool, shell) = (self.git.tool.clone(), self.format.formatter.shell().clone());
-        self.spawn_blocking_then(done, move || work(tool.resolve(&shell)));
+        let program = self.config.git_path.clone();
+        self.spawn_blocking_then(done, move || work(tool.resolve(&shell, program.as_deref())));
     }
 
     /// 接收后台刷新的结果；成功时同时更新已打开的 Git 差异。
@@ -1055,6 +1076,7 @@ impl App {
                         }
                     }
                     self.git.problem = None;
+                    self.git.missing = false;
                     self.fetch_last_commit();
                     refreshed = true;
                     // 只读了状态的这次刷新没有读其他仓库：列着其他仓库时补读，文件保存后各仓库的
@@ -1068,6 +1090,7 @@ impl App {
                     self.git.status = None;
                     self.git.decorations.clear();
                     self.git.problem = Some(e);
+                    self.git.missing = outcome.missing;
                 }
             }
             self.git.generation += 1;

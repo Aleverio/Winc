@@ -594,6 +594,7 @@ const GIT: &[Field] = &[
                 .map(|depth| Json::Number(depth as f64))
         },
     },
+    string_field!("path", git_path),
     string_field!("worktreeRoot", git_worktree_root),
     Field {
         key: "openWorktree",
