@@ -810,3 +810,25 @@ fn extra_folders_are_listed_as_top_level_rows() {
     assert_eq!(rows(&ws), [row("src", 0), row("readme.md", 0)]);
     assert!(ws.selected_entry().is_none());
 }
+
+/// 同名的文件夹在名字后注明上级目录，不同名的不注明。
+#[test]
+fn folders_with_the_same_name_show_their_parents() {
+    let base = crate::test_util::scratch("ws-same-name");
+    for dir in ["main", "services/api", "tools/api"] {
+        fs::create_dir_all(base.join(dir)).unwrap();
+    }
+    let mut ws = Workspace::open(&base.join("main")).unwrap();
+    ws.add_folder(&base.join("services/api")).unwrap();
+    let names = |ws: &Workspace| -> Vec<String> {
+        (ws.rows().iter().filter(|e| e.depth == 0))
+            .map(|e| e.label().into_owned())
+            .collect()
+    };
+    assert_eq!(names(&ws), ["main", "api"]);
+    ws.add_folder(&base.join("tools/api")).unwrap();
+    assert_eq!(names(&ws), ["main", "api (services)", "api (tools)"]);
+    let first = ws.extra_folders()[0].clone();
+    ws.remove_folder(&first);
+    assert_eq!(names(&ws), ["main", "api"]);
+}

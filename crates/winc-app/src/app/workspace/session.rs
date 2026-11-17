@@ -161,6 +161,11 @@ impl App {
                 let _ = workspace.add_folder(folder);
             }
         }
+        if let (Some(workspace), Some(session)) = (&mut self.editor.workspace, &session)
+            && !workspace.extra_folders().is_empty()
+        {
+            workspace.set_alias(session.name.as_deref());
+        }
         self.watch_extra_folders();
         let restored = restore_tabs(
             &mut self.editor,
@@ -344,6 +349,8 @@ impl App {
         let terminal = self.terminal_session();
         let run = self.run.selected.clone();
         let folders = self.extra_folders();
+        let name = (self.editor.workspace.as_ref())
+            .and_then(|workspace| workspace.alias().map(str::to_owned));
         let sidebar_hidden = !self.panels.sidebar.visible;
         let bookmarks = self
             .editor
@@ -368,6 +375,7 @@ impl App {
                 terminal,
                 run,
                 folders,
+                name,
                 sidebar_hidden,
             });
         });

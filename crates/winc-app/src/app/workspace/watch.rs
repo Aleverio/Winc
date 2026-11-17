@@ -97,6 +97,8 @@ impl App {
         }
         self.disk.watcher = None;
         self.disk.changes_due = None;
+        // 换了目录或关闭了目录：原来附加的目录不再监视。
+        self.watch_extra_folders();
         self.git_folder_changed();
         let (Some(root), Some(proxy)) = (root, self.link.proxy.clone()) else {
             return;
@@ -197,6 +199,14 @@ impl App {
         }
         if let Some(changes) = self.disk.watcher.as_ref().map(Watcher::take) {
             self.apply_changes(changes);
+        }
+        let limited: Vec<PathBuf> = (self.disk.extra_watchers.iter())
+            .filter(|watcher| watcher.take_limit())
+            .map(|watcher| watcher.root().to_path_buf())
+            .collect();
+        for folder in limited {
+            let name = winc_editor::display_name(&folder);
+            self.notify(winc_i18n::t!("workspace-watch-limit", name = name));
         }
         let extra: Vec<Changes> = self.disk.extra_watchers.iter().map(Watcher::take).collect();
         for changes in extra {

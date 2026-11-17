@@ -62,12 +62,25 @@ impl Workspace {
         self.expanded.retain(|dir| !dir.starts_with(path));
         self.children.retain(|dir, _| !dir.starts_with(path));
         self.marked.retain(|item| !item.starts_with(path));
-        // 只剩根目录时它不再占一行，内容直接列出。
+        // 只剩根目录时它不再占一行，内容直接列出；名字属于这组目录，随之取消。
         if self.extra.is_empty() {
             self.expanded.insert(self.root.clone());
+            self.set_alias(None);
         }
         self.rebuild();
         true
+    }
+
+    /// 返回用户给这组目录起的名字。
+    pub fn alias(&self) -> Option<&str> {
+        self.alias.as_deref()
+    }
+
+    /// 给这组目录起名为 `alias`，显示名随之改变；`None` 或空白时恢复为根目录的名字。
+    pub fn set_alias(&mut self, alias: Option<&str>) {
+        let alias = alias.map(str::trim).filter(|alias| !alias.is_empty());
+        self.alias = alias.map(str::to_owned);
+        self.name = (self.alias.clone()).unwrap_or_else(|| self.own_name.clone());
     }
 
     /// 返回文件树最上一层的各个文件夹；没有附加的文件夹时返回 `None`。
@@ -75,11 +88,26 @@ impl Workspace {
         if self.extra.is_empty() {
             return None;
         }
-        let rows = self.folders().map(|folder| DirEntry {
-            path: folder.to_path_buf(),
-            name: segment_name(folder).into_owned(),
-            kind: EntryKind::Dir,
-            symlink: false,
+        // 同名的文件夹在名字后注明上级目录。
+        let same = |folder: &Path| {
+            let name = segment_name(folder);
+            self.folders()
+                .filter(|other| segment_name(other) == name)
+                .count()
+                > 1
+        };
+        let rows = self.folders().map(|folder| {
+            let name = segment_name(folder);
+            let parent = folder.parent().filter(|_| same(folder)).map(segment_name);
+            DirEntry {
+                path: folder.to_path_buf(),
+                name: match parent {
+                    Some(parent) => format!("{name} ({parent})"),
+                    None => name.into_owned(),
+                },
+                kind: EntryKind::Dir,
+                symlink: false,
+            }
         });
         Some(rows.collect())
     }

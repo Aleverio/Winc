@@ -148,6 +148,40 @@ pub fn folder(frame: &mut Frame<'_>, (x, y): (f32, f32), open: bool, color: Colo
     frame.stroke(shapes.as_slice(), STROKE, color, clip);
 }
 
+/// 绘制一组目录的图标，15×12，左上角在 `(x, y)`：前面一个合上的目录，右上露出后面一个目录的
+/// 上沿和右边。
+pub fn folders(frame: &mut Frame<'_>, (x, y): (f32, f32), color: Color, clip: Rect) {
+    let h = STROKE / 2.0;
+    // 前面的目录 12.5×9.5，靠左下；后面的目录向右上错开 2.5。
+    let shift = 2.5;
+    let (l, t, r, b) = (x + h, y + shift + h, x + 15.0 - shift - h, y + 12.0 - h);
+    let c = 2.0;
+    let tab_end = l + 4.0;
+    let lid = t + 2.0;
+    let front = [
+        Stroke::Line(l, b - c, l, t + c),
+        Stroke::Arc(l + c, t + c, c, -PI, -FRAC_PI_2),
+        Stroke::Line(l + c, t, tab_end, t),
+        Stroke::Line(tab_end, t, tab_end + 1.5, lid),
+        Stroke::Line(tab_end + 1.5, lid, r - c, lid),
+        Stroke::Arc(r - c, lid + c, c, -FRAC_PI_2, 0.0),
+        Stroke::Line(r, lid + c, r, b - c),
+        Stroke::Arc(r - c, b - c, c, 0.0, FRAC_PI_2),
+        Stroke::Line(r - c, b, l + c, b),
+        Stroke::Arc(l + c, b - c, c, FRAC_PI_2, PI),
+    ];
+    let (far, top) = (r + shift, lid - shift);
+    let back = [
+        Stroke::Line(tab_end + 1.5 + shift, top, far - c, top),
+        Stroke::Arc(far - c, top + c, c, -FRAC_PI_2, 0.0),
+        Stroke::Line(far, top + c, far, b - shift - c),
+        Stroke::Arc(far - c, b - shift - c, c, 0.0, FRAC_PI_2),
+        Stroke::Line(far - c, b - shift, r + h, b - shift),
+    ];
+    frame.stroke(&front, STROKE, color, clip);
+    frame.stroke(&back, STROKE, color, clip);
+}
+
 /// 绘制小号目录图标，12×10，以 `(cx, cy)` 为中心：形状和合上的 [`folder`] 相同，线条和小号分支
 /// 图标一样细，用于侧栏小号文字旁。
 pub fn folder_small(frame: &mut Frame<'_>, (cx, cy): (f32, f32), color: Color, clip: Rect) {

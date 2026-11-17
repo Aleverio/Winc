@@ -577,6 +577,7 @@ fn configurations_load_when_the_first_window_opens() {
             folder,
             run: Some("web".into()),
             folders: Vec::new(),
+            name: None,
             ..winc_config::Session::default()
         });
     });

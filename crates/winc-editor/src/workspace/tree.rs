@@ -114,8 +114,12 @@ pub struct DirEntry {
 pub struct Workspace {
     /// 根目录（规范化后的绝对路径）。
     pub root: PathBuf,
-    /// 根目录的显示名，标题栏和状态栏使用。
+    /// 显示名，标题栏和状态栏使用：根目录的名字，或用户起的名字（见 [`Workspace::set_alias`]）。
     pub name: String,
+    /// 根目录的名字，没有起名时的显示名。
+    own_name: String,
+    /// 用户给这组目录起的名字。
+    alias: Option<String>,
     /// 附加的文件夹（规范化后的绝对路径），按添加的顺序；见 [`Workspace::add_folder`]。
     extra: Vec<PathBuf>,
     /// 选中行在 [`Self::rows`] 中的下标（从 0 起）。
@@ -264,7 +268,9 @@ impl Workspace {
 
         let mut workspace = Workspace {
             root: root.clone(),
+            own_name: name.clone(),
             name,
+            alias: None,
             extra: Vec::new(),
             selected: None,
             marked: HashSet::new(),

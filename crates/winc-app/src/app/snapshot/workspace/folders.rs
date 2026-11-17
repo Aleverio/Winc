@@ -1,5 +1,7 @@
 //! 附加目录的测试：添加和移除、文件树的顶层行、菜单、相对路径、随会话恢复。
 
+use winit::keyboard::{Key, NamedKey};
+
 use super::*;
 use crate::app::input::context_menu::{MenuCommand, MenuEntry, MenuTarget};
 
@@ -110,18 +112,69 @@ fn a_folder_can_be_added_to_the_window_and_removed() {
     assert_eq!(app.extra_folders().len(), 1);
     shoot(&mut app, "folders-two");
 
-    // 随打开的目录的会话保存，重新打开时恢复。
-    app.remember_session();
+    // 有附加的目录时项目菜单里可以给这一组起名：输入框里是现在的名字，留空恢复为目录名。
+    assert!(project(&mut app).contains(&MenuCommand::RenameGroup));
+    app.ask_rename_group();
+    assert!(app.overlays.form_dialog.is_some());
+    app.focused_field().unwrap().insert("  数据平台  ");
+    assert!(app.dialog_key(&Key::Named(NamedKey::Enter), "", false));
+    assert!(app.overlays.form_dialog.is_none());
+    assert_eq!(app.editor.workspace.as_ref().unwrap().name, "数据平台");
+    app.ask_rename_group();
+    assert_eq!(app.focused_field().unwrap().text(), "数据平台");
+    app.close_form_dialog();
+
+    // 改动当时就记进会话，不等退出；也不改变下次启动时打开哪个目录。
+    let saved = app.state.session_for(&main).unwrap();
+    assert_eq!(saved.folders, std::slice::from_ref(&other));
+    assert_eq!(saved.name.as_deref(), Some("数据平台"));
     let state = app.state.clone();
     let mut again = blank_app(false);
-    again.state = state;
+    again.state = state.clone();
     again.open_folder_now(&main);
     assert_eq!(again.extra_folders(), std::slice::from_ref(&other));
+    assert_eq!(again.editor.workspace.as_ref().unwrap().name, "数据平台");
+
+    // 最近列表里这一组用起的名字和叠放的目录图标；没起名时在目录名后注明附加的个数。
+    let mut elsewhere = blank_app(false);
+    elsewhere.state = state;
+    elsewhere.open_folder_now(&other);
+    let index = (elsewhere.state.recent.iter())
+        .position(|folder| *folder == main)
+        .unwrap();
+    let recent = MenuCommand::OpenRecent(index);
+    assert_eq!(elsewhere.menu_label(recent).title, "数据平台");
+    let group_icon = crate::app::input::context_menu::MenuIcon::Folders;
+    assert_eq!(elsewhere.menu_icon_kind(recent), Some(group_icon));
+    // 「打开最近」面板同样显示组名，按组名和目录本身的名字都能找到。
+    for (query, marked) in [("数据", true), ("folders-main", false)] {
+        elsewhere.open_recent_folders();
+        elsewhere.overlays.picker.input.set_text(query);
+        elsewhere.picker_refresh();
+        assert_eq!(elsewhere.overlays.picker.hits, [index], "{query}");
+        assert_eq!(!elsewhere.folder_matched(0).0.is_empty(), marked, "{query}");
+        elsewhere.close_picker();
+    }
+    paint(&mut elsewhere);
+    elsewhere.open_project_menu();
+    shoot(&mut elsewhere, "folders-recent");
+    elsewhere.overlays.context_menu = None;
+    again.rename_group("");
+    again.remember_session();
+    assert_eq!(again.recent_title(&main), "folders-main +1");
+    assert_eq!(
+        again.editor.workspace.as_ref().unwrap().name,
+        "folders-main"
+    );
 
     // 移除：只从窗口中拿掉，磁盘上的内容不动，文件树回到只列打开的目录。
     app.run_tree_command(MenuCommand::RemoveFolder, Some(other.clone()));
     paint(&mut app);
     assert!(app.extra_folders().is_empty() && other.join("src/main.rs").is_file());
+    // 名字属于这一组：只剩打开的目录时取消，菜单里不再有重命名。
+    assert_eq!(app.editor.workspace.as_ref().unwrap().name, "folders-main");
+    assert!(!project(&mut app).contains(&MenuCommand::RenameGroup));
+    assert!(app.recent_group(&main).is_none());
     assert_eq!(rows(&app), single);
     let _ = std::fs::remove_dir_all(&main);
     let _ = std::fs::remove_dir_all(&other);

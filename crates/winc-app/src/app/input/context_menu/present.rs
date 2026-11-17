@@ -58,6 +58,8 @@ const TAB_LIST_ICON: f32 = 16.0;
 pub(crate) enum MenuIcon {
     /// 最近打开的目录：与文件树中的目录相同的图标和颜色。
     Folder,
+    /// 最近打开的一组目录：两个叠放的目录。
+    Folders,
     /// 标签列表的第几项：标签上的图标（文件类型图标，日志标签为 Git 图标）。
     Tab(usize),
     /// 目录菜单中的文件：文件类型的记号和它在深色、浅色配色下的颜色（同文件树）。
@@ -69,7 +71,7 @@ impl MenuIcon {
     pub(crate) fn size(self) -> (f32, f32) {
         match self {
             MenuIcon::Tab(_) | MenuIcon::File(..) => (TAB_LIST_ICON, TAB_LIST_ICON),
-            MenuIcon::Folder => MENU_ICON,
+            MenuIcon::Folder | MenuIcon::Folders => MENU_ICON,
         }
     }
 }
@@ -353,13 +355,7 @@ impl App {
                     (self.remote_enabled()).then(crate::app::remote::refresh_hosts),
                     root.is_some_and(winc_backend::is_remote),
                 ));
-                // 打开了本机的目录时，「打开目录…」之后是「添加目录到窗口…」。
-                let open = MenuEntry::Item(MenuCommand::OpenFolder, true);
-                if self.can_add_folder()
-                    && let Some(at) = menu.iter().position(|entry| *entry == open)
-                {
-                    menu.insert(at + 1, MenuEntry::Item(MenuCommand::AddFolder, true));
-                }
+                self.add_folder_entries(&mut menu);
                 menu
             }
             MenuTarget::Tree(Some(_))
@@ -1083,28 +1079,6 @@ impl App {
         }
     }
 
-    /// 返回最近目录第 `i` 项的菜单文字：标题只写目录名，完整路径放在悬停提示中（主目录显示为
-    /// `~`）。
-    ///
-    /// 只有最近列表中另有同名目录时，才在标题下方用一行小字写明所在的上级目录；否则每一项
-    /// 都会多出一行相同的上级目录，既占空间又没有信息量。
-    fn recent_label(&self, i: usize) -> MenuLabel {
-        let Some(folder) = self.state.recent.get(i) else {
-            return MenuLabel::plain("");
-        };
-        let name = winc_editor::display_name(folder);
-        let same_name = |other: &PathBuf| winc_editor::display_name(other) == name;
-        let ambiguous = self.state.recent.iter().filter(|p| same_name(p)).count() > 1;
-        MenuLabel {
-            subtitle: folder
-                .parent()
-                .filter(|_| ambiguous)
-                .map(|parent| winc_editor::display_path(parent, None)),
-            tooltip: Some(winc_editor::display_path(folder, None)),
-            title: name.into_owned(),
-        }
-    }
-
     /// 返回格式化（修复）工具菜单中一项的文字：「自动」下方写着当前自动选中的工具；
     /// 预设下方写着该预设的命令，没装的在名字后面注明「（未安装）」。
     fn tool_label(&self, command: MenuCommand) -> MenuLabel {
@@ -1359,8 +1333,14 @@ impl App {
     /// 其他命令没有图标。
     pub(in crate::app) fn menu_icon_kind(&self, command: MenuCommand) -> Option<MenuIcon> {
         match command {
-            MenuCommand::OpenRecent(_) | MenuCommand::OpenRecentInNewWindow(_) => {
-                Some(MenuIcon::Folder)
+            MenuCommand::OpenRecent(i) | MenuCommand::OpenRecentInNewWindow(i) => {
+                let group = (self.state.recent.get(i))
+                    .is_some_and(|folder| self.recent_group(folder).is_some());
+                Some(if group {
+                    MenuIcon::Folders
+                } else {
+                    MenuIcon::Folder
+                })
             }
             MenuCommand::ShowTab(i) => self.editor.documents.get(i).map(|_| MenuIcon::Tab(i)),
             _ => None,
@@ -1381,6 +1361,7 @@ impl App {
         let (w, h) = icon.size();
         match icon {
             MenuIcon::Folder => icons::folder(frame, (x, y), false, self.palette.folder, clip),
+            MenuIcon::Folders => icons::folders(frame, (x, y), self.palette.folder, clip),
             MenuIcon::File(glyph, [dark, light]) => {
                 let color = winc_render::Color::hex(if self.palette.dark { dark } else { light });
                 // 文件图标 12 × 15。
