@@ -648,6 +648,20 @@ impl App {
             }
         };
 
+        // 菜单所指的文件在远端主机上：不列出只能在本机执行的项。
+        let place = match &target {
+            MenuTarget::Tree(path) => path.as_deref().or(self.editor.root()),
+            MenuTarget::Tab(id) => (self.editor.document(*id)).and_then(|d| d.path.as_deref()),
+            MenuTarget::CommitFile(path) | MenuTarget::LogFile(_, path) => Some(path.as_path()),
+            _ => None,
+        };
+        let entries = match place {
+            Some(path) if winc_backend::is_remote(path) => {
+                without_local_only(entries, self.terminal_enabled())
+            }
+            _ => entries,
+        };
+
         // 菜单上显示的快捷键按菜单弹出的位置取：文件树中取文件树的键位，编辑区中取编辑区的键位。
         let context = match &target {
             MenuTarget::Tree(_) => Context::Tree,

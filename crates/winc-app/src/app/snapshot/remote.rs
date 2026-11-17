@@ -479,6 +479,7 @@ fn a_folder_on_a_connected_host_opens_as_the_workspace() {
     assert_eq!(app.state.remote_key("app-remote-open"), None);
     assert_eq!(remote::identity(&target), None);
     app.close_picker();
+    local_only_actions_are_not_offered_on_a_remote_host();
 }
 
 /// 截图：开始页、主机面板、目录面板（浏览与筛选）和打开远端目录后的窗口。
@@ -924,5 +925,76 @@ fn features_work_in_a_remote_workspace() {
     );
 
     remote::disconnect(&target);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 远端工作区不提供只能在本机执行的动作：菜单中不列出，浏览器按钮不出现；从快捷键、命令面板
+/// 执行时说明原因，不显示系统的错误码。由 [`a_folder_on_a_connected_host_opens_as_the_workspace`]
+/// 调用，原因同 [`folders_on_a_remote_host_are_not_taken_for_files`]。
+fn local_only_actions_are_not_offered_on_a_remote_host() {
+    use crate::app::input::context_menu::{MenuCommand, MenuEntry, MenuTarget};
+
+    let dir = search_folder("remote-local-only").canonicalize().unwrap();
+    std::fs::write(dir.join("page.html"), "<p>hi</p>\n").unwrap();
+    let target = loopback("app-remote-local-only");
+    let root = winc_backend::virtual_path(&target, dir.as_os_str().as_bytes());
+    let mut app = blank_app(false);
+    app.config.remote_enabled = Some(true);
+    app.open_folder(&root);
+    let file = root.join("src/main.rs");
+
+    let listed = |app: &mut App, target: MenuTarget| -> Vec<MenuCommand> {
+        app.open_context_menu(target, (10.0, 10.0));
+        let menu = app.overlays.context_menu.take().unwrap();
+        (menu.entries.into_iter())
+            .filter_map(|entry| match entry {
+                MenuEntry::Item(command, _) => Some(command),
+                _ => None,
+            })
+            .collect()
+    };
+    // 终端模块关闭：两项都不列出；开启后「在终端中打开」进入内置终端，照常列出。
+    for terminal in [false, true] {
+        app.config.terminal_enabled = Some(terminal);
+        let tree = listed(&mut app, MenuTarget::Tree(Some(file.clone())));
+        assert!(!tree.contains(&MenuCommand::Reveal), "{tree:?}");
+        assert_eq!(tree.contains(&MenuCommand::OpenInTerminal), terminal);
+        assert!(tree.contains(&MenuCommand::CopyPath) && tree.contains(&MenuCommand::NewFile));
+        let blank = listed(&mut app, MenuTarget::Tree(None));
+        assert!(!blank.contains(&MenuCommand::Reveal), "{blank:?}");
+        assert_eq!(blank.contains(&MenuCommand::OpenInTerminal), terminal);
+    }
+    app.config.terminal_enabled = Some(false);
+    let changed = listed(&mut app, MenuTarget::CommitFile(file.clone()));
+    assert!(!changed.contains(&MenuCommand::Reveal), "{changed:?}");
+    assert!(changed.contains(&MenuCommand::GitOpenFile));
+    let places = app.location_row_menu(&root, None);
+    assert!(!places.contains(&MenuEntry::Item(MenuCommand::LocationReveal, true)));
+    // 本机的文件不受影响。
+    let local = listed(&mut app, MenuTarget::Tree(Some(dir.join("src/main.rs"))));
+    assert!(local.contains(&MenuCommand::Reveal) && local.contains(&MenuCommand::OpenInTerminal));
+    let places = app.location_row_menu(&dir, None);
+    assert!(places.contains(&MenuEntry::Item(MenuCommand::LocationReveal, true)));
+
+    // 快捷键和命令面板仍能到达这些动作：说明原因。
+    app.reveal_in_file_manager(&file);
+    let notice = app.notice.text.take();
+    assert_eq!(
+        notice.as_deref(),
+        Some(winc_i18n::t!("workspace-remote-local-only"))
+    );
+    app.open_in_terminal(Some(&file));
+    let notice = app.notice.text.take();
+    assert_eq!(
+        notice.as_deref(),
+        Some(winc_i18n::t!("workspace-remote-terminal"))
+    );
+
+    // 远端的网页文件没有「在浏览器中打开」；本机的有。
+    app.open_path(&root.join("page.html"));
+    assert!(app.editor.active().is_some_and(|d| d.path.is_some()));
+    assert!(app.browser_page().is_none());
+    app.open_path(&dir.join("page.html"));
+    assert!(app.browser_page().is_some());
     let _ = std::fs::remove_dir_all(&dir);
 }
