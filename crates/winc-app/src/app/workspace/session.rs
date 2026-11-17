@@ -155,24 +155,11 @@ impl App {
             return;
         };
         let session = self.state.session_for(&root).cloned();
-        // 上次附加的目录：已不存在的跳过。
-        // 已不存在或不能再添加的不恢复，并说明是哪一个。
-        let mut skipped = Vec::new();
-        for folder in session.iter().flat_map(|session| &session.folders) {
-            if let Some(workspace) = &mut self.editor.workspace
-                && workspace.add_folder(folder).is_err()
-            {
-                skipped.push(winc_editor::display_name(folder).into_owned());
-            }
-        }
-        if !skipped.is_empty() {
-            let names = skipped.join(winc_i18n::t!("common-list-separator"));
-            self.notify(winc_i18n::t!("workspace-add-folder-skipped", names = names));
-        }
-        if let (Some(workspace), Some(session)) = (&mut self.editor.workspace, &session)
-            && !workspace.extra_folders().is_empty()
-        {
-            workspace.set_alias(session.name.as_deref());
+        // 单独打开一组中的打开的目录时不恢复附加的目录，这一组仍记在会话里。
+        let alone = self.disk.open_alone.take().is_some_and(|path| path == root);
+        self.disk.solo = alone && session.as_ref().is_some_and(|s| !s.folders.is_empty());
+        if !self.disk.solo {
+            self.restore_group(session.as_ref());
         }
         self.watch_extra_folders();
         let restored = restore_tabs(
@@ -356,9 +343,17 @@ impl App {
 
         let terminal = self.terminal_session();
         let run = self.run.selected.clone();
-        let folders = self.extra_folders();
-        let name = (self.editor.workspace.as_ref())
+        let mut folders = self.extra_folders();
+        let mut name = (self.editor.workspace.as_ref())
             .and_then(|workspace| workspace.alias().map(str::to_owned));
+        // 单独打开着一组中的打开的目录：这一组保持原样。
+        if self.disk.solo
+            && folders.is_empty()
+            && let Some(session) = self.state.session_for(&folder)
+        {
+            folders = session.folders.clone();
+            name = session.name.clone();
+        }
         let sidebar_hidden = !self.panels.sidebar.visible;
         let bookmarks = self
             .editor

@@ -105,6 +105,10 @@ pub enum MenuCommand {
     RemoveFolder,
     /// 给窗口中的这组目录起名。
     RenameGroup,
+    /// 最近列表第几项是一组目录时，其子菜单的第一项：打开这一组。
+    OpenGroup(usize),
+    /// 最近列表第几项这一组中的第几个目录（0 为打开的目录）：单独打开它。
+    GroupFolder(usize, usize),
     /// 在系统文件管理器中显示。
     Reveal,
     OpenInTerminal,
@@ -484,6 +488,8 @@ impl MenuCommand {
             MenuCommand::AddFolder => t!("cmd-add-folder"),
             MenuCommand::RemoveFolder => t!("menu-remove-folder"),
             MenuCommand::RenameGroup => t!("menu-rename-group"),
+            MenuCommand::OpenGroup(_) => t!("menu-open-group"),
+            MenuCommand::GroupFolder(..) => "",
             MenuCommand::Reveal | MenuCommand::LocationReveal => crate::system::reveal_label(),
             MenuCommand::OpenInTerminal => t!("menu-open-in-terminal"),
             MenuCommand::FindInFolder => t!("cmd-find-in-folder"),

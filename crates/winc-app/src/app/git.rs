@@ -272,6 +272,8 @@ pub(crate) struct GitState {
     pub commit: commit::CommitState,
     /// 行号栏的改动标记和已展开的改动卡片。
     pub changes: changes::LineChanges,
+    /// 提交视图上下文一行中各控件宽度的过渡。
+    pub context_row: commit::ContextRow,
     /// 日志标签的后台通道和点击区域。
     pub log: log::LogState,
     /// 逐行追溯（`git blame`）的状态。
@@ -354,6 +356,7 @@ impl Default for GitState {
             receiver,
             commit: Default::default(),
             changes: Default::default(),
+            context_row: Default::default(),
             log: Default::default(),
             blame: Default::default(),
             branch: Default::default(),

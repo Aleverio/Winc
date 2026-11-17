@@ -58,6 +58,10 @@ pub(crate) struct DiskState {
     pub(in crate::app) watcher: Option<winc_editor::Watcher>,
     /// 各个附加目录的文件监视器。
     pub(in crate::app) extra_watchers: Vec<winc_editor::Watcher>,
+    /// 打开的目录属于一组目录，但这个窗口单独打开了它，没有恢复附加的目录。
+    pub(in crate::app) solo: bool,
+    /// 下一次打开这个目录时单独打开，不恢复它那一组附加的目录。
+    pub(in crate::app) open_alone: Option<PathBuf>,
     /// 已收到目录变化通知后，统一处理变化的时刻。
     pub(in crate::app) changes_due: Option<Instant>,
     /// 正在后台重读的、被其他程序修改的文件。

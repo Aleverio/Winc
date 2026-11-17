@@ -142,6 +142,8 @@ impl App {
                 MenuCommand::OpenFolder => self.pick(Pick::OpenFolder),
                 MenuCommand::AddFolder => self.ask_add_folder(),
                 MenuCommand::RenameGroup => self.ask_rename_group(),
+                MenuCommand::OpenGroup(i) => self.open_group(i),
+                MenuCommand::GroupFolder(i, j) => self.open_group_folder(i, j),
                 MenuCommand::OpenWslFolder(i) => {
                     if let Some(distro) = crate::system::wsl_distributions().get(i) {
                         self.pick(Pick::WslFolder(distro.clone()));

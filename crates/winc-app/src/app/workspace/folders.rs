@@ -47,7 +47,12 @@ impl App {
     }
 
     /// 把目录 `path` 加为附加的目录；不能添加时说明原因。
+    ///
+    /// 单独打开着一组中的打开的目录时，先恢复这一组，再加入新的目录。
     pub(in crate::app) fn add_folder(&mut self, path: &Path) {
+        if self.disk.solo {
+            self.attach_group();
+        }
         let Some(workspace) = &mut self.editor.workspace else {
             return;
         };
@@ -146,9 +151,105 @@ impl App {
         self.request_redraw();
     }
 
-    /// 在项目菜单 `menu` 的「打开目录…」之后加入「添加目录到窗口…」；已有附加的目录时再加入
-    /// 给这一组起名的一项。没有打开本机的目录时不加。
+    /// 恢复会话 `session` 中记下的附加目录和这一组的名字；已不可用的目录不恢复，并说明是哪些。
+    pub(in crate::app) fn restore_group(&mut self, session: Option<&winc_config::Session>) {
+        let Some(session) = session else {
+            return;
+        };
+        let mut skipped = Vec::new();
+        for folder in &session.folders {
+            if let Some(workspace) = &mut self.editor.workspace
+                && workspace.add_folder(folder).is_err()
+            {
+                skipped.push(winc_editor::display_name(folder).into_owned());
+            }
+        }
+        if !skipped.is_empty() {
+            let names = skipped.join(t!("common-list-separator"));
+            self.notify(t!("workspace-add-folder-skipped", names = names));
+        }
+        if let Some(workspace) = &mut self.editor.workspace
+            && !workspace.extra_folders().is_empty()
+        {
+            workspace.set_alias(session.name.as_deref());
+        }
+    }
+
+    /// 单独打开着一组中的打开的目录时，恢复这一组的其他目录。
+    pub(in crate::app) fn attach_group(&mut self) {
+        if !std::mem::take(&mut self.disk.solo) {
+            return;
+        }
+        let session = (self.editor.root()).and_then(|root| self.state.session_for(root).cloned());
+        self.restore_group(session.as_ref());
+        self.folders_changed();
+    }
+
+    /// 打开最近列表第 `i` 项这一组：正单独打开着其中打开的目录时就地恢复其他目录。
+    pub(in crate::app) fn open_group(&mut self, i: usize) {
+        let here =
+            (self.state.recent.get(i)).is_some_and(|f| Some(f.as_path()) == self.editor.root());
+        if here {
+            self.attach_group();
+        } else {
+            self.run_start_action(crate::app::StartAction::Recent(i));
+        }
+    }
+
+    /// 单独打开最近列表第 `i` 项这一组中的第 `j` 个目录，不带这一组的其他目录。
+    pub(in crate::app) fn open_group_folder(&mut self, i: usize, j: usize) {
+        let folders = self.group_folders(i);
+        let Some(folder) = folders.get(j).cloned() else {
+            return;
+        };
+        if j > 0 {
+            self.open_path(&folder);
+            return;
+        }
+        // 这一组正开在这个窗口里：移除其他目录，这一组仍记在会话里。
+        if Some(folder.as_path()) == self.editor.root() {
+            self.disk.solo = true;
+            for extra in self.extra_folders() {
+                self.remove_folder(&extra);
+            }
+            return;
+        }
+        self.disk.open_alone = Some(folder);
+        self.run_start_action(crate::app::StartAction::Recent(i));
+    }
+
+    /// 整理项目菜单 `menu` 中与附加目录有关的项。
+    ///
+    /// 最近列表中的一组目录换成子菜单：第一项打开这一组，其后列出其中的各个目录，点击单独
+    /// 打开。打开了本机的目录时，「打开目录…」之后加入「添加目录到窗口…」，已有附加的目录时
+    /// 再加入给这一组起名的一项。
     pub(in crate::app) fn add_folder_entries(&self, menu: &mut Vec<MenuEntry>) {
+        let mut at = 0;
+        while at < menu.len() {
+            let MenuEntry::Item(MenuCommand::OpenRecent(i), _) = menu[at] else {
+                at += 1;
+                continue;
+            };
+            let folders = self.group_folders(i);
+            if folders.len() > 1 {
+                let mut items = vec![
+                    MenuEntry::Item(MenuCommand::OpenGroup(i), true),
+                    MenuEntry::Separator,
+                ];
+                items.extend(
+                    (0..folders.len())
+                        .map(|j| MenuEntry::Item(MenuCommand::GroupFolder(i, j), true)),
+                );
+                let title = self.recent_title(&folders[0]);
+                // 子菜单取代这一项和紧随其后的「在新窗口打开」。
+                let alternate = matches!(menu.get(at + 1), Some(MenuEntry::Alternate(..)));
+                menu.splice(
+                    at..at + 1 + usize::from(alternate),
+                    [MenuEntry::Submenu(title, items)],
+                );
+            }
+            at += 1;
+        }
         let open = MenuEntry::Item(MenuCommand::OpenFolder, true);
         let Some(at) = menu.iter().position(|entry| *entry == open) else {
             return;
@@ -159,6 +260,34 @@ impl App {
         menu.insert(at + 1, MenuEntry::Item(MenuCommand::AddFolder, true));
         if !self.extra_folders().is_empty() {
             menu.insert(at + 2, MenuEntry::Item(MenuCommand::RenameGroup, true));
+        }
+        // 单独打开着一组中的打开的目录：可以就地恢复这一组。
+        let current = (self.editor.root())
+            .and_then(|root| self.state.recent.iter().position(|folder| folder == root));
+        if let Some(i) = current.filter(|_| self.disk.solo) {
+            menu.insert(at + 2, MenuEntry::Item(MenuCommand::OpenGroup(i), true));
+        }
+    }
+
+    /// 返回最近列表第 `i` 项这一组的各个目录：打开的目录在前，其后是上次附加的目录；该项不存在
+    /// 时为空。
+    pub(in crate::app) fn group_folders(&self, i: usize) -> Vec<PathBuf> {
+        let Some(folder) = self.state.recent.get(i) else {
+            return Vec::new();
+        };
+        let extra = (self.state.session_for(folder).into_iter()).flat_map(|s| s.folders.iter());
+        std::iter::once(folder).chain(extra).cloned().collect()
+    }
+
+    /// 返回最近列表第 `i` 项这一组中第 `j` 个目录的菜单文字：目录名，完整路径在悬停提示中。
+    pub(in crate::app) fn group_folder_label(&self, i: usize, j: usize) -> MenuLabel {
+        match self.group_folders(i).get(j) {
+            Some(folder) => MenuLabel {
+                title: winc_editor::display_name(folder).into_owned(),
+                subtitle: None,
+                tooltip: Some(winc_editor::display_path(folder, None)),
+            },
+            None => MenuLabel::plain(""),
         }
     }
 

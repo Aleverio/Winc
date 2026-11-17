@@ -841,6 +841,7 @@ impl App {
     pub(crate) fn menu_label(&self, command: MenuCommand) -> MenuLabel {
         match command {
             MenuCommand::OpenRecent(i) => self.recent_label(i),
+            MenuCommand::GroupFolder(i, j) => self.group_folder_label(i, j),
             MenuCommand::ShowTab(i) => self.tab_list_label(i),
             MenuCommand::RunSelect(i) => {
                 let config = self.run.list.get(i);
@@ -1351,6 +1352,8 @@ impl App {
                     MenuIcon::Folder
                 })
             }
+            MenuCommand::OpenGroup(_) => Some(MenuIcon::Folders),
+            MenuCommand::GroupFolder(..) => Some(MenuIcon::Folder),
             MenuCommand::ShowTab(i) => self.editor.documents.get(i).map(|_| MenuIcon::Tab(i)),
             _ => None,
         }

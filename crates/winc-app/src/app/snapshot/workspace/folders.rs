@@ -155,10 +155,80 @@ fn a_folder_can_be_added_to_the_window_and_removed() {
         assert_eq!(!elsewhere.folder_matched(0).0.is_empty(), marked, "{query}");
         elsewhere.close_picker();
     }
+    // 项目菜单里这一组是子菜单：第一项打开这一组，其后列出其中的各个目录。
     paint(&mut elsewhere);
     elsewhere.open_project_menu();
+    let menu = elsewhere.overlays.context_menu.as_ref().unwrap();
+    let group = (menu.entries.iter()).find_map(|entry| match entry {
+        MenuEntry::Submenu(title, items) if title == "数据平台" => Some(items.clone()),
+        _ => None,
+    });
+    let group = group.expect("一组目录在项目菜单中是子菜单");
+    assert_eq!(
+        group,
+        [
+            MenuEntry::Item(MenuCommand::OpenGroup(index), true),
+            MenuEntry::Separator,
+            MenuEntry::Item(MenuCommand::GroupFolder(index, 0), true),
+            MenuEntry::Item(MenuCommand::GroupFolder(index, 1), true),
+        ]
+    );
+    let inner = MenuCommand::GroupFolder(index, 1);
+    assert_eq!(elsewhere.menu_label(inner).title, "folders-other");
+    assert_eq!(
+        elsewhere.group_folders(index),
+        [main.clone(), other.clone()]
+    );
+    // 展开子菜单再截图。
+    paint(&mut elsewhere);
+    let row = elsewhere
+        .popup()
+        .and_then(|popup| popup.levels[0].row_rects.first().copied());
+    if let Some(row) = row {
+        elsewhere.on_mouse_move(row.x + 30.0, row.y + row.h / 2.0);
+    }
+    paint(&mut elsewhere);
     shoot(&mut elsewhere, "folders-recent");
     elsewhere.overlays.context_menu = None;
+
+    // 子菜单里点打开的目录：单独打开它，不带其他目录；这一组仍记在会话里。
+    elsewhere.open_group_folder(index, 0);
+    assert_eq!(elsewhere.editor.root(), Some(main.as_path()));
+    assert!(elsewhere.extra_folders().is_empty() && elsewhere.disk.solo);
+    assert_eq!(
+        elsewhere.editor.workspace.as_ref().unwrap().name,
+        "folders-main"
+    );
+    elsewhere.remember_session();
+    let kept = elsewhere.state.session_for(&main).unwrap();
+    assert_eq!(kept.folders, std::slice::from_ref(&other));
+    assert_eq!(kept.name.as_deref(), Some("数据平台"));
+    // 这时项目菜单里可以就地恢复这一组。
+    let here = (elsewhere.state.recent.iter())
+        .position(|folder| *folder == main)
+        .unwrap();
+    assert!(project(&mut elsewhere).contains(&MenuCommand::OpenGroup(here)));
+    elsewhere.open_group(here);
+    assert_eq!(elsewhere.extra_folders(), std::slice::from_ref(&other));
+    assert!(!elsewhere.disk.solo);
+    assert_eq!(
+        elsewhere.editor.workspace.as_ref().unwrap().name,
+        "数据平台"
+    );
+    // 这一组开着时点其中打开的目录：移除其他目录，这一组仍然保留。
+    elsewhere.open_group_folder(here, 0);
+    assert!(elsewhere.extra_folders().is_empty() && elsewhere.disk.solo);
+    assert_eq!(
+        elsewhere.state.session_for(&main).unwrap().folders,
+        std::slice::from_ref(&other)
+    );
+    // 单独打开着时再添加目录：先恢复这一组，再加入新的。
+    let extra = main.with_file_name("folders-extra");
+    std::fs::create_dir_all(&extra).unwrap();
+    let extra = extra.canonicalize().unwrap();
+    elsewhere.add_folder(&extra);
+    assert_eq!(elsewhere.extra_folders(), [other.clone(), extra.clone()]);
+    let _ = std::fs::remove_dir_all(&extra);
     again.rename_group("");
     again.remember_session();
     assert_eq!(again.recent_title(&main), "folders-main +1");
