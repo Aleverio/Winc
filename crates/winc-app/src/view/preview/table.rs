@@ -16,7 +16,7 @@ use winc_preview::table::{Area, Sheet, Table, column_name};
 use winc_render::{FontKind, Frame, Rect};
 
 use crate::app::App;
-use crate::theme::{RADIUS_POPUP, RADIUS_ROW};
+use crate::theme::RADIUS_ROW;
 use crate::view::{ScrollArea, fit, ui_baseline};
 
 /// 单元格左右的留白（逻辑像素，经验值）。
@@ -400,10 +400,7 @@ fn draw_cell_card(
     app.preview.table_layout.card = card;
     app.preview.table_layout.card_max = max_scroll;
 
-    let covered = frame.covered(card, RADIUS_POPUP);
-    frame.shadow(card, RADIUS_POPUP, 12.0, 4.0, p.shadow, Some(covered));
-    frame.rect_clipped(card, p.popup_border, RADIUS_POPUP, body);
-    frame.rect_clipped(card.inset(1.0, 1.0), p.popup_bg, RADIUS_POPUP - 1.0, body);
+    crate::view::draw_floating_bar(frame, p, card, body);
     let clip = card.inset(1.0, CARD_PAD - 4.0).intersect(body);
     for (i, line) in lines.iter().enumerate() {
         let top = card.y + CARD_PAD + i as f32 * line_h - scroll;

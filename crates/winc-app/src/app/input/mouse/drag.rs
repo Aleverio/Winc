@@ -9,6 +9,7 @@ impl App {
     pub(in crate::app) fn on_mouse_move(&mut self, x: f32, y: f32) {
         self.pointer.mouse = (x, y);
         self.update_scrollbar_hover(x, y);
+        self.track_pdf_tools(x, y);
 
         // 鼠标离开顶栏时解除关闭标签期间锁定的宽度，标签重新排布。
         if y >= TOP_BAR_END && self.tabs.width_lock.take().is_some() {

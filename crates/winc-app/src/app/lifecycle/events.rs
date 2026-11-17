@@ -662,6 +662,8 @@ impl App {
         earliest(&mut wake, find);
         let mapping = self.vim_tick(now);
         earliest(&mut wake, mapping);
+        let pdf_tools = self.pdf_tools_tick(now);
+        earliest(&mut wake, pdf_tools);
         // 当前标签正在读取且保留上一帧未绘制时，到期仍未读取完成则绘制「正在读取」。
         if self.disk.loads.held {
             match self.holding_frame(now) {

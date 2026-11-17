@@ -39,6 +39,9 @@ const PICTURE: &[StatusKey] = &[
     StatusKey::PictureFormat,
 ];
 
+/// PDF 预览组的项。
+const PDF: &[StatusKey] = &[StatusKey::PdfPage];
+
 /// 分支图标的宽度（逻辑像素），位于分支名左侧。
 const BRANCH_ICON: f32 = 14.0;
 
@@ -501,6 +504,25 @@ pub(super) fn draw_status(app: &mut App, frame: &mut Frame<'_>) {
         &mut motion,
         animate,
         PICTURE,
+        items,
+        1.0,
+        bar,
+        &mut right,
+        &mut status_hits,
+    );
+
+    // PDF 预览：视口中线所在的页和总页数。
+    let mut items = Vec::new();
+    if let Some((page, total)) = app.preview.pdf.page {
+        let text = t!("preview-pdf-page", page = page + 1, total = total);
+        items.push((StatusKey::PdfPage, text, None));
+    }
+    draw_group(
+        frame,
+        app,
+        &mut motion,
+        animate,
+        PDF,
         items,
         1.0,
         bar,
