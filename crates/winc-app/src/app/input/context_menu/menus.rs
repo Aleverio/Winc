@@ -528,6 +528,13 @@ pub fn locale_menu() -> Vec<MenuEntry> {
         .collect()
 }
 
+/// 返回「打开工作树」菜单的菜单项，当前的选择打勾。
+pub fn open_worktree_menu() -> Vec<MenuEntry> {
+    (0..winc_config::WorktreeOpen::ALL.len())
+        .map(|i| MenuEntry::Item(MenuCommand::OpenWorktree(i), true))
+        .collect()
+}
+
 /// 返回「Vim 剪贴板」菜单的菜单项，当前的选择打勾。
 pub fn vim_clipboard_menu() -> Vec<MenuEntry> {
     (0..winc_config::VimClipboard::ALL.len())

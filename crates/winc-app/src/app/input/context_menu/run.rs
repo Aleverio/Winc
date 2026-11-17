@@ -190,6 +190,13 @@ impl App {
                     self.set_render_whitespace(choice);
                 }
             }
+            MenuTarget::OpenWorktree => {
+                if let MenuCommand::OpenWorktree(i) = command
+                    && let Some(&choice) = winc_config::WorktreeOpen::ALL.get(i)
+                {
+                    self.set_open_worktree(choice);
+                }
+            }
             MenuTarget::VimClipboard => {
                 if let MenuCommand::VimClipboard(i) = command
                     && let Some(&choice) = winc_config::VimClipboard::ALL.get(i)
@@ -286,11 +293,22 @@ impl App {
                 }
             }
             MenuTarget::Location(path, worktree) => match command {
+                MenuCommand::LocationThisWindow => {
+                    self.close_picker();
+                    self.switch_folder(&path);
+                }
                 MenuCommand::LocationNewWindow => self.open_in_new_window(&path),
                 MenuCommand::LocationReveal => self.reveal_in_file_manager(&path),
                 MenuCommand::LocationPrune => {
                     self.close_picker();
                     self.prune_worktrees();
+                }
+                MenuCommand::LocationMerge => {
+                    let tree = worktree.and_then(|i| self.git.worktrees.get(i));
+                    if let Some(name) = tree.and_then(|w| w.branch()).map(str::to_owned) {
+                        self.close_picker();
+                        self.git_merge_branch(name);
+                    }
                 }
                 MenuCommand::LocationRemove => {
                     if let Some(i) = worktree {
