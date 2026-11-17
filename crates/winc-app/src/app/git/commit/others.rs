@@ -1,10 +1,8 @@
 //! 「显示全部仓库」：打开的目录中有多个仓库时，有更改的仓库按仓库列表的顺序每个一节。
 //!
-//! 每节一行标题；当前仓库的改动列表排在它的标题下面，缩进一层。其他仓库的文件同样分组（勾选式
-//! 下「更改」「未跟踪的文件」，暂存区视图中「已暂存的更改」「更改」），可以折叠。没有更改的
-//! 仓库收在列表末尾的一组里，展开后每个仓库一行。当前仓库与其他仓库按同一规则排列，切换仓库
-//! 不改变各行的位置。点击其他仓库的标题行或其中的文件即切换到该仓库。各行的内容取自后台读到
-//! 的各仓库状态。
+//! 每节一行标题，当前仓库的改动列表排在它的标题下面。其他仓库的文件按组列出，可以折叠；
+//! 没有更改的仓库收在列表末尾的一组里。当前仓库与其他仓库按同一规则排列，切换仓库不改变各行的位置。
+//! 各行的内容取自后台读到的各仓库状态。
 
 use std::sync::PoisonError;
 
@@ -210,7 +208,7 @@ impl App {
         rows
     }
 
-    /// 没有更改的仓库数，以及是否另有仓库有更改：「没有更改的仓库」一组的标题据此措辞。
+    /// 返回没有更改的仓库数，以及是否另有仓库有更改。
     pub(crate) fn quiet_repositories(&self) -> (usize, bool) {
         let root = self.git.root.as_deref();
         let summaries = (self.git.summaries.lock()).unwrap_or_else(PoisonError::into_inner);
@@ -231,7 +229,7 @@ impl App {
             .any(|repo| summaries.get(repo).is_some_and(|s| !s.entries.is_empty()))
     }
 
-    /// 展开或收起「没有更改的仓库」一组，并开始展开或收起的动画；动态效果关闭时直接到位。
+    /// 展开或收起「没有更改的仓库」一组，并开始过渡。
     pub(super) fn toggle_quiet_repositories(&mut self) {
         let before = self.commit_other_rows();
         let open = before.last() != Some(&OtherRow::QuietGroup);
@@ -271,8 +269,7 @@ impl App {
         Some((at + block) as f32 * COMMIT_ROW)
     }
 
-    /// 换了当前仓库以后调用：列表仍是同一个（列着全部仓库），滚动位置放回 `scroll`；当前仓库的
-    /// 标题行不在列表里露着时滚到它。
+    /// 切换当前仓库后恢复滚动位置 `scroll`；当前仓库的标题行不可见时滚动到该行。
     pub(in crate::app) fn keep_commit_scroll(&mut self, scroll: f32) {
         if !self.commit_shows_others() {
             return;
@@ -454,8 +451,7 @@ impl App {
             let path = |status: &Status| status.entries.get(entry).map(|e| e.path.clone());
             self.other_status(repo, |_, status| path(status)).flatten()
         });
-        // 切换前后该仓库的标题行保持在屏幕上的同一位置：换仓库时滚动位置归零，这里按原来的
-        // 位置和标题行移动的距离放回去。
+        // 切换仓库会重置滚动位置：按原位置和标题行移动的距离恢复，点击的标题行位置不变。
         let header = [OtherRow::Repository(repo), OtherRow::Quiet(repo)];
         let before = header.into_iter().find_map(|h| self.other_row_offset(h));
         let scroll = self.git.commit.scroll;

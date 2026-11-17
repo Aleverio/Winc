@@ -1068,7 +1068,7 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
             };
             Some((rect, label.to_owned()))
         }
-        // 工作树一组收着时看不到各行：其他工作树有更改时在标题上提示。
+        // 工作树一组收起时各行不可见：其他工作树有更改时在标题上提示。
         Hover::Commit(target @ CommitTarget::Worktrees) if !app.git.commit.worktrees.open => {
             let rect = app.hits.commit.iter().find(|(_, t)| *t == target)?.0;
             let count = app.git_other_changes();

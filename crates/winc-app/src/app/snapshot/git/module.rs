@@ -2,8 +2,7 @@
 
 use super::*;
 
-/// 仓库和工作树各有一个选择器：仓库选择器每个仓库一行，没有新建工作树的底栏；工作树选择器
-/// 只列当前仓库的工作树，底栏里是新建工作树。
+/// 仓库选择器每个仓库一行，没有底栏；工作树选择器只列当前仓库的工作树，底栏里是新建工作树。
 #[test]
 fn repositories_and_worktrees_are_picked_separately() {
     let dir = search_folder("git-separate-pickers");
@@ -991,8 +990,7 @@ fn shoot_location_picker() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-/// 换仓库再换回来时，储藏在后台读取完成之前就已经列出，底部各组的展开状态也不变：提交视图
-/// 底部不会先清空再出现。
+/// 切换仓库再切换回来时，储藏在后台读取完成之前已经列出，底部各组的展开状态不变。
 #[test]
 fn switching_back_shows_the_kept_stashes_and_fold_states_at_once() {
     let Some((mut app, dir)) = nested_repositories("git-kept-refs") else {
@@ -1020,7 +1018,7 @@ fn switching_back_shows_the_kept_stashes_and_fold_states_at_once() {
     assert!(app.git.commit.stashes.open && !app.git.commit.worktrees.open);
     assert_eq!(app.git.commit.quiet_open, Some(true));
 
-    // 不等后台读取：换回来时储藏已经在了。
+    // 不等后台读取：储藏已经列出。
     app.git_switch_repository(0);
     assert_eq!(app.git.stashes.len(), 1);
     assert!(app.git.commit.stashes.open);

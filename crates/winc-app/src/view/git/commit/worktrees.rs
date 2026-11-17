@@ -16,18 +16,15 @@ const COUNT_INSET: f32 = 6.0;
 const BRANCH_ICON: f32 = 14.0;
 /// 工作树名字的末尾到分支名的距离（逻辑像素），与仓库行相同：图标宽约 10，与分支名相隔 3。
 const BRANCH_TEXT: f32 = 22.0;
-/// 分支名至少要有的宽度（逻辑像素）：约三个字符，再窄时不写分支。
+/// 分支名至少需要的宽度（逻辑像素）：约三个字符，不足时不显示分支。
 const BRANCH_MIN: f32 = 24.0;
 /// 锁定标记占的宽度（逻辑像素）：图标宽 9，左右各留约 5。
 const LOCK_ROOM: f32 = 20.0;
 
-/// 绘制储藏上面的工作树一组：上沿一条分隔线；标题是箭头、「工作树」和个数，悬停时右端换成
-/// 「新建工作树」；展开时下面每个工作树一行。
+/// 绘制工作树一组：上沿一条分隔线，标题是箭头、「工作树」和个数，展开时每个工作树一行。
 ///
-/// 一行依次是工作树图标、名字，当前工作树后面是「当前」，其他工作树后面是所在的分支和锁定
-/// 标记；右端是不在当前分支上的提交数（已经合并时写「已合并」）和未提交的更改数，悬停时最右
-/// 多一个「⋯」。名字放不下时截短，分支只用剩下的宽度。收着而其他工作树有未提交的更改时，
-/// 标题后面有一个强调色的圆点。
+/// 一行依次是图标、名字、「当前」标记或所在的分支和锁定标记，
+/// 右端是不在当前分支上的提交数（已合并时显示「已合并」）和未提交的更改数；悬停时最右是「⋯」。
 pub(super) fn draw_worktrees(
     app: &App,
     frame: &mut Frame<'_>,
@@ -80,7 +77,7 @@ pub(super) fn draw_worktrees(
         draw_count_pill(app, frame, head, &places.len().to_string(), clip);
     }
     hits.push((head, CommitTarget::Worktrees));
-    // 展开、收起的途中各行跟着标题移动，露出多少由一组的范围裁掉；这时行还没停稳，不响应点击。
+    // 过渡中各行的位置尚未确定，不响应点击。
     if !open && !moving {
         return;
     }
@@ -117,8 +114,7 @@ pub(super) fn draw_worktrees(
         let locked = (place.worktree)
             .and_then(|w| app.git.worktrees.get(w))
             .is_some_and(|w| w.locked);
-        // 右端是提交数和更改数，文字的右边与标题行的个数对齐；悬停时最右是「⋯」，两个数排到
-        // 它的左边，看着它们的时候不会消失。
+        // 右端是提交数和更改数，与标题行的个数右对齐；悬停时「⋯」在最右，二者移到它的左边。
         let mut right = row.right() - END_PAD - COUNT_INSET;
         if hovered {
             let (_, more) = file_actions(row);
@@ -129,7 +125,7 @@ pub(super) fn draw_worktrees(
             hits.push((more, CommitTarget::WorktreeMenu(i)));
             right = more.x - 6.0;
         }
-        // 不在当前分支上的提交数；已经合并、可以清理的写「已合并」。
+        // 不在当前分支上的提交数；已合并时显示「已合并」。
         let ahead = app.worktree_divergence(&place.path);
         let (sync, ink) = match ahead.map_or(0, |(_, ahead)| ahead) {
             0 if app.worktree_merged(place) => (t!("git-worktree-merged").to_owned(), p.text_dim),
@@ -156,7 +152,7 @@ pub(super) fn draw_worktrees(
             p.text_muted
         };
         icons::worktree_small(frame, (row.x + WORKTREE_ICON, cy), ink, room);
-        // 名字放不下时截短；分支只用名字之后剩下的宽度，不足 [`BRANCH_MIN`] 时不写。
+        // 名字放不下时截短；分支使用剩余的宽度，不足 [`BRANCH_MIN`] 时不显示。
         let ink = if place.missing { p.text_dim } else { p.text };
         let left = row.x + WORKTREE_NAME;
         let name = fit(
@@ -177,7 +173,7 @@ pub(super) fn draw_worktrees(
                 icons::branch_small(frame, (x + BRANCH_ICON, cy), p.text_dim, room);
                 let head = fit(frame, head, size, width, false);
                 let end = ui_text_small(frame, app, x + BRANCH_TEXT, row, &head, p.text_dim, room);
-                // 锁定标记跟在分支后面：它说的是这个工作树，不是右端的数字。
+                // 锁定标记跟在分支后面，表示该工作树的状态。
                 if locked {
                     icons::lock(frame, (end + LOCK_ROOM / 2.0 + 2.0, cy), p.text_dim, room);
                 }

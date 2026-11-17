@@ -728,11 +728,6 @@ fn draw_branch_row(
         (_, _, Some(b)) if !b.remote => Some(display_local(&b.local, b.time, row.now)),
         _ => None,
     };
-    match (more, meta) {
-        (Some(at), _) => right = at + NAME_GAP,
-        (None, Some(meta)) => line.draw_meta(app, frame, &mut right, &meta),
-        (None, None) => {}
-    }
     // 和上游差的提交数写在右侧文字的左边，用强调色（选中行上用行内的字色）：哪个分支有提交
     // 没推送、落后了多少，不用切过去就看得到。
     let track = branch.map_or_else(String::new, |b| match (b.behind, b.ahead) {
@@ -741,8 +736,24 @@ fn draw_branch_row(
         (behind, 0) => format!("↓{behind}"),
         (behind, ahead) => format!("↓{behind} ↑{ahead}"),
     });
+    let size = app.fonts.ui_small;
+    let track_w = match track.is_empty() {
+        true => 0.0,
+        false => NAME_GAP + frame.measure(FontKind::Ui, size, &track),
+    };
+    match (more, meta) {
+        (Some(at), _) => right = at + NAME_GAP,
+        // 名字优先：右端的文字使用名字和提交数之外的宽度，放不下时截短，过窄时不显示。
+        (None, Some(meta)) => {
+            let name = frame.measure(FontKind::Ui, app.fonts.ui, row.label);
+            if let Some(room) = meta_room(right - text, name + NAME_GAP + track_w) {
+                let shown = ellipsize(frame, &meta, size, room);
+                line.draw_meta(app, frame, &mut right, &shown);
+            }
+        }
+        (None, None) => {}
+    }
     if !track.is_empty() {
-        let size = app.fonts.ui_small;
         right -= NAME_GAP + frame.measure(FontKind::Ui, size, &track);
         let ink = if line.selected {
             line.text
@@ -753,6 +764,16 @@ fn draw_branch_row(
     }
     let at = (text, right - NAME_GAP);
     line.draw_name(app, frame, at, row.label, line.text);
+}
+
+/// 右端次要文字至少需要的宽度（逻辑像素）：约六个字符，截短后首尾各保留两三个字符。
+const META_MIN: f32 = 48.0;
+
+/// 返回右端次要文字可用的宽度：`total` 是从名字左边到右端的宽度，`taken` 是名字及其后内容的宽度；
+/// 不足 [`META_MIN`] 时为 `None`。
+pub(in crate::view) fn meta_room(total: f32, taken: f32) -> Option<f32> {
+    let room = total - taken;
+    (room >= META_MIN).then_some(room)
 }
 
 /// 绘制工作树选择器列表下方的底栏：上沿一条分隔线，里面是新建工作树，图标和字的位置与各行相同。

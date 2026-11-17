@@ -442,8 +442,7 @@ fn the_commit_message_grows_with_its_text_and_the_list_follows() {
     };
     app.run_action(Action::ShowCommit);
     paint(&mut app);
-    // 自上而下依次是改动列表、提交卡片和「上一次提交」一栏；卡片里先是「修改上次提交」一行，
-    // 再是提交信息，底行靠左是「提交」「提交并推送…」，最右是下拉箭头。空信息时高度为两行。
+    // 自上而下依次是改动列表、提交卡片和「上一次提交」一栏；空信息时提交信息高两行。
     let one = app.commit_parts();
     let card = one.card.unwrap();
     assert_eq!(one.message.h, 2.0 * 20.0 + 4.0);

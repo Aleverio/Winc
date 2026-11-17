@@ -1,14 +1,12 @@
 //! 提交视图底部的工作树：一组可以收起的行，当前仓库的每个工作树一行。
 //!
-//! 一组在储藏的上面，当前仓库有多个工作树时才有；展开、收起的过渡与储藏一组共用
-//! （[`Drawer`]）。点击一行打开该工作树，在新窗口还是当前窗口按设置，默认询问；悬停时右端多
-//! 一个「⋯」（在此窗口或新窗口中打开、合并到当前分支、移除等），标题行悬停时右端是「新建
-//! 工作树」。直接列出的行数有上限，再多时最后一行写还有几个，点击后展开工作树选择器。
+//! 位于储藏一组的上面，当前仓库有多个工作树时显示；展开、收起的过渡见 [`Drawer`]。
+//! 列出的行数有上限，超出时最后一行显示剩余个数，点击后展开工作树选择器。
 
 use super::*;
 
-/// 工作树一组展开时最多占几行（行），连同「另有 N 个工作树」：与储藏一组的上限（`STASH_ROWS`）
-/// 相同，再多时上方的改动列表高度过小。
+/// 工作树一组展开时最多占的行数（行），含「另有 N 个工作树」一行：
+/// 与储藏一组的上限（`STASH_ROWS`）相同。
 pub(crate) const WORKTREE_ROWS: usize = 5;
 
 /// 工作树一组展开时标题下面的一行。
@@ -21,8 +19,7 @@ pub(crate) enum WorktreeLine {
 }
 
 impl App {
-    /// 工作树一组展开时标题下面的各行：最多 [`WORKTREE_ROWS`] 行，放不下时最后一行是「另有
-    /// N 个工作树」。当前工作树总在列出的各行之中。
+    /// 返回工作树一组展开时标题下面的各行：最多 [`WORKTREE_ROWS`] 行，其中总包含当前工作树。
     pub(crate) fn worktree_lines(&self) -> Vec<WorktreeLine> {
         let places = self.worktree_places();
         if places.len() <= WORKTREE_ROWS {
@@ -40,15 +37,13 @@ impl App {
         lines
     }
 
-    /// 每帧绘制提交视图之前调用：工作树一组的终点高度变化（工作树增加、减少，换到另一个
-    /// 仓库）时，从当前显示的高度开始过渡；仓库的状态刚读到时直接到位。
+    /// 工作树一组的终点高度变化时从当前高度开始过渡。每帧绘制提交视图之前调用。
     pub(crate) fn track_worktree_height(&mut self) {
         let (settled, clock) = (self.worktree_settled_height(), self.section_clock());
         self.git.commit.worktrees.track(settled, clock);
     }
 
-    /// 底部各组的终点高度变化时过渡用的时钟。上一帧还没有读到仓库的状态（启动、打开目录）时
-    /// 为 `None`：各组本来就在那里，直接到位。
+    /// 返回底部各组高度过渡所用的时钟；上一帧尚未读到仓库的状态时为 `None`，各组直接到位。
     pub(crate) fn section_clock(&mut self) -> Option<crate::app::animation::Clock> {
         if !self.git.commit.sections_known {
             return None;
@@ -56,18 +51,17 @@ impl App {
         self.clock(crate::app::animation::TREE_ANIMATION)
     }
 
-    /// 每帧各组的高度都跟踪过以后调用：记下这一帧仓库的状态是否已经读到。
+    /// 记录这一帧是否已读到仓库的状态。各组的高度跟踪之后调用。
     pub(crate) fn sections_tracked(&mut self) {
         self.git.commit.sections_known = self.git.status.is_some();
     }
 
-    /// 工作树一组占的高度（逻辑像素）：收着时是标题一行，展开时再加上 [`App::worktree_lines`]
-    /// 各行；展开、收起的途中按时钟过渡。当前仓库只有一个工作树时为 0。
+    /// 返回工作树一组的高度（逻辑像素），过渡中按时钟插值；当前仓库只有一个工作树时为 0。
     pub(crate) fn worktree_section_height(&self) -> f32 {
         (self.git.commit.worktrees).height(self.worktree_settled_height())
     }
 
-    /// 工作树一组不在过渡中时的高度（逻辑像素），见 [`App::worktree_section_height`]。
+    /// 返回工作树一组不在过渡中时的高度（逻辑像素）。
     fn worktree_settled_height(&self) -> f32 {
         if !self.git_has_worktrees() {
             return 0.0;
@@ -79,13 +73,13 @@ impl App {
         }
     }
 
-    /// 工作树一组标题上的箭头转到哪儿，见 [`Drawer::chevron`]。
+    /// 返回工作树一组标题上箭头的角度比例，见 [`Drawer::chevron`]。
     pub(crate) fn worktree_chevron(&self) -> f32 {
         let span = self.worktree_lines().len() as f32 * COMMIT_ROW;
         (self.git.commit.worktrees).chevron(self.worktree_settled_height(), span)
     }
 
-    /// 点了工作树一组的标题：收起或展开，从现在的高度过渡过去。
+    /// 收起或展开工作树一组。
     fn toggle_worktrees(&mut self) {
         let from = self.worktree_section_height();
         let clock = self.clock(crate::app::animation::TREE_ANIMATION);
@@ -96,7 +90,7 @@ impl App {
 
     /// 处理工作树一组中的目标：展开、切换、菜单和新建。
     pub(super) fn press_commit_worktree(&mut self, target: CommitTarget) {
-        // 「⋯」只在悬停时画出：没有它的位置时菜单弹在这一行的右端。
+        // 「⋯」只在悬停时绘制：没有它的位置时菜单弹在该行的右端。
         let at = |wanted: CommitTarget| {
             let hit = (self.hits.commit.iter()).find(|(_, t)| *t == wanted);
             hit.map(|(rect, _)| *rect)
@@ -113,7 +107,7 @@ impl App {
                 let Some(place) = self.worktree_places().get(i).cloned() else {
                     return;
                 };
-                // 目录已不在的工作树打不开：点这一行同样弹出菜单，里面只有清理。
+                // 目录已不存在的工作树无法打开：点击该行弹出菜单，其中只有清理。
                 let menu = matches!(target, CommitTarget::WorktreeMenu(_)) || place.missing;
                 match (menu, place.worktree, rect) {
                     (true, _, Some(rect)) => {

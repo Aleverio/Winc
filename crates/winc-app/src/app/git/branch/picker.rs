@@ -724,8 +724,7 @@ impl App {
         self.branch_picker_from(GitAnchor::Log)
     }
 
-    /// 返回选择面板底栏的高度（逻辑像素）：列出工作树时底栏里是新建工作树；列出仓库时没有
-    /// 底栏；列出分支时新建的入口在搜索框下面的操作里，同样没有底栏。
+    /// 返回选择面板底栏的高度（逻辑像素）：只有列出工作树时有底栏。
     pub(crate) fn git_picker_footer(&self) -> f32 {
         if self.picker_lists_worktrees() {
             GIT_PICKER_FOOT

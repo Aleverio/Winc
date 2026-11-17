@@ -339,7 +339,7 @@ pub(super) fn parse_worktrees(output: &[u8], terminator: u8) -> Vec<Worktree> {
 
 /// 读完一个工作树的字段后补全它：没有分支、有提交号的是游离的 `HEAD`（裸仓库两者都没有）。
 fn finish((mut worktree, oid): (Worktree, Option<String>)) -> Worktree {
-    // 还没有提交的分支写的是全 0 的提交号。
+    // 尚无提交的分支的提交号全为 0。
     let oid = oid.filter(|o| !o.is_empty() && o.bytes().any(|b| b != b'0'));
     if worktree.head.is_none()
         && let Some(oid) = &oid

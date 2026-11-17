@@ -852,8 +852,7 @@ impl App {
         self.git.commit.other_stage_running = old.other_stage_running;
         self.git.commit.collapsed = old.collapsed;
         self.git.commit.drafts = old.drafts;
-        // 底部各组的展开状态和高度、卡片和「上一次提交」露出的多少照旧：换仓库以后从原来的样子
-        // 过渡到新的样子。
+        // 保留底部各组的展开状态和高度、卡片和「上一次提交」的显示比例：切换仓库后从原状态过渡。
         self.git.commit.quiet_open = old.quiet_open;
         self.git.commit.stashes = Drawer {
             motion: None,

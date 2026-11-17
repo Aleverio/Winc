@@ -6,8 +6,7 @@ impl App {
     /// 计算提交视图的布局。
     ///
     /// 自上而下依次为标题行、分支行、说明条（有进行中的操作时）、改动列表、工作树、储藏、提交
-    /// 卡片，最下面是还没推送的上一次提交。先看改了什么、再写信息、最后提交，从上往下就是这个
-    /// 顺序。
+    /// 卡片和尚未推送的上一次提交。
     pub(crate) fn commit_parts(&self) -> CommitParts {
         let s = self.layout.sidebar;
         let panel = Rect::new(s.x, TOP_BAR_END, s.w, (s.bottom() - TOP_BAR_END).max(0.0));
@@ -59,10 +58,8 @@ impl App {
             (rect, abort)
         });
 
-        // 「上一次提交」在视图的最底部，有提交卡片时在卡片下面：先写信息、提交，刚提交的那一次
-        // 列在其后。栏内上下各留 4。提交以后仍有未勾选的文件（未跟踪的文件默认不勾选）时卡片
-        // 保持显示，栏同样显示。拉开、收起的途中栏按露出的高度算，里面的东西贴着上沿，从下沿
-        // 底下露出来；卡片随之上移、下移。
+        // 「上一次提交」在视图的最底部，栏内上下各留 4；显示、
+        // 隐藏的过渡中按露出的高度计算，卡片随之移动。
         let undo_share = self.git.commit.undo.share(self.commit_undoable().is_some());
         let undo = (undo_share > 0.0).then(|| {
             let h = UNDO_H * undo_share;
@@ -76,8 +73,8 @@ impl App {
         });
         let card_share = self.commit_card_share();
         let (card, message, message_settled, amend, buttons) = if card_share > 0.0 {
-            // 卡片在「上一次提交」一栏上面，下沿贴着栏的上沿：栏内文字上方已经留了 4，两者之间
-            // 不再留白。没有那一栏时卡片离视图底部一个 `MARGIN`。
+            // 卡片的下沿与「上一次提交」一栏的上沿重合：栏内文字上方已留 4。
+            // 没有该栏时卡片离视图底部一个 `MARGIN`。
             let bottom = undo.map_or(panel.bottom(), |(bar, ..)| bar.y + MARGIN * undo_share);
             let room = Rect::new(panel.x, panel.y, panel.w, (bottom - panel.y).max(0.0));
             self.commit_card_parts(room, inner_x, inner_w, card_share)
@@ -93,13 +90,12 @@ impl App {
             (None, Some((bar, ..))) => bar.y,
             (None, None) => panel.bottom(),
         };
-        // 储藏、工作树两组在改动列表下面，标题和各行各占一行，上下各留 `STASH_GAP`。一组的下沿
-        // 与卡片之间再留一个 `STASH_GAP`：连同组内下方的留白，最后一行到卡片的距离等于改动
-        // 列表和卡片之间的间隔（`SIDEBAR_LIST_GAP`）。
+        // 储藏、工作树两组的下沿与卡片之间留一个 `STASH_GAP`：连同组内下方的留白，
+        // 等于改动列表与卡片的间隔（`SIDEBAR_LIST_GAP`）。
         let h = self.stash_section_height();
         let stash_bottom = card.map_or(above, |card| card.y - STASH_GAP * card_share);
         let stashes = (h > 0.0).then(|| Rect::new(panel.x, stash_bottom - h, panel.w, h));
-        // 工作树一组在储藏上面，两组之间没有间隔：各自的上沿都有分隔线。
+        // 工作树一组在储藏上面，两组之间没有间隔。
         let h = self.worktree_section_height();
         let bottom = stashes.map_or(stash_bottom, |rect| rect.y);
         let worktrees = (h > 0.0).then(|| Rect::new(panel.x, bottom - h, panel.w, h));

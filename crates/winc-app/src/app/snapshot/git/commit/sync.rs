@@ -83,8 +83,7 @@ fn the_last_local_commit_can_be_undone() {
     assert_ne!(second, first);
     assert_eq!(app.commit_undoable().unwrap().subject, "加上改动");
     paint(&mut app);
-    // 「上一次提交」在视图的最底部，提交卡片在它上面（还有没勾的未跟踪文件，卡片还在），改动
-    // 列表在卡片上面结束；没有卡片时改动列表到它的上沿为止。
+    // 「上一次提交」在视图的最底部，提交卡片在它上面；没有卡片时改动列表到它的上沿为止。
     let parts = app.commit_parts();
     let (bar, undo, button) = parts.undo.unwrap();
     assert_eq!(bar.bottom(), app.layout.sidebar.bottom());

@@ -59,7 +59,7 @@ const AMEND_CHECK: f32 = 7.0;
 /// 「修改上次提交」的文字离该区域左边的距离（逻辑像素）：勾选框右边再隔 8，与设置里勾选项中
 /// 勾选框与文字的间隔相同。
 const AMEND_TEXT: f32 = 21.0;
-/// 「修改上次提交」文字右边还能点到的宽度（逻辑像素）：点击的范围比文字略宽。
+/// 「修改上次提交」文字右边可点击的宽度（逻辑像素）。
 const AMEND_END: f32 = 6.0;
 /// 没有更改时空状态和下面「推送」「拉取」按钮之间的距离（逻辑像素）：比说明的两行之间宽，
 /// 看得出按钮不是说明的一部分。
@@ -690,11 +690,9 @@ fn draw_sticky(
     hits.splice(0..0, pinned);
 }
 
-/// 列表下面还有内容没有露出来时，列表的下端渐隐到侧栏的底色：被裁掉一半的行不紧贴下面固定
-/// 的各组（工作树、储藏、提交卡片）。`rest` 是还能往下滚动的距离（逻辑像素）。
+/// 列表下方还有内容时，列表的下端渐隐到侧栏的底色。`rest` 是还能向下滚动的距离（逻辑像素）。
 ///
-/// 渐隐的高度与标签栏两端的渐隐（`TAB_FADE`）相同，强度随 `rest` 在这段高度内线性变化，滚到底
-/// 时不突然消失。
+/// 渐隐的高度与标签栏两端的渐隐（`TAB_FADE`）相同，强度随 `rest` 在该高度内线性变化。
 fn draw_list_fade(app: &App, frame: &mut Frame<'_>, list: Rect, rest: f32) {
     use crate::view::workspace::top_bar::TAB_FADE;
     let strength = (rest / TAB_FADE).min(1.0);
@@ -914,8 +912,8 @@ fn draw_card(
     app.git.commit.message = field;
     let clip = panel.intersect(card);
 
-    // 「修改上次提交」：勾选框连同文字整段可点击。悬停时不铺底色：勾选框的左边与按钮、信息
-    // 文字对齐，底色的边缘会紧贴着它；改为加深勾选框的边框和文字。
+    // 「修改上次提交」整段可点击。悬停时加深勾选框的边框和文字，不铺底色：勾选框与按钮左对齐，
+    // 底色的边缘会与它重合。
     if let Some(amend) = parts.amend {
         let hovered = app.pointer.hover == Hover::Commit(CommitTarget::Amend);
         let cy = amend.y + amend.h / 2.0;

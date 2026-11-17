@@ -68,11 +68,9 @@ pub(crate) const COMMIT_ROW: f32 = 24.0;
 const TOOL: f32 = 24.0;
 /// 提交卡片底行的高度（逻辑像素）：提交按钮一行，与 `BUTTON_SMALL` 同高。
 const FOOTER_H: f32 = 24.0;
-/// 提交卡片里「修改上次提交」一行的高度（逻辑像素）：边长 12 的勾选框上下各留 3。这一行没有
-/// 按钮，不必与按钮一行同高。
+/// 提交卡片里「修改上次提交」一行的高度（逻辑像素）：边长 12 的勾选框上下各留 3。
 const AMEND_H: f32 = 18.0;
-/// 「修改上次提交」一行离卡片上沿的距离（逻辑像素）：勾选框到卡片上沿与到左沿的距离相同，
-/// 都是 7。
+/// 「修改上次提交」一行离卡片上沿的距离（逻辑像素）：勾选框到上沿、左沿的距离同为 7。
 const AMEND_TOP: f32 = 4.0;
 /// 提交卡片里「修改上次提交」一行、按钮一行与卡片边缘的距离（逻辑像素）。
 ///
@@ -501,8 +499,7 @@ pub enum CommitTarget {
     OtherGroupFiles(usize, others::OtherGroup),
     /// 另一个仓库标题行左端的折叠箭头：折叠或展开这个仓库的一节。
     OtherFold(usize),
-    /// 多仓库时当前仓库的标题行：它已经是当前仓库，点击不做任何操作；与其他仓库的标题行一样
-    /// 占住整行，点击不落到别处。
+    /// 多仓库时当前仓库的标题行：点击不做任何操作。
     CurrentRepository,
     /// 多仓库时当前仓库标题行左端的折叠箭头：折叠或展开它的一节。
     CurrentFold,
@@ -534,11 +531,9 @@ pub enum CommitTarget {
     Worktrees,
     /// 悬停工作树一组的标题时右端的「新建工作树」。
     WorktreeNew,
-    /// 第几个工作树（[`App::worktree_places`] 的下标）那一行：打开它，见
-    /// [`App::open_worktree_asking`]。
+    /// 第几个工作树（[`App::worktree_places`] 的下标）那一行：打开该工作树。
     WorktreeRow(usize),
-    /// 悬停工作树那一行时右端的「⋯」：在新窗口中打开、移除等。参数同
-    /// [`CommitTarget::WorktreeRow`]。
+    /// 悬停工作树一行时右端的「⋯」，参数同 [`CommitTarget::WorktreeRow`]。
     WorktreeMenu(usize),
     /// 工作树太多时最后一行的「另有 N 个工作树」：展开工作树选择器。
     WorktreeMore,
@@ -657,8 +652,7 @@ pub(crate) struct CommitParts {
     pub undo: Option<(Rect, Rect, Rect)>,
     /// 储藏一组（整个侧栏宽，上沿一条分隔线），在改动列表下面；没有储藏时为 `None`。
     pub stashes: Option<Rect>,
-    /// 工作树一组（整个侧栏宽，上沿一条分隔线），在改动列表和储藏之间；当前仓库只有一个
-    /// 工作树时为 `None`。
+    /// 工作树一组，在改动列表和储藏之间；当前仓库只有一个工作树时为 `None`。
     pub worktrees: Option<Rect>,
     /// 改动列表。
     pub list: Rect,
@@ -790,8 +784,7 @@ pub(crate) struct CommitState {
     pub(in crate::app::git) carry_in: bool,
     /// 多仓库时折叠着的其他仓库（组为 `None`）和其中折叠着的组，按仓库的根目录记。
     other_folds: HashSet<(PathBuf, Option<others::OtherGroup>)>,
-    /// 多仓库时「没有更改的仓库」一组是否展开；未选过时为 `None`，按有无更改决定（见
-    /// [`App::quiet_repositories_open`]）。
+    /// 「没有更改的仓库」一组是否展开；未选过时为 `None`，见 [`App::quiet_repositories_open`]。
     pub(crate) quiet_open: Option<bool>,
     /// 其他仓库各行的缓存（见 [`App::commit_other_rows`]）。
     other_rows: std::cell::RefCell<Option<(others::OtherRowsKey, Vec<others::OtherRow>)>>,
@@ -881,12 +874,11 @@ pub(crate) struct CommitState {
     pub(crate) refreshed: Option<Instant>,
     /// 绘制时量好的文字宽度，见 [`CommitLabels`]。
     pub(crate) labels: CommitLabels,
-    /// 储藏一组的展开状态和高度的过渡（默认收起：储藏是暂时放到一边的东西，平时不必占地方）。
+    /// 储藏一组的展开状态和高度的过渡，默认收起。
     pub(crate) stashes: Drawer,
-    /// 工作树一组的展开状态和高度的过渡（默认展开：其他工作树的分支和更改数平时就要能看到）。
+    /// 工作树一组的展开状态和高度的过渡，默认展开。
     pub(crate) worktrees: Drawer,
-    /// 上一帧绘制时仓库的状态是否已经读到：读到以后底部各组的出现和消失才过渡，刚打开时
-    /// 直接到位。
+    /// 上一帧绘制时是否已读到仓库的状态：读到之后底部各组的高度变化才过渡。
     pub(crate) sections_known: bool,
     /// 正在储藏的预览标签里看的一条储藏。
     pub(crate) stash_view: Option<StashView>,
@@ -1137,8 +1129,7 @@ impl App {
         let Some(status) = self.git.status.as_ref() else {
             return false;
         };
-        // 多仓库时其他仓库有更改即显示：其中勾选的文件随当前仓库一并提交，切换仓库时卡片不
-        // 随当前仓库有无更改而出现或消失。
+        // 多仓库时其他仓库有更改即显示：其中勾选的文件随当前仓库一并提交。
         !status.entries.is_empty()
             || status.operation.is_some()
             || self.git.commit.amend

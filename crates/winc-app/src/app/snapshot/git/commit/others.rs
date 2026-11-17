@@ -119,8 +119,7 @@ fn other_repositories_are_listed_after_the_current_one_and_a_click_switches() {
     assert!(!app.current_section_folded());
     paint(&mut app);
 
-    // 点另一个仓库的文件：切换到那个仓库，选中该文件并预览差异；列表的顺序不变，该仓库的
-    // 标题行留在原处，成为当前仓库的标题行。
+    // 点另一个仓库的文件：切换到该仓库并选中该文件；列表的顺序不变。
     let file = hit(&app, CommitTarget::OtherFile(1, 0));
     let header = hit(&app, CommitTarget::OtherRepository(1));
     click(&mut app, (file.x + 60.0, file.y + 4.0));
@@ -137,8 +136,7 @@ fn other_repositories_are_listed_after_the_current_one_and_a_click_switches() {
     assert_eq!(app.commit_other_rows()[0], OtherRow::Repository(0));
     assert_eq!(app.commit_other_rows().last(), Some(&OtherRow::Current));
 
-    // 当前仓库没有更改时不画空状态：它收在列表末尾「没有更改的仓库」一组里，该组默认收起；
-    // 另一个仓库有更改，提交卡片仍然显示。
+    // 当前仓库没有更改时收在「没有更改的仓库」一组里；另一个仓库有更改，提交卡片仍然显示。
     git_in(&b, &["checkout", "-q", "--", "."]);
     std::fs::remove_file(b.join("src/new.rs")).unwrap();
     app.git_refresh();
@@ -177,7 +175,7 @@ fn other_repositories_are_listed_after_the_current_one_and_a_click_switches() {
         app.commit_other_rows(),
         [OtherRow::Current, OtherRow::QuietGroup, OtherRow::Quiet(1)]
     );
-    // 点该组中的仓库同样切换过去；所有仓库都没有更改时该组不必展开即可见，默认展开。
+    // 点该组中的仓库同样切换；所有仓库都没有更改时该组默认展开。
     paint(&mut app);
     let quiet = hit(&app, CommitTarget::OtherRepository(1));
     click(&mut app, (quiet.right() - 30.0, quiet.y + 4.0));
@@ -408,8 +406,7 @@ fn staged_files_of_other_repositories_are_committed_alongside() {
     let _ = std::fs::remove_dir_all(a.parent().unwrap());
 }
 
-/// 当前仓库没有更改而另一个仓库有更改时提交卡片仍然显示：勾上另一个仓库的文件即可提交，
-/// 当前仓库不产生提交。
+/// 当前仓库没有更改而另一个仓库有更改时提交卡片仍然显示，勾上另一个仓库的文件即可提交。
 #[test]
 fn a_clean_current_repository_commits_the_checked_files_of_others() {
     let Some((mut app, a, b)) = two_repositories("git-clean-current-commit", false) else {
@@ -557,7 +554,7 @@ fn inline_blame_follows_the_repository_of_the_file() {
     let _ = std::fs::remove_dir_all(a.parent().unwrap());
 }
 
-/// 列表滚动过以后点另一个仓库的标题行：换仓库不把列表滚回顶部，点的那一行留在原来的位置。
+/// 列表滚动后点另一个仓库的标题行：列表不滚回顶部，该行的位置不变。
 #[test]
 fn switching_from_a_scrolled_list_keeps_the_clicked_row_in_place() {
     let Some((mut app, a, b)) = two_repositories("git-switch-scrolled", false) else {
@@ -583,7 +580,7 @@ fn switching_from_a_scrolled_list_keeps_the_clicked_row_in_place() {
         let hit = app.hits.commit.iter().find(|(_, t)| *t == target);
         hit.map(|(rect, _)| rect.y)
     };
-    // 往下滚，直到另一个仓库的标题行整行露在列表里。
+    // 向下滚动，直到另一个仓库的标题行完整显示。
     let list = app.commit_parts().list;
     let shown = |app: &App| {
         top(app, header).is_some_and(|y| y >= list.y + 48.0 && y + 24.0 <= list.bottom())

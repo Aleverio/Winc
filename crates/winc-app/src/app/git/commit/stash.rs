@@ -119,15 +119,13 @@ impl App {
     /// 储藏一组的终点高度变化（展开、收起一条储藏的文件，或在别处关闭了预览标签，文件不再列出）
     /// 时，从当前显示的高度开始过渡。每帧绘制提交视图之前调用，预览标签无论在何处关闭都能察觉。
     ///
-    /// 整个一组出现或消失（新增第一条储藏、删除最后一条、换到另一个仓库）时同样过渡；仓库的
-    /// 状态刚读到（启动、打开目录）时直接到位，见 [`App::section_clock`]。
+    /// 整组出现或消失时同样过渡；仓库的状态刚读到时直接到位，见 [`App::section_clock`]。
     pub(crate) fn track_stash_height(&mut self) {
         let (settled, clock) = (self.stash_settled_height(), self.section_clock());
         self.git.commit.stashes.track(settled, clock);
     }
 
-    /// 储藏一组占的高度（逻辑像素）：收着时是 [`DRAWER_CLOSED`]，展开时再加上
-    /// [`App::stash_open_rows`] 行；展开、收起的途中按时钟过渡。没有储藏时为 0。
+    /// 返回储藏一组的高度（逻辑像素），过渡中按时钟插值；没有储藏时为 0。
     pub(crate) fn stash_section_height(&self) -> f32 {
         (self.git.commit.stashes).height(self.stash_settled_height())
     }
@@ -144,7 +142,7 @@ impl App {
         }
     }
 
-    /// 储藏一组标题上的箭头转到哪儿，见 [`Drawer::chevron`]。
+    /// 返回储藏一组标题上箭头的角度比例，见 [`Drawer::chevron`]。
     pub(crate) fn stash_chevron(&self) -> f32 {
         let span = self.stash_open_rows() as f32 * COMMIT_ROW;
         (self.git.commit.stashes).chevron(self.stash_settled_height(), span)

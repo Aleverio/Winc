@@ -197,13 +197,11 @@ pub(crate) struct GitState {
     summaries_version: Arc<std::sync::atomic::AtomicU64>,
     /// 各仓库最近一次读取的工作树；位置选择器据此在仓库下列出工作树。
     summary_worktrees: Arc<Mutex<HashMap<PathBuf, Vec<Worktree>>>>,
-    /// 离开各仓库时它的分支、储藏、工作树和上一次提交：切换回去时先显示这些，后台读取完成
-    /// 后再更新，提交视图底部的各组不会先消失再出现。
+    /// 离开各仓库时记下的分支、储藏、工作树和上一次提交，切换回去时先显示。
     kept: HashMap<PathBuf, location_picker::KeptRefs>,
     /// 排好的全部位置，见 `App::cached_places`。
     places: std::cell::RefCell<Option<location_picker::PlacesCache>>,
-    /// 当前仓库的各个工作树相对当前 `HEAD` 落后和领先的提交数，与 `summaries` 一起读取；连同
-    /// 算出它的两个提交号，两者都没变时不重新计算。
+    /// 当前仓库各工作树相对当前 `HEAD` 的差异，与 `summaries` 一起读取。
     summary_divergence: Arc<Mutex<HashMap<PathBuf, location_picker::Divergence>>>,
     /// 正在运行的读取；重新读取时取消。
     summaries_running: Option<Cancel>,
@@ -743,7 +741,7 @@ impl App {
         }
         // 保存即将离开的仓库的状态，切换回来时可立即显示。
         if let Some(old) = self.git.root.clone() {
-            // 分支和储藏随后就要清空，直接移走；工作树列表还要用来判断是否换到同一仓库。
+            // 分支和储藏随后清空，直接移走；工作树列表仍用于判断是否为同一仓库。
             let kept = location_picker::KeptRefs {
                 branches: std::mem::take(&mut self.git.branches),
                 stashes: std::mem::take(&mut self.git.stashes),

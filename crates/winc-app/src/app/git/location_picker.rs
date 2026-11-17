@@ -1,8 +1,8 @@
 //! 位置选择器：从提交视图的上下文一行就地展开，选在哪个仓库或哪个工作树里工作。
 //!
-//! 仓库和工作树各有一个选择器，互不混列：仓库选择器每个仓库一行，选中即切换到该仓库（有多个
-//! 工作树的仓库切换到主工作树）；工作树选择器只列当前仓库的工作树，新建工作树的入口在其底栏。
-//! 每一行写着分支、与上游的差异和未提交的更改数。
+//! 仓库和工作树各有一个选择器：仓库选择器每个仓库一行，选中即切换到该仓库；
+//! 工作树选择器只列当前仓库的工作树，新建工作树的入口在底栏。各行显示分支、
+//! 与上游的差异和未提交的更改数。
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -39,12 +39,10 @@ pub struct Place {
 
 /// 一个仓库的各个位置：仓库的名字、主工作树的目录、位置。
 pub(crate) type PlaceGroup = (String, PathBuf, Vec<Place>);
-/// 排好的全部位置及其缓存键（Git 状态的代数、各仓库状态的版本、仓库数），见
-/// `App::cached_places`。
+/// 排好的全部位置及其缓存键：Git 状态的代数、各仓库状态的版本、仓库数。
 pub(super) type PlacesCache = ((u64, u64, usize), Rc<Vec<PlaceGroup>>, Rc<Vec<Place>>);
 
-/// 一个工作树相对当前 `HEAD` 的差异：算出它的两个提交号（当前 `HEAD`、该工作树的 `HEAD`），
-/// 以及落后和领先的提交数。
+/// 一个工作树相对当前 `HEAD` 的差异：据以计算的两个提交号，以及落后和领先的提交数。
 pub(super) type Divergence = ((String, String), (u32, u32));
 
 /// 一个位置现在的样子。
@@ -84,13 +82,13 @@ pub(super) struct KeptRefs {
 }
 
 impl App {
-    /// 换到一个仓库以后先放回上次离开它时记下的分支、储藏、工作树和上一次提交；没有到过的
-    /// 仓库用后台读各仓库状态时读到的工作树。
+    /// 切换到一个仓库后恢复离开时记下的分支、储藏、工作树和上一次提交；
+    /// 未记录过的仓库使用后台读到的工作树。
     pub(super) fn restore_kept_refs(&mut self) {
         let Some(root) = self.git.root.clone() else {
             return;
         };
-        // 下面放回的内容改变排好的位置（`cached_places`）。
+        // 恢复的内容影响排好的位置（`cached_places`）。
         self.git.generation += 1;
         if let Some(kept) = self.git.kept.remove(&root) {
             self.git.branches = kept.branches;
@@ -102,7 +100,7 @@ impl App {
         if self.git.worktrees.is_empty() {
             let known = self.git.summary_worktrees.lock();
             let known = known.unwrap_or_else(PoisonError::into_inner);
-            // 仓库本身是附属工作树时，记在主工作树名下的那份里有它。
+            // 仓库是附属工作树时，其工作树列表记在主工作树名下。
             let trees = known
                 .values()
                 .find(|trees| trees.iter().any(|w| w.path == root));
@@ -122,7 +120,7 @@ impl App {
             || self.git.worktrees.iter().filter(|w| usable(w)).count() >= 2
     }
 
-    /// 当前仓库是否有不止一个可以工作的工作树：有时提交视图才有工作树一组。
+    /// 当前仓库是否有多个可用的工作树。
     pub(crate) fn git_has_worktrees(&self) -> bool {
         let usable = self.git.worktrees.iter().filter(|w| w.head.is_some());
         usable.count() >= 2
@@ -163,8 +161,7 @@ impl App {
         self.request_redraw();
     }
 
-    /// 命令「切换仓库」（`all` 为真，列出各仓库）和「切换工作树」（只列当前仓库的工作树）：
-    /// 打开提交视图，再展开选择器。
+    /// 打开提交视图并展开选择器：`all` 为真时列出各仓库，否则列出当前仓库的工作树。
     pub(in crate::app) fn switch_location(&mut self, all: bool) {
         let any = if all {
             self.git.repositories.len() >= 2
@@ -222,7 +219,7 @@ impl App {
         self.cached_places().1
     }
 
-    /// 全部位置和其中当前仓库的各个工作树。每帧要用多次，按 Git 状态和各仓库状态的版本缓存。
+    /// 返回全部位置和其中当前仓库的各个工作树，按 Git 状态和各仓库状态的版本缓存。
     fn cached_places(&self) -> (Rc<Vec<PlaceGroup>>, Rc<Vec<Place>>) {
         let key = (
             self.git.generation,
@@ -313,7 +310,7 @@ impl App {
         let query = needle(self.overlays.picker.input.text());
         let searching = !query.is_empty();
         let groups = (*self.location_groups()).clone();
-        // 列出仓库时每个仓库一行：当前仓库是现在所在的工作树，其他仓库是主工作树。
+        // 列出仓库时每个仓库一行：当前仓库取所在的工作树，其他仓库取主工作树。
         if self.git.location_all {
             let rows = groups.into_iter().filter_map(|(label, _, places)| {
                 let at = places.iter().position(|p| p.current).unwrap_or(0);
@@ -395,8 +392,7 @@ impl App {
             let Ok(git) = tool else {
                 return;
             };
-            // 各仓库的状态读完以后一起写入：逐个写入时列表随每个仓库重排一次。中途被取消时
-            // 已读到的照样写入。
+            // 各仓库的状态读完后一次写入，列表只重排一次；中途取消时写入已读到的部分。
             let mut read: Vec<(PathBuf, Status)> = Vec::new();
             let flush = |read: Vec<(PathBuf, Status)>| {
                 let mut summaries = summaries.lock().unwrap_or_else(PoisonError::into_inner);
@@ -412,13 +408,12 @@ impl App {
                     let usable = trees.iter().filter(|w| w.head.is_some() && !w.prunable);
                     usable.map(|w| w.path.clone()).collect()
                 };
-                // 当前仓库的其他工作树：各自有多少提交不在当前分支上。两边的提交都没有变时沿用
-                // 上次的结果，不再运行 `git`。
+                // 当前仓库的其他工作树各有多少提交不在当前分支上；提交号未变时沿用上次的结果。
                 let here = current
                     .as_deref()
                     .and_then(|c| trees.iter().find(|w| w.path == c));
                 if let Some((here, base)) = here.and_then(|w| Some((w, w.oid.clone()?))) {
-                    // 算的途中界面照旧读上次的结果，算完一次换上。
+                    // 计算期间界面读取上次的结果，计算完成后一次替换。
                     let old = divergence
                         .lock()
                         .unwrap_or_else(PoisonError::into_inner)
@@ -457,17 +452,15 @@ impl App {
         });
     }
 
-    /// 工作树 `path` 相对当前 `HEAD` 落后和领先的提交数；还没读到、或不是当前仓库的其他工作树
-    /// 时为 `None`。
+    /// 返回工作树 `path` 相对当前 `HEAD` 落后和领先的提交数；未读到时为 `None`。
     pub(crate) fn worktree_divergence(&self, path: &Path) -> Option<(u32, u32)> {
         let counts = self.git.summary_divergence.lock();
         let counts = counts.unwrap_or_else(PoisonError::into_inner);
         counts.get(path).map(|(_, count)| *count)
     }
 
-    /// 工作树 `place` 的分支是否已经合并到当前分支：没有不在当前分支上的提交（与
-    /// `git branch --merged` 的判断相同），并且没有未提交的更改。主工作树、当前工作树和锁定的
-    /// 工作树不算。
+    /// 工作树 `place` 的分支是否已合并到当前分支：没有不在当前分支上的提交（判断同
+    /// `git branch --merged`），并且没有未提交的更改。主工作树、当前工作树和锁定的工作树除外。
     pub(crate) fn worktree_merged(&self, place: &Place) -> bool {
         let linked = place.worktree.filter(|i| *i > 0);
         let tree = linked.and_then(|i| self.git.worktrees.get(i));
@@ -594,8 +587,7 @@ impl App {
         }
     }
 
-    /// 处理没有查询时的左右键：右键打开选中位置的操作菜单。返回是否已处理；有查询时左右键
-    /// 移动输入框的光标。
+    /// 处理没有查询时的左右键，返回是否已处理：右键打开选中位置的操作菜单。
     pub(in crate::app) fn location_picker_side(&mut self, right: bool) -> bool {
         if !self.picker_lists_locations() || !self.overlays.picker.input.text().is_empty() {
             return false;
@@ -614,9 +606,7 @@ impl App {
         true
     }
 
-    /// 位置 `path` 的操作菜单：在新窗口中打开、在文件管理器中显示；工作树还可以在此窗口中
-    /// 打开，其他工作树可以把分支合并到当前分支、移除。`worktree` 是它在当前仓库的工作树列表
-    /// 里的下标。
+    /// 返回位置 `path` 的操作菜单；`worktree` 是它在当前仓库工作树列表中的下标。
     pub(in crate::app) fn location_row_menu(
         &self,
         path: &Path,
@@ -624,7 +614,7 @@ impl App {
     ) -> Vec<MenuEntry> {
         let tree = worktree.and_then(|i| self.git.worktrees.get(i));
         let idle = self.git.branch.running.is_none();
-        // 目录已不在：打不开，也没有东西可以移除，只能清理。
+        // 目录已不存在：只能清理。
         if tree.is_some_and(|w| w.prunable) {
             return vec![MenuEntry::Item(MenuCommand::LocationPrune, idle)];
         }
@@ -632,14 +622,13 @@ impl App {
             MenuEntry::Item(MenuCommand::LocationNewWindow, true),
             MenuEntry::Item(MenuCommand::LocationReveal, true),
         ];
-        // 工作树可以换进这个窗口；打开的目录里的仓库点一下就切换过去，没有这一项。当前所在的
-        // 工作树已经开在这个窗口里。
+        // 只有工作树可以在此窗口中打开；当前所在的工作树该项不可用。
         if tree.is_some() {
             let here = self.git.root.as_deref() == Some(path);
             menu.insert(0, MenuEntry::Item(MenuCommand::LocationThisWindow, !here));
         }
         let other = tree.filter(|_| self.git.current_worktree() != worktree);
-        // 有提交不在当前分支上的其他工作树：可以把它的分支合并过来。
+        // 其他工作树有提交不在当前分支上时可以合并。
         if let Some(other) = other.filter(|w| w.branch().is_some()) {
             let ahead = self.worktree_divergence(&other.path);
             let any = ahead.is_none_or(|(_, ahead)| ahead > 0);

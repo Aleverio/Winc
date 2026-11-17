@@ -541,8 +541,7 @@ fn the_status_bar_switches_worktrees_and_branches_from_menus() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// 工作树一组只在当前仓库有多个工作树时出现，每个工作树一行；点一行打开它（没有窗口时在
-/// 当前窗口），点标题收起。工作树选择器只列这个仓库的工作树，不分组。
+/// 工作树一组只在当前仓库有多个工作树时出现，每个工作树一行；点击一行打开，点击标题收起。
 #[test]
 fn the_worktree_section_lists_the_worktrees_of_this_repository() {
     let Some((mut app, root)) = git_app("git-worktree-section", false) else {
@@ -595,8 +594,7 @@ fn the_worktree_section_lists_the_worktrees_of_this_repository() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// 工作树一行写它有多少提交不在当前分支上；合并过来以后写「已合并」。菜单里的「合并到当前
-/// 分支」只在有这样的提交时可用。
+/// 工作树一行显示不在当前分支上的提交数，合并后显示「已合并」；菜单中的合并只在有这样的提交时可用。
 #[test]
 fn a_worktree_row_tells_unmerged_commits_and_merges_them() {
     use crate::app::input::context_menu::{MenuCommand, MenuEntry};
@@ -648,8 +646,7 @@ fn a_worktree_row_tells_unmerged_commits_and_merges_them() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// 在提示框里选定打开工作树的方式并勾选「不再询问」：所选的方式记进设置，随后打开；工作树
-/// 的菜单里两种方式都在，当前所在的工作树不能再在此窗口打开。
+/// 提示框中勾选「不再询问」后所选方式写入设置；当前所在的工作树不能在此窗口中再次打开。
 #[test]
 fn the_chosen_way_to_open_a_worktree_is_remembered() {
     use crate::app::input::context_menu::{MenuCommand, MenuEntry};
@@ -719,7 +716,7 @@ fn worktrees_leave_the_branch_row_unchanged() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// 工作树一组收着时标题的悬停提示：其他工作树有更改时提示它；展开时各行已经写着，不提示。
+/// 工作树一组收起时，其他工作树有更改会在标题的悬停提示中说明；展开时不提示。
 #[test]
 fn the_folded_worktree_section_tells_when_other_worktrees_have_changes() {
     let Some((mut app, root)) = git_app("git-location-others", false) else {
