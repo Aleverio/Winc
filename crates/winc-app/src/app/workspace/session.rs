@@ -156,10 +156,18 @@ impl App {
         };
         let session = self.state.session_for(&root).cloned();
         // 上次附加的目录：已不存在的跳过。
+        // 已不存在或不能再添加的不恢复，并说明是哪一个。
+        let mut skipped = Vec::new();
         for folder in session.iter().flat_map(|session| &session.folders) {
-            if let Some(workspace) = &mut self.editor.workspace {
-                let _ = workspace.add_folder(folder);
+            if let Some(workspace) = &mut self.editor.workspace
+                && workspace.add_folder(folder).is_err()
+            {
+                skipped.push(winc_editor::display_name(folder).into_owned());
             }
+        }
+        if !skipped.is_empty() {
+            let names = skipped.join(winc_i18n::t!("common-list-separator"));
+            self.notify(winc_i18n::t!("workspace-add-folder-skipped", names = names));
         }
         if let (Some(workspace), Some(session)) = (&mut self.editor.workspace, &session)
             && !workspace.extra_folders().is_empty()

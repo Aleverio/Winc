@@ -327,6 +327,9 @@ impl App {
             MenuTarget::Whitespace => whitespace_menu(),
             MenuTarget::VimClipboard => vim_clipboard_menu(),
             MenuTarget::OpenWorktree => open_worktree_menu(),
+            MenuTarget::DropFolder => (0..winc_config::FolderDrop::ALL.len())
+                .map(|i| MenuEntry::Item(MenuCommand::DropFolder(i), true))
+                .collect(),
             MenuTarget::DefaultShell => default_shell_menu(self.terminal.shells.len()),
             MenuTarget::Zoom => zoom_menu(),
             MenuTarget::BackgroundImage => background_menu(),
@@ -693,6 +696,7 @@ impl App {
                 | MenuTarget::Whitespace
                 | MenuTarget::VimClipboard
                 | MenuTarget::OpenWorktree
+                | MenuTarget::DropFolder
                 | MenuTarget::Zoom
                 | MenuTarget::BackgroundImage
                 | MenuTarget::BackgroundFit
@@ -708,6 +712,7 @@ impl App {
             MenuTarget::Whitespace => Some(Setting::RenderWhitespace),
             MenuTarget::VimClipboard => Some(Setting::VimClipboard),
             MenuTarget::OpenWorktree => Some(Setting::GitOpenWorktree),
+            MenuTarget::DropFolder => Some(Setting::DropFolder),
             MenuTarget::Zoom => Some(Setting::Zoom),
             MenuTarget::BackgroundImage => Some(Setting::BackgroundImage),
             MenuTarget::BackgroundFit => Some(Setting::BackgroundFit),
@@ -1269,6 +1274,10 @@ impl App {
             MenuCommand::OpenWorktree(i) => {
                 winc_config::WorktreeOpen::ALL.get(i)
                     == Some(&self.config.git_open_worktree.unwrap_or_default())
+            }
+            MenuCommand::DropFolder(i) => {
+                winc_config::FolderDrop::ALL.get(i)
+                    == Some(&self.config.drop_folder.unwrap_or_default())
             }
             MenuCommand::DefaultShell(i) => {
                 let configured = self.configured_shell().map(|shell| shell.command);

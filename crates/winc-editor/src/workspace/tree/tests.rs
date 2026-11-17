@@ -799,6 +799,11 @@ fn extra_folders_are_listed_as_top_level_rows() {
     assert_eq!(made, other.join("new.txt"));
     assert!(ws.rename(&made, "../escape.txt").is_err());
 
+    // 文件夹本身不能改名，也不能移进另一个文件夹。
+    assert!(ws.rename(&other, "renamed").is_err() && other.is_dir());
+    assert!(ws.move_into(&main, &other).is_err() && main.is_dir());
+    assert!(ws.move_into(&other, &main.join("src")).is_err() && other.is_dir());
+
     // 已在某个文件夹之内、包含某个文件夹的目录不能再加入；根目录不能移除。
     assert!(ws.add_folder(&main.join("src")).is_err());
     assert!(ws.add_folder(&base).is_err());

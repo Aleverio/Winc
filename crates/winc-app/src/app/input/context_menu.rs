@@ -203,6 +203,9 @@ pub enum MenuCommand {
     /// 设置中「打开工作树」菜单的一项，参数为
     /// [`WorktreeOpen::ALL`](winc_config::WorktreeOpen::ALL) 中的序号（从 0 起）。
     OpenWorktree(usize),
+    /// 设置中「拖入目录」菜单的一项，参数为
+    /// [`FolderDrop::ALL`](winc_config::FolderDrop::ALL) 中的序号（从 0 起）。
+    DropFolder(usize),
     /// 设置中「默认 Shell」菜单的一项：`None` 为系统默认，`Some(i)` 为检测到的第 `i` 个 shell
     /// （从 0 起）。
     DefaultShell(Option<usize>),
@@ -649,6 +652,9 @@ impl MenuCommand {
             MenuCommand::OpenWorktree(i) => winc_config::WorktreeOpen::ALL
                 .get(i)
                 .map_or("", |&choice| crate::layout::open_worktree_label(choice)),
+            MenuCommand::DropFolder(i) => winc_config::FolderDrop::ALL
+                .get(i)
+                .map_or("", |&choice| crate::layout::drop_folder_label(choice)),
             MenuCommand::Locale(i) => winc_i18n::LocaleChoice::ALL
                 .get(i)
                 .map_or("", |&choice| crate::layout::locale_label(choice)),
@@ -812,6 +818,8 @@ pub enum MenuTarget {
     VimClipboard,
     /// 设置的 Git 页中的「打开工作树」。
     OpenWorktree,
+    /// 设置的编辑器页中的「拖入目录」。
+    DropFolder,
     /// 设置的外观页中的「界面缩放」。
     Zoom,
     /// 设置的外观页中的「背景图片」。

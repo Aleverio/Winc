@@ -939,7 +939,8 @@ impl App {
             let title = match &kind {
                 Pick::Open | Pick::BackgroundImage => t!("cmd-open-file"),
                 Pick::KeyFile => t!("workspace-remote-dialog-key-choose"),
-                Pick::OpenFolder | Pick::WorktreeFolder | Pick::AddFolder => t!("cmd-open-folder"),
+                Pick::OpenFolder | Pick::WorktreeFolder => t!("cmd-open-folder"),
+                Pick::AddFolder => t!("cmd-add-folder"),
                 Pick::WslFolder(_) => t!("cmd-open-wsl-folder"),
                 Pick::SaveAs(_) => t!("cmd-save-as"),
             };

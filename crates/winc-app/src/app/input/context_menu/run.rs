@@ -192,6 +192,13 @@ impl App {
                     self.set_render_whitespace(choice);
                 }
             }
+            MenuTarget::DropFolder => {
+                if let MenuCommand::DropFolder(i) = command
+                    && let Some(&choice) = winc_config::FolderDrop::ALL.get(i)
+                {
+                    self.set_drop_folder(choice);
+                }
+            }
             MenuTarget::OpenWorktree => {
                 if let MenuCommand::OpenWorktree(i) = command
                     && let Some(&choice) = winc_config::WorktreeOpen::ALL.get(i)

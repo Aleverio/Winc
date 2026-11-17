@@ -218,4 +218,87 @@ impl App {
             }
         }
     }
+
+    /// 处理拖进窗口的 `path`：可以加为附加目录的目录按设置询问、添加或按落点处理，其余的按落点
+    /// 处理（见 [`App::drop_plain`]）。`into` 是文件树上的目标目录，落在编辑区时为 `None`。
+    ///
+    /// 询问推迟到拖放结束之后（[`UserEvent::FolderDropAsk`]）：系统的拖放回调中不弹出对话框。
+    pub(in crate::app) fn drop_folder(&mut self, path: &Path, into: Option<PathBuf>) {
+        use winc_config::FolderDrop;
+
+        let addable = self.can_add_folder()
+            && (self.editor.workspace.as_ref()).is_some_and(|ws| ws.can_add_folder(path));
+        let choice = self.config.drop_folder.unwrap_or_default();
+        match (addable, choice, self.link.proxy.clone()) {
+            (true, FolderDrop::Add, _) => self.add_folder(path),
+            // 没有窗口（测试中）时不询问，按落点处理。
+            (true, FolderDrop::Ask, Some(proxy)) if self.window.handle.is_some() => {
+                let ask = crate::app::UserEvent::FolderDropAsk(path.to_path_buf(), into);
+                let _ = proxy.send_event(ask);
+            }
+            _ => self.drop_plain(path, into),
+        }
+    }
+
+    /// 询问拖入的目录 `path` 是添加到窗口，还是按落点处理（打开，或复制进 `into`）。
+    pub(in crate::app) fn ask_folder_drop(&mut self, path: &Path, into: Option<PathBuf>) {
+        let name = winc_editor::display_name(path);
+        let (message, detail, other) = match &into {
+            Some(dir) => {
+                let dir = winc_editor::display_name(dir);
+                (
+                    t!("workspace-drop-folder-ask-copy", name = name, folder = dir),
+                    t!("workspace-drop-folder-copy-detail"),
+                    t!("workspace-drop-folder-copy"),
+                )
+            }
+            None => (
+                t!("workspace-drop-folder-ask", name = name),
+                t!("workspace-drop-folder-ask-detail"),
+                t!("workspace-drop-folder-open"),
+            ),
+        };
+        let buttons = vec![
+            crate::app::AlertButton::new(t!("workspace-drop-folder-add")),
+            crate::app::AlertButton::new(other),
+            crate::app::AlertButton::cancel(t!("common-cancel")),
+        ];
+        let remember = Some((t!("common-dont-ask"), false));
+        let target = path.to_path_buf();
+        self.present_alert(&message, detail, buttons, remember, move |i, kept| {
+            let (path, into) = (target.clone(), into.clone());
+            (i < 2).then(|| crate::app::UserEvent::FolderDropped(path, into, i == 0, kept))
+        });
+    }
+
+    /// 按询问中的选择处理拖入的目录 `path`；`remember` 时把该方式写入设置。
+    pub(in crate::app) fn folder_drop_chosen(
+        &mut self,
+        path: &Path,
+        into: Option<PathBuf>,
+        add: bool,
+        remember: bool,
+    ) {
+        use winc_config::FolderDrop;
+
+        if remember {
+            self.set_drop_folder(if add {
+                FolderDrop::Add
+            } else {
+                FolderDrop::Open
+            });
+        }
+        if add {
+            self.add_folder(path);
+        } else {
+            self.drop_plain(path, into);
+        }
+    }
+
+    /// 设置把目录拖进已打开目录的窗口时怎样处理。
+    pub(in crate::app) fn set_drop_folder(&mut self, choice: winc_config::FolderDrop) {
+        self.config.drop_folder = Some(choice);
+        self.save_config();
+        self.request_redraw();
+    }
 }

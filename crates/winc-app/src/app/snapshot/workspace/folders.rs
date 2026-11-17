@@ -167,6 +167,22 @@ fn a_folder_can_be_added_to_the_window_and_removed() {
         "folders-main"
     );
 
+    // 上次附加的目录已不存在：不恢复，说明是哪一个；这一组随之不再成组。
+    let gone = main.with_file_name("folders-gone");
+    std::fs::create_dir_all(&gone).unwrap();
+    let gone = gone.canonicalize().unwrap();
+    again.add_folder(&gone);
+    again.remove_folder(&other);
+    assert_eq!(again.extra_folders(), std::slice::from_ref(&gone));
+    let state = again.state.clone();
+    std::fs::remove_dir_all(&gone).unwrap();
+    let mut later = blank_app(false);
+    later.state = state;
+    later.open_folder_now(&main);
+    assert!(later.extra_folders().is_empty());
+    let notice = later.notice.text.take().unwrap_or_default();
+    assert!(notice.contains("folders-gone"), "{notice}");
+
     // 移除：只从窗口中拿掉，磁盘上的内容不动，文件树回到只列打开的目录。
     app.run_tree_command(MenuCommand::RemoveFolder, Some(other.clone()));
     paint(&mut app);
@@ -247,4 +263,65 @@ fn git_in_quiet(dir: &Path, args: &[&str]) -> bool {
         .current_dir(dir)
         .status();
     status.is_ok_and(|status| status.success())
+}
+
+/// 把目录拖到编辑区：按设置添加到窗口或打开它；已在窗口中的目录和文件直接打开。
+#[test]
+fn a_dropped_folder_is_added_or_opened_as_configured() {
+    use winc_config::FolderDrop;
+
+    let main = sample_folder("folders-drop-main").canonicalize().unwrap();
+    let other = search_folder("folders-drop-other").canonicalize().unwrap();
+    let third = search_folder("folders-drop-third").canonicalize().unwrap();
+    let mut app = app_with(&main.join("short.rs"), false);
+    paint(&mut app);
+    let editor = app.layout.editor;
+    let (x, y) = (editor.x + editor.w / 2.0, editor.y + editor.h / 2.0);
+
+    // 设为添加：拖入的目录成为附加目录，打开的目录不变。
+    app.config.drop_folder = Some(FolderDrop::Add);
+    app.drop_file_at(&other, x, y);
+    assert_eq!(app.extra_folders(), std::slice::from_ref(&other));
+    assert_eq!(app.editor.root(), Some(main.as_path()));
+
+    // 已在窗口中的目录不能再添加：和以前一样打开它。文件始终是打开。
+    app.drop_file_at(&other.join("src/main.rs"), x, y);
+    assert_eq!(app.editor.root(), Some(main.as_path()));
+    assert_eq!(app.editor.active().unwrap().name(), "main.rs");
+
+    // 询问中选择添加并记住：写入设置，之后不再询问。
+    app.config.drop_folder = Some(FolderDrop::Ask);
+    app.folder_drop_chosen(&third, None, true, true);
+    assert_eq!(app.extra_folders(), [other.clone(), third.clone()]);
+    assert_eq!(app.config.drop_folder, Some(FolderDrop::Add));
+
+    // 拖到文件树上同样按设置处理：设为添加时成为附加目录，不复制进去。
+    let fourth = search_folder("folders-drop-fourth").canonicalize().unwrap();
+    let tree = app.layout.tree;
+    app.drop_file_at(&fourth, tree.x + 20.0, tree.bottom() - 6.0);
+    assert!(app.extra_folders().contains(&fourth));
+    assert!(!main.join("folders-drop-fourth").exists());
+    app.remove_folder(&fourth);
+    // 询问中选择复制：复制进落点所在的目录，不成为附加目录。
+    app.folder_drop_chosen(&fourth, Some(main.clone()), false, false);
+    assert!(main.join("folders-drop-fourth/src/main.rs").is_file());
+    assert!(!app.extra_folders().contains(&fourth));
+    let _ = std::fs::remove_dir_all(&fourth);
+
+    // 设为不添加：拖到编辑区的目录替换打开的目录。
+    app.remove_folder(&third);
+    app.config.drop_folder = Some(FolderDrop::Open);
+    app.drop_file_at(&third, x, y);
+    assert_eq!(app.editor.root(), Some(third.as_path()));
+    assert!(app.extra_folders().is_empty());
+
+    // 设置页的编辑器一页列出这一项，菜单里打勾的是当前的取值。
+    assert_eq!(Setting::DropFolder.page(), SettingsPage::Editor);
+    assert_eq!(
+        crate::layout::drop_folder_label(FolderDrop::Open),
+        winc_i18n::t!("settings-drop-folder-open")
+    );
+    for dir in [&main, &other, &third] {
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }

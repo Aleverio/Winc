@@ -703,6 +703,7 @@ impl Workspace {
     ///
     /// 名称无效时返回 `InvalidInput`，目标已被其他项占用时返回 `AlreadyExists`。
     pub fn rename(&mut self, path: &Path, name: &str) -> io::Result<PathBuf> {
+        self.refuse_folder(path)?;
         let target = rename_at(self.folder_or_root(path), path, name)?;
         if target != path {
             self.relocated(path, &target);
@@ -719,6 +720,7 @@ impl Workspace {
     /// 移动工作区根目录、`dir` 不在工作区内、移入自身内部时返回 `InvalidInput`，目标已存在时返回
     /// `AlreadyExists`。
     pub fn move_into(&mut self, path: &Path, dir: &Path) -> io::Result<PathBuf> {
+        self.refuse_folder(path)?;
         let target = move_at(self.folder_or_root(dir), path, dir)?;
         if target != path {
             self.relocated(path, &target);

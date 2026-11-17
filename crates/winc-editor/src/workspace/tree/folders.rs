@@ -26,9 +26,31 @@ impl Workspace {
         self.folder_of(path).unwrap_or(&self.root)
     }
 
+    /// `path` 是根目录或附加的文件夹本身时返回 `InvalidInput`：它们不能改名、移动。
+    pub(super) fn refuse_folder(&self, path: &Path) -> io::Result<()> {
+        if self.folders().any(|folder| folder == path) {
+            let reason = t!("workspace-tree-cannot-move");
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, reason));
+        }
+        Ok(())
+    }
+
     /// `path` 是否为在文件树中占一行的文件夹：有附加的文件夹时的根目录和各个附加的文件夹。
     pub fn is_folder_row(&self, path: &Path) -> bool {
         !self.extra.is_empty() && self.folders().any(|folder| folder == path)
+    }
+
+    /// 目录 `path` 是否可以加为附加的文件夹：是可读的目录，不与已有的文件夹重叠，并与根目录在
+    /// 同一个系统上。
+    pub fn can_add_folder(&self, path: &Path) -> bool {
+        let Ok(path) = winc_config::files::canonicalize(path) else {
+            return false;
+        };
+        let overlaps = |folder: &Path| path.starts_with(folder) || folder.starts_with(&path);
+        let place = |path: &Path| winc_backend::locate(path).map(|at| at.target);
+        winc_backend::fs::is_dir(&path)
+            && !self.folders().any(overlaps)
+            && place(&path) == place(&self.root)
     }
 
     /// 把目录 `path` 加为附加的文件夹并展开，返回规范化后的路径。
@@ -62,6 +84,13 @@ impl Workspace {
         self.expanded.retain(|dir| !dir.starts_with(path));
         self.children.retain(|dir, _| !dir.starts_with(path));
         self.marked.retain(|item| !item.starts_with(path));
+        if self
+            .anchor
+            .as_ref()
+            .is_some_and(|anchor| anchor.starts_with(path))
+        {
+            self.anchor = None;
+        }
         // 只剩根目录时它不再占一行，内容直接列出；名字属于这组目录，随之取消。
         if self.extra.is_empty() {
             self.expanded.insert(self.root.clone());
