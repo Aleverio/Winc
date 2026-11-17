@@ -437,7 +437,7 @@ pub(super) fn draw_status(app: &mut App, frame: &mut Frame<'_>) {
         }
     }
 
-    // 文档可以由用户设为只读时，远程按钮左边是一把锁：点了弹出菜单。设了只读时锁合上并铺底色。
+    // 只读开关位于远程按钮左侧；文档因自身的状态而只读时不显示。
     if let Some(doc) = shown.filter(|doc| doc.can_lock()) {
         let item = StatusItem::ReadOnly;
         let slot = right - icons::SIDEBAR_WIDTH;

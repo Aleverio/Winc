@@ -487,6 +487,7 @@ impl App {
             || self.panels.outline.fold.is_some()
             || self.preview.markdown.toc_fade.is_some()
             || self.preview.markdown.toc_close.is_some()
+            || self.preview.markdown.catch_up.pending
             || self.preview.markdown.toc_pin.is_some()
             || self.preview.markdown.toc_flash.is_some()
             || self.preview.markdown.anchor_flash.is_some()

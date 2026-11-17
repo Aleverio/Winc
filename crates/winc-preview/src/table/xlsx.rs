@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use roxmltree::{Document, Node};
 use winc_i18n::t;
 
-use super::{Area, MAX_COLUMNS, MAX_ROWS, Sheet, Table};
+use super::{Area, MAX_COLUMNS, MAX_ROWS, Rows, Sheet, Table};
 use crate::ooxml::{package_target, parse, part, relations};
 use crate::zip::{self, Archive};
 
@@ -237,27 +237,31 @@ pub(super) fn classify(code: &str) -> NumberFormat {
 
 /// 读一张工作表。
 fn worksheet(doc: &Document<'_>, name: String, context: &Context) -> Sheet {
-    let mut rows: Vec<Vec<String>> = Vec::new();
+    let mut rows = Rows::default();
     let mut truncated = false;
     let Some(data) = doc
         .descendants()
         .find(|n| n.tag_name().name() == "sheetData")
     else {
-        return Sheet::from_rows(name, rows, false);
+        return rows.finish(name, false);
     };
-    let mut next_row = 0;
     for row in data.children().filter(|n| n.tag_name().name() == "row") {
         let index = row
             .attribute("r")
             .and_then(|r| r.parse::<usize>().ok())
             .and_then(|r| r.checked_sub(1))
-            .unwrap_or(next_row);
-        next_row = index + 1;
+            .unwrap_or(rows.len());
         if index >= MAX_ROWS {
             truncated = true;
             break;
         }
-        let mut cells = Vec::new();
+        // 行按出现的顺序追加：行号小于已有行数的行无法插回前面，跳过。
+        if index < rows.len() {
+            continue;
+        }
+        while rows.len() < index {
+            rows.end_row();
+        }
         let mut next_column = 0;
         for cell in row.children().filter(|n| n.tag_name().name() == "c") {
             let column = cell
@@ -270,21 +274,19 @@ fn worksheet(doc: &Document<'_>, name: String, context: &Context) -> Sheet {
                 break;
             }
             let value = cell_text(cell, context);
-            if value.is_empty() {
+            // 单元格同样按出现的顺序追加；空单元格不追加，由之后的单元格补齐。
+            if value.is_empty() || column < rows.cells() {
                 continue;
             }
-            if cells.len() <= column {
-                cells.resize(column + 1, String::new());
+            while rows.cells() < column {
+                rows.push("");
             }
-            cells[column] = value;
+            rows.push(&value);
         }
-        if rows.len() <= index {
-            rows.resize(index + 1, Vec::new());
-        }
-        rows[index] = cells;
+        rows.end_row();
     }
-    let mut sheet = Sheet::from_rows(name, rows, truncated);
-    sheet.merges = merges(doc, sheet.rows.len());
+    let mut sheet = rows.finish(name, truncated);
+    sheet.merges = merges(doc, sheet.row_count());
     // 合并区域伸到有文字的列之外时，列数按合并区域算，区域完整显示。
     let widest = sheet.merges.iter().map(|m| m.right + 1).max().unwrap_or(0);
     sheet.columns = sheet.columns.max(widest);

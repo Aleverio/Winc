@@ -76,7 +76,7 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, index: usize, 
     let size = app.fonts.ui;
     let row_h = (size * 2.0).round();
     let numbers_w =
-        frame.measure(FontKind::Ui, size, &sheet.rows.len().max(1).to_string()) + 2.0 * PAD;
+        frame.measure(FontKind::Ui, size, &sheet.row_count().max(1).to_string()) + 2.0 * PAD;
     let numbers_w = numbers_w.max(40.0).round();
     let widths = column_widths(
         app,
@@ -100,7 +100,7 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, index: usize, 
     let numbers = Rect::new(grid.x, body.y, numbers_w, body.h);
     let content = (
         edges.last().copied().unwrap_or(0.0),
-        sheet.rows.len() as f32 * row_h,
+        sheet.row_count() as f32 * row_h,
     );
     let max_scroll = ((content.0 - body.w).max(0.0), (content.1 - body.h).max(0.0));
     let (sx, sy) = (
@@ -113,13 +113,14 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, index: usize, 
     layout.header = header;
     layout.numbers = numbers;
     layout.row_h = row_h;
-    layout.size = (sheet.rows.len(), sheet.columns);
+    layout.size = (sheet.row_count(), sheet.columns);
     // 区域在窗口中的矩形（逻辑像素）：左上角的横纵坐标由列边界和行号换算。列号超出表格时取
     // 最右的边界，区域的宽度为 0。
     let edge = |column: usize| edges.get(column).or(edges.last()).copied().unwrap_or(0.0);
     let area_rect = |a: &Area| {
         let x = body.x + edge(a.left) - sx;
-        let y = body.y + a.top as f32 * row_h - sy;
+        // 行数很多时纵坐标超出 `f32` 能精确表示的范围，先用 `f64` 求出相对视口的位置。
+        let y = body.y + (a.top as f64 * f64::from(row_h) - f64::from(sy)) as f32;
         Rect::new(
             x,
             y,
@@ -136,8 +137,9 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, index: usize, 
         .skip_while(|&(_, x, w)| x + w <= body.x)
         .take_while(|&(_, x, _)| x < body.right())
         .collect();
-    let first = (sy / row_h).floor() as usize;
-    let last = (((sy + body.h) / row_h).ceil() as usize).min(sheet.rows.len());
+    let (top, row) = (f64::from(sy), f64::from(row_h));
+    let first = (top / row).floor() as usize;
+    let last = (((top + f64::from(body.h)) / row).ceil() as usize).min(sheet.row_count());
     let visible = match (columns.first(), columns.last()) {
         (Some(l), Some(r)) if first < last => Some(Area {
             top: first,
@@ -161,10 +163,10 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, index: usize, 
     let current = sheet
         .merge_at(head.0, head.1)
         .unwrap_or(Area::spanning(head, head));
-    let has_cells = sheet.columns > 0 && !sheet.rows.is_empty();
+    let has_cells = sheet.columns > 0 && sheet.row_count() > 0;
     let selected_rect = has_cells.then(|| {
         area_rect(&Area {
-            bottom: selected.bottom.min(sheet.rows.len().saturating_sub(1)),
+            bottom: selected.bottom.min(sheet.row_count().saturating_sub(1)),
             right: selected.right.min(sheet.columns - 1),
             ..selected
         })
@@ -298,7 +300,6 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, index: usize, 
         draw_cell_card(app, frame, (body, cell), (id, key), text, card_scroll);
     }
 
-    // 和编辑区的滚动条一样：平时隐藏，滚动、悬停时显示，可以拖动。
     let content = (body.w + max_scroll.0, body.h + max_scroll.1);
     crate::view::draw_scrollbar(app, frame, ScrollArea::Table, id.0, body, sy, content.1);
     let thumb = crate::layout::hscrollbar_thumb(body, sx, content.0);
@@ -577,8 +578,8 @@ fn column_widths(
     }
     let size = app.fonts.ui;
     let mut widths = vec![COLUMN_MIN; sheet.columns];
-    for (r, row) in sheet.rows.iter().take(MEASURED_ROWS).enumerate() {
-        for (column, text) in row.iter().enumerate() {
+    for r in 0..sheet.row_count().min(MEASURED_ROWS) {
+        for (column, text) in sheet.row(r).enumerate() {
             let first = text.lines().next().unwrap_or_default();
             let spans = sheet.merge_at(r, column).is_some_and(|m| m.right > m.left);
             if first.is_empty() || spans {

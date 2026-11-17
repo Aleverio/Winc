@@ -937,7 +937,7 @@ impl Document {
         self.unwritable_reason().or_else(locked).or_else(all)
     }
 
-    /// 应用不是由用户发起的事务（磁盘上的新内容、备份中的内容）：用户设置的只读不拦。
+    /// 应用不由用户发起的事务（磁盘上的新内容、备份中的内容），不受用户设置的只读限制。
     pub(crate) fn apply_unlocked(&mut self, transaction: Transaction) {
         let held = (self.locked, self.all_locked);
         (self.locked, self.all_locked) = (false, false);
@@ -945,7 +945,9 @@ impl Document {
         (self.locked, self.all_locked) = held;
     }
 
-    /// 返回文档因自身的状态而只读的原因（显示给用户），此时也不能保存；用户设置的只读不算。
+    /// 返回文档因自身的状态而只读的原因（显示给用户），此时也不能保存。
+    ///
+    /// 不包括用户设置的只读。
     pub fn unwritable_reason(&self) -> Option<&'static str> {
         match &self.text {
             _ if !self.readonly => None,

@@ -38,8 +38,9 @@ impl Default for TableJobs {
 impl App {
     /// 当前标签的表格需要读取时，提交后台任务；每次绘制前调用。
     ///
-    /// 工作簿按路径读磁盘上的文件；csv、tsv 读文档当前的文字，包含未保存的修改。同一文档同时
-    /// 只读一版：打字快过读取时，上一版回来以后直接读最新的，中间的版本跳过。
+    /// 工作簿按路径读磁盘上的文件；csv、tsv 读文档当前的文字，包含未保存的修改，大文件读磁盘上
+    /// 的文件。同一文档同时只读一版：打字快过读取时，上一版回来以后直接读最新的，中间的版本
+    /// 跳过。
     pub(crate) fn advance_tables(&mut self) {
         let Some(doc) = self.editor.active() else {
             return;
@@ -64,17 +65,21 @@ impl App {
             };
             Box::new(move || table::load_workbook(&path))
         } else {
-            let Some(rope) = doc.text().rope() else {
-                return;
-            };
-            let text = rope.to_string();
             let tabs = doc.highlighter.language().id == "tsv";
-            Box::new(move || {
-                let sheet = table::read_delimited(&text, tabs);
-                Ok(Table {
-                    sheets: vec![sheet],
-                })
-            })
+            match (doc.text().rope(), path) {
+                (Some(rope), _) => {
+                    let text = rope.to_string();
+                    Box::new(move || {
+                        let sheet = table::read_delimited(&text, tabs);
+                        Ok(Table {
+                            sheets: vec![sheet],
+                        })
+                    })
+                }
+                // 大文件的原文不在内存中，从磁盘读取。
+                (None, Some(path)) => Box::new(move || table::load_delimited(&path, tabs)),
+                (None, None) => return,
+            }
         };
         self.preview.tables.pending.insert(key);
         let (sender, proxy) = (self.preview.tables.sender.clone(), self.link.proxy.clone());
@@ -109,7 +114,7 @@ impl App {
         shown && self.preview.table_layout.area.contains(x, y)
     }
 
-    /// 返回当前标签的表格的滚动位置（逻辑像素），限制在可以滚动的范围内；没有表格时为零。
+    /// 返回当前标签中表格的滚动位置（逻辑像素），已限制在可滚动的范围内；没有表格时为零。
     pub(crate) fn table_scroll(&self) -> (f32, f32) {
         let (max_x, max_y) = self.preview.table_layout.max_scroll;
         let view = self.editor.active().and_then(|doc| doc.table.as_deref());
@@ -121,7 +126,9 @@ impl App {
         })
     }
 
-    /// 拖动表格的滚动条：鼠标在 (`x`, `y`)，按下时离滑块起点 `grab`；`horizontal` 为水平的一条。
+    /// 拖动表格的滚动条，`horizontal` 表示水平的一条。
+    ///
+    /// 鼠标位于 (`x`, `y`)，按下处距滑块起点 `grab`（逻辑像素）。
     pub(crate) fn drag_table_scrollbar(&mut self, horizontal: bool, (x, y): (f32, f32), grab: f32) {
         let layout = &self.preview.table_layout;
         let (body, (max_x, max_y)) = (layout.body, layout.max_scroll);
@@ -299,7 +306,7 @@ impl App {
             return false;
         };
         let sheet = &table.sheets[sheet];
-        let (rows, columns) = (sheet.rows.len(), sheet.columns);
+        let (rows, columns) = (sheet.row_count(), sheet.columns);
         if rows == 0 || columns == 0 {
             return false;
         }
@@ -371,7 +378,7 @@ impl App {
     pub(crate) fn table_select_all(&mut self) {
         let (rows, columns) = self
             .active_sheet()
-            .map(|(table, sheet)| (table.sheets[sheet].rows.len(), table.sheets[sheet].columns))
+            .map(|(table, sheet)| (table.sheets[sheet].row_count(), table.sheets[sheet].columns))
             .unwrap_or_default();
         if rows > 0 && columns > 0 {
             self.set_table_selection((0, 0), (rows - 1, columns - 1), false);
@@ -388,7 +395,7 @@ impl App {
             return;
         };
         let sheet = &table.sheets[sheet];
-        if sheet.rows.is_empty() || sheet.columns == 0 {
+        if sheet.row_count() == 0 || sheet.columns == 0 {
             return;
         }
         let area = sheet.cover_merges(Area::spanning(view.selection.0, view.selection.1));
@@ -473,7 +480,8 @@ impl TableLayout {
             .partition_point(|&edge| edge <= cx)
             .saturating_sub(1)
             .min(columns - 1);
-        let row = (((y - self.body.y + scroll.1) / self.row_h).max(0.0) as usize).min(rows - 1);
+        let down = f64::from(y - self.body.y) + f64::from(scroll.1);
+        let row = ((down / f64::from(self.row_h)).max(0.0) as usize).min(rows - 1);
         Some(match () {
             () if clamp => TableHit::Cell(row, column),
             () if in_header => TableHit::Column(column),

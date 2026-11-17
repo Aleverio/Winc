@@ -278,7 +278,7 @@ pub fn reveal_in_file_manager(path: &Path) -> io::Result<()> {
 
 /// 返回让资源管理器选中 `path` 的命令行参数，原样传给 `explorer`。
 ///
-/// 引号只包住路径：路径中有空格而整个参数加了引号时，资源管理器不认，改为打开默认的目录。
+/// 引号只包含路径：整个参数加引号时 `explorer` 无法解析，会改为打开默认的目录。
 #[cfg_attr(not(any(windows, test)), allow(dead_code))]
 fn explorer_select(path: &Path) -> std::ffi::OsString {
     let mut select = std::ffi::OsString::from("/select,\"");

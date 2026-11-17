@@ -607,7 +607,7 @@ impl App {
 
         // 预览（分栏时位于右侧，仅预览时占满编辑区）先于编辑区判断，仅预览时两者重叠。
         let preview = self.preview.markdown.area;
-        // 展开的标题列表盖在预览上，先于预览判断；第一行右端的图钉按钮不让给滚动条。
+        // 标题列表覆盖在预览之上，先于预览判断；图钉按钮所在的位置不属于滚动条。
         let list = &self.preview.markdown.toc_list;
         let pin = crate::app::preview::markdown::TocTarget::Pin;
         if list.track.contains(x, y)
@@ -636,7 +636,7 @@ impl App {
             return Some((Scrollbar::Markdown, grab(y, thumb.y, thumb.h)));
         }
 
-        // 表格预览：滚动条叠在单元格区域的右边和下边。
+        // 表格预览的滚动条位于单元格区域的右边和下边。
         if self.table_at(x, y) {
             let layout = &self.preview.table_layout;
             let (body, scroll) = (layout.body, self.table_scroll());

@@ -63,7 +63,23 @@ pub(crate) struct Laid {
     pub(crate) hscroll: HashMap<(usize, usize), f32>,
     /// 上一次横向滚动使其可见的光标位置（原文字节偏移），见 [`Laid::follow_caret`]。
     pub(crate) followed: Option<usize>,
+    /// 各顶层块是否仍沿用旧条件下的排版结果（见 [`Later`]）；全部按当前条件排好时为空。
+    pub(crate) stale: Vec<bool>,
 }
+
+/// 分帧排版的依据：排版条件变化而文字未变时，视口内的块立即重排，其余的块在超过时限后沿用
+/// 旧结果，由之后的各帧继续重排。
+pub(crate) struct Later<'a> {
+    /// 旧的各顶层块，与本次排版的各块一一对应。
+    pub(crate) old: &'a [(u64, Arc<LaidBlock>)],
+    /// 必须按当前条件重排的块，即视口内的块。
+    pub(crate) window: std::ops::Range<usize>,
+    /// 截止时刻：此后 `window` 之外的块沿用旧结果。
+    pub(crate) deadline: std::time::Instant,
+}
+
+/// 一帧中排版 [`Later::window`] 之外的块的时限：4 毫秒，约为 60 Hz 下一帧间隔的四分之一。
+pub(crate) const LAYOUT_BUDGET: std::time::Duration = std::time::Duration::from_millis(4);
 
 /// 预览上的一个位置：左边缘（相对内容左边）、所在那一行铺底色的上边缘（和滚动位置同一个
 /// 量法）和高度，均为逻辑像素；见 [`point_of`]。
@@ -280,6 +296,7 @@ pub(crate) fn lay_out(
     source: usize,
     live: Option<&crate::app::preview::markdown::LiveLeaf>,
     reuse: Vec<(u64, Arc<LaidBlock>)>,
+    later: Option<Later<'_>>,
 ) -> Laid {
     let reuse: HashMap<u64, Arc<LaidBlock>> = reuse.into_iter().collect();
     // 光标所在顶层块现在的原文，和叶子块在其中的范围。
@@ -347,6 +364,7 @@ pub(crate) fn lay_out(
     let mut tops = Vec::with_capacity(parsed.blocks.len());
     let mut starts = Vec::with_capacity(parsed.blocks.len());
     let (mut y, mut below, mut chars) = (0.0, None, 0);
+    let mut stale = Vec::new();
     for (i, (block, &hash)) in parsed.blocks.iter().zip(&parsed.hashes).enumerate() {
         let raw = raw.as_ref().filter(|r| r.0 == i);
         // 显示原文的块换一个键存：光标离开后同样内容的块要重新按排版显示。
@@ -359,7 +377,19 @@ pub(crate) fn lay_out(
             }
             None => hash,
         };
-        let laid = reuse.get(&hash).cloned().unwrap_or_else(|| {
+        let kept = later.as_ref().and_then(|later| {
+            let (old, block) = later.old.get(i)?;
+            let keep = *old == hash
+                && !later.window.contains(&i)
+                && !reuse.contains_key(&hash)
+                && std::time::Instant::now() >= later.deadline;
+            keep.then(|| Arc::clone(block))
+        });
+        if kept.is_some() {
+            stale.resize(parsed.blocks.len(), false);
+            stale[i] = true;
+        }
+        let laid = reuse.get(&hash).cloned().or(kept).unwrap_or_else(|| {
             let mut out = Out::default();
             cx.text.clear();
             cx.chars = 0;
@@ -454,6 +484,7 @@ pub(crate) fn lay_out(
         pad: 0.0,
         hscroll: HashMap::new(),
         followed: None,
+        stale,
     }
 }
 
@@ -466,6 +497,30 @@ pub(crate) fn line_box(baseline: f32, size: f32) -> (f32, f32) {
 }
 
 impl Laid {
+    /// 是否仍有沿用旧结果的块。
+    pub(crate) fn pending(&self) -> bool {
+        !self.stale.is_empty()
+    }
+
+    /// 返回内容坐标 `y` 所在的顶层块，以及 `y` 到该块上边缘的距离（逻辑像素）。
+    pub(crate) fn place_at(&self, y: f32) -> Option<(usize, f32)> {
+        let i = self.tops.partition_point(|&t| t <= y).checked_sub(1)?;
+        Some((i, y - self.tops[i]))
+    }
+
+    /// 返回与内容坐标 `from` 到 `to` 相交的顶层块。
+    pub(crate) fn blocks_in(&self, from: f32, to: f32) -> std::ops::Range<usize> {
+        let first = self.tops.partition_point(|&t| t <= from).saturating_sub(1);
+        first..self.tops.partition_point(|&t| t < to).max(first)
+    }
+
+    /// 返回已按当前条件排好的块。
+    pub(crate) fn fresh(&self) -> Vec<(u64, Arc<LaidBlock>)> {
+        let fresh = |i: &usize| !self.stale.get(*i).copied().unwrap_or(false);
+        let blocks = (0..self.blocks.len()).filter(fresh);
+        blocks.map(|i| self.blocks[i].clone()).collect()
+    }
+
     /// `blocks` 范围里的各顶层块中能选中的文字，逐段返回：所在块的上边缘（相对内容顶部）、在
     /// 整份文字里的起点、横坐标、基线、字号、各字宽度和原文位置，以及所在的块和文字本身。
     pub(crate) fn spans(

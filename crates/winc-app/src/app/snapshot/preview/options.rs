@@ -326,3 +326,80 @@ fn a_heading_list_too_long_for_the_view_scrolls_by_the_wheel() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 很长的文档改变宽度时分帧排版：这一帧只排看得见的块，其余的留到以后的帧里补排；补排期间
+/// 预览顶边所在的块不动，排完后与一次排完的结果相同。
+#[test]
+fn a_long_document_is_laid_out_over_several_frames_after_its_width_changes() {
+    let dir = sample_folder("md-catch-up");
+    let path = dir.join("long.md");
+    let text: String = (0..400)
+        .map(|i| {
+            format!(
+                "Paragraph {i} {}\n\n",
+                "with enough words to wrap. ".repeat(6)
+            )
+        })
+        .collect();
+    std::fs::write(&path, text).unwrap();
+    let mut app = app_with(&path, false);
+    paint(&mut app);
+    app.set_preview_mode(PreviewMode::Preview);
+    app.set_text_width(winc_config::TextWidth::Full);
+    settle(&mut app);
+    let laid = |app: &App| {
+        let laid = app.preview.markdown.layout.as_ref().unwrap();
+        (
+            laid.key.width,
+            laid.height,
+            laid.stale.iter().filter(|s| **s).count(),
+        )
+    };
+    let (wide, wide_height, waiting) = laid(&app);
+    assert_eq!(waiting, 0);
+
+    // 滚到中间，记下顶边所在的块。
+    app.preview.markdown.scroll_to(wide_height / 2.0);
+    paint(&mut app);
+    let top = |app: &App| {
+        let laid = app.preview.markdown.layout.as_ref().unwrap();
+        laid.place_at(app.preview.markdown.scroll() - laid.pad)
+            .unwrap()
+    };
+    let (held, _) = top(&app);
+
+    // 不给补排的时间：收起侧栏使正文变宽，这一帧只排了看得见的块。
+    app.preview.markdown.catch_up.budget = Some(std::time::Duration::ZERO);
+    app.toggle_sidebar();
+    paint(&mut app);
+    let (width, _, waiting) = laid(&app);
+    assert!(width > wide && waiting > 300, "{width} {waiting}");
+    assert!(app.preview.markdown.catch_up.pending && app.animating());
+    assert_eq!(top(&app).0, held);
+    let area = app.preview.markdown.area;
+    let shown = {
+        let laid = app.preview.markdown.layout.as_ref().unwrap();
+        let y = app.preview.markdown.scroll() - laid.pad;
+        laid.blocks_in(y, y + area.h)
+    };
+    let laid_now = app.preview.markdown.layout.as_ref().unwrap();
+    assert!(shown.clone().all(|i| !laid_now.stale[i]), "{shown:?}");
+
+    // 给足时间：下一帧排完，顶边所在的块仍是那一块。
+    app.preview.markdown.catch_up.budget = None;
+    paint(&mut app);
+    let (_, height, waiting) = laid(&app);
+    assert_eq!(waiting, 0);
+    assert!(!app.preview.markdown.catch_up.pending);
+    assert_eq!(top(&app).0, held);
+
+    // 与一次排完的结果相同：换回原来的宽度再换回来，高度一致。
+    app.toggle_sidebar();
+    paint(&mut app);
+    assert_eq!(laid(&app), (wide, wide_height, 0));
+    app.toggle_sidebar();
+    paint(&mut app);
+    assert_eq!(laid(&app), (width, height, 0));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
