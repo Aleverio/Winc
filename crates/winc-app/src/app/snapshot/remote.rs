@@ -990,6 +990,20 @@ fn local_only_actions_are_not_offered_on_a_remote_host() {
         Some(winc_i18n::t!("workspace-remote-terminal"))
     );
 
+    // 远端的目录没有运行配置：按钮不显示，命令说明原因，不在本机新建配置文件。
+    app.config.terminal_enabled = Some(true);
+    for action in [Action::RunConfiguration, Action::EditRunConfigurations] {
+        app.run_action(action);
+        let notice = app.notice.text.take();
+        assert_eq!(
+            notice.as_deref(),
+            Some(winc_i18n::t!("terminal-run-remote"))
+        );
+    }
+    assert!(app.run.list.is_empty());
+    assert!(!dir.join(".winc").exists());
+    app.config.terminal_enabled = Some(false);
+
     // 远端的网页文件没有「在浏览器中打开」；本机的有。
     app.open_path(&root.join("page.html"));
     assert!(app.editor.active().is_some_and(|d| d.path.is_some()));
