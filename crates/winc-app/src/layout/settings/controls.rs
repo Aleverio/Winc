@@ -25,9 +25,12 @@ pub(super) fn control_rect(setting: Setting, row: Rect, editing: bool) -> Rect {
         SettingControl::Choice if setting == Setting::Language => {
             (segmented_width(), SETTINGS_CONTROL_H)
         }
-        // 格式化命令带参数，编辑时换成更宽的输入框；其余命令编辑时宽度不变。
+        // 格式化命令带参数，编辑时换成更宽的输入框；其余命令编辑时宽度不变。远程目录映射的按钮上
+        // 写着一条映射的两段路径，总是用宽的。
         SettingControl::Command
-            if editing && matches!(setting, Setting::FormatCommand(_) | Setting::FixCommand(_)) =>
+            if setting == Setting::RemoteFolders
+                || editing
+                    && matches!(setting, Setting::FormatCommand(_) | Setting::FixCommand(_)) =>
         {
             (SETTINGS_COMMAND_W, SETTINGS_CONTROL_H)
         }

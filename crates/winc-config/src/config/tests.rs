@@ -183,6 +183,45 @@ fn bad_format_settings_are_reported_one_by_one() {
     assert_eq!(problems.len(), 9, "{problems:?}");
 }
 
+/// `remote.localFolders`：键规范为 `目标:/路径`（去掉末尾的 `/`），写法不对的项逐项报告。
+#[test]
+fn remote_local_folders_are_normalised_and_checked() {
+    let (config, problems) = Config::parse(
+        r#"{"remote": {"localFolders": {
+                "devbox:/home/me/": "Z:\\",
+                "devbox:2222:/": " /mnt/devbox ",
+                "devbox:/srv": "",
+                "devbox": "Y:\\",
+                "/srv": "X:\\",
+                "devbox:/opt": 3
+            }}}"#,
+    );
+    assert_eq!(
+        config.remote_local_folders,
+        BTreeMap::from([
+            ("devbox:/home/me".to_string(), r"Z:\".to_string()),
+            ("devbox:2222:/".to_string(), "/mnt/devbox".to_string()),
+        ])
+    );
+    for expected in [
+        "remote.localFolders.devbox：键应写成「主机:/远端目录」",
+        "remote.localFolders./srv：键应写成「主机:/远端目录」",
+        "remote.localFolders.devbox:/opt 应为字符串",
+    ] {
+        assert!(
+            problems.iter().any(|p| p.contains(expected)),
+            "{expected}：{problems:?}"
+        );
+    }
+    assert_eq!(problems.len(), 3, "{problems:?}");
+    let (wrong, problems) = Config::parse(r#"{"remote": {"localFolders": ["Z:"]}}"#);
+    assert!(wrong.remote_local_folders.is_empty());
+    assert!(
+        problems[0].contains("remote.localFolders 应为对象"),
+        "{problems:?}"
+    );
+}
+
 #[test]
 fn project_configs_only_read_the_format_section() {
     let (config, problems) = Config::parse_project(
@@ -319,6 +358,10 @@ fn round_trips_through_json() {
         git_open_worktree: Some(WorktreeOpen::NewWindow),
         git_path: Some("C:\\Tools\\wslgit.exe".to_string()),
         remote_enabled: Some(true),
+        remote_local_folders: BTreeMap::from([
+            ("devbox:2222:/home/me".to_string(), r"Z:\".to_string()),
+            ("me@build:/".to_string(), "~/mnt/build".to_string()),
+        ]),
         keymap: Some("vscode".to_owned()),
         shortcuts: [
             ("quickOpen".to_owned(), vec!["cmd+p".to_owned()]),

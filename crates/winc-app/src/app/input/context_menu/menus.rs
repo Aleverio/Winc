@@ -111,15 +111,16 @@ pub fn document_language_menu(named: bool) -> Vec<MenuEntry> {
 
 /// 去掉 `menu` 中只能在本机执行的项，并合并因此相邻的分隔线。
 ///
-/// 远端主机上的文件无法交给本机的文件管理器；`terminal` 为 `false`（终端模块关闭）时
+/// 远端主机上的文件无法交给本机的文件管理器，除非它所在的目录挂载在本机（`mounted`，见配置项
+/// `remote.localFolders`），此时显示的是本机上的那一份；`terminal` 为 `false`（终端模块关闭）时
 /// 「在终端中打开」只能启动本机的终端程序，同样去掉。
-pub fn without_local_only(menu: Vec<MenuEntry>, terminal: bool) -> Vec<MenuEntry> {
+pub fn without_local_only(menu: Vec<MenuEntry>, terminal: bool, mounted: bool) -> Vec<MenuEntry> {
     use MenuCommand::{LocationReveal, OpenInTerminal, Reveal};
 
     let mut kept: Vec<MenuEntry> = Vec::with_capacity(menu.len());
     for entry in menu {
         let dropped = match &entry {
-            MenuEntry::Item(Reveal | LocationReveal, _) => true,
+            MenuEntry::Item(Reveal | LocationReveal, _) => !mounted,
             MenuEntry::Item(OpenInTerminal, _) => !terminal,
             MenuEntry::Separator => matches!(kept.last(), None | Some(MenuEntry::Separator)),
             _ => false,

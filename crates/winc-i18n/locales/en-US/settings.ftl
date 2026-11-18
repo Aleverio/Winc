@@ -118,6 +118,25 @@ settings-vim-mode-desc = Use Vim modes and keys in the editor
 settings-git-path = Git Program
 settings-git-path-auto = Automatic
 settings-git-path-desc = Path to the Git executable; found on PATH when empty
+settings-remote-folders = Remote Folder Mounts
+settings-remote-folders-desc = Lets Reveal work for remote files
+settings-mounts-none = Not set
+settings-mounts-count = { $count ->
+    [one] { $count } mount
+   *[other] { $count } mounts
+}
+settings-mounts-title = Remote Folder Mounts
+settings-mounts-help = Where each remote folder is mounted on this computer, such as a mapped network drive.
+settings-mounts-remote = Remote folder (host:/path)
+settings-mounts-local = Local folder
+settings-mounts-remote-placeholder = devbox:/home/me
+settings-mounts-add = Add Mount
+settings-mounts-browse = Choose Local Folder
+settings-mounts-cancel = Cancel
+settings-mounts-save = Save
+settings-mounts-remote-invalid = Write the remote folder as host:/path, such as devbox:/home/me
+settings-mounts-local-empty = Enter a local folder
+settings-mounts-duplicate = This remote folder is already listed above
 settings-git-open-worktree = Open Worktrees In
 settings-git-open-worktree-ask = Always Ask
 settings-git-open-worktree-new = New Window

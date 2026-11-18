@@ -267,6 +267,24 @@ fn finish_search(app: &mut App) {
 fn settings_point(app: &App, part: SettingsPart) -> (f32, f32) {
     let layout = app.settings_layout();
     let rect = match part {
+        SettingsPart::Mount(part) => {
+            use crate::layout::MountPart;
+            let mounts = app.mounts_layout();
+            let row = |i: usize| mounts.rows[i];
+            match part {
+                MountPart::Remote(i) => row(i).remote,
+                MountPart::Local(i) => row(i).local,
+                MountPart::Browse(i) => row(i).browse,
+                MountPart::Remove(i) => row(i).remove,
+                MountPart::Add => mounts.add,
+                MountPart::Close => mounts.close,
+                MountPart::Cancel => mounts.cancel,
+                MountPart::Save => mounts.save,
+                MountPart::Backdrop => {
+                    Rect::new(layout.card.x + 4.0, layout.card.y + 4.0, 1.0, 1.0)
+                }
+            }
+        }
         SettingsPart::Close => layout.close,
         SettingsPart::SearchField => layout.search,
         SettingsPart::Page(page) => layout.pages.iter().find(|(p, _)| *p == page).unwrap().1,

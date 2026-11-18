@@ -805,7 +805,13 @@ impl App {
                 {
                     CursorIcon::Text
                 }
-                Some(SettingsPart::KeySearch | SettingsPart::SearchField) => CursorIcon::Text,
+                Some(
+                    SettingsPart::KeySearch
+                    | SettingsPart::SearchField
+                    | SettingsPart::Mount(
+                        crate::layout::MountPart::Remote(_) | crate::layout::MountPart::Local(_),
+                    ),
+                ) => CursorIcon::Text,
                 Some(SettingsPart::Link(_)) => CursorIcon::Pointer,
                 _ => CursorIcon::Default,
             };

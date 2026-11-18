@@ -25,7 +25,11 @@ impl App {
             Focus::GlobalInclude => Some(&mut self.panels.global.include),
             Focus::GlobalExclude => Some(&mut self.panels.global.exclude),
             Focus::Picker => Some(&mut self.overlays.picker.input),
-            Focus::Setting => self.settings.editing.as_mut().map(|(_, field)| field),
+            // 「远程目录映射」弹窗打开时是弹窗中有焦点的输入框。
+            Focus::Setting => match self.settings.mounts.as_mut() {
+                Some(dialog) => dialog.field_mut(),
+                None => self.settings.editing.as_mut().map(|(_, field)| field),
+            },
             Focus::KeySearch => Some(&mut self.settings.keys_query),
             Focus::SettingsSearch => Some(&mut self.settings.search),
             Focus::LogFilter => Some(&mut self.git.log.filter),
@@ -65,7 +69,12 @@ impl App {
                     self.global_changed(false);
                 }
                 Focus::Picker => self.picker_refresh(),
-                Focus::Setting => self.settings_live_font(),
+                Focus::Setting => {
+                    self.settings_live_font();
+                    if let Some(dialog) = &mut self.settings.mounts {
+                        dialog.error = None;
+                    }
+                }
                 Focus::LogFilter => self.log_filter_changed(),
                 Focus::TerminalFind => self.terminal_find_changed(),
                 Focus::SettingsSearch => self.settings_search_changed(),

@@ -343,6 +343,7 @@ impl App {
             Setting::FixCommand(id) => (MenuTarget::Tool(Task::Fix, id), row.control),
             Setting::TerminalShell => (MenuTarget::DefaultShell, row.control),
             Setting::GitPath => return self.settings_start_editing(setting),
+            Setting::RemoteFolders => return self.settings_open_mounts(),
             Setting::Updates => return self.settings_check_updates(),
             _ => return,
         };

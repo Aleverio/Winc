@@ -1037,13 +1037,37 @@ fn local_only_actions_are_not_offered_on_a_remote_host() {
     let places = app.location_row_menu(&dir, None);
     assert!(places.contains(&MenuEntry::Item(MenuCommand::LocationReveal, true)));
 
-    // 快捷键和命令面板仍能到达这些动作：说明原因。
+    // 快捷键和命令面板仍能到达这些动作：说明原因（以及可以怎样把挂载在本机的目录对应起来）。
     app.reveal_in_file_manager(&file);
     let notice = app.notice.text.take();
     assert_eq!(
         notice.as_deref(),
-        Some(winc_i18n::t!("workspace-remote-local-only"))
+        Some(winc_i18n::t!("workspace-remote-reveal-unmapped"))
     );
+
+    // 远端的目录挂载在本机（`remote.localFolders`，这里用同一个目录代替挂载点）：「在文件管理器
+    // 中显示」重新列出，作用于本机上的那一份，不再提示；挂载点之外的文件仍不列出。
+    let mount = format!("app-remote-local-only:{}/src", dir.display());
+    let local = dir.join("src").display().to_string();
+    app.config.remote_local_folders.insert(mount, local);
+    assert_eq!(app.local_folder(&file), Some(dir.join("src/main.rs")));
+    let tree = listed(&mut app, MenuTarget::Tree(Some(file.clone())));
+    assert!(tree.contains(&MenuCommand::Reveal), "{tree:?}");
+    let outside = listed(&mut app, MenuTarget::Tree(Some(root.join("page.html"))));
+    assert!(!outside.contains(&MenuCommand::Reveal), "{outside:?}");
+    app.reveal_in_file_manager(&file);
+    assert!(app.notice.text.is_none(), "{:?}", app.notice.text);
+    app.config.remote_local_folders.clear();
+
+    // 设置中打开「远程目录映射」弹窗：还没有映射时，第一行的远程目录先填上打开的这个目录。
+    app.open_settings();
+    app.settings_open_mounts();
+    let first = app.settings.mounts.as_ref().unwrap().rows[0]
+        .remote
+        .text()
+        .to_owned();
+    assert_eq!(first, format!("app-remote-local-only:{}", dir.display()));
+    app.close_settings();
     app.open_in_terminal(Some(&file));
     let notice = app.notice.text.take();
     assert_eq!(

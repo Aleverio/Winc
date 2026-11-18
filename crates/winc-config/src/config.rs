@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use crate::files::{config_dir, write_atomic};
 use crate::json::{self, Json};
+pub use fields::remote_folder_key;
 use fields::*;
 use winc_i18n::{LocaleChoice, t};
 
@@ -195,6 +196,12 @@ pub struct Config {
     pub terminal_application_priority: Option<bool>,
     /// 是否启用远程模块（经 `ssh` 打开其他主机上的目录），默认为否。
     pub remote_enabled: Option<bool>,
+    /// 远端目录挂载在本机的位置（SSHFS、Samba 映射的盘符等）：键是远端目录的显示写法
+    /// `目标:/路径`（如 `devbox:/home/me`），值是本机上对应的目录（如 `Z:\`）。
+    ///
+    /// 远端的文件在这些目录之内时，「在文件管理器中显示」「用默认应用打开」改为对本机上
+    /// 对应的位置执行；默认没有。键已去掉末尾的 `/`（根目录除外）。
+    pub remote_local_folders: BTreeMap<String, String>,
     /// 键位方案：`idea` 或 `vscode`；没写时用 `idea`。
     pub keymap: Option<String>,
     /// 改过的快捷键：命令名 → 按键写法的数组，空数组表示不设快捷键。

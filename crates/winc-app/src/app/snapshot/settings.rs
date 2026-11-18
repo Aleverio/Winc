@@ -225,11 +225,13 @@ fn settings_keyboard_walks_every_item_and_adjusts() {
     assert_eq!(app.settings.selected, Setting::KeySearch);
     assert_eq!(app.settings_layout().page, SettingsPage::Keys);
     assert_eq!(app.focus, Focus::KeySearch);
-    // 向回走一步，回到模块页最后的远程开关，焦点回到浮层；再往回是终端开关和 Git 开关；再走
-    // 一步，回到终端页的最后一项（macOS 上是「Meta 键」，其他平台是「关闭前确认」）。
+    // 向回走一步，回到模块页最后的远程目录映射，焦点回到浮层；再往回是远程、终端和 Git 开关；
+    // 再走一步，回到终端页的最后一项（macOS 上是「Meta 键」，其他平台是「关闭前确认」）。
+    app.settings_move(false);
+    assert_eq!(app.settings.selected, Setting::RemoteFolders);
+    assert_eq!(app.focus, Focus::Settings);
     app.settings_move(false);
     assert_eq!(app.settings.selected, Setting::RemoteModule);
-    assert_eq!(app.focus, Focus::Settings);
     app.settings_move(false);
     assert_eq!(app.settings.selected, Setting::TerminalModule);
     app.settings_move(false);
@@ -1036,6 +1038,129 @@ fn the_git_page_is_listed_only_when_the_module_is_on() {
     assert_eq!(app.settings_layout().page, SettingsPage::Modules);
 
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// 「模块」页的「远程目录映射」：点击后打开弹窗，一行一条映射，每行是远程目录、本机目录两个
+/// 输入框；保存时逐行检查，写错时停在写错的那一栏，配置不变；取消放弃改动；全部移除后保存即
+/// 没有映射。
+#[test]
+fn remote_folder_mounts_are_edited_in_a_dialog() {
+    use crate::layout::MountPart;
+    let dir = sample_folder("settings-remote-folders");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    app.open_settings();
+    app.settings_show_page(SettingsPage::Modules);
+    let rows: Vec<Setting> = (app.settings_layout().rows.iter())
+        .map(|row| row.setting)
+        .collect();
+    assert_eq!(rows.last(), Some(&Setting::RemoteFolders));
+    paint(&mut app);
+    let mount = SettingsPart::Mount;
+    let focus = |app: &App| app.settings.mounts.as_ref().and_then(|d| d.focus);
+    let texts = |app: &App| -> Vec<(String, String)> {
+        let dialog = app.settings.mounts.as_ref().unwrap();
+        (dialog.rows.iter())
+            .map(|row| (row.remote.text().to_owned(), row.local.text().to_owned()))
+            .collect()
+    };
+    let typed = |app: &mut App, text: &str| {
+        app.edit_field(|f| {
+            f.set_text(text);
+            true
+        })
+    };
+
+    // 还没有映射：弹窗里有一个空行，键盘焦点在它的远程目录上。
+    click_part(&mut app, SettingsPart::Field(Setting::RemoteFolders));
+    assert_eq!(texts(&app), [(String::new(), String::new())]);
+    assert_eq!(focus(&app), Some(MountPart::Remote(0)));
+    assert_eq!(app.focus, Focus::Setting);
+    typed(&mut app, "devbox:/home/me/");
+    app.mounts_move(true);
+    assert_eq!(focus(&app), Some(MountPart::Local(0)));
+    typed(&mut app, r"Z:\");
+
+    // 再加一行，本机目录空着：保存时停在那一栏并说明原因，配置不变，弹窗不关。
+    click_part(&mut app, mount(MountPart::Add));
+    assert_eq!(focus(&app), Some(MountPart::Remote(1)));
+    typed(&mut app, "devbox:2222:/srv");
+    // ↑ ↓ 在两行的同一栏之间移动，到头不动。
+    app.mounts_step_row(false);
+    assert_eq!(focus(&app), Some(MountPart::Remote(0)));
+    app.mounts_step_row(false);
+    assert_eq!(focus(&app), Some(MountPart::Remote(0)));
+    app.mounts_step_row(true);
+    assert_eq!(focus(&app), Some(MountPart::Remote(1)));
+    click_part(&mut app, mount(MountPart::Save));
+    let error = app.settings.mounts.as_ref().unwrap().error.clone().unwrap();
+    assert_eq!((error.row, error.local), (1, true));
+    assert_eq!(focus(&app), Some(MountPart::Local(1)));
+    assert!(app.config.remote_local_folders.is_empty());
+    paint(&mut app);
+
+    // 用系统的对话框选好目录（这里直接给出结果）：填进那一行的本机目录，错误随之清除。
+    app.mount_folder_picked(1, std::path::PathBuf::from(r"Y:\srv"));
+    assert_eq!(texts(&app)[1].1, r"Y:\srv");
+    assert!(app.settings.mounts.as_ref().unwrap().error.is_none());
+    // 点在弹窗外面：什么也不做，弹窗和设置都还开着。
+    click_part(&mut app, mount(MountPart::Backdrop));
+    assert!(app.settings.mounts.is_some() && app.settings.open);
+    click_part(&mut app, mount(MountPart::Save));
+    assert!(app.settings.mounts.is_none());
+    assert_eq!(app.focus, Focus::Settings);
+    let expected: std::collections::BTreeMap<String, String> = [
+        ("devbox:/home/me".to_owned(), r"Z:\".to_owned()),
+        ("devbox:2222:/srv".to_owned(), r"Y:\srv".to_owned()),
+    ]
+    .into();
+    assert_eq!(app.config.remote_local_folders, expected);
+
+    // 再打开：按远程目录排好的两行。移除一行后取消：配置不变。
+    app.settings_open_mounts();
+    assert_eq!(texts(&app).len(), 2);
+    assert_eq!(texts(&app)[0].0, "devbox:/home/me");
+    click_part(&mut app, mount(MountPart::Remove(0)));
+    assert_eq!(texts(&app).len(), 1);
+    click_part(&mut app, mount(MountPart::Cancel));
+    assert_eq!(app.config.remote_local_folders, expected);
+
+    // 全部移除后保存：没有映射（最后一行清空而不是删掉，弹窗里总有一行可填）。
+    app.settings_open_mounts();
+    app.mounts_activate(MountPart::Remove(0));
+    app.mounts_activate(MountPart::Remove(0));
+    assert_eq!(texts(&app), [(String::new(), String::new())]);
+    app.mounts_activate(MountPart::Save);
+    assert!(app.config.remote_local_folders.is_empty());
+    assert!(app.settings.mounts.is_none());
+
+    // 关闭设置时弹窗一并关掉。
+    app.settings_open_mounts();
+    app.close_settings();
+    assert!(app.settings.mounts.is_none());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// 截图：「模块」页的「远程目录映射」一行，以及弹窗（两行映射；第二行本机目录空着时保存出错）。
+#[test]
+#[ignore]
+fn shoot_remote_folder_mounts() {
+    use crate::layout::MountPart;
+    let dir = search_folder("settings-remote-folders-shot");
+    let mut app = app_with(&dir, false);
+    app.open_settings();
+    app.settings_show_page(SettingsPage::Modules);
+    app.config.remote_local_folders = [("devbox:/home/me".to_owned(), r"Z:\".to_owned())].into();
+    shoot(&mut app, "settings-remote-folders-row");
+    app.settings_open_mounts();
+    shoot(&mut app, "settings-remote-folders-dialog");
+    app.mounts_activate(MountPart::Add);
+    app.edit_field(|f| {
+        f.set_text("devbox:2222:/srv/project");
+        true
+    });
+    app.mounts_activate(MountPart::Save);
+    shoot(&mut app, "settings-remote-folders-error");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// 「关于」页的「更新日志」一行与是否支持应用内更新无关，点击后关闭设置。
