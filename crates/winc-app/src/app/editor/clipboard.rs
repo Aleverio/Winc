@@ -20,6 +20,9 @@ pub(crate) struct Clipboard {
     /// 测试中代替系统剪贴板的图片（PNG）。
     #[cfg(test)]
     pub copied_image: Option<Vec<u8>>,
+    /// 测试中让写入失败，原有内容不变，如同无法访问系统剪贴板。
+    #[cfg(test)]
+    pub unavailable: bool,
     /// 最近一次整行复制的文本；写入的不是整行或写入文件时为 `None`。
     whole_line: Option<String>,
 }
@@ -37,20 +40,26 @@ impl Clipboard {
         }
     }
 
-    /// 把 `text` 写入剪贴板，替换其中的文件和图片。
+    /// 把 `text` 写入剪贴板，替换其中的文件和图片；返回是否写入了。
     ///
     /// `whole_line` 为 `true` 表示 `text` 是整行，见 [`Self::holds_line`]。
-    pub(in crate::app) fn set_text(&mut self, text: String, whole_line: bool) {
+    pub(in crate::app) fn set_text(&mut self, text: String, whole_line: bool) -> bool {
+        #[cfg(test)]
+        if self.unavailable {
+            return false;
+        }
         self.whole_line = whole_line.then(|| text.clone());
         #[cfg(test)]
         {
             self.copied = Some(text);
             self.copied_files.clear();
             self.copied_image = None;
+            true
         }
         #[cfg(not(test))]
-        if let Some(system) = self.system() {
-            let _ = system.set_text(text);
+        {
+            self.system()
+                .is_some_and(|system| system.set_text(text).is_ok())
         }
     }
 
@@ -75,18 +84,32 @@ impl Clipboard {
         }
     }
 
-    /// 把文件或目录 `paths` 写入剪贴板，替换其中的文本和图片。
-    pub(in crate::app) fn set_files(&mut self, paths: &[PathBuf]) {
+    /// 把本机的文件或目录 `paths` 写入剪贴板，替换其中的文本和图片；返回是否写入了。
+    ///
+    /// 系统剪贴板的文件列表只能放本机上存在的文件：arboard 写入前逐项打开或规范化，打不开的项
+    /// 被丢掉，全都打不开时什么也不写（macOS 上会先清空剪贴板）。远端的文件不经过这里，见
+    /// `App::copy_entries`。
+    pub(in crate::app) fn set_files(&mut self, paths: &[PathBuf]) -> bool {
+        #[cfg(test)]
+        if self.unavailable {
+            return false;
+        }
         self.whole_line = None;
         #[cfg(test)]
         {
+            // 与系统剪贴板一样放不下远端的文件（见上）：写入失败，原有内容不变。
+            if paths.iter().any(|path| winc_backend::is_remote(path)) {
+                return false;
+            }
             self.copied = None;
             self.copied_image = None;
             self.copied_files = paths.to_vec();
+            true
         }
         #[cfg(not(test))]
-        if let Some(system) = self.system() {
-            let _ = system.set().file_list(paths);
+        {
+            self.system()
+                .is_some_and(|system| system.set().file_list(paths).is_ok())
         }
     }
 
