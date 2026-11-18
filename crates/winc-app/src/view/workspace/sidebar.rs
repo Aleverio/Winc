@@ -168,6 +168,16 @@ fn draw_project_header(app: &mut App, frame: &mut Frame<'_>) {
 
 /// 文件树中目录有 Git 改动时，右端圆点的直径（逻辑像素）。
 const GIT_DOT: f32 = 6.0;
+/// 文件树中符号链接的行尾标记，和 VS Code Explorer 保持一致。
+const SYMLINK_MARK: &str = "⤷";
+/// 文件树名称与右侧标记之间的间距（逻辑像素）。
+const TREE_MARK_GAP: f32 = 6.0;
+/// 文件树最右侧标记与侧栏边缘的间距（逻辑像素）。
+const TREE_MARK_RIGHT: f32 = 16.0;
+/// VS Code 多个行尾标记之间使用的分隔符。
+const TREE_MARK_SEPARATOR: &str = ",";
+/// 行尾逗号与下一个标记之间的紧凑间距（逻辑像素）。
+const TREE_MARK_SEPARATOR_GAP: f32 = 2.0;
 /// 文件树中放不下的名称在侧栏边缘淡出的宽度（逻辑像素），
 /// 与结果行上按钮左侧的渐隐同宽。
 pub(in crate::view) const NAME_FADE: f32 = 20.0;
@@ -597,12 +607,33 @@ fn draw_tree_entry(
     // 鼠标移上去时在编辑区上方继续绘制完整名称（见 `draw_tree_overflow`）。
     let label_x = tree_label_x(row, entry.depth, shift);
     let label = entry.label();
-    // 合并显示的一行放不下时折叠中间的各级；鼠标在这一行上时展开完整路径，任意一级都点得到。
-    let room = if app.git.change_of(&entry.path).is_some() {
-        tree.right() - 16.0 - GIT_DOT - 6.0
+    let git_change = app.git.change_of(&entry.path);
+    let git_letter = git_change
+        .filter(|_| entry.kind != EntryKind::Dir)
+        .map(|c| c.letter().to_string());
+    let git_mark_w = match (&git_letter, git_change) {
+        (Some(letter), _) => frame.measure(FontKind::Ui, app.fonts.ui_small, letter),
+        (None, Some(_)) => GIT_DOT,
+        (None, None) => 0.0,
+    };
+    let symlink_mark_w = entry
+        .symlink
+        .then(|| frame.measure(FontKind::Ui, app.fonts.ui_small, SYMLINK_MARK))
+        .unwrap_or(0.0);
+    let mark_separator_w = (entry.symlink && git_change.is_some())
+        .then(|| {
+            frame.measure(FontKind::Ui, app.fonts.ui_small, TREE_MARK_SEPARATOR)
+                + TREE_MARK_SEPARATOR_GAP
+        })
+        .unwrap_or(0.0);
+    let mark_w = git_mark_w + symlink_mark_w + mark_separator_w;
+    let mark_room = if mark_w > 0.0 {
+        TREE_MARK_RIGHT + mark_w + TREE_MARK_GAP
     } else {
-        tree.right() - 12.0
-    } - label_x;
+        12.0
+    };
+    // 合并显示的一行放不下时折叠中间的各级；鼠标在这一行上时展开完整路径，任意一级都点得到。
+    let room = tree.right() - mark_room - label_x;
     let folded = chain_folded(app, frame, entry, room);
     let full = label_width(app, frame, entry);
     // 悬停和收回时名字的内容、宽度都缓动；放不下的普通名字收回到侧栏边缘。
@@ -676,21 +707,28 @@ fn draw_tree_entry(
     // 右端的 Git 状态与提交视图相同：文件显示带颜色的字母（M、U、A……），目录中有改动时
     // 显示圆点。名称会被状态截断的行在悬停时不绘制状态，以完整显示名称；
     // 放不下的部分继续绘制在编辑区上方。
-    let change = app.git.change_of(&entry.path);
-    let letter = change
-        .filter(|_| entry.kind != EntryKind::Dir)
-        .map(|c| c.letter().to_string());
-    let mark_w = match (&letter, change) {
-        (Some(letter), _) => frame.measure(FontKind::Ui, app.fonts.ui_small, letter),
-        (None, Some(_)) => GIT_DOT,
-        (None, None) => 0.0,
-    };
-    let mark_x = tree.right() - 16.0 - mark_w;
-    let change = change.filter(|_| !(hovered && label_end > mark_x - 6.0));
+    let reserved_git_x =
+        tree.right() - TREE_MARK_RIGHT - symlink_mark_w - mark_separator_w - git_mark_w;
+    let change = git_change.filter(|_| !(hovered && label_end > reserved_git_x - TREE_MARK_GAP));
+    let visible_git_w = change.map_or(0.0, |_| git_mark_w);
+    let visible_separator_w = (entry.symlink && change.is_some())
+        .then_some(mark_separator_w)
+        .unwrap_or(0.0);
+    let symlink_x = tree.right() - TREE_MARK_RIGHT - symlink_mark_w;
+    let separator_x = symlink_x - visible_separator_w;
+    let mark_x = separator_x - visible_git_w;
     // 名字画到哪里为止：有状态时停在状态左边，没有时到侧栏边缘。
-    let (text_right, cut) = match change {
-        Some(_) => (mark_x - 6.0, label_end > mark_x - 6.0),
-        None => (tree.right(), overflows),
+    let (text_right, cut) = if entry.symlink && change.is_some() {
+        (mark_x - TREE_MARK_GAP, label_end > mark_x - TREE_MARK_GAP)
+    } else if entry.symlink {
+        (
+            symlink_x - TREE_MARK_GAP,
+            label_end > symlink_x - TREE_MARK_GAP,
+        )
+    } else if change.is_some() {
+        (mark_x - TREE_MARK_GAP, label_end > mark_x - TREE_MARK_GAP)
+    } else {
+        (tree.right(), overflows)
     };
 
     let color = tree_entry_color(app, entry, selected);
@@ -744,7 +782,7 @@ fn draw_tree_entry(
 
     if let Some(change) = change {
         let color = git_color(p, change);
-        match &letter {
+        match &git_letter {
             Some(letter) => {
                 ui_text_small(frame, app, mark_x, row, letter, color, clip);
             }
@@ -753,6 +791,26 @@ fn draw_tree_entry(
                 frame.rect_clipped(dot, color, GIT_DOT / 2.0, clip);
             }
         }
+    }
+
+    if entry.symlink {
+        let marker_color = if selected {
+            tree_entry_color(app, entry, selected)
+        } else {
+            p.text_dim
+        };
+        if change.is_some() {
+            ui_text_small(
+                frame,
+                app,
+                separator_x,
+                row,
+                TREE_MARK_SEPARATOR,
+                marker_color,
+                clip,
+            );
+        }
+        ui_text_small(frame, app, symlink_x, row, SYMLINK_MARK, marker_color, clip);
     }
 
     // 横向滚动范围按折叠后的宽度计算，鼠标移到这一行上时滚动条不变。
