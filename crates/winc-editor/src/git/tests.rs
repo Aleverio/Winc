@@ -352,6 +352,18 @@ fn runs_the_real_git() {
     let untracked = git.head_content(&root, &root.join("b.rs"), &cancel);
     assert_eq!(untracked, Ok(None));
     assert!(status.entries[1].untracked());
+    // 较早的 `git` 只说「Not a valid object name」：版本存在时才算没有该文件。
+    let old = b"fatal: Not a valid object name HEAD:tests/e2e/README.md\n";
+    assert!(unnamed(old, "HEAD") && !unnamed(old, "main"));
+    assert!(unnamed(b"fatal: Not a valid object name :b.rs\n", ""));
+    assert!(!unnamed(
+        b"fatal: path 'b.rs' does not exist in 'HEAD'\n",
+        "HEAD"
+    ));
+    assert!(git.has_version(&root, "HEAD", &cancel) && git.has_version(&root, "", &cancel));
+    assert!(git.has_version(&root, "main", &cancel));
+    assert!(!git.has_version(&root, "no-such-branch", &cancel));
+    assert!(!git.has_version(&root, "--all", &cancel));
 
     // 提交暂存区的内容：只暂存 a.rs，未暂存的文件留在工作区。
     let a = root.join("src/a.rs");
