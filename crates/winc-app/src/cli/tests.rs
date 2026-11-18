@@ -111,3 +111,39 @@ fn the_launcher_flag_is_recorded_and_dropped_when_relaunching() {
     );
     assert!(!args(&["a"]).unwrap().launcher);
 }
+
+/// `winc://file/<绝对路径>[:行[:列]]` 链接：百分号编码解码，忽略查询和片段，Windows 盘符路径去掉
+/// 开头的斜杠；没有盘符的 Windows 路径、编码不完整的链接报错，不当作文件名。
+#[test]
+fn winc_links_open_files_at_a_line() {
+    assert_eq!(
+        link("winc://file/no/such/a%20b.rs:12:3?windowId=1#x"),
+        Some(at("/no/such/a b.rs", Some(11), Some(2)))
+    );
+    assert_eq!(
+        link("WINC://file/no/such/dir"),
+        Some(at("/no/such/dir", None, None))
+    );
+    if cfg!(windows) {
+        assert_eq!(
+            link("winc://file/C:/no/such/a.rs:4"),
+            Some(at("C:/no/such/a.rs", Some(3), None))
+        );
+        assert_eq!(link("winc://file/no/drive"), None);
+    }
+    for bad in [
+        "winc://file",
+        "winc://open/no/such/a.rs",
+        "winc://file/no/such/%e4",
+        "winc://file/no/such/%zz",
+        "vscode://file/no/such/a.rs",
+    ] {
+        assert_eq!(link(bad), None, "{bad}");
+    }
+    if cfg!(windows) {
+        return;
+    }
+    let parsed = args(&["winc://file/no/such/a.rs:2"]).unwrap();
+    assert_eq!(parsed.targets, [at("/no/such/a.rs", Some(1), None)]);
+    assert!(args(&["winc://file/no/such/%zz"]).is_err());
+}
