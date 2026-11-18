@@ -54,7 +54,7 @@ pub(crate) use input::context_menu::{
 };
 pub use input::context_menu::{ContextMenu, MenuButton, MenuCommand};
 pub use input::palette::palette;
-pub(crate) use lifecycle::alert::{AlertButton, AlertKey, AlertPart, AlertParts};
+pub(crate) use lifecycle::alert::{AlertButton, AlertKey, AlertPart, AlertParts, InAppAlert};
 use lifecycle::appearance::{forced_theme, unusable_font};
 pub(crate) use lifecycle::backup::{restore_at_launch, restore_tabs};
 pub use lifecycle::closing::{CloseRequest, SaveChoice, SavePrompt};
@@ -310,6 +310,8 @@ pub enum UserEvent {
     TerminalShells(Vec<terminal::shells::ShellChoice>),
     /// 退出或关闭窗口前的确认结果（终端中有程序在运行）：用户确认时为真，取消时为假。
     TerminalQuit(bool),
+    /// 关闭前确认（`confirm_close`）的结果：用户确认时为真，取消时为假。
+    CloseConfirmed(bool),
     /// 确认框中确认把文字粘贴到指定的终端标签（多行文字，且程序未开启括号粘贴）。
     TerminalPaste(u16, String),
     /// 确认框中确认日志中对一个提交的操作（签出该提交、硬重置）。

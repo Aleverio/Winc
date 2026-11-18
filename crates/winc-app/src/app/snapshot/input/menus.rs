@@ -738,7 +738,7 @@ fn alerts_without_a_system_dialog_are_drawn_in_the_window() {
 }
 
 /// 截图：窗口内绘制的提示框（关闭有未保存修改的标签时那样的三个按钮和「不再询问」）
-/// （`alert-light`、`alert-dark`）。
+/// （`alert-light`、`alert-dark`），以及只有一句的关闭前确认（`alert-short-*`）。
 #[test]
 #[ignore = "截图，手动运行"]
 fn shoot_alert() {
@@ -766,6 +766,13 @@ fn shoot_alert() {
         let button = app.overlays.alert.as_ref().unwrap().parts.buttons[1];
         app.on_mouse_move(button.x + 10.0, button.y + 10.0);
         shoot(&mut app, &format!("alert-{theme}"));
+
+        // 只有一句的提示框按内容收窄。
+        let mut app = app_with(&dir.join("short.rs"), dark);
+        app.config.confirm_close = Some(true);
+        app.ask_quit();
+        paint(&mut app);
+        shoot(&mut app, &format!("alert-short-{theme}"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
