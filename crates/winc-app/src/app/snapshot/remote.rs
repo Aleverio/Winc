@@ -323,7 +323,7 @@ fn a_folder_on_a_connected_host_opens_as_the_workspace() {
     row_of(&app, "renamed.rs");
     std::fs::create_dir_all(dir.join("old/deep")).unwrap();
     std::fs::write(dir.join("old/deep/x"), "").unwrap();
-    app.delete_entries(&[root.join("renamed.rs"), root.join("old")]);
+    app.delete_entries(&[root.join("renamed.rs"), root.join("old")], true);
     assert!(!dir.join("renamed.rs").exists() && !dir.join("old").exists());
     assert!(app.notice.text.is_none(), "{:?}", app.notice.text);
 

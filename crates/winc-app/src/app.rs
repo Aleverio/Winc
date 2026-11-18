@@ -178,8 +178,8 @@ pub enum UserEvent {
     /// 右键菜单中选中一项，参数是 `AppKit` 菜单项的编号（`tag`）。
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     MenuCommand(isize),
-    /// 删除确认框中选择了「移到废纸篓」，参数是要删除的各个路径。
-    Delete(Vec<PathBuf>),
+    /// 删除确认框中确认了删除，参数是要删除的各个路径，以及是否不经废纸篓直接删除。
+    Delete(Vec<PathBuf>, bool),
     /// 「要保存修改吗」提示框中的一个按钮被点击。
     SaveChoice(SaveChoice),
     /// 状态栏路径的目录菜单中选中了一个文件。
