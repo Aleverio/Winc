@@ -231,6 +231,7 @@ fn round_trips_through_json() {
         tab_width: Some(8),
         auto_save: Some(true),
         hot_exit: Some(false),
+        confirm_close: Some(true),
         restore_folder: Some(false),
         open_folder_in_new_window: Some(true),
         sticky_scroll: Some(false),

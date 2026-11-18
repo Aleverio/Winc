@@ -34,6 +34,7 @@ settings-editor-size = Font Size
 settings-tab-width = Tab Width
 settings-auto-save = Auto Save
 settings-hot-exit = Hot Exit
+settings-confirm-close = Confirm Before Closing
 settings-restore-folder = Restore Last Folder
 settings-sticky-scroll = Sticky Scroll
 settings-vim-mode = Vim Mode (Experimental)
@@ -107,6 +108,7 @@ settings-key-search = Search Shortcuts
 
 settings-auto-save-desc = Save changes when switching tabs or apps
 settings-hot-exit-desc = Quit without confirming each file and restore unsaved changes on next launch
+settings-confirm-close-desc = Ask before closing a window or quitting
 settings-restore-folder-desc = Reopen the last folder and its tabs on launch
 settings-sticky-scroll-desc = Pin the current function, class or heading to the top while scrolling
 settings-vim-mode-desc = Use Vim modes and keys in the editor

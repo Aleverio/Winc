@@ -131,6 +131,7 @@ impl SettingsPage {
                 plain(vec![
                     Setting::AutoSave,
                     Setting::HotExit,
+                    Setting::ConfirmClose,
                     Setting::RestoreFolder,
                     Setting::DropFolder,
                     Setting::PreviewOnClick,
@@ -280,6 +281,8 @@ pub enum Setting {
     AutoSave,
     /// 热退出：退出时不逐个询问是否保存，下次打开时恢复未保存的修改。
     HotExit,
+    /// 关闭窗口或退出前先确认。
+    ConfirmClose,
     /// 启动时打开上次退出时打开的目录和标签。
     RestoreFolder,
     /// 粘滞滚动：滚动时在编辑区顶部钉住当前所在的函数、类和标题。
@@ -478,6 +481,7 @@ impl Setting {
             | Setting::TabWidth
             | Setting::AutoSave
             | Setting::HotExit
+            | Setting::ConfirmClose
             | Setting::RestoreFolder
             | Setting::DropFolder
             | Setting::CompactFolders
@@ -556,6 +560,7 @@ impl Setting {
             Setting::TabWidth => t!("settings-tab-width"),
             Setting::AutoSave => t!("settings-auto-save"),
             Setting::HotExit => t!("settings-hot-exit"),
+            Setting::ConfirmClose => t!("settings-confirm-close"),
             Setting::RestoreFolder => t!("settings-restore-folder"),
             Setting::DropFolder => t!("settings-drop-folder"),
             Setting::StickyScroll => t!("settings-sticky-scroll"),
@@ -639,6 +644,7 @@ impl Setting {
             Setting::SystemTitleBar => Some(t!("settings-system-title-bar-desc")),
             Setting::AutoSave => Some(t!("settings-auto-save-desc")),
             Setting::HotExit => Some(t!("settings-hot-exit-desc")),
+            Setting::ConfirmClose => Some(t!("settings-confirm-close-desc")),
             Setting::RestoreFolder => Some(t!("settings-restore-folder-desc")),
             Setting::DropFolder => Some(t!("settings-drop-folder-desc")),
             Setting::StickyScroll => Some(t!("settings-sticky-scroll-desc")),
@@ -712,6 +718,7 @@ impl Setting {
             Setting::SystemTitleBar
             | Setting::AutoSave
             | Setting::HotExit
+            | Setting::ConfirmClose
             | Setting::RestoreFolder
             | Setting::CompactFolders
             | Setting::PreviewOnClick

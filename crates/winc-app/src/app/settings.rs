@@ -751,6 +751,7 @@ impl App {
             Setting::FixOnSave => self.config.fix_on_save == Some(true),
             Setting::AutoSave => self.config.auto_save == Some(true),
             Setting::HotExit => self.config.hot_exit != Some(false),
+            Setting::ConfirmClose => self.config.confirm_close == Some(true),
             Setting::RestoreFolder => self.config.restore_folder != Some(false),
             Setting::StickyScroll => self.config.sticky_scroll != Some(false),
             Setting::VimMode => self.config.vim_enabled == Some(true),
@@ -812,6 +813,7 @@ impl App {
             Setting::FixOnSave => self.config.fix_on_save = Some(on),
             Setting::AutoSave => self.config.auto_save = Some(on),
             Setting::HotExit => self.config.hot_exit = Some(on),
+            Setting::ConfirmClose => self.config.confirm_close = Some(on),
             Setting::RestoreFolder => self.config.restore_folder = Some(on),
             Setting::StickyScroll => self.config.sticky_scroll = Some(on),
             Setting::VimMode => {

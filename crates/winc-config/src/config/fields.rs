@@ -128,6 +128,7 @@ const EDITOR: &[Field] = &[
     },
     bool_field!("autoSave", auto_save),
     bool_field!("hotExit", hot_exit),
+    bool_field!("confirmClose", confirm_close),
     bool_field!("restoreFolder", restore_folder),
     bool_field!("openFolderInNewWindow", open_folder_in_new_window),
     Field {

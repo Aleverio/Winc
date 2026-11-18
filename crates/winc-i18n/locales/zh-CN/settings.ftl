@@ -34,6 +34,7 @@ settings-editor-size = 字号
 settings-tab-width = 制表符长度
 settings-auto-save = 自动保存
 settings-hot-exit = 热退出
+settings-confirm-close = 关闭前确认
 settings-restore-folder = 恢复上次的目录
 settings-sticky-scroll = 粘滞滚动
 settings-vim-mode = Vim 模式（实验性）
@@ -107,6 +108,7 @@ settings-key-search = 搜索快捷键
 
 settings-auto-save-desc = 切换标签页或应用时自动保存修改
 settings-hot-exit-desc = 退出时不逐个确认保存，下次启动时恢复未保存的修改
+settings-confirm-close-desc = 关闭窗口或退出前先确认
 settings-restore-folder-desc = 启动时重新打开上次的目录和标签页
 settings-sticky-scroll-desc = 滚动时将当前所在的函数、类和标题固定在顶部
 settings-vim-mode-desc = 在编辑区使用 Vim 的模式与按键
