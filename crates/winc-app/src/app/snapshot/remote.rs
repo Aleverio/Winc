@@ -54,6 +54,7 @@ fn a_folder_on_a_connected_host_opens_as_the_workspace() {
     folders_on_a_remote_host_are_not_taken_for_files();
     features_work_in_a_remote_workspace();
     clipboard_images_pasted_into_a_remote_terminal_are_sent_there_first();
+    ssh_arguments_open_the_project_and_file();
 
     // 模块默认关闭：状态栏上没有连接的按钮，命令不可用，按下也不打开面板。
     paint(&mut app);
@@ -740,6 +741,47 @@ fn measure_remote_round_trips() {
     step("保存");
     app.check_disk();
     step("窗口重新获得焦点");
+    remote::disconnect(&target);
+}
+
+/// 命令行上的 `ssh://` 参数：模块关闭时提示原因；开启时连接、打开项目目录，再打开文件并跳到
+/// 指定位置。目录已经开着时不再连接，直接打开文件。
+///
+/// 由 [`a_folder_on_a_connected_host_opens_as_the_workspace`] 调用，原因同
+/// [`folders_on_a_remote_host_are_not_taken_for_files`]。
+fn ssh_arguments_open_the_project_and_file() {
+    let dir = search_folder("remote-cli").canonicalize().unwrap();
+    let target = loopback("app-remote-cli");
+    let url = |path: &Path, suffix: &str| {
+        let path = path.to_str().unwrap().replace(' ', "%20");
+        std::ffi::OsString::from(format!("ssh://app-remote-cli{path}{suffix}"))
+    };
+    let main = dir.join("src/main.rs");
+    let parsed = crate::cli::parse([url(&dir, ""), url(&main, ":2:5")]).unwrap();
+    let open = crate::cli::remote_open(&parsed.targets).unwrap();
+    let root = winc_backend::virtual_path(&target, dir.as_os_str().as_bytes());
+
+    let mut app = blank_app(false);
+    app.open_remote(open.clone());
+    let notice = app.notice.text.take().unwrap();
+    assert!(notice.contains("远程模块未启用"), "{notice}");
+    assert!(app.editor.root().is_none());
+
+    app.config.remote_enabled = Some(true);
+    remote::forbid_blocking();
+    app.open_remote(open);
+    assert_eq!(app.editor.root(), Some(root.as_path()));
+    let caret = |app: &App| {
+        let doc = app.editor.active().unwrap();
+        let head = doc.selection.head;
+        (doc.path.clone().unwrap(), doc.text().pos_to_line_col(head))
+    };
+    assert_eq!(caret(&app), (root.join("src/main.rs"), (1, 4)));
+
+    let config = dir.join("src/config.rs");
+    let parsed = crate::cli::parse([url(&dir, ""), url(&config, ":3")]).unwrap();
+    app.open_remote(crate::cli::remote_open(&parsed.targets).unwrap());
+    assert_eq!(caret(&app), (root.join("src/config.rs"), (2, 0)));
     remote::disconnect(&target);
 }
 
