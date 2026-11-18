@@ -378,7 +378,7 @@ fn bookmark_commands_are_available_in_the_editor_menu() {
 }
 
 #[test]
-fn cmd_i_copies_a_reference_to_the_lines() {
+fn copy_reference_copies_the_lines() {
     use crate::app::snapshot::editor::navigation::press;
     use crate::keymap::KeyCode::Char;
     use winc_core::Selection;
@@ -387,7 +387,7 @@ fn cmd_i_copies_a_reference_to_the_lines() {
     let mut app = app_with(&dir.join("short.rs"), false);
     let copy = |app: &mut App, anchor, head| {
         app.editor.active_mut().unwrap().selection = Selection { anchor, head };
-        assert!(press(app, &["cmd"], Char('i')));
+        assert!(press(app, &["cmd", "shift", "alt"], Char('c')));
         app.clipboard.copied.clone().unwrap()
     };
     // `short.rs` 的第 0 行是 `fn main() {`，第 1 行从字符偏移 12 起，第 2 行从字符偏移 35 起。
@@ -397,8 +397,8 @@ fn cmd_i_copies_a_reference_to_the_lines() {
     assert_eq!(copy(&mut app, 0, 35), "short.rs:1-2");
     assert_eq!(copy(&mut app, 0, 36), "short.rs:1-3");
 
-    // ⌘L：完整路径。
-    assert!(press(&mut app, &["cmd"], Char('l')));
+    // 完整路径。
+    assert!(app.run_action(crate::keymap::Action::CopyAbsoluteReference));
     let file = app.editor.active().unwrap().path.clone().unwrap();
     let expected = format!("{}:1-3", file.display());
     assert_eq!(app.clipboard.copied.as_deref(), Some(expected.as_str()));

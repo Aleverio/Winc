@@ -67,6 +67,32 @@ pub fn read_only_menu(own: bool, all: bool) -> Vec<MenuEntry> {
     ]
 }
 
+/// 返回「快捷键」页中一行的菜单项：`has_keys` 表示命令现在有快捷键，`customized` 表示改过。
+pub fn shortcut_menu(has_keys: bool, customized: bool) -> Vec<MenuEntry> {
+    vec![
+        MenuEntry::Item(MenuCommand::ShortcutChange, true),
+        MenuEntry::Item(MenuCommand::ShortcutAdd, has_keys),
+        MenuEntry::Item(MenuCommand::ShortcutRemove, has_keys),
+        MenuEntry::Separator,
+        MenuEntry::Item(MenuCommand::ShortcutReset, customized),
+    ]
+}
+
+/// 返回「键位方案」菜单的菜单项：各方案，从本机找到的 `sources` 处编辑器导入，以及恢复全部
+/// 默认（`customized` 表示改过快捷键，否则不可选）。
+pub fn keymap_menu(sources: usize, customized: bool) -> Vec<MenuEntry> {
+    let mut entries: Vec<MenuEntry> = (crate::keymap::Preset::ALL.into_iter())
+        .map(|preset| MenuEntry::Item(MenuCommand::KeymapPreset(preset), true))
+        .collect();
+    if sources > 0 {
+        entries.push(MenuEntry::Separator);
+        entries.extend((0..sources).map(|i| MenuEntry::Item(MenuCommand::ImportKeymap(i), true)));
+    }
+    entries.push(MenuEntry::Separator);
+    entries.push(MenuEntry::Item(MenuCommand::ResetAllShortcuts, customized));
+    entries
+}
+
 /// 返回状态栏语言菜单的菜单项：有文件名（`named`）时第一项是按文件名识别，然后是纯文本，
 /// 其余语言按名字排序。
 pub fn document_language_menu(named: bool) -> Vec<MenuEntry> {

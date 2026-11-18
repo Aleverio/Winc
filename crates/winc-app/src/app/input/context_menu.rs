@@ -20,6 +20,7 @@ use crate::icons;
 use crate::keymap::{self, Action, Context, Stroke};
 use crate::layout::hit;
 
+mod labels;
 mod menus;
 mod popup;
 mod present;
@@ -136,6 +137,20 @@ pub enum MenuCommand {
     ReadOnly(bool),
     /// 把窗口里的全部标签设为只读（`true`）或恢复。
     ReadOnlyAll(bool),
+    /// 「快捷键」页：按新键取代命令原有的快捷键。
+    ShortcutChange,
+    /// 「快捷键」页：给命令再加一个快捷键。
+    ShortcutAdd,
+    /// 「快捷键」页：移除命令的全部快捷键。
+    ShortcutRemove,
+    /// 「快捷键」页：恢复命令在键位方案中的快捷键。
+    ShortcutReset,
+    /// 「快捷键」页：改用一个键位方案。
+    KeymapPreset(crate::keymap::Preset),
+    /// 「快捷键」页：从第几处来源（`SettingsState::import_sources` 的下标）导入快捷键。
+    ImportKeymap(usize),
+    /// 「快捷键」页：恢复全部命令的默认快捷键。
+    ResetAllShortcuts,
     /// 在文件树中显示并选中该文件。
     RevealInTree,
     /// 标签列表：切换到指定标签，参数为 `documents` 的下标。
@@ -515,10 +530,17 @@ impl MenuCommand {
             MenuCommand::ReadOnly(false) => t!("menu-clear-read-only"),
             MenuCommand::ReadOnlyAll(true) => t!("menu-set-read-only-all"),
             MenuCommand::ReadOnlyAll(false) => t!("menu-clear-read-only-all"),
+            MenuCommand::ShortcutChange => t!("menu-shortcut-change"),
+            MenuCommand::ShortcutAdd => t!("menu-shortcut-add"),
+            MenuCommand::ShortcutRemove => t!("menu-shortcut-remove"),
+            MenuCommand::ShortcutReset => t!("menu-shortcut-reset"),
+            MenuCommand::KeymapPreset(preset) => preset.title(),
+            MenuCommand::ResetAllShortcuts => t!("menu-shortcuts-reset-all"),
             MenuCommand::CloseAll => t!("cmd-close-all-tabs"),
             MenuCommand::RevealInTree => t!("menu-reveal-in-tree"),
             MenuCommand::RunEdit => t!("cmd-edit-run-configurations"),
             MenuCommand::OpenRecent(_)
+            | MenuCommand::ImportKeymap(_)
             | MenuCommand::ShowTab(_)
             | MenuCommand::RunSelect(_)
             | MenuCommand::NewTerminalShell(_)
@@ -798,7 +820,7 @@ impl MenuCommand {
         }
         let action = self.action()?;
         let stroke = keymap::single_stroke(action, context)?;
-        match keymap::lookup(keymap::current(), stroke, None, context) {
+        match keymap::lookup(&keymap::current(), stroke, None, context) {
             keymap::Lookup::Run(actions) if actions.first() == Some(&action) => Some(stroke),
             _ => None,
         }
@@ -864,6 +886,10 @@ pub enum MenuTarget {
     Encoding(DocumentId),
     /// 状态栏中一个文档的只读标记。
     ReadOnly(DocumentId),
+    /// 「快捷键」页中一个命令的一行。
+    Shortcut(Action),
+    /// 「快捷键」页「键位方案」一行的值。
+    Keymap,
     /// 状态栏中一个文档的语言。
     Language(DocumentId),
     /// 分支选择器里第几个分支（[`crate::app::git::GitState::branches`] 的下标）的操作。

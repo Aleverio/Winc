@@ -287,6 +287,19 @@ impl App {
             MenuTarget::Tool(task, id) => {
                 self.settings_choose_tool(tool_setting(task, id), command)
             }
+            MenuTarget::Keymap => match command {
+                MenuCommand::KeymapPreset(preset) => self.set_keymap_preset(preset),
+                MenuCommand::ImportKeymap(i) => self.import_keymap(i),
+                MenuCommand::ResetAllShortcuts => self.reset_all_shortcuts(),
+                _ => {}
+            },
+            MenuTarget::Shortcut(action) => match command {
+                MenuCommand::ShortcutChange => self.start_key_edit(action, false),
+                MenuCommand::ShortcutAdd => self.start_key_edit(action, true),
+                MenuCommand::ShortcutRemove => self.remove_shortcuts(action),
+                MenuCommand::ShortcutReset => self.reset_shortcuts(action),
+                _ => {}
+            },
             MenuTarget::Indent(id)
             | MenuTarget::LineEnding(id)
             | MenuTarget::Encoding(id)

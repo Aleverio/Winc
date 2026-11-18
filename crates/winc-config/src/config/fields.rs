@@ -55,6 +55,7 @@ pub(super) const SECTIONS: &[(&str, &[Field])] = &[
     ("vim", VIM),
     ("git", GIT),
     ("remote", REMOTE),
+    ("keyboard", KEYBOARD),
     ("format", FORMAT),
 ];
 
@@ -667,6 +668,53 @@ const GIT: &[Field] = &[
 
 /// `remote` 一节。
 const REMOTE: &[Field] = &[bool_field!("enabled", remote_enabled)];
+
+/// `keyboard` 一节：键位方案和改过的快捷键；命令名和按键写法由应用检查。
+const KEYBOARD: &[Field] = &[
+    Field {
+        key: "keymap",
+        read: |config, value, name, problems| {
+            config.keymap = match value.as_str() {
+                Some(key @ ("idea" | "vscode")) => Some(key.to_owned()),
+                _ => {
+                    problems.push(t!("config-keymap-invalid", name = name));
+                    None
+                }
+            }
+        },
+        write: |config| config.keymap.clone().map(Json::String),
+    },
+    Field {
+        key: "shortcuts",
+        read: |config, value, name, problems| {
+            let entries = value.as_object().and_then(|object| {
+                (object.iter())
+                    .map(|(command, keys)| {
+                        let keys = keys.as_array()?.iter().map(|key| key.as_str());
+                        let keys: Option<Vec<&str>> = keys.collect();
+                        Some((
+                            command.clone(),
+                            keys?.into_iter().map(str::to_owned).collect(),
+                        ))
+                    })
+                    .collect::<Option<BTreeMap<String, Vec<String>>>>()
+            });
+            match entries {
+                Some(entries) => config.shortcuts = entries,
+                None => problems.push(t!("config-shortcuts-invalid", name = name)),
+            }
+        },
+        write: |config| {
+            (!config.shortcuts.is_empty()).then(|| {
+                let keys = |keys: &Vec<String>| {
+                    Json::Array(keys.iter().cloned().map(Json::String).collect())
+                };
+                let object = config.shortcuts.iter().map(|(k, v)| (k.clone(), keys(v)));
+                Json::Object(object.collect())
+            })
+        },
+    },
+];
 
 /// `format` 一节，用户配置和项目配置共用。
 ///
