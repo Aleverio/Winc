@@ -1031,10 +1031,12 @@ fn clipboard_images_pasted_into_a_remote_terminal_are_sent_there_first() {
     assert_eq!(std::fs::read(&path).unwrap(), png);
     assert!(app.notice.text.is_none(), "{:?}", app.notice.text);
 
-    // 从文件管理器复制的本机文件：传过去，名字里的空白换掉，粘贴的路径不需要引号。
+    // 从文件管理器复制的本机文件：传过去，名字里的空白换掉，粘贴的路径不需要引号。剪贴板里
+    // 同时有文件名的文字（访达复制文件时如此），仍然传文件。
     let shot = dir.join("my shot.png");
     std::fs::write(&shot, &png).unwrap();
     app.clipboard.copied_image = None;
+    app.clipboard.copied = Some("my shot.png".into());
     app.clipboard.copied_files = vec![shot];
     let before = app.input_sent_to(&log, id).len();
     app.terminal_paste();
@@ -1045,10 +1047,14 @@ fn clipboard_images_pasted_into_a_remote_terminal_are_sent_there_first() {
     );
     assert_eq!(std::fs::read(&path).unwrap(), png);
 
-    // ⌃V：Claude Code、Codex、Pi 在 Linux 上粘贴图片的键。主屏上、开启了括号粘贴的程序里同样
-    // 先传再粘贴路径；备用屏上的程序（vim 的 ⌃V 是列选择）和剪贴板里有文字时照常发给程序。
+    // ⌃V：有程序运行、在主屏上、开启了括号粘贴时同样先传再粘贴路径。shell 的提示符下（⌃V 是
+    // 逐字输入）、备用屏上的程序（vim 的 ⌃V 是列选择）和剪贴板里只有文字时照常发给程序。
+    app.clipboard.copied = None;
     app.clipboard.copied_files.clear();
     app.clipboard.copied_image = Some(png.clone());
+    app.terminal.tab_mut().unwrap().process = "bash".into();
+    assert!(!app.ctrl_v_uploads());
+    app.terminal.tab_mut().unwrap().process = "claude".into();
     let before = app.input_sent_to(&log, id).len();
     assert!(app.ctrl_v_uploads());
     assert!(pasted(&app, before).starts_with(folder.to_str().unwrap()));
@@ -1078,12 +1084,22 @@ fn clipboard_images_pasted_into_a_remote_terminal_are_sent_there_first() {
         .modes
         .set(Modes::BRACKETED_PASTE, true);
 
-    // 目录不传：说明原因，什么也不粘贴。
+    // 目录和超过上限的文件不传：说明原因，什么也不粘贴。
     app.clipboard.copied_files = vec![dir.join("cache")];
     let before = app.input_sent_to(&log, id).len();
     app.terminal_paste();
     assert_eq!(app.input_sent_to(&log, id).len(), before);
-    assert!(app.notice.text.take().is_some());
+    let notice = app.notice.text.take().unwrap();
+    assert!(notice.contains("不能把文件夹粘贴到远端终端"), "{notice}");
+    let large = dir.join("large.bin");
+    let file = std::fs::File::create(&large).unwrap();
+    file.set_len(crate::app::terminal::upload::MAX_UPLOAD + 1)
+        .unwrap();
+    app.clipboard.copied_files = vec![large];
+    app.terminal_paste();
+    assert_eq!(app.input_sent_to(&log, id).len(), before);
+    let notice = app.notice.text.take().unwrap();
+    assert!(notice.contains("太大"), "{notice}");
 
     // 本机的终端不变：仍是一次空的括号粘贴，由程序自己读剪贴板；⌃V 也照常发给程序。
     app.clipboard.copied_files.clear();

@@ -40,14 +40,15 @@ impl App {
     ///
     /// 剪贴板中没有文字（如只有图片）时按空文字粘贴：程序开启了括号粘贴时收到一次空的括号
     /// 粘贴，可据此自行读取剪贴板中的图片；未开启时不发送任何内容。远端主机上的标签例外：
-    /// 那里的程序读不到本机的剪贴板，图片和文件先传过去，再粘贴那里的路径（[`App::upload_paste`]）。
+    /// 那里的程序读不到本机的剪贴板，复制的文件和图片先传过去，再粘贴那里的路径
+    /// （[`App::upload_paste`]）。
     pub(in crate::app) fn terminal_paste(&mut self) {
         let text = self.clipboard_text().unwrap_or_default();
         let Some(tab) = self.terminal.tab().map(|t| (t.id, t.modes, t.cwd.clone())) else {
             return;
         };
         let (id, modes, cwd) = tab;
-        if text.is_empty() && self.upload_paste(id, &cwd) {
+        if self.upload_paste(id, &cwd, text.is_empty()) {
             return;
         }
         if input::paste_needs_confirm(&text, modes) {
@@ -231,22 +232,26 @@ impl App {
         }
     }
 
-    /// 在正在看的标签里按了 ⌃V：标签在远端主机上、本机剪贴板里只有图片或文件时，传到那台主机
-    /// 再粘贴路径（见 [`App::upload_paste`]），返回 `true`，不再把 ⌃V 发给程序。
+    /// 在正在看的标签里按了 ⌃V：标签在远端主机上、本机剪贴板里有复制的文件或只有图片时，传到
+    /// 那台主机再粘贴路径（见 [`App::upload_paste`]），返回 `true`，不再把 ⌃V 发给程序。
     ///
-    /// Claude Code、Codex、Pi 在 Linux 上都用 ⌃V 粘贴图片，但它们读的是远端的剪贴板，按了也读
-    /// 不到本机的截图；这里让这个习惯的键照样可用。只在主屏上、程序开启了括号粘贴时这样做（这些
-    /// 程序都是如此）：vim 这类备用屏上的程序，以及剪贴板里有文字时，⌃V 照常发给程序。
+    /// 用 ⌃V 粘贴图片的程序读的是远端的剪贴板，按了也读不到本机的截图；这里让这个习惯的键照样
+    /// 可用。只在有程序运行（[`TermTab::busy`]）、在主屏上、开启了括号粘贴时这样做：shell 的
+    /// 提示符下 ⌃V 是逐字输入下一个键，备用屏上的 vim 是列选择，这些时候照常发给程序。
     pub(in crate::app) fn ctrl_v_uploads(&mut self) -> bool {
         let Some(tab) = self.terminal.tab() else {
             return false;
         };
         let (id, cwd, modes) = (tab.id, tab.cwd.clone(), tab.modes);
-        modes.has(Modes::BRACKETED_PASTE)
+        let ready = tab.busy().is_some()
+            && modes.has(Modes::BRACKETED_PASTE)
             && !modes.has(Modes::ALT_SCREEN)
-            && winc_backend::is_remote(&bytes_path(&cwd))
-            && self.clipboard_text().is_none_or(|text| text.is_empty())
-            && self.upload_paste(id, &cwd)
+            && winc_backend::is_remote(&bytes_path(&cwd));
+        if !ready {
+            return false;
+        }
+        let empty = self.clipboard_text().is_none_or(|text| text.is_empty());
+        self.upload_paste(id, &cwd, empty)
     }
 
     /// 返回编码终端按键和鼠标上报时使用的修饰键。
