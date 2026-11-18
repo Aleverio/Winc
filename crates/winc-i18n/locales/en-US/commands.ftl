@@ -257,6 +257,7 @@ cmd-cli-usage =
       -h, --help            Show this help
       -v, --version         Show the version
 cmd-cli-unknown-option = Unrecognized option “{ $flag }”
+cmd-cli-bad-link = Can’t open the link “{ $link }”: expected winc://file/ followed by an absolute path
 cmd-cli-wait-needs-file = --wait requires a file
 cmd-cli-wsl-needs-name = --wsl requires a distribution name
 cmd-cli-wait-needs-openable-file = --wait requires at least one file that can be opened

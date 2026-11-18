@@ -257,6 +257,7 @@ cmd-cli-usage =
       -h, --help            显示帮助
       -v, --version         显示版本号
 cmd-cli-unknown-option = 无法识别的选项「{ $flag }」
+cmd-cli-bad-link = 无法打开链接「{ $link }」：应为 winc://file/ 加绝对路径
 cmd-cli-wait-needs-file = --wait 需要指定文件
 cmd-cli-wsl-needs-name = --wsl 需要指定发行版名称
 cmd-cli-wait-needs-openable-file = --wait 需要至少一个可打开的文件

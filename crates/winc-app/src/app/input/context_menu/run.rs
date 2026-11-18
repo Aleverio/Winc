@@ -412,7 +412,9 @@ impl App {
                     }
                 }
                 MenuCommand::Cut => self.cut_entries(&self.tree_targets()),
-                MenuCommand::Copy => self.copy_entries(&self.tree_targets()),
+                MenuCommand::Copy => {
+                    self.copy_entries(&self.tree_targets());
+                }
                 MenuCommand::Delete => self.ask_delete_all(self.tree_targets()),
                 MenuCommand::CopyPath => self.copy_paths(&selection, false),
                 MenuCommand::CopyRelativePath => self.copy_paths(&selection, true),

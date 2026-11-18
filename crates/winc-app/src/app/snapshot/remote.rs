@@ -524,6 +524,7 @@ fn a_folder_on_a_connected_host_opens_as_the_workspace() {
     assert_eq!(remote::identity(&target), None);
     app.close_picker();
     local_only_actions_are_not_offered_on_a_remote_host();
+    files_copied_in_a_remote_tree_are_pasted_there();
 }
 
 /// 截图：开始页、主机面板、目录面板（浏览与筛选）和打开远端目录后的窗口。
@@ -1198,4 +1199,116 @@ fn local_only_actions_are_not_offered_on_a_remote_host() {
     app.open_path(&dir.join("page.html"));
     assert!(app.browser_page().is_some());
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 远端工作区的文件树里复制、剪切文件，再粘贴到同一工作区。由
+/// [`a_folder_on_a_connected_host_opens_as_the_workspace`] 调用，原因同
+/// [`folders_on_a_remote_host_are_not_taken_for_files`]。
+///
+/// 回归（#272）：系统剪贴板的文件列表放不下远端的文件，写入失败被忽略，粘贴时用的是剪贴板里
+/// 原有的内容：旧文字写成 `untitled.txt`，旧的本机文件被复制到远端，剪切永远不移动。
+fn files_copied_in_a_remote_tree_are_pasted_there() {
+    let dir = search_folder("remote-tree-copy").canonicalize().unwrap();
+    std::fs::write(dir.join("notes.txt"), "note\n").unwrap();
+    std::fs::create_dir(dir.join("into-copy")).unwrap();
+    std::fs::create_dir(dir.join("into-cut")).unwrap();
+    let stale = sample_folder("remote-tree-stale").join("a.txt");
+    let target = loopback("app-remote-tree-copy");
+    let root = winc_backend::virtual_path(&target, dir.as_os_str().as_bytes());
+    let mut app = blank_app(false);
+    app.config.remote_enabled = Some(true);
+    app.open_folder(&root);
+    let select = |app: &mut App, name: &str| {
+        let row = row_of(app, name);
+        app.editor.workspace.as_mut().unwrap().selected = Some(row);
+    };
+    let notes = root.join("notes.txt");
+
+    // 剪贴板里原有本机的文件：复制远端的文件以后，粘贴的是远端的文件。系统剪贴板里写的是它在
+    // 那台主机上的路径，粘贴到终端、聊天窗口里可以直接用。
+    app.clipboard.copied_files = vec![stale.clone()];
+    app.copy_entry(&notes);
+    let native = dir.join("notes.txt").to_string_lossy().into_owned();
+    assert_eq!(app.clipboard_text(), Some(native.clone()));
+    assert_eq!(app.clipboard_files(), std::slice::from_ref(&notes));
+    select(&mut app, "into-copy");
+    app.paste_into_tree();
+    assert_eq!(
+        std::fs::read_to_string(dir.join("into-copy/notes.txt")).unwrap(),
+        "note\n"
+    );
+    assert!(!dir.join("into-copy/a.txt").exists() && dir.join("notes.txt").exists());
+    assert!(app.notice.text.is_none(), "{:?}", app.notice.text);
+
+    // 剪切：粘贴时移过去，只移一次。
+    app.cut_entries(std::slice::from_ref(&notes));
+    assert_eq!(
+        *app.link.shared.cut_files.borrow(),
+        std::slice::from_ref(&notes)
+    );
+    select(&mut app, "into-cut");
+    app.paste_into_tree();
+    assert!(dir.join("into-cut/notes.txt").exists() && !dir.join("notes.txt").exists());
+    assert!(app.link.shared.cut_files.borrow().is_empty());
+
+    // 粘贴到编辑区：非 Markdown 文档中写那台主机上的路径，不写本机的虚拟路径。
+    let moved = root.join("into-cut/notes.txt");
+    app.copy_entry(&moved);
+    app.open_path(&root.join("src/main.rs"));
+    app.focus = Focus::Editor;
+    app.select(0, 0);
+    app.paste();
+    let text = app
+        .editor
+        .active()
+        .unwrap()
+        .text_range(0, usize::MAX)
+        .unwrap();
+    let native = dir
+        .join("into-cut/notes.txt")
+        .to_string_lossy()
+        .into_owned();
+    assert!(text.starts_with(&native), "{text}");
+
+    // 复制以后剪贴板被别的内容替换（这里由本程序写入一段文字）：不再当作复制的文件。
+    app.copy_entry(&moved);
+    app.set_clipboard("other".into(), false);
+    assert!(app.clipboard_files().is_empty());
+    assert!(app.link.shared.remote_copy.borrow().is_none());
+
+    // 本程序写入的文字与复制时写入的路径相同（例如「复制路径」）：同样不再当作复制的文件。
+    app.copy_entry(&moved);
+    let path = app.clipboard_text().unwrap();
+    app.set_clipboard(path, false);
+    assert!(app.clipboard_files().is_empty());
+
+    // 写不进剪贴板：说明原因，上一次的剪切仍然有效。
+    app.cut_entries(std::slice::from_ref(&moved));
+    app.clipboard.unavailable = true;
+    app.copy_entry(&root.join("src/main.rs"));
+    let notice = app.notice.text.take().unwrap();
+    assert!(notice.contains("无法写入系统剪贴板"), "{notice}");
+    app.clipboard.unavailable = false;
+    assert_eq!(app.clipboard_files(), std::slice::from_ref(&moved));
+    assert_eq!(
+        *app.link.shared.cut_files.borrow(),
+        std::slice::from_ref(&moved)
+    );
+
+    // 剪切的远端文件粘贴到另一个窗口里本机的目录：不同主机之间不能移动，改为复制，原处的保留。
+    // 两个窗口共用各窗口间的状态和系统剪贴板。
+    let local = sample_folder("remote-tree-local").canonicalize().unwrap();
+    let mut other = app_with(&local, false);
+    other.link.shared = std::rc::Rc::clone(&app.link.shared);
+    other.clipboard.copied = app.clipboard.copied.clone();
+    other.paste_into_tree();
+    let notice = other.notice.text.take().unwrap();
+    assert!(notice.contains("不同主机之间不能移动"), "{notice}");
+    assert!(local.join("notes.txt").exists() && dir.join("into-cut/notes.txt").exists());
+    assert!(app.link.shared.cut_files.borrow().is_empty());
+    let _ = std::fs::remove_dir_all(&local);
+
+    remote::disconnect(&target);
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(stale.parent().unwrap());
 }
