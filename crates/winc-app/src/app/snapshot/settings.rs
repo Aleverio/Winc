@@ -297,8 +297,8 @@ fn settings_keyboard_walks_every_item_and_adjusts() {
     );
     assert_eq!(app.settings.selected, Setting::License);
     assert_eq!(app.settings_layout().page, SettingsPage::About);
-    // 往回走过关于页的八行（版本、更新两行、更新日志和四个链接），回到快捷键页的搜索框。
-    for _ in 0..8 {
+    // 往回走过关于页的九行（版本、更新三行、更新日志和四个链接），回到快捷键页的搜索框。
+    for _ in 0..9 {
         app.settings_move(false);
     }
     assert_eq!(app.settings.selected, Setting::KeySearch);
@@ -1091,9 +1091,10 @@ fn the_git_page_is_listed_only_when_the_module_is_on() {
         Setting::GitConfirmPush,
         Setting::GitRememberCredentials,
         Setting::GitAutoFetch,
-        Setting::GitSystemProxy,
     ];
     assert_eq!(rows, expected);
+    // 代理不只管 Git：放在「关于」页的更新旁边，关掉 Git 模块也找得到。
+    assert_eq!(Setting::SystemProxy.page(), SettingsPage::About);
     // 「树形显示更改」与提交视图「⋯」菜单里的是同一个开关，记在状态文件里。
     assert!(app.git.commit.flat() && !app.switch_on(Setting::GitTree));
     app.settings_toggle(Setting::GitTree);

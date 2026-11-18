@@ -114,8 +114,8 @@ pub enum UpdateState {
     Latest,
     /// 上次检查找到了新版本（版本号）。
     Found(String),
-    /// 上次检查失败（各通道都连不上、appcast 签名不对……）。
-    Failed,
+    /// 上次检查失败（各通道都连不上、appcast 签名不对……），带着知道的原因。
+    Failed(Option<crate::web::Failure>),
     /// 正在下载找到的新版本（版本号，已下载的百分比 0 到 100）；macOS 上这一段交给 Sparkle，由它
     /// 显示进度。
     #[cfg_attr(target_os = "macos", allow(dead_code))]

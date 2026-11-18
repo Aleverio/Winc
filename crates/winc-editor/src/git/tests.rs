@@ -1341,3 +1341,22 @@ fn a_repository_on_a_remote_host_is_read_through_its_connection() {
     assert!(git.status(&far, &cancel).is_err());
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn only_online_commands_follow_the_proxy() {
+    use std::ffi::OsStr;
+    let online = |args: &[&str]| super::online(args.iter().map(OsStr::new));
+    assert!(online(&["fetch", "--all"]));
+    assert!(online(&["push", "--set-upstream", "origin", "HEAD"]));
+    assert!(online(&[
+        "-c",
+        "protocol.ext.allow=never",
+        "clone",
+        "--",
+        "url",
+        "dir"
+    ]));
+    assert!(!online(&["add", "--all", "--", "a.rs"]));
+    assert!(!online(&["commit", "-m", "x"]));
+    assert!(!online(&["-c", "core.fsmonitor=false", "stash", "push"]));
+}
