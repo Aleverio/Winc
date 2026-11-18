@@ -709,8 +709,8 @@ const REMOTE: &[Field] = &[
 /// 把「远端目录 → 本机目录」的对象（`remote.localFolders`）读入 `out`，无法理解的地方记入
 /// `problems`，文案中用 `name` 指代这一项。
 ///
-/// 键要写成 `目标:/路径`（远端目录的显示写法），末尾的 `/` 去掉（根目录除外）；值去掉首尾
-/// 空白，空字符串视为没写。连接目标是否有效由应用在使用时检查。
+/// 键要写成 `目标:/路径`（远端目录的显示写法），按 [`remote_folder_key`] 规范；值去掉首尾
+/// 空白，空字符串视为没写。规范后相同的两个键只取第一个，其余记为问题。
 fn read_local_folders(
     value: &Json,
     name: &str,
@@ -735,24 +735,30 @@ fn read_local_folders(
             problems.push(t!("config-remote-folder-invalid", name = entry));
             continue;
         };
+        if out.contains_key(&remote) {
+            problems.push(t!("config-remote-folder-duplicate", name = entry));
+            continue;
+        }
         out.insert(remote, local);
     }
 }
 
-/// 把 `remote.localFolders` 的键规范为 `目标:/路径`，去掉末尾的 `/`（根目录除外）；不是这种
-/// 写法时返回 `None`。目标不含 `/`，第一个 `:/` 就是目标与路径的分界（目标可以带 `:端口`）。
-///
-/// 读配置文件和设置页中填写时都用它，两处得到同样的键。
-pub fn remote_folder_key(key: &str) -> Option<String> {
+/// 把 `remote.localFolders` 的键规范为 `目标:/路径`：路径中的空段和 `.` 去掉、`..` 上移一级，
+/// 与远端位置的比较方式相同（根目录是 `/`）。不是这种写法、目标不是有效的连接目标时返回
+/// `None`。目标不含 `/`，第一个 `:/` 就是目标与路径的分界（目标可以带 `:端口`）。
+fn remote_folder_key(key: &str) -> Option<String> {
     let key = key.trim();
     let at = key.find(":/")?;
-    let (target, path) = (&key[..at], &key[at + 1..]);
-    if target.is_empty() || target.contains(char::is_whitespace) {
-        return None;
+    let target = winc_backend::Target::new(&key[..at])?;
+    let mut segments: Vec<&str> = Vec::new();
+    for segment in key[at + 1..].split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => _ = segments.pop(),
+            name => segments.push(name),
+        }
     }
-    let path = path.trim_end_matches('/');
-    let path = if path.is_empty() { "/" } else { path };
-    Some(format!("{target}:{path}"))
+    Some(format!("{}:/{}", target.as_str(), segments.join("/")))
 }
 
 /// `keyboard` 一节：键位方案和改过的快捷键；命令名和按键写法由应用检查。

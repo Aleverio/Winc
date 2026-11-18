@@ -117,13 +117,6 @@ impl App {
     /// 点在卡片外面（遮罩上）时关闭设置，不会同时点到下方的内容。正在编辑时，点到输入框
     /// 以外的地方先离开输入框（见 [`App::settings_leave_field`]），再处理这次点击。
     pub(super) fn click_settings(&mut self, x: f32, y: f32) {
-        // 「远程目录映射」弹窗打开时只处理弹窗；点在弹窗外面什么也不做，不会关掉设置。
-        if self.settings.mounts.is_some() {
-            if let Some(SettingsPart::Mount(part)) = self.settings_part_at(x, y) {
-                self.click_mounts(part, x, y);
-            }
-            return;
-        }
         let layout = self.settings_layout();
         let part = self.settings_part_at(x, y);
 
@@ -152,8 +145,6 @@ impl App {
         }
 
         match part {
-            // 弹窗打开时已在上面处理。
-            Some(SettingsPart::Mount(_)) => {}
             Some(SettingsPart::Close) => self.close_settings(),
             Some(SettingsPart::Page(page)) => self.settings_show_page(page),
             Some(SettingsPart::Field(setting)) => {

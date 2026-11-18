@@ -183,16 +183,19 @@ fn bad_format_settings_are_reported_one_by_one() {
     assert_eq!(problems.len(), 9, "{problems:?}");
 }
 
-/// `remote.localFolders`：键规范为 `目标:/路径`（去掉末尾的 `/`），写法不对的项逐项报告。
+/// `remote.localFolders`：键规范为 `目标:/路径`（空段、`.`、`..` 与远端位置的比较方式相同），
+/// 写法不对、目标无效、规范后重复的项逐项报告。
 #[test]
 fn remote_local_folders_are_normalised_and_checked() {
     let (config, problems) = Config::parse(
         r#"{"remote": {"localFolders": {
-                "devbox:/home/me/": "Z:\\",
+                "devbox:/home//me/./proj/../": "Z:\\",
+                "devbox:/home/me": "W:\\",
                 "devbox:2222:/": " /mnt/devbox ",
                 "devbox:/srv": "",
                 "devbox": "Y:\\",
                 "/srv": "X:\\",
+                "-oProxyCommand=x:/": "V:\\",
                 "devbox:/opt": 3
             }}}"#,
     );
@@ -206,6 +209,8 @@ fn remote_local_folders_are_normalised_and_checked() {
     for expected in [
         "remote.localFolders.devbox：键应写成「主机:/远端目录」",
         "remote.localFolders./srv：键应写成「主机:/远端目录」",
+        "remote.localFolders.-oProxyCommand=x:/：键应写成「主机:/远端目录」",
+        "remote.localFolders.devbox:/home/me：与前面的一项是同一个远端目录",
         "remote.localFolders.devbox:/opt 应为字符串",
     ] {
         assert!(
@@ -213,7 +218,7 @@ fn remote_local_folders_are_normalised_and_checked() {
             "{expected}：{problems:?}"
         );
     }
-    assert_eq!(problems.len(), 3, "{problems:?}");
+    assert_eq!(problems.len(), 5, "{problems:?}");
     let (wrong, problems) = Config::parse(r#"{"remote": {"localFolders": ["Z:"]}}"#);
     assert!(wrong.remote_local_folders.is_empty());
     assert!(

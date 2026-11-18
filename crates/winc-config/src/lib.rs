@@ -15,7 +15,6 @@ mod version;
 pub use config::{
     AutoSave, BackgroundFit, Backup, Config, FolderDrop, OptionAsMeta, RenderWhitespace, Saved,
     TextWidth, ThemeChoice, VimClipboard, VimMapMode, VimMapping, WorktreeOpen, config_path,
-    remote_folder_key,
 };
 pub use font::{FontRequest, font_list, resolve_font, resolve_font_list};
 pub use json::Json;

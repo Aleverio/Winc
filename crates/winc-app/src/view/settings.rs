@@ -4,7 +4,6 @@
 //! 几何绘制，并记录当前页中各控件的可点击区域。
 
 mod keys;
-mod mounts;
 
 use std::borrow::Cow;
 
@@ -131,11 +130,7 @@ fn draw_dialog(app: &mut App, frame: &mut Frame<'_>, layout: &SettingsLayout) {
     } else {
         frame.within(layout.body, |frame| draw_body(app, frame, layout))
     };
-    let mut caret = caret.or(search_caret);
-    // 「远程目录映射」弹窗盖在卡片之上。
-    if app.settings.mounts.is_some() {
-        caret = mounts::draw(app, frame, layout);
-    }
+    let caret = caret.or(search_caret);
     if caret.is_some() {
         app.ime.cursor = caret;
     }
@@ -434,12 +429,6 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
                     Some(shell) => (shell.name, false),
                     None => (t!("settings-terminal-shell-default").to_owned(), false),
                 },
-                // 远程目录映射：写出唯一的一项或项数，点击打开弹窗逐行编辑。
-                None if row.setting == Setting::RemoteFolders => {
-                    let folders = &app.config.remote_local_folders;
-                    let text = crate::app::remote::mounts::summary(folders);
-                    (text, folders.is_empty())
-                }
                 None => (t!("format-tool-auto").to_owned(), false),
             };
             let hovered = app.settings.hover == Some(SettingsPart::Field(row.setting));

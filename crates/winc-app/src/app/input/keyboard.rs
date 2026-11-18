@@ -556,11 +556,6 @@ impl App {
     fn on_key_settings(&mut self, event: &KeyEvent, base: &str, cmd: bool) {
         let shift = self.pointer.modifiers.shift_key();
 
-        if self.settings.mounts.is_some() {
-            self.on_key_mounts(event, base, cmd);
-            return;
-        }
-
         // 修改快捷键时，按键都记作新键。
         if self.settings.key_edit.is_some() {
             let location = event.location;
@@ -613,35 +608,6 @@ impl App {
                 self.focus = Focus::SettingsSearch;
                 self.on_key_field(event, base, cmd);
             }
-            _ => {}
-        }
-    }
-
-    /// 处理「远程目录映射」弹窗打开时的按键。
-    ///
-    /// `Tab`、`⇧Tab` 在各部件之间移动，`↑` `↓` 换到上下一行的同一栏，`Esc`、`⌘W` 关闭弹窗（不
-    /// 保存）。焦点在输入框上时 `↩` 保存，其余按键交给输入框；在按钮上时 `↩`、空格按下它。
-    fn on_key_mounts(&mut self, event: &KeyEvent, base: &str, cmd: bool) {
-        let shift = self.pointer.modifiers.shift_key();
-        let focus = self.settings.mounts.as_ref().and_then(|d| d.focus);
-        let in_field = matches!(
-            focus,
-            Some(crate::layout::MountPart::Remote(_) | crate::layout::MountPart::Local(_))
-        );
-        match &event.logical_key {
-            Key::Named(NamedKey::Escape) => self.close_mounts(),
-            _ if cmd && matches!(base, "," | "w") => self.close_mounts(),
-            Key::Named(NamedKey::Tab) => self.mounts_move(!shift),
-            Key::Named(NamedKey::ArrowDown) if in_field => self.mounts_step_row(true),
-            Key::Named(NamedKey::ArrowUp) if in_field => self.mounts_step_row(false),
-            Key::Named(NamedKey::Enter) if in_field => self.save_mounts(),
-            Key::Named(NamedKey::Enter | NamedKey::Space) => {
-                if let Some(part) = focus {
-                    self.mounts_activate(part);
-                }
-            }
-            _ if in_field && cmd && base == "v" => self.paste(),
-            _ if in_field => self.on_key_field(event, base, cmd),
             _ => {}
         }
     }

@@ -99,10 +99,6 @@ impl App {
             x
         };
         if self.settings.open {
-            // 「远程目录映射」弹窗打开时，只有它的列表可以滚动。
-            if self.settings.mounts.is_some() {
-                return ScrollTarget::Settings(self.mounts_layout().list.contains(x, y));
-            }
             return ScrollTarget::Settings(self.settings_layout().body.contains(x, y));
         }
         if !self.overlays.picker.open

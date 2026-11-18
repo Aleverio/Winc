@@ -5,7 +5,6 @@
 
 mod adopt;
 mod formatters;
-pub(super) mod mounts;
 pub(super) mod shortcuts;
 
 use std::ops::RangeInclusive;
@@ -84,8 +83,6 @@ pub struct SettingsState {
     pub switch_slide: Option<(Setting, super::animation::Clock)>,
     /// 出现、消失动画用的快照，动画开头画一次存下来，动画结束就释放。
     pub cache: Option<DialogCache>,
-    /// 「远程目录映射」弹窗；没有打开时为 `None`。打开期间设置浮层的输入都先交给它。
-    pub mounts: Option<mounts::MountsDialog>,
     /// 设置页滚动期间保存的窗口画面（含遮罩），用于代替逐帧重绘浮层下方的界面。
     pub scroll_base: Option<winc_render::Snapshot>,
     /// 最近一次滚动的时刻；未在滚动时为 `None`。
@@ -247,7 +244,6 @@ impl App {
 
         self.settings_cancel_field();
         self.cancel_key_edit();
-        self.settings.mounts = None;
         self.settings.open = false;
         self.settings.motion = self
             .clock(super::animation::DIALOG_OUT)
@@ -278,10 +274,6 @@ impl App {
     /// 先判断上一帧绘制出的「安装方法…」链接，再判断布局中的部件。滚动到标题之下而不可见的
     /// 链接不可点击。
     pub(super) fn settings_part_at(&self, x: f32, y: f32) -> Option<SettingsPart> {
-        // 弹窗盖在最上面：只看弹窗，下层的设置不响应悬停和点击。
-        if self.settings.mounts.is_some() {
-            return Some(SettingsPart::Mount(self.mounts_layout().part_at(x, y)));
-        }
         let layout = self.settings_layout();
         if layout.page == SettingsPage::Keys
             && !layout.searching
@@ -613,9 +605,6 @@ impl App {
 
     /// 按滚轮增量 `dy`（逻辑像素）滚动当前页，滚动位置限制在有效范围内。
     pub(in crate::app) fn settings_scroll_by(&mut self, dy: f32) {
-        if self.settings.mounts.is_some() {
-            return self.mounts_scroll_by(dy);
-        }
         let (_, max) = self.settings_scroll_area();
         // 列表收短后（如快捷键页收起一行）滚动量可能超出范围，从有效范围内的位置起算。
         self.settings.scroll = (self.settings.scroll.min(max) - dy).clamp(0.0, max);

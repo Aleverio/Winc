@@ -66,13 +66,30 @@ fn join_local(local: &str, rest: &[u8]) -> Option<PathBuf> {
     }
     for segment in rest.split(|&b| b == b'/').filter(|s| !s.is_empty()) {
         let name = std::str::from_utf8(segment).ok()?;
-        // 远端的名字里可以有 `\`、`:`，在 Windows 上会被当成分隔符或盘符，指向别处。
-        if cfg!(windows) && name.contains(['\\', ':']) {
+        if cfg!(windows) && !windows_name(name) {
             return None;
         }
         base.push(name);
     }
     Some(base)
+}
+
+/// 远端的名字 `name` 在 Windows 上是否原样表示同一个文件。
+///
+/// `\\`、`:` 会被当成分隔符或盘符，`<>"|?*` 不能出现在名字里，末尾的 `.` 和空格会被系统去掉，
+/// `CON`、`NUL`、`COM1` 这类名字（带不带扩展名）指向设备：这些名字换算后会指向别的文件。
+fn windows_name(name: &str) -> bool {
+    const DEVICES: [&str; 4] = ["CON", "PRN", "AUX", "NUL"];
+    let stem = name.split('.').next().unwrap_or(name).to_ascii_uppercase();
+    let numbered = |prefix: &str| {
+        stem.strip_prefix(prefix)
+            .is_some_and(|n| n.len() == 1 && n.as_bytes()[0].is_ascii_digit())
+    };
+    !name.contains(['\\', ':', '<', '>', '"', '|', '?', '*'])
+        && !name.ends_with(['.', ' '])
+        && !DEVICES.contains(&stem.as_str())
+        && !numbered("COM")
+        && !numbered("LPT")
 }
 
 /// 展开开头的 `~/`（本机用户的主目录）；没有主目录时原样返回。
@@ -81,65 +98,6 @@ fn expand_home(local: &str) -> PathBuf {
     match (local.strip_prefix("~/").or(local.strip_prefix("~\\")), home) {
         (Some(rest), Some(home)) => PathBuf::from(home).join(rest),
         _ => PathBuf::from(local),
-    }
-}
-
-/// 弹窗里一行写错的地方：第几行、哪一栏，以及原因。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct RowError {
-    /// 第几行（从 0 起）。
-    pub row: usize,
-    /// 是否是本机目录那一栏；否则是远程目录。
-    pub local: bool,
-    /// 原因，显示在弹窗底部。
-    pub message: String,
-}
-
-/// 读入弹窗里的各行（远程目录、本机目录），返回 `remote.localFolders` 的内容。
-///
-/// 两栏都空着的行不算，便于先添加一行再填。远程目录规范为 `目标:/路径`（与读配置文件相同），
-/// 本机目录去掉首尾空白。
-///
-/// # Errors
-///
-/// 远程目录不是 `主机:/路径`、主机不是有效的连接目标、本机目录空着，或同一个远程目录写了两次
-/// 时，返回第一处错误。
-pub(crate) fn parse_rows(rows: &[(&str, &str)]) -> Result<BTreeMap<String, String>, RowError> {
-    let mut folders = BTreeMap::new();
-    for (i, (remote, local)) in rows.iter().enumerate() {
-        let (remote, local) = (remote.trim(), local.trim());
-        if remote.is_empty() && local.is_empty() {
-            continue;
-        }
-        let error = |local: bool, message: &str| RowError {
-            row: i,
-            local,
-            message: message.to_owned(),
-        };
-        let key = winc_config::remote_folder_key(remote).filter(|key| parse_key(key).is_some());
-        let Some(key) = key else {
-            return Err(error(
-                false,
-                winc_i18n::t!("settings-mounts-remote-invalid"),
-            ));
-        };
-        if local.is_empty() {
-            return Err(error(true, winc_i18n::t!("settings-mounts-local-empty")));
-        }
-        if folders.insert(key, local.to_owned()).is_some() {
-            return Err(error(false, winc_i18n::t!("settings-mounts-duplicate")));
-        }
-    }
-    Ok(folders)
-}
-
-/// 设置页「远程目录映射」一行右侧显示的概况：没有时为「未设置」，一项时写出这一项，多项时
-/// 写项数。
-pub(crate) fn summary(folders: &BTreeMap<String, String>) -> String {
-    match folders.iter().next() {
-        None => winc_i18n::t!("settings-mounts-none").to_owned(),
-        Some((remote, local)) if folders.len() == 1 => format!("{remote} → {local}"),
-        Some(_) => winc_i18n::t!("settings-mounts-count", count = folders.len()),
     }
 }
 
@@ -192,41 +150,17 @@ mod tests {
         assert_eq!(local_folder(&map, Path::new("/home/me/a")), None);
     }
 
-    /// 弹窗里的各行：空行跳过，远程目录规范化；写错的行和栏、本机目录空着、重复的远程目录都
-    /// 指出是第几行。
+    /// Windows 上会被改写或指向设备的名字不换算。
     #[test]
-    fn rows_from_the_dialog_are_checked_one_by_one() {
-        let map = parse_rows(&[
-            (" devbox:/home/me/ ", r" Z:\ "),
-            ("", ""),
-            ("devbox:2222:/srv", r"Y:\srv"),
-        ])
-        .unwrap();
-        assert_eq!(
-            map,
-            folders(&[("devbox:/home/me", r"Z:\"), ("devbox:2222:/srv", r"Y:\srv")])
-        );
-        assert_eq!(parse_rows(&[]).unwrap(), BTreeMap::new());
-        let wrong = |rows: &[(&str, &str)]| {
-            let error = parse_rows(rows).unwrap_err();
-            (error.row, error.local)
-        };
-        assert_eq!(wrong(&[("devbox:/a", "Y:"), ("devbox", "Z:")]), (1, false));
-        assert_eq!(wrong(&[("-oProxy:/x", "Z:")]), (0, false));
-        assert_eq!(wrong(&[("devbox:/a", "  ")]), (0, true));
-        assert_eq!(
-            wrong(&[("devbox:/a/", "Y:"), ("devbox:/a", "Z:")]),
-            (1, false)
-        );
-    }
-
-    #[test]
-    fn the_summary_names_one_mount_or_counts_several() {
-        assert_eq!(summary(&BTreeMap::new()), "未设置");
-        let one = folders(&[("devbox:/home/me", r"Z:\")]);
-        assert_eq!(summary(&one), r"devbox:/home/me → Z:\");
-        let two = folders(&[("devbox:/a", "Y:"), ("devbox:/b", "Z:")]);
-        assert_eq!(summary(&two), "2 项");
+    fn names_windows_would_change_are_refused() {
+        for bad in [
+            "a.", "a ", "a:b", "a\\b", "x?.txt", "CON", "nul.txt", "COM1", "lpt9.log",
+        ] {
+            assert!(!windows_name(bad), "{bad}");
+        }
+        for good in ["a.txt", "console", "COM10", ".env", "lpt"] {
+            assert!(windows_name(good), "{good}");
+        }
     }
 
     #[test]

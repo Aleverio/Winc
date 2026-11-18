@@ -44,8 +44,6 @@ pub enum Pick {
     BackgroundImage,
     /// 连接远端主机对话框中密钥文件右端的按钮：选密钥文件，从 `~/.ssh` 开始。
     KeyFile,
-    /// 设置中「远程目录映射」弹窗第几行本机目录右边的按钮：选远程目录挂载在本机的目录。
-    MountFolder(usize),
 }
 
 /// 无法打开的文件在编辑区中给出的操作。
@@ -963,7 +961,6 @@ impl App {
                 (name, dir)
             }
             Pick::KeyFile => (String::new(), crate::app::remote::key_dir()),
-            Pick::MountFolder(i) => (String::new(), self.mount_folder_start(*i)),
             Pick::Open
             | Pick::OpenFolder
             | Pick::WslFolder(_)
@@ -990,10 +987,6 @@ impl App {
                         dir: None,
                     }
                 }
-                Pick::MountFolder(_) => Panel::Open {
-                    files: false,
-                    dir: dir.as_deref(),
-                },
                 Pick::SaveAs(_) => Panel::Save {
                     name: &name,
                     dir: dir.as_deref(),
@@ -1036,13 +1029,6 @@ impl App {
                     };
                     (choose, t!("cmd-open-folder"))
                 }
-                Pick::MountFolder(_) => {
-                    let choose = Choose::Open {
-                        directory: true,
-                        dir: dir.as_deref(),
-                    };
-                    (choose, t!("settings-mounts-browse"))
-                }
                 Pick::SaveAs(_) => (
                     Choose::Save {
                         name: &name,
@@ -1068,7 +1054,6 @@ impl App {
             let title = match &kind {
                 Pick::Open | Pick::BackgroundImage => t!("cmd-open-file"),
                 Pick::KeyFile => t!("workspace-remote-dialog-key-choose"),
-                Pick::MountFolder(_) => t!("settings-mounts-browse"),
                 Pick::OpenFolder | Pick::WorktreeFolder => t!("cmd-open-folder"),
                 Pick::AddFolder => t!("cmd-add-folder"),
                 Pick::WslFolder(_) => t!("cmd-open-wsl-folder"),
@@ -1096,8 +1081,7 @@ impl App {
                     Pick::OpenFolder
                     | Pick::WslFolder(_)
                     | Pick::WorktreeFolder
-                    | Pick::AddFolder
-                    | Pick::MountFolder(_) => dialog.pick_folder(),
+                    | Pick::AddFolder => dialog.pick_folder(),
                     Pick::SaveAs(_) => dialog.set_file_name(&name).save_file(),
                 };
                 let _ = proxy.send_event(UserEvent::Picked(kind, path));
@@ -1133,8 +1117,7 @@ impl App {
             | Pick::WorktreeFolder
             | Pick::AddFolder
             | Pick::BackgroundImage
-            | Pick::KeyFile
-            | Pick::MountFolder(_) => None,
+            | Pick::KeyFile => None,
         };
 
         let Some(path) = path else { return };
@@ -1145,7 +1128,6 @@ impl App {
             Pick::AddFolder => self.add_folder(&path),
             Pick::BackgroundImage => self.set_background_image(Some(path)),
             Pick::KeyFile => self.key_file_picked(&path),
-            Pick::MountFolder(i) => self.mount_folder_picked(i, path),
             Pick::SaveAs(id) => {
                 if self.save_document(id, Some(path))
                     && let Some(prompt) = continuation

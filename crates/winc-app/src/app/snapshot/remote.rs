@@ -1058,16 +1058,6 @@ fn local_only_actions_are_not_offered_on_a_remote_host() {
     app.reveal_in_file_manager(&file);
     assert!(app.notice.text.is_none(), "{:?}", app.notice.text);
     app.config.remote_local_folders.clear();
-
-    // 设置中打开「远程目录映射」弹窗：还没有映射时，第一行的远程目录先填上打开的这个目录。
-    app.open_settings();
-    app.settings_open_mounts();
-    let first = app.settings.mounts.as_ref().unwrap().rows[0]
-        .remote
-        .text()
-        .to_owned();
-    assert_eq!(first, format!("app-remote-local-only:{}", dir.display()));
-    app.close_settings();
     app.open_in_terminal(Some(&file));
     let notice = app.notice.text.take();
     assert_eq!(

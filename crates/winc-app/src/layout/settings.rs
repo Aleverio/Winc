@@ -9,12 +9,10 @@ use winc_i18n::t;
 mod about;
 mod controls;
 mod keys;
-mod mounts;
 
 pub use about::*;
 pub use controls::*;
 pub use keys::*;
-pub use mounts::*;
 
 /// 设置的一个分类，对应左侧分类栏中的一项和右侧的一页。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -185,14 +183,11 @@ impl SettingsPage {
                     Setting::GitSystemProxy,
                 ]),
             ],
-            SettingsPage::Modules => vec![
-                plain(vec![
-                    Setting::GitModule,
-                    Setting::TerminalModule,
-                    Setting::RemoteModule,
-                ]),
-                plain(vec![Setting::RemoteFolders]),
-            ],
+            SettingsPage::Modules => vec![plain(vec![
+                Setting::GitModule,
+                Setting::TerminalModule,
+                Setting::RemoteModule,
+            ])],
             SettingsPage::Format => {
                 let mut sections = vec![
                     plain(vec![
@@ -424,9 +419,6 @@ pub enum Setting {
     TerminalModule,
     /// 远程模块的开关。
     RemoteModule,
-    /// 远程目录挂载在本机的位置（`remote.localFolders`），写成一行：`主机:/远程目录=本机目录`，
-    /// 多项以 `;` 隔开。
-    RemoteFolders,
     /// 「快捷键」页顶部的搜索框。
     ///
     /// 该页没有设置项，选中这一项即表示停留在该页。
@@ -544,10 +536,9 @@ impl Setting {
             | Setting::GitAutoFetch
             | Setting::GitTree
             | Setting::DiffInline => SettingsPage::Git,
-            Setting::GitModule
-            | Setting::TerminalModule
-            | Setting::RemoteModule
-            | Setting::RemoteFolders => SettingsPage::Modules,
+            Setting::GitModule | Setting::TerminalModule | Setting::RemoteModule => {
+                SettingsPage::Modules
+            }
             Setting::KeySearch => SettingsPage::Keys,
         }
     }
@@ -631,7 +622,6 @@ impl Setting {
             Setting::GitStagingArea => t!("settings-git-staging-area"),
             Setting::GitOpenWorktree => t!("settings-git-open-worktree"),
             Setting::GitPath => t!("settings-git-path"),
-            Setting::RemoteFolders => t!("settings-remote-folders"),
             Setting::TerminalModule => t!("settings-terminal-module"),
             Setting::RemoteModule => t!("settings-remote-module"),
             Setting::KeySearch => t!("settings-key-search"),
@@ -697,7 +687,6 @@ impl Setting {
             Setting::GitStagingArea => Some(t!("settings-git-staging-area-desc")),
             Setting::GitOpenWorktree => Some(t!("settings-git-open-worktree-desc")),
             Setting::GitPath => Some(t!("settings-git-path-desc")),
-            Setting::RemoteFolders => Some(t!("settings-remote-folders-desc")),
             Setting::TerminalShell => Some(t!("settings-terminal-shell-desc")),
             Setting::TerminalCopyOnSelect => Some(t!("settings-terminal-copy-on-select-desc")),
             Setting::TerminalConfirmClose => Some(t!("settings-terminal-confirm-close-desc")),
@@ -768,8 +757,7 @@ impl Setting {
             Setting::FormatCommand(_)
             | Setting::FixCommand(_)
             | Setting::TerminalShell
-            | Setting::GitPath
-            | Setting::RemoteFolders => SettingControl::Command,
+            | Setting::GitPath => SettingControl::Command,
             Setting::SkipOnSave
             | Setting::Language
             | Setting::BackgroundImage
@@ -954,8 +942,6 @@ pub fn settings_thumb(area: Rect, scroll: f32, max: f32) -> Option<Rect> {
 /// 设置浮层中可以单独悬停和点击的部件。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsPart {
-    /// 「远程目录映射」弹窗打开时，弹窗中的部件（弹窗以外是 [`MountPart::Backdrop`]）。
-    Mount(MountPart),
     /// 右上角的关闭按钮。
     Close,
     /// 分类栏顶部的搜索框。
@@ -1353,10 +1339,7 @@ fn row_height(
             rows * tile.1 + (rows - 1.0) * THEME_GRID_GAP + THEME_GRID_PAD * 2.0
         }
         SettingControl::Command
-            if !matches!(
-                setting,
-                Setting::TerminalShell | Setting::GitPath | Setting::RemoteFolders
-            ) =>
+            if !matches!(setting, Setting::TerminalShell | Setting::GitPath) =>
         {
             SETTINGS_ROW_TALL
         }
