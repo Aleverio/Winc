@@ -20,6 +20,9 @@ pub(crate) struct Clipboard {
     /// 测试中代替系统剪贴板的图片（PNG）。
     #[cfg(test)]
     pub copied_image: Option<Vec<u8>>,
+    /// 测试中让写入失败，原有内容不变，如同无法访问系统剪贴板。
+    #[cfg(test)]
+    pub unavailable: bool,
     /// 最近一次整行复制的文本；写入的不是整行或写入文件时为 `None`。
     whole_line: Option<String>,
 }
@@ -41,6 +44,10 @@ impl Clipboard {
     ///
     /// `whole_line` 为 `true` 表示 `text` 是整行，见 [`Self::holds_line`]。
     pub(in crate::app) fn set_text(&mut self, text: String, whole_line: bool) -> bool {
+        #[cfg(test)]
+        if self.unavailable {
+            return false;
+        }
         self.whole_line = whole_line.then(|| text.clone());
         #[cfg(test)]
         {
@@ -83,6 +90,10 @@ impl Clipboard {
     /// 被丢掉，全都打不开时什么也不写（macOS 上会先清空剪贴板）。远端的文件不经过这里，见
     /// `App::copy_entries`。
     pub(in crate::app) fn set_files(&mut self, paths: &[PathBuf]) -> bool {
+        #[cfg(test)]
+        if self.unavailable {
+            return false;
+        }
         self.whole_line = None;
         #[cfg(test)]
         {
