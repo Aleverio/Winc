@@ -919,6 +919,8 @@ pub struct App {
     // 状态栏消息和悬停提示
     /// 文件已从磁盘删除、自动保存因此未写入且已提示过用户的文档；失去焦点时不再重复提示。
     deleted_told: HashSet<DocumentId>,
+    /// 自动保存的时机：焦点是否离开编辑区，停止输入后何时保存。
+    auto_save_watch: workspace::files::AutoSaveWatch,
     /// 右上角提示条的状态。
     pub notice: lifecycle::notice::Notice,
 

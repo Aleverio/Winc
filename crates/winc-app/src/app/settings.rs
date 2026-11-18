@@ -749,7 +749,6 @@ impl App {
         match setting {
             Setting::FormatOnSave => self.config.format_on_save == Some(true),
             Setting::FixOnSave => self.config.fix_on_save == Some(true),
-            Setting::AutoSave => self.config.auto_save == Some(true),
             Setting::HotExit => self.config.hot_exit != Some(false),
             Setting::ConfirmClose => self.config.confirm_close == Some(true),
             Setting::RestoreFolder => self.config.restore_folder != Some(false),
@@ -811,7 +810,6 @@ impl App {
         match setting {
             Setting::FormatOnSave => self.config.format_on_save = Some(on),
             Setting::FixOnSave => self.config.fix_on_save = Some(on),
-            Setting::AutoSave => self.config.auto_save = Some(on),
             Setting::HotExit => self.config.hot_exit = Some(on),
             Setting::ConfirmClose => self.config.confirm_close = Some(on),
             Setting::RestoreFolder => self.config.restore_folder = Some(on),

@@ -126,7 +126,29 @@ const EDITOR: &[Field] = &[
         },
         write: |config| config.tab_width.map(|width| Json::Number(width as f64)),
     },
-    bool_field!("autoSave", auto_save),
+    Field {
+        key: "autoSave",
+        // 早先的版本是开关：`true` 即切换焦点时保存。
+        read: |config, value, name, problems| {
+            config.auto_save = match (value, value.as_str()) {
+                (Json::Bool(false), _) | (_, Some("off")) => Some(AutoSave::Off),
+                (Json::Bool(true), _) | (_, Some("onFocusChange")) => Some(AutoSave::OnFocusChange),
+                (_, Some("afterDelay")) => Some(AutoSave::AfterDelay),
+                _ => {
+                    problems.push(t!("config-auto-save-invalid", name = name));
+                    None
+                }
+            };
+        },
+        write: |config| {
+            let value = match config.auto_save? {
+                AutoSave::Off => "off",
+                AutoSave::OnFocusChange => "onFocusChange",
+                AutoSave::AfterDelay => "afterDelay",
+            };
+            Some(Json::String(value.into()))
+        },
+    },
     bool_field!("hotExit", hot_exit),
     bool_field!("confirmClose", confirm_close),
     bool_field!("restoreFolder", restore_folder),

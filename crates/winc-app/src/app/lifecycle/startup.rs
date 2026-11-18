@@ -206,6 +206,7 @@ impl App {
             closing: Default::default(),
             ask_on_quit: Arc::new(AtomicBool::new(false)),
             deleted_told: HashSet::new(),
+            auto_save_watch: Default::default(),
             notice: Default::default(),
             frame: crate::app::lifecycle::FrameState {
                 renderer: None,
