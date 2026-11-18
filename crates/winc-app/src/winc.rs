@@ -745,7 +745,7 @@ impl Winc {
         app.watch_git_output();
         app.store.config_path = template.config_path;
         app.state = (template.state_path.as_deref())
-            .map(|path| State::load_with_recent_limit(path, app.config.recent_folder_limit()))
+            .map(State::load_from)
             .unwrap_or_default();
         app.git.commit.set_flat(!app.state.commit_tree);
         let sort = crate::app::CommitSort::from_key(&app.state.commit_sort);

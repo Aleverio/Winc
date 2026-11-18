@@ -15,39 +15,26 @@ fn card_height(rows: usize) -> f32 {
     crate::theme::BAR_HEIGHT + rows as f32 * PICKER_ROW + 2.0 * crate::app::PICKER_PAD
 }
 
+/// 「打开最近的目录」列出整个最近列表；项目名菜单只列前面的几个，开始页更少。
 #[test]
-fn recent_folder_setting_trims_history_and_updates_the_open_picker() {
+fn only_open_recent_lists_the_whole_history() {
+    use crate::app::input::context_menu::MenuCommand;
+    use winc_config::{MAX_RECENT, RECENT_IN_MENU};
     let mut app = blank_app(false);
-    let dir = sample_folder("recent-setting");
-    let state_path = dir.join("state.json");
-    app.store.config_path = Some(dir.join("config.json"));
-    app.store.state_path = Some(state_path.clone());
-    app.config.recent_folder_limit = Some(31);
-    for n in 0..31 {
-        app.state
-            .remember(&PathBuf::from(format!("/project/{n}")), 31);
+    for n in 0..MAX_RECENT + 5 {
+        app.state.remember(&PathBuf::from(format!("/project/{n}")));
     }
-    app.state.save_to(&state_path).unwrap();
-    app.settings_adjust(Setting::RecentFolderLimit, false);
-    assert_eq!(app.config.recent_folder_limit(), 30);
-    assert_eq!(app.state.recent.len(), 30);
-    assert_eq!(State::load_from(&state_path).recent, app.state.recent);
-    assert_eq!(
-        Config::load_from(&dir.join("config.json"))
-            .0
-            .recent_folder_limit(),
-        30
-    );
-    app.run_action(Action::OpenRecent);
-    assert_eq!(app.overlays.picker.hits.len(), 30);
+    assert_eq!(app.state.recent.len(), MAX_RECENT);
 
-    let mut config = app.config.clone();
-    config.recent_folder_limit = None;
-    app.adopt_config(config);
-    assert_eq!(app.overlays.picker.hits.len(), 10);
-    assert_eq!(app.state.recent.len(), 10);
-    assert!(app.setting_value(Setting::RecentFolderLimit).1);
-    let _ = std::fs::remove_dir_all(dir);
+    app.run_action(Action::OpenRecent);
+    assert_eq!(app.overlays.picker.hits.len(), MAX_RECENT);
+    app.close_picker();
+
+    app.open_project_menu();
+    let recent = (menu_commands(&app).into_iter())
+        .filter(|(command, _)| matches!(command, MenuCommand::OpenRecent(_)))
+        .count();
+    assert_eq!(recent, RECENT_IN_MENU);
 }
 
 #[test]

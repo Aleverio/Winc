@@ -342,8 +342,7 @@ impl ApplicationHandler<UserEvent> for App {
                     self.terminal_window_focused();
                     // 其他 winc 窗口可能修改了最近列表，重新读取后开始页和项目菜单显示最新内容。
                     if let Some(path) = &self.store.state_path {
-                        self.state =
-                            State::load_with_recent_limit(path, self.config.recent_folder_limit());
+                        self.state = State::load_from(path);
                     }
                 } else {
                     let ids: Vec<DocumentId> = self.editor.documents.iter().map(|d| d.id).collect();

@@ -9,7 +9,7 @@ fn several_windows_keep_each_others_changes() {
     let (x, y) = (Path::new("/p/x"), Path::new("/p/y"));
 
     // 模拟两个进程先后读改写同一个文件：第一个记下 X 的现场与书签，第二个打开 Y。
-    let (_, ok) = State::update(&path, |s| s.remember(x, 10));
+    let (_, ok) = State::update(&path, |s| s.remember(x));
     ok.unwrap();
     let (_, ok) = State::update(&path, |s| {
         s.set_session(Session {
@@ -20,7 +20,7 @@ fn several_windows_keep_each_others_changes() {
     });
     ok.unwrap();
     let (_, ok) = State::update(&path, |s| {
-        s.remember(y, 10);
+        s.remember(y);
         s.last = Some(y.to_path_buf());
     });
     ok.unwrap();
@@ -198,13 +198,16 @@ fn bad_input_means_no_history() {
 #[test]
 fn recent_list_moves_to_front_and_is_capped() {
     let mut state = State::default();
-    for i in 0..15 {
-        state.remember(Path::new(&format!("/p{i}")), 10);
+    for i in 0..MAX_RECENT + 5 {
+        state.remember(Path::new(&format!("/p{i}")));
     }
-    assert_eq!(state.recent.len(), 10);
-    assert_eq!(state.recent[0], PathBuf::from("/p14"));
+    assert_eq!(state.recent.len(), MAX_RECENT);
+    assert_eq!(
+        state.recent[0],
+        PathBuf::from(format!("/p{}", MAX_RECENT + 4))
+    );
 
-    state.remember(Path::new("/p10"), 10);
+    state.remember(Path::new("/p10"));
     assert_eq!(state.recent[0], PathBuf::from("/p10"));
     assert_eq!(
         state
@@ -226,36 +229,10 @@ fn recent_list_moves_to_front_and_is_capped() {
 }
 
 #[test]
-fn larger_recent_lists_survive_unrelated_writes_and_reload() {
-    let dir = std::env::temp_dir().join(format!("winc-recent-limit-{}", std::process::id()));
-    let path = dir.join("state.json");
-    let mut state = State::default();
-    for i in 0..=100 {
-        state.remember(&PathBuf::from(format!("/projects/{i}")), 100);
-    }
-    state.save_to(&path).unwrap();
-    assert_eq!(state.recent.len(), 100);
-    assert_eq!(state.recent.last(), Some(&PathBuf::from("/projects/1")));
-    State::update(&path, |s| s.commit_tree = true).1.unwrap();
-    assert_eq!(State::load_from(&path).recent, state.recent);
-    assert_eq!(
-        State::load_with_recent_limit(&path, 31).recent,
-        state.recent[..31]
-    );
-    State::update(&path, |s| s.remember(Path::new("/projects/12"), 31))
-        .1
-        .unwrap();
-    let recent = State::load_from(&path).recent;
-    assert_eq!(recent.len(), 31);
-    assert_eq!(recent[0], Path::new("/projects/12"));
-    std::fs::remove_dir_all(dir).unwrap();
-}
-
-#[test]
 fn recent_folders_keep_their_own_badge_colors() {
     let mut state = State::default();
     for i in 0..BADGE_COLORS {
-        state.remember(Path::new(&format!("/projects/p{i}")), 10);
+        state.remember(Path::new(&format!("/projects/p{i}")));
     }
 
     // 最近列表中各目录的颜色互不相同。
@@ -274,17 +251,20 @@ fn recent_folders_keep_their_own_badge_colors() {
         .iter()
         .map(|p| (p.clone(), state.badge_color(p)))
         .collect();
-    state.remember(Path::new("/projects/p3"), 10);
+    state.remember(Path::new("/projects/p3"));
     assert_eq!(state.badge_color(Path::new("/projects/p3")), before);
     for (folder, color) in others {
         assert_eq!(state.badge_color(&folder), color);
     }
 
-    // 新目录替换最旧的目录并获得其释放的颜色；序列化后再读回，颜色保持不变。
+    // 新目录把第十个目录挤出前十并获得它让出的颜色；该目录仍在列表中，按名字取色。序列化
+    // 后再读回，颜色保持不变。
     let oldest = state.recent.last().cloned().unwrap();
     let freed = state.badge_color(&oldest);
-    state.remember(Path::new("/projects/new"), 10);
+    state.remember(Path::new("/projects/new"));
     assert_eq!(state.badge_color(Path::new("/projects/new")), freed);
+    assert_eq!(state.recent.get(BADGE_COLORS), Some(&oldest));
+    assert_eq!(state.badge_color(&oldest), preferred_color(&oldest));
     assert_eq!(colors(&State::parse(&state.to_json())), colors(&state));
 
     // 旧文件缺少颜色、手工改成重复或越界时，读入后颜色被理顺为互不相同。
@@ -331,7 +311,7 @@ fn sessions_are_kept_per_folder() {
             ..Session::default()
         });
     }
-    assert_eq!(state.sessions.len(), MAX_SAVED_SESSIONS);
+    assert_eq!(state.sessions.len(), MAX_SESSIONS);
 
     // 旧格式只记单个 `session`，读入后作为上次退出时的现场。
     let old = "{\"recent\": [\"/a\"], \"session\": {\"folder\": \"/a\", \"files\": [\"/a/x\"]}}";

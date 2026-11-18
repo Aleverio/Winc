@@ -280,9 +280,8 @@ impl App {
 
         // 退出时会再记录一次；此处先设置 `last`，使进程异常中止后下次启动仍能回到该目录，
         // 并找回未保存的内容。还没有现场的目录先记一个空现场：`last` 只认有现场的目录。
-        let limit = self.config.recent_folder_limit();
         self.update_state(|state| {
-            state.remember(&root, limit);
+            state.remember(&root);
             if state.session_for(&root).is_none() {
                 state.set_session(Session {
                     folder: root.clone(),
@@ -416,9 +415,6 @@ impl App {
         };
         let (state, result) = State::update(&path, change);
         self.state = state;
-        self.state
-            .recent
-            .truncate(self.config.recent_folder_limit());
         if let Err(e) = result {
             eprintln!("winc: 无法记下最近打开的目录：{e}");
         }

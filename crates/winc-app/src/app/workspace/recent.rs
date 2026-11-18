@@ -92,14 +92,6 @@ fn folder_rank(needle: &[char], name: &str, parent: &str) -> Option<u8> {
 }
 
 impl App {
-    /// 数量调低时从共享的最近列表移除最旧的目录。
-    pub(crate) fn apply_recent_folder_limit(&mut self) {
-        let limit = self.config.recent_folder_limit();
-        if self.state.recent.len() > limit {
-            self.update_state(|state| state.recent.truncate(limit));
-        }
-    }
-
     /// 命令「打开最近的目录」（`⌃R`）：在面板中列出最近列表中的目录，当前目录除外。
     ///
     /// 第一条是上一次打开的目录，按 `⌃R` 再按回车即可切回；列表已经打开时，再按一次选中下一条。

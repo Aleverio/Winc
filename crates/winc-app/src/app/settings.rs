@@ -1237,10 +1237,6 @@ impl App {
                 ViewFonts::of(&self.config).terminal,
                 Config::EDITOR_SIZE_RANGE,
             ),
-            Setting::RecentFolderLimit => (
-                self.config.recent_folder_limit() as f32,
-                Config::RECENT_FOLDER_LIMIT_RANGE,
-            ),
             Setting::TabWidth => (
                 self.config.tab_width.unwrap_or(self.editor.tab_width) as f32,
                 Config::TAB_WIDTH_RANGE,
@@ -1292,12 +1288,6 @@ impl App {
                 let current = ViewFonts::of(&self.config).terminal;
                 self.config.terminal_size = Some(step(current, up, Config::EDITOR_SIZE_RANGE));
                 self.apply_font_sizes();
-            }
-            Setting::RecentFolderLimit => {
-                let current = self.config.recent_folder_limit();
-                let next = step(current as f32, up, Config::RECENT_FOLDER_LIMIT_RANGE) as usize;
-                self.config.recent_folder_limit = Some(next);
-                self.apply_recent_folder_limit();
             }
             Setting::TabWidth => {
                 let current = self.config.tab_width.unwrap_or(self.editor.tab_width);
