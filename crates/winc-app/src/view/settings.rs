@@ -596,6 +596,24 @@ fn draw_product(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Re
     ui_text(frame, app, x, area, &text, p.text_muted, clip);
 }
 
+/// 找到新版本 `version` 时的说明：不由应用自己更新的安装写明从哪里取得。
+fn found_text(version: &str) -> String {
+    #[cfg(not(target_os = "macos"))]
+    {
+        use crate::updates::Delivery;
+        match crate::updates::delivery() {
+            Some(Delivery::Download) => {
+                return t!("settings-updates-found-download", version = version);
+            }
+            Some(Delivery::Pacman) => {
+                return t!("settings-updates-found-pacman", version = version);
+            }
+            _ => {}
+        }
+    }
+    t!("settings-updates-found", version = version)
+}
+
 /// 「关于」页「更新」一行下方的状态文字和颜色；也是状态栏更新按钮的悬停提示（见
 /// `status::update_tooltip`）。
 pub(in crate::view) fn update_status(app: &App) -> (String, Color) {
@@ -606,10 +624,7 @@ pub(in crate::view) fn update_status(app: &App) -> (String, Color) {
         UpdateState::Idle => (t!("settings-updates-idle").to_owned(), p.text_muted),
         UpdateState::Checking => (t!("settings-updates-checking").to_owned(), p.text_muted),
         UpdateState::Latest => (t!("settings-updates-latest").to_owned(), p.text_muted),
-        UpdateState::Found(version) => (
-            t!("settings-updates-found", version = version.as_str()),
-            p.accent,
-        ),
+        UpdateState::Found(version) => (found_text(version), p.accent),
         UpdateState::Failed => (t!("settings-updates-failed").to_owned(), p.text_muted),
         UpdateState::Downloading(version, percent) => (
             t!(

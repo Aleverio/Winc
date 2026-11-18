@@ -374,6 +374,7 @@ workspace-status-spaces = Spaces: { $size }
 workspace-status-update = Update
 workspace-status-update-restart = Restart
 workspace-status-update-retry = Retry
+workspace-status-update-pacman = Run sudo pacman -Syu to update Winc
 workspace-status-not-shown = Not shown: { $features }
 workspace-status-position-selected = { $position } ({ $count } selected)
 workspace-status-selections = { $count ->
