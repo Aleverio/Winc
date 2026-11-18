@@ -82,6 +82,12 @@ workspace-start-module-remote = SSH Remote
 workspace-start-theme = Theme
 workspace-start-setup-intro = Your personal workspace starts here.
 workspace-start-setup-done = Done
+workspace-start-setup-next = Continue
+workspace-start-setup-back = Back
+workspace-start-keymap-title = Shortcuts
+workspace-start-keymap-intro = Choose a keymap, or import your shortcuts from another editor
+workspace-start-keymap-import = Import from an editor on this computer
+workspace-start-keymap-default = Default
 workspace-start-section-start = Start
 workspace-start-section-recent = Recent
 

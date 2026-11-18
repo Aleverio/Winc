@@ -76,6 +76,12 @@ workspace-start-module-remote = SSH 远程
 workspace-start-theme = 主题
 workspace-start-setup-intro = 您的个性化工作台，从这里开始。
 workspace-start-setup-done = 完成
+workspace-start-setup-next = 继续
+workspace-start-setup-back = 返回
+workspace-start-keymap-title = 快捷键
+workspace-start-keymap-intro = 选择快捷键方案，或从其他编辑器导入自己的快捷键
+workspace-start-keymap-import = 从本机的编辑器导入
+workspace-start-keymap-default = 默认
 workspace-start-section-start = 开始
 workspace-start-section-recent = 最近
 

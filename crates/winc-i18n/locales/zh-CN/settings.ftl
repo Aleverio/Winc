@@ -243,11 +243,29 @@ settings-theme-name-veil-umber = 檀幕
 
 ## 快捷键页。
 
-settings-keys-recording = 请按下要查找的快捷键，按 Esc 停止
-settings-keys-search-record = 输入命令名查找，按 { $key } 录制按键
-settings-keys-search = 输入命令名查找
+settings-keys-recording = 按下快捷键查找对应的命令
+settings-keys-search = 搜索命令
 settings-keys-no-command = 无命令使用此快捷键
 settings-keys-no-match = 无匹配的命令
+settings-keys-keymap = 键位方案
+settings-keys-imported = 已导入 { $name } 的快捷键
+settings-keys-imported-skipped = 已导入 { $name } 的快捷键，{ $count } 项无法对应，已跳过
+settings-keys-keymap-description = 快捷键的默认方案，也可以从本机的其他编辑器导入
+settings-keys-keymap-changed = 已修改 { $count } 个命令的快捷键
+settings-keys-edit = 编辑
+settings-keys-reset = 恢复默认
+settings-keys-save = 保存
+settings-keys-cancel = 取消
+settings-keys-edit-hint = 新的快捷键会加在已有的键之后
+settings-keys-conflict = 保存后 { $key } 将从{ $names }改给此命令
+settings-keys-takes-typing = 不带修饰键的 { $key } 会取代编辑区和输入框中的文字输入
+settings-keys-modified = 已修改
+settings-keys-press = 按下快捷键
+settings-keys-import-from = 从 { $name } 导入…
+keymap-import-read-failed = 无法读取「{ $path }」：{ $error }
+keymap-import-invalid = 「{ $path }」的格式不对
+keymap-import-unsupported = 不支持导入「{ $name }」键位方案
+keymap-import-missing = 找不到「{ $name }」键位方案
 
 ## 字号与配置文件。
 

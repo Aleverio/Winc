@@ -64,6 +64,7 @@ pub(crate) use lifecycle::title_bar::resize_cursor;
 pub(crate) use lifecycle::wallpaper::Layer as WallpaperLayer;
 use lifecycle::window::frame_interval;
 pub(crate) use scroll::ScrollTarget;
+pub(crate) use settings::shortcuts::KeyEdit;
 pub use settings::{DialogCache, SettingsState};
 pub(crate) use status::language_picker::LanguageRow;
 pub use status::motion::{StatusEntry, StatusKey, StatusMotion, StatusRow};
@@ -888,6 +889,10 @@ pub struct App {
     pub(crate) history: workspace::History,
     /// 两段组合键（如 `⌘K ⌘S`）的第一段，正在等待第二段。
     pub(crate) pending_chord: Option<crate::keymap::Stroke>,
+    /// 单按修饰键的状态，用于连按两下修饰键的快捷键。
+    pub(crate) taps: input::tap::Taps,
+    /// 「首次设置」中快捷键一页的状态。
+    pub(crate) setup: setup::SetupKeys,
 
     /// 设置浮层：当前页、分类和各输入框。
     pub settings: SettingsState,

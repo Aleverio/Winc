@@ -298,6 +298,12 @@ fn round_trips_through_json() {
         git_open_worktree: Some(WorktreeOpen::NewWindow),
         git_path: Some("C:\\Tools\\wslgit.exe".to_string()),
         remote_enabled: Some(true),
+        keymap: Some("vscode".to_owned()),
+        shortcuts: [
+            ("quickOpen".to_owned(), vec!["cmd+p".to_owned()]),
+            ("format".to_owned(), Vec::new()),
+        ]
+        .into(),
         git_worktree_copy: vec![".env*".to_string(), "config/local.toml".to_string()],
         format_on_save: Some(false),
         format_on_save_exclude: vec!["markdown".to_string(), "yaml".to_string()],

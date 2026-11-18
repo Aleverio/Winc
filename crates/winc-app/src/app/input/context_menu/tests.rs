@@ -33,6 +33,7 @@ fn menu_items_are_numbered_in_display_order() {
 
 #[test]
 fn menus_show_the_key_for_where_they_open() {
+    crate::keymap::install(crate::keymap::Preset::VsCode, &Default::default());
     let text = |c: MenuCommand, context| {
         c.shortcut(context)
             .map(|s| s.label(crate::keymap::Os::CURRENT))

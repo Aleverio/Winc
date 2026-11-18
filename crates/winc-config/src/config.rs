@@ -193,6 +193,10 @@ pub struct Config {
     pub terminal_application_priority: Option<bool>,
     /// 是否启用远程模块（经 `ssh` 打开其他主机上的目录），默认为否。
     pub remote_enabled: Option<bool>,
+    /// 键位方案：`idea` 或 `vscode`；没写时用 `idea`。
+    pub keymap: Option<String>,
+    /// 改过的快捷键：命令名 → 按键写法的数组，空数组表示不设快捷键。
+    pub shortcuts: BTreeMap<String, Vec<String>>,
     /// 是否启用 Git 模块（文件状态、分支、变更视图），默认为否。
     pub git_enabled: Option<bool>,
     /// 发布、推送或同步分支前是否先确认目标远程仓库，默认为是。
