@@ -443,6 +443,7 @@ workspace-drop-folder-open = Open
 workspace-drop-folder-copy = Copy
 workspace-drop-folder-copy-detail = An added folder is listed beside the current one, and nothing on disk changes.
 workspace-remote-local-only = Files on a remote host can’t be opened with programs on this computer
+workspace-remote-reveal-unmapped = To show remote files here, add the local folder they are mounted at to remote.localFolders in the config file
 workspace-remote-terminal = Folders on a remote host open only in the built-in terminal; enable Terminal in Settings first
 workspace-terminal-app-fallback = Terminal
 workspace-open-app-failed = Couldn’t open “{ $app }”: { $error }

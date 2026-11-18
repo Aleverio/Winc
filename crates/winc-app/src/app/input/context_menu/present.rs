@@ -697,7 +697,8 @@ impl App {
         };
         let entries = match place {
             Some(path) if winc_backend::is_remote(path) => {
-                without_local_only(entries, self.terminal_enabled())
+                let mounted = self.local_folder(path).is_some();
+                without_local_only(entries, self.terminal_enabled(), mounted)
             }
             _ => entries,
         };

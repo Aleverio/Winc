@@ -368,6 +368,7 @@ workspace-drop-folder-open = 打开
 workspace-drop-folder-copy = 复制
 workspace-drop-folder-copy-detail = 添加后与当前目录并列显示，不改动磁盘上的文件。
 workspace-remote-local-only = 远端主机上的文件无法用本机程序打开
+workspace-remote-reveal-unmapped = 要在本机显示远端的文件，请在配置文件的 remote.localFolders 中写上它挂载在本机的目录
 workspace-remote-terminal = 远端主机上的目录只能在内置终端中打开，请先在设置中启用终端
 workspace-terminal-app-fallback = 终端
 workspace-open-app-failed = 无法打开「{ $app }」：{ $error }
