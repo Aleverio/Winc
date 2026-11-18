@@ -39,13 +39,17 @@ impl App {
     /// 弹出确认框（macOS 上是系统的，其他平台画在窗口里）。
     ///
     /// 剪贴板中没有文字（如只有图片）时按空文字粘贴：程序开启了括号粘贴时收到一次空的括号
-    /// 粘贴，可据此自行读取剪贴板中的图片；未开启时不发送任何内容。
+    /// 粘贴，可据此自行读取剪贴板中的图片；未开启时不发送任何内容。远端主机上的标签例外：
+    /// 那里的程序读不到本机的剪贴板，图片和文件先传过去，再粘贴那里的路径（[`App::upload_paste`]）。
     pub(in crate::app) fn terminal_paste(&mut self) {
         let text = self.clipboard_text().unwrap_or_default();
-        let Some(tab) = self.terminal.tab().map(|t| (t.id, t.modes)) else {
+        let Some(tab) = self.terminal.tab().map(|t| (t.id, t.modes, t.cwd.clone())) else {
             return;
         };
-        let (id, modes) = tab;
+        let (id, modes, cwd) = tab;
+        if text.is_empty() && self.upload_paste(id, &cwd) {
+            return;
+        }
         if input::paste_needs_confirm(&text, modes) {
             let message = t!("terminal-paste-confirm", count = text.lines().count());
             if self.window.handle.is_some() {
@@ -205,6 +209,12 @@ impl App {
             }
         }
         let (modes, keyboard) = (tab.modes, tab.keyboard);
+        let ctrl_v = self.pointer.modifiers == winit::keyboard::ModifiersState::CONTROL
+            && matches!(event.key_without_modifiers(), Key::Character(c)
+                if c.chars().next().is_some_and(|c| latin(c, event.physical_key) == 'v'));
+        if ctrl_v && self.ctrl_v_uploads() {
+            return;
+        }
         if let Some(bytes) = self.encode_terminal_key(event, modes, keyboard) {
             // 输入文字时清除选区，否则 ⌘C 会复制旧内容；方向键和快捷键保留选区。
             let mods = self.terminal_mods();
@@ -219,6 +229,24 @@ impl App {
             }
             self.terminal_input(bytes);
         }
+    }
+
+    /// 在正在看的标签里按了 ⌃V：标签在远端主机上、本机剪贴板里只有图片或文件时，传到那台主机
+    /// 再粘贴路径（见 [`App::upload_paste`]），返回 `true`，不再把 ⌃V 发给程序。
+    ///
+    /// Claude Code、Codex、Pi 在 Linux 上都用 ⌃V 粘贴图片，但它们读的是远端的剪贴板，按了也读
+    /// 不到本机的截图；这里让这个习惯的键照样可用。只在主屏上、程序开启了括号粘贴时这样做（这些
+    /// 程序都是如此）：vim 这类备用屏上的程序，以及剪贴板里有文字时，⌃V 照常发给程序。
+    pub(in crate::app) fn ctrl_v_uploads(&mut self) -> bool {
+        let Some(tab) = self.terminal.tab() else {
+            return false;
+        };
+        let (id, cwd, modes) = (tab.id, tab.cwd.clone(), tab.modes);
+        modes.has(Modes::BRACKETED_PASTE)
+            && !modes.has(Modes::ALT_SCREEN)
+            && winc_backend::is_remote(&bytes_path(&cwd))
+            && self.clipboard_text().is_none_or(|text| text.is_empty())
+            && self.upload_paste(id, &cwd)
     }
 
     /// 返回编码终端按键和鼠标上报时使用的修饰键。

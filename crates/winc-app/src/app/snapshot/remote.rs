@@ -10,6 +10,7 @@ use winc_backend::remote;
 use super::*;
 use crate::app::git::form::FormKind;
 use crate::keymap::Action;
+use winc_pty::protocol::Modes;
 
 /// 在本进程内启动服务端并登记为到 `name` 的连接：该目标的虚拟路径指向本机的同名路径。
 fn loopback(name: &str) -> winc_backend::Target {
@@ -52,6 +53,7 @@ fn a_folder_on_a_connected_host_opens_as_the_workspace() {
     remote::forbid_blocking();
     folders_on_a_remote_host_are_not_taken_for_files();
     features_work_in_a_remote_workspace();
+    clipboard_images_pasted_into_a_remote_terminal_are_sent_there_first();
 
     // 模块默认关闭：状态栏上没有连接的按钮，命令不可用，按下也不打开面板。
     paint(&mut app);
@@ -985,6 +987,114 @@ fn features_work_in_a_remote_workspace() {
         missing.unsupported
     );
 
+    remote::disconnect(&target);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 远端主机上的终端里粘贴剪贴板中的图片或本机文件：先传到那台主机上的缓存目录，再粘贴那里的
+/// 路径（那里的程序读不到本机的剪贴板）。本机的终端不变。由
+/// [`a_folder_on_a_connected_host_opens_as_the_workspace`] 调用，原因同
+/// [`folders_on_a_remote_host_are_not_taken_for_files`]。
+fn clipboard_images_pasted_into_a_remote_terminal_are_sent_there_first() {
+    let dir = sample_folder("remote-terminal-paste")
+        .canonicalize()
+        .unwrap();
+    let cache = dir.join("cache");
+    *crate::app::terminal::upload::CACHE.lock().unwrap() = Some(cache.clone());
+    let target = loopback("app-remote-terminal-paste");
+    let root = winc_backend::virtual_path(&target, dir.as_os_str().as_bytes());
+    let mut app = blank_app(false);
+    app.config.remote_enabled = Some(true);
+    app.open_folder(&root);
+    super::terminal::show_terminal(&mut app, "\x1b[?2004h");
+    let id = app.terminal.tab().unwrap().id;
+    app.terminal.tab_mut().unwrap().cwd = root.as_os_str().as_bytes().to_vec();
+    let log = app.attach_recording_helper(&dir);
+    let pasted = |app: &App, from: usize| -> String {
+        let sent = app.input_sent_to(&log, id);
+        let text = String::from_utf8(sent[from..].to_vec()).unwrap();
+        let inner = text
+            .strip_prefix("\x1b[200~")
+            .and_then(|t| t.strip_suffix("\x1b[201~"));
+        inner.unwrap_or_else(|| panic!("{text:?}")).to_owned()
+    };
+    let folder = cache.join("winc/paste");
+
+    // 剪贴板里只有图片：存为缓存目录中的 PNG，粘贴它在那台主机上的路径。
+    let png = winc_editor::paste::encode_png(1, 1, &[255, 0, 0, 255]).unwrap();
+    app.clipboard.copied = None;
+    app.clipboard.copied_image = Some(png.clone());
+    app.terminal_paste();
+    let path = pasted(&app, 0);
+    assert!(path.starts_with(folder.to_str().unwrap()), "{path}");
+    assert!(path.ends_with(".png"), "{path}");
+    assert_eq!(std::fs::read(&path).unwrap(), png);
+    assert!(app.notice.text.is_none(), "{:?}", app.notice.text);
+
+    // 从文件管理器复制的本机文件：传过去，名字里的空白换掉，粘贴的路径不需要引号。
+    let shot = dir.join("my shot.png");
+    std::fs::write(&shot, &png).unwrap();
+    app.clipboard.copied_image = None;
+    app.clipboard.copied_files = vec![shot];
+    let before = app.input_sent_to(&log, id).len();
+    app.terminal_paste();
+    let path = pasted(&app, before);
+    assert!(
+        path.starts_with(folder.to_str().unwrap()) && path.ends_with("-my_shot.png"),
+        "{path}"
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), png);
+
+    // ⌃V：Claude Code、Codex、Pi 在 Linux 上粘贴图片的键。主屏上、开启了括号粘贴的程序里同样
+    // 先传再粘贴路径；备用屏上的程序（vim 的 ⌃V 是列选择）和剪贴板里有文字时照常发给程序。
+    app.clipboard.copied_files.clear();
+    app.clipboard.copied_image = Some(png.clone());
+    let before = app.input_sent_to(&log, id).len();
+    assert!(app.ctrl_v_uploads());
+    assert!(pasted(&app, before).starts_with(folder.to_str().unwrap()));
+    app.terminal
+        .tab_mut()
+        .unwrap()
+        .modes
+        .set(Modes::ALT_SCREEN, true);
+    assert!(!app.ctrl_v_uploads());
+    app.terminal
+        .tab_mut()
+        .unwrap()
+        .modes
+        .set(Modes::ALT_SCREEN, false);
+    app.clipboard.copied = Some("text".into());
+    assert!(!app.ctrl_v_uploads());
+    app.clipboard.copied = None;
+    app.terminal
+        .tab_mut()
+        .unwrap()
+        .modes
+        .set(Modes::BRACKETED_PASTE, false);
+    assert!(!app.ctrl_v_uploads());
+    app.terminal
+        .tab_mut()
+        .unwrap()
+        .modes
+        .set(Modes::BRACKETED_PASTE, true);
+
+    // 目录不传：说明原因，什么也不粘贴。
+    app.clipboard.copied_files = vec![dir.join("cache")];
+    let before = app.input_sent_to(&log, id).len();
+    app.terminal_paste();
+    assert_eq!(app.input_sent_to(&log, id).len(), before);
+    assert!(app.notice.text.take().is_some());
+
+    // 本机的终端不变：仍是一次空的括号粘贴，由程序自己读剪贴板；⌃V 也照常发给程序。
+    app.clipboard.copied_files.clear();
+    app.clipboard.copied_image = Some(png);
+    app.terminal.tab_mut().unwrap().cwd = dir.as_os_str().as_bytes().to_vec();
+    let before = app.input_sent_to(&log, id).len();
+    app.terminal_paste();
+    assert_eq!(pasted(&app, before), "");
+    assert!(!app.ctrl_v_uploads());
+
+    *crate::app::terminal::upload::CACHE.lock().unwrap() = None;
     remote::disconnect(&target);
     let _ = std::fs::remove_dir_all(&dir);
 }

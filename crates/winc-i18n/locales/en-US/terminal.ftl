@@ -81,6 +81,11 @@ terminal-paste-confirm = { $count ->
        *[other] Paste { $count } lines into the terminal?
     }
 terminal-paste-confirm-detail = The program in the terminal hasn’t enabled bracketed paste, so each line will run as a separate command right away.
+terminal-upload-started = Sending the clipboard to the remote host…
+terminal-upload-failed = Couldn’t send the clipboard to the remote host: { $error }
+terminal-upload-folder = Folders can’t be pasted into a remote terminal: { $name }
+terminal-upload-no-folder = Couldn’t create a folder for it on the remote host
+terminal-upload-elsewhere = Sent to the remote host: { $path }
 
 ## 运行配置。
 
