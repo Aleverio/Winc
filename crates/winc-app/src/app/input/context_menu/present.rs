@@ -337,6 +337,9 @@ impl App {
             MenuTarget::DropFolder => (0..winc_config::FolderDrop::ALL.len())
                 .map(|i| MenuEntry::Item(MenuCommand::DropFolder(i), true))
                 .collect(),
+            MenuTarget::AutoSave => (0..winc_config::AutoSave::ALL.len())
+                .map(|i| MenuEntry::Item(MenuCommand::AutoSave(i), true))
+                .collect(),
             MenuTarget::DefaultShell => default_shell_menu(self.terminal.shells.len()),
             MenuTarget::Zoom => zoom_menu(),
             MenuTarget::BackgroundImage => background_menu(),
@@ -721,6 +724,7 @@ impl App {
                 | MenuTarget::VimClipboard
                 | MenuTarget::OpenWorktree
                 | MenuTarget::DropFolder
+                | MenuTarget::AutoSave
                 | MenuTarget::Zoom
                 | MenuTarget::BackgroundImage
                 | MenuTarget::BackgroundFit
@@ -737,6 +741,7 @@ impl App {
             MenuTarget::VimClipboard => Some(Setting::VimClipboard),
             MenuTarget::OpenWorktree => Some(Setting::GitOpenWorktree),
             MenuTarget::DropFolder => Some(Setting::DropFolder),
+            MenuTarget::AutoSave => Some(Setting::AutoSave),
             MenuTarget::Zoom => Some(Setting::Zoom),
             MenuTarget::BackgroundImage => Some(Setting::BackgroundImage),
             MenuTarget::BackgroundFit => Some(Setting::BackgroundFit),
@@ -1014,6 +1019,10 @@ impl App {
             MenuCommand::DropFolder(i) => {
                 winc_config::FolderDrop::ALL.get(i)
                     == Some(&self.config.drop_folder.unwrap_or_default())
+            }
+            MenuCommand::AutoSave(i) => {
+                winc_config::AutoSave::ALL.get(i)
+                    == Some(&self.config.auto_save.unwrap_or_default())
             }
             MenuCommand::DefaultShell(i) => {
                 let configured = self.configured_shell().map(|shell| shell.command);

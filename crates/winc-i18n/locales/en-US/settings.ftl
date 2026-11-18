@@ -33,6 +33,9 @@ settings-editor-font = Font
 settings-editor-size = Font Size
 settings-tab-width = Tab Width
 settings-auto-save = Auto Save
+settings-auto-save-off = Off
+settings-auto-save-focus = On Focus Change
+settings-auto-save-delay = 1 Second After Typing
 settings-hot-exit = Hot Exit
 settings-confirm-close = Confirm Before Closing
 settings-restore-folder = Restore Last Folder
@@ -106,7 +109,7 @@ settings-key-search = Search Shortcuts
 
 ## Setting descriptions.
 
-settings-auto-save-desc = Save changes when switching tabs or apps
+settings-auto-save-desc = Save changes when switching tabs, the terminal, or apps
 settings-hot-exit-desc = Quit without confirming each file and restore unsaved changes on next launch
 settings-confirm-close-desc = Ask before closing a window or quitting
 settings-restore-folder-desc = Reopen the last folder and its tabs on launch

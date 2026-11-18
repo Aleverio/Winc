@@ -33,6 +33,9 @@ settings-editor-font = 字体
 settings-editor-size = 字号
 settings-tab-width = 制表符长度
 settings-auto-save = 自动保存
+settings-auto-save-off = 关闭
+settings-auto-save-focus = 切换时
+settings-auto-save-delay = 停止输入 1 秒后
 settings-hot-exit = 热退出
 settings-confirm-close = 关闭前确认
 settings-restore-folder = 恢复上次的目录
@@ -106,7 +109,7 @@ settings-key-search = 搜索快捷键
 
 ## 设置项的说明。
 
-settings-auto-save-desc = 切换标签页或应用时自动保存修改
+settings-auto-save-desc = 切换标签页、终端或应用时保存修改
 settings-hot-exit-desc = 退出时不逐个确认保存，下次启动时恢复未保存的修改
 settings-confirm-close-desc = 关闭窗口或退出前先确认
 settings-restore-folder-desc = 启动时重新打开上次的目录和标签页

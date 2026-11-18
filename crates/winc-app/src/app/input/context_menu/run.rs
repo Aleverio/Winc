@@ -201,6 +201,13 @@ impl App {
                     self.set_drop_folder(choice);
                 }
             }
+            MenuTarget::AutoSave => {
+                if let MenuCommand::AutoSave(i) = command
+                    && let Some(&choice) = winc_config::AutoSave::ALL.get(i)
+                {
+                    self.set_auto_save(choice);
+                }
+            }
             MenuTarget::OpenWorktree => {
                 if let MenuCommand::OpenWorktree(i) = command
                     && let Some(&choice) = winc_config::WorktreeOpen::ALL.get(i)

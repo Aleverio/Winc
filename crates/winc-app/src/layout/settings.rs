@@ -716,7 +716,6 @@ impl Setting {
             Setting::Theme => SettingControl::Themes,
             Setting::LightTheme | Setting::DarkTheme => SettingControl::ThemeList,
             Setting::SystemTitleBar
-            | Setting::AutoSave
             | Setting::HotExit
             | Setting::ConfirmClose
             | Setting::RestoreFolder
@@ -771,6 +770,7 @@ impl Setting {
             | Setting::TerminalTabPosition
             | Setting::TerminalOptionAsMeta
             | Setting::DropFolder
+            | Setting::AutoSave
             | Setting::GitOpenWorktree => SettingControl::Choice,
             Setting::AddLanguage | Setting::AddFixLanguage => SettingControl::Action,
             Setting::KeySearch => SettingControl::Search,
@@ -839,7 +839,18 @@ pub fn text_width_label(choice: winc_config::TextWidth) -> &'static str {
     }
 }
 
-/// 返回「打开工作树」设置中选项 `choice` 的名字。
+/// 返回「自动保存」设置中选项 `choice` 的名字。
+pub fn auto_save_label(choice: winc_config::AutoSave) -> &'static str {
+    use winc_config::AutoSave::{AfterDelay, Off, OnFocusChange};
+
+    match choice {
+        Off => t!("settings-auto-save-off"),
+        OnFocusChange => t!("settings-auto-save-focus"),
+        AfterDelay => t!("settings-auto-save-delay"),
+    }
+}
+
+/// 返回「拖入目录」设置中选项 `choice` 的名字。
 pub fn drop_folder_label(choice: winc_config::FolderDrop) -> &'static str {
     use winc_config::FolderDrop::{Add, Ask, Open};
 
