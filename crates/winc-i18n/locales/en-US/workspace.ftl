@@ -49,6 +49,12 @@ workspace-tree-copy-failed = Couldn’t copy “{ $name }”: { $error }
 workspace-tree-copying-file = Copying “{ $name }”… { $done } of { $total }
 workspace-tree-copying-folder = Copying “{ $name }”… { $done } copied
 workspace-tree-copy-canceled = Copy canceled
+workspace-download-done-one = Downloaded “{ $name }”
+workspace-download-done-many = Downloaded { $count } items
+workspace-download-failed = Couldn’t download “{ $name }”: { $error }
+workspace-download-file = Downloading “{ $name }”… { $done } of { $total }
+workspace-download-folder = Downloading “{ $name }”… { $done } downloaded
+workspace-download-canceled = Download canceled
 workspace-tree-move-confirm-one = Move “{ $name }” to “{ $folder }”?
 workspace-tree-move-confirm-many = { $count ->
         [one] Move { $count } item to “{ $folder }”?

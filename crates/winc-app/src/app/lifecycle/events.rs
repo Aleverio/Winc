@@ -544,13 +544,13 @@ impl App {
             UserEvent::OpenFolderIn(path, new_window, never_ask) => {
                 self.open_folder_in(&path, new_window, never_ask);
             }
-            UserEvent::Pasted(result, copying) => {
-                // 取消的那一项不算失败：不提示原因，之前粘贴好的各项照常显示。
-                let result = match self.copy_finished(&copying) {
-                    true => Ok(result.unwrap_or_default()),
-                    false => result,
-                };
-                self.pasted_into_tree(result);
+            UserEvent::Pasted(done, failure, copying) => {
+                self.copy_finished(&copying);
+                self.pasted_into_tree(done, failure);
+            }
+            UserEvent::Downloaded(done, failure, copying) => {
+                self.copy_finished(&copying);
+                self.downloaded(done, failure);
             }
             UserEvent::Copied(copies, failures, copying) => {
                 self.copy_finished(&copying);

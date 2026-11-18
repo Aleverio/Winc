@@ -376,7 +376,7 @@ impl App {
             (copies, failures)
         };
         let done = |(copies, failures), copying| UserEvent::Copied(copies, failures, copying);
-        if let Some((copies, failures)) = self.spawn_copy(remote, copy, done) {
+        if let Some((copies, failures)) = self.spawn_copy(remote, false, copy, done) {
             self.copied_into_tree(copies, failures);
         }
     }
