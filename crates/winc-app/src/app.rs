@@ -210,11 +210,12 @@ pub enum UserEvent {
     ///
     /// 由应用层决定切换到哪个窗口或新建窗口，并经通道答复是否接收；该事件不会分发到窗口。
     Launched(crate::instance::Launch, std::sync::mpsc::Sender<bool>),
-    /// 系统交来要打开的文件和目录（拖到程序坞图标上、文件管理器中的「打开方式」）。
+    /// 系统交来要打开的文件和目录（拖到程序坞图标上、文件管理器中的「打开方式」、
+    /// `winc://` 链接）。
     ///
     /// 处理方式同 [`UserEvent::Launched`]：由应用层决定在哪个窗口打开。
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-    Opened(Vec<PathBuf>),
+    Opened(Vec<crate::cli::Target>),
     /// 程序坞菜单中选择了「新建窗口」。
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     NewWindow,

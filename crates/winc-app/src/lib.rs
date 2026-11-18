@@ -222,10 +222,10 @@ pub fn run() {
     #[cfg(target_os = "macos")]
     if !silent {
         let proxy = event_loop.create_proxy();
-        macos::on_open_files(move |paths| {
+        macos::on_open_files(move |targets| {
             let _ = proxy.send_event(Envelope {
                 to: winc::Recipient::Active,
-                event: app::UserEvent::Opened(paths),
+                event: app::UserEvent::Opened(targets),
             });
         });
     }
