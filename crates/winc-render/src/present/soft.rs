@@ -109,6 +109,12 @@ impl Presenter {
             stride: width,
         });
         let _ = buffer.present();
+        #[cfg(windows)]
+        #[allow(unsafe_code)]
+        // SAFETY: GdiFlush takes no arguments. Flush this thread's copies before reusing the bitmap.
+        unsafe {
+            windows_sys::Win32::Graphics::Gdi::GdiFlush();
+        }
         self.presented = Some(Instant::now());
         true
     }
