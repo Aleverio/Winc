@@ -207,5 +207,6 @@ editor-paste-image-save-first = 请先保存此文件，图片将保存到其所
 editor-paste-image-markdown-only = 图片只能粘贴到 Markdown 文件或文件树中
 editor-paste-image-save-failed = 无法保存图片：{ $error }
 editor-paste-clipboard-empty = 剪贴板为空
+editor-paste-clipboard-unavailable = 无法写入系统剪贴板，没有复制
 editor-paste-copy-name = { $stem } 副本{ $ext }
 editor-paste-copy-name-numbered = { $stem } 副本 { $number }{ $ext }

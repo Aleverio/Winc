@@ -10,10 +10,26 @@ use winc_editor::{Workspace, display_name};
 use winc_i18n::t;
 
 use super::*;
+use crate::winc::RemoteCopy;
 
 impl App {
     /// 返回剪贴板中的文件（从系统文件管理器或文件树中复制的）；没有时为空。
-    pub(super) fn clipboard_files(&mut self) -> Vec<PathBuf> {
+    ///
+    /// 文件树里复制的远端文件不在系统剪贴板的文件列表中（见 [`Self::copy_entries`]）：剪贴板里
+    /// 还是复制时写入的那段文字时取这些文件，先于系统剪贴板；文字已被替换时不再取，读系统
+    /// 剪贴板。顺序不能反过来：复制远端文件时系统剪贴板里可能正好留着更早复制的本机文件。
+    pub(in crate::app) fn clipboard_files(&mut self) -> Vec<PathBuf> {
+        let copied = self.link.shared.remote_copy.borrow().clone();
+        if let Some(copied) = copied {
+            if self
+                .clipboard
+                .text()
+                .is_some_and(|text| copied.holds(&text))
+            {
+                return copied.paths;
+            }
+            *self.link.shared.remote_copy.borrow_mut() = None;
+        }
         self.clipboard.files()
     }
 
@@ -40,25 +56,57 @@ impl App {
     }
 
     /// 同 [`Self::copy_entry`]，一次放入 `paths` 里的各项（文件树里多选时）。
+    ///
+    /// 本机的文件放进系统剪贴板的文件列表。其中有远端的文件时，系统剪贴板放不下（见
+    /// [`Clipboard::set_files`](super::clipboard::Clipboard::set_files)）：改为写入它们在远端
+    /// 主机上的路径（每行一个），文件本身记在各窗口共用的 [`RemoteCopy`] 中，粘贴到文件树、
+    /// 编辑区时取用（见 [`Self::clipboard_files`]），粘贴到终端时得到路径。写不进剪贴板时说明
+    /// 原因，不提示已复制。
     pub(in crate::app) fn copy_entries(&mut self, paths: &[PathBuf]) {
+        self.put_entries(paths);
+    }
+
+    /// 执行 [`Self::copy_entries`]，返回是否放进了剪贴板。
+    fn put_entries(&mut self, paths: &[PathBuf]) -> bool {
         if paths.is_empty() {
-            return;
+            return false;
         }
         self.link.shared.cut_files.borrow_mut().clear();
-        self.clipboard.set_files(paths);
+        let shared = std::rc::Rc::clone(&self.link.shared);
+        let written = if paths.iter().any(|path| winc_backend::is_remote(path)) {
+            let lines: Vec<_> = paths
+                .iter()
+                .map(|p| winc_backend::native_lossy(p))
+                .collect();
+            let text = lines.join("\n");
+            let written = self.clipboard.set_text(text.clone(), false);
+            *shared.remote_copy.borrow_mut() = written.then(|| RemoteCopy {
+                paths: paths.to_vec(),
+                text,
+            });
+            written
+        } else {
+            *shared.remote_copy.borrow_mut() = None;
+            self.clipboard.set_files(paths)
+        };
+        if !written {
+            self.notify(t!("editor-paste-clipboard-unavailable"));
+            return false;
+        }
         self.flash(match paths {
             [path] => t!("editor-paste-copied-item", name = display_name(path)),
             many => t!("editor-paste-copied-items", count = many.len()),
         });
+        true
     }
 
     /// 剪切文件树里的 `paths`：和复制一样放到剪贴板中，再记下这些路径；之后粘贴到文件树时把
-    /// 它们移过去，而不是复制（粘贴到系统文件管理器、编辑区时仍是复制和插入）。
+    /// 它们移过去，而不是复制（粘贴到系统文件管理器、编辑区时仍是复制和插入）。没能放进剪贴板
+    /// 时不记下。
     pub(in crate::app) fn cut_entries(&mut self, paths: &[PathBuf]) {
-        if paths.is_empty() {
+        if !self.put_entries(paths) {
             return;
         }
-        self.copy_entries(paths);
         *self.link.shared.cut_files.borrow_mut() = paths.to_vec();
         self.flash(match paths {
             [path] => t!("editor-paste-cut-item", name = display_name(path)),
@@ -115,7 +163,11 @@ impl App {
             return;
         }
         let Some(doc_dir) = self.markdown_dir() else {
-            let paths: Vec<_> = files.iter().map(|p| p.to_string_lossy()).collect();
+            // 远端的文件写成那台主机上的路径，不写虚拟路径。
+            let paths: Vec<_> = files
+                .iter()
+                .map(|p| winc_backend::native_lossy(p))
+                .collect();
             self.run(Command::Paste(paths.join("\n")));
             return;
         };

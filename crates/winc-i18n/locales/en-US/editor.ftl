@@ -234,5 +234,6 @@ editor-paste-image-save-first = Save this file first; the image will be saved in
 editor-paste-image-markdown-only = Images can only be pasted into Markdown files or the file tree
 editor-paste-image-save-failed = Couldn’t save the image: { $error }
 editor-paste-clipboard-empty = The clipboard is empty
+editor-paste-clipboard-unavailable = Couldn’t write to the system clipboard; nothing was copied
 editor-paste-copy-name = { $stem } copy{ $ext }
 editor-paste-copy-name-numbered = { $stem } copy { $number }{ $ext }
