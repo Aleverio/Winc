@@ -625,7 +625,14 @@ pub(in crate::view) fn update_status(app: &App) -> (String, Color) {
         UpdateState::Checking => (t!("settings-updates-checking").to_owned(), p.text_muted),
         UpdateState::Latest => (t!("settings-updates-latest").to_owned(), p.text_muted),
         UpdateState::Found(version) => (found_text(version), p.accent),
-        UpdateState::Failed => (t!("settings-updates-failed").to_owned(), p.text_muted),
+        UpdateState::Failed(None) => (t!("settings-updates-failed").to_owned(), p.text_muted),
+        UpdateState::Failed(Some(failure)) => (
+            t!(
+                "settings-updates-failed-because",
+                reason = failure.message()
+            ),
+            p.text_muted,
+        ),
         UpdateState::Downloading(version, percent) => (
             t!(
                 "settings-updates-downloading",

@@ -180,7 +180,6 @@ impl SettingsPage {
                     Setting::GitConfirmPush,
                     Setting::GitRememberCredentials,
                     Setting::GitAutoFetch,
-                    Setting::GitSystemProxy,
                 ]),
             ],
             SettingsPage::Modules => vec![plain(vec![
@@ -220,7 +219,11 @@ impl SettingsPage {
             SettingsPage::Keys => Vec::new(),
             SettingsPage::About => vec![
                 plain(vec![Setting::Version]),
-                plain(vec![Setting::Updates, Setting::CheckUpdates]),
+                plain(vec![
+                    Setting::Updates,
+                    Setting::CheckUpdates,
+                    Setting::SystemProxy,
+                ]),
                 plain(vec![
                     Setting::ReleaseNotes,
                     Setting::Website,
@@ -333,6 +336,8 @@ pub enum Setting {
     MarkdownLineNumbers,
     /// 定时检查更新。
     CheckUpdates,
+    /// 联网的命令跟随系统的代理设置（`network.systemProxy`）。
+    SystemProxy,
     /// 「关于」页的版本号，只读。
     Version,
     /// 「关于」页的更新状态和「检查更新」按钮。
@@ -399,8 +404,6 @@ pub enum Setting {
     GitConfirmPush,
     /// 允许记住 HTTP(S) 密码（`git.rememberCredentials`）。
     GitRememberCredentials,
-    /// `git` 跟随系统的代理设置（`git.systemProxy`）。
-    GitSystemProxy,
     /// 光标所在行末尾的追溯提示（`git.inlineBlame`）。
     GitInlineBlame,
     /// 定时在后台获取（`git.autoFetch`）。
@@ -503,6 +506,7 @@ impl Setting {
             Setting::Version
             | Setting::Updates
             | Setting::CheckUpdates
+            | Setting::SystemProxy
             | Setting::ReleaseNotes
             | Setting::Website
             | Setting::Repository
@@ -531,7 +535,6 @@ impl Setting {
             | Setting::GitPath
             | Setting::GitConfirmPush
             | Setting::GitRememberCredentials
-            | Setting::GitSystemProxy
             | Setting::GitInlineBlame
             | Setting::GitAutoFetch
             | Setting::GitTree
@@ -615,7 +618,7 @@ impl Setting {
             Setting::GitModule => "Git",
             Setting::GitConfirmPush => t!("settings-git-confirm-push"),
             Setting::GitRememberCredentials => t!("settings-git-remember-credentials"),
-            Setting::GitSystemProxy => t!("settings-git-system-proxy"),
+            Setting::SystemProxy => t!("settings-system-proxy"),
             Setting::GitInlineBlame => t!("settings-git-inline-blame"),
             Setting::GitAutoFetch => t!("settings-git-auto-fetch"),
             Setting::GitTree => t!("settings-git-tree"),
@@ -680,7 +683,7 @@ impl Setting {
             Setting::RemoteModule => Some(t!("settings-remote-module-desc")),
             Setting::GitConfirmPush => Some(t!("settings-git-confirm-push-desc")),
             Setting::GitRememberCredentials => Some(t!("settings-git-remember-credentials-desc")),
-            Setting::GitSystemProxy => Some(t!("settings-git-system-proxy-desc")),
+            Setting::SystemProxy => Some(t!("settings-system-proxy-desc")),
             Setting::GitInlineBlame => Some(t!("settings-git-inline-blame-desc")),
             Setting::GitAutoFetch => Some(t!("settings-git-auto-fetch-desc")),
             Setting::GitTree => Some(t!("settings-git-tree-desc")),
@@ -742,7 +745,7 @@ impl Setting {
             | Setting::GitModule
             | Setting::GitConfirmPush
             | Setting::GitRememberCredentials
-            | Setting::GitSystemProxy
+            | Setting::SystemProxy
             | Setting::GitInlineBlame
             | Setting::GitAutoFetch
             | Setting::GitTree

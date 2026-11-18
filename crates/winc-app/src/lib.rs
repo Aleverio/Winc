@@ -247,7 +247,7 @@ pub fn run() {
     let (key, proxy) = winc.reserve();
     let mut app = App::new(editor, proxy, bench, config);
     app.watch_git_output();
-    winc_editor::git::follow_system_proxy(app.config.git_system_proxy != Some(false));
+    winc_editor::proxy::follow_system_proxy(app.config.system_proxy != Some(false));
     app.store.config_path = config_path;
     app.git.commit.set_flat(!state.commit_tree);
     let sort = crate::app::CommitSort::from_key(&state.commit_sort);
