@@ -933,12 +933,17 @@ impl App {
                 }
                 true
             }
-            Err(e) => {
+            // 另存为的新位置不以管理员身份重试：那是用户刚选的地方，可以换一个。
+            Err(e) if saved_as => {
                 self.notify(t!(
                     "workspace-save-failed",
                     name = name,
                     error = e.to_string()
                 ));
+                false
+            }
+            Err(e) => {
+                self.save_failed(id, &name, &e);
                 false
             }
         }
