@@ -116,34 +116,34 @@ fn the_launcher_flag_is_recorded_and_dropped_when_relaunching() {
 /// 开头的斜杠；没有盘符的 Windows 路径、编码不完整的链接报错，不当作文件名。
 #[test]
 fn winc_links_open_files_at_a_line() {
+    // 绝对路径：Windows 上带盘符，链接写作 `winc://file/C:/…`。
+    let (url, dir) = if cfg!(windows) {
+        ("winc://file/C:/no/such", "C:/no/such")
+    } else {
+        ("winc://file/no/such", "/no/such")
+    };
     assert_eq!(
-        link("winc://file/no/such/a%20b.rs:12:3?windowId=1#x"),
-        Some(at("/no/such/a b.rs", Some(11), Some(2)))
+        link(&format!("{url}/a%20b.rs:12:3?windowId=1#x")),
+        Some(at(&format!("{dir}/a b.rs"), Some(11), Some(2)))
     );
+    let upper = url.replacen("winc", "WINC", 1);
     assert_eq!(
-        link("WINC://file/no/such/dir"),
-        Some(at("/no/such/dir", None, None))
+        link(&format!("{upper}/dir")),
+        Some(at(&format!("{dir}/dir"), None, None))
     );
     if cfg!(windows) {
-        assert_eq!(
-            link("winc://file/C:/no/such/a.rs:4"),
-            Some(at("C:/no/such/a.rs", Some(3), None))
-        );
         assert_eq!(link("winc://file/no/drive"), None);
     }
     for bad in [
-        "winc://file",
-        "winc://open/no/such/a.rs",
-        "winc://file/no/such/%e4",
-        "winc://file/no/such/%zz",
-        "vscode://file/no/such/a.rs",
+        "winc://file".to_owned(),
+        "winc://open/no/such/a.rs".to_owned(),
+        format!("{url}/%e4"),
+        format!("{url}/%zz"),
+        "vscode://file/no/such/a.rs".to_owned(),
     ] {
-        assert_eq!(link(bad), None, "{bad}");
+        assert_eq!(link(&bad), None, "{bad}");
     }
-    if cfg!(windows) {
-        return;
-    }
-    let parsed = args(&["winc://file/no/such/a.rs:2"]).unwrap();
-    assert_eq!(parsed.targets, [at("/no/such/a.rs", Some(1), None)]);
-    assert!(args(&["winc://file/no/such/%zz"]).is_err());
+    let parsed = args(&[&format!("{url}/a.rs:2")]).unwrap();
+    assert_eq!(parsed.targets, [at(&format!("{dir}/a.rs"), Some(1), None)]);
+    assert!(args(&[&format!("{url}/%zz")]).is_err());
 }
