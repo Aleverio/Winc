@@ -7,6 +7,7 @@
 //!
 //! 模块关闭时命令不可用，不启动 `ssh`；关闭模块会断开已有的连接。
 
+pub(crate) mod mounts;
 pub(crate) mod picker;
 
 use std::path::{Path, PathBuf};

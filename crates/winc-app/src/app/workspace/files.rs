@@ -437,15 +437,23 @@ impl App {
                     self.load_active_in_background();
                 }
             }
-            PlaceholderAction::OpenWithDefaultApp if winc_backend::is_remote(&path) => {
-                self.notify(t!("workspace-remote-local-only"));
-            }
             PlaceholderAction::OpenWithDefaultApp => {
-                if let Err(e) = system::open_with_default_app(&path) {
-                    self.notify(t!(
-                        "workspace-open-default-app-failed",
-                        error = e.to_string()
-                    ));
+                // 远端的文件：挂载在本机时（`remote.localFolders`）打开本机上的那一份。
+                let local = if winc_backend::is_remote(&path) {
+                    self.local_folder(&path)
+                } else {
+                    Some(path)
+                };
+                match local {
+                    None => self.notify(t!("workspace-remote-local-only")),
+                    Some(path) => {
+                        if let Err(e) = system::open_with_default_app(&path) {
+                            self.notify(t!(
+                                "workspace-open-default-app-failed",
+                                error = e.to_string()
+                            ));
+                        }
+                    }
                 }
             }
             PlaceholderAction::Reveal => self.reveal_in_file_manager(&path),
@@ -457,11 +465,21 @@ impl App {
     }
 
     /// 在系统文件管理器中显示 `path`；失败时提示原因。
+    ///
+    /// 远端的文件在挂载到本机的目录之内时（配置项 `remote.localFolders`）显示本机上的那一份；
+    /// 没有挂载时说明可以怎样设置。
     pub(in crate::app) fn reveal_in_file_manager(&mut self, path: &Path) {
-        if winc_backend::is_remote(path) {
-            self.notify(t!("workspace-remote-local-only"));
-            return;
-        }
+        let local;
+        let path = if winc_backend::is_remote(path) {
+            let Some(mapped) = self.local_folder(path) else {
+                self.notify(t!("workspace-remote-reveal-unmapped"));
+                return;
+            };
+            local = mapped;
+            local.as_path()
+        } else {
+            path
+        };
         if let Err(e) = system::reveal_in_file_manager(path) {
             self.notify(t!(
                 "workspace-reveal-failed",

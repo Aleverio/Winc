@@ -360,7 +360,7 @@ impl App {
                 let current = root.and_then(|r| self.state.recent.iter().position(|p| p == r));
                 let mut menu: Vec<MenuEntry> = Vec::new();
                 menu.extend(project_menu(
-                    self.state.recent.len(),
+                    self.state.recent.len().min(winc_config::RECENT_IN_MENU),
                     current,
                     root.is_some(),
                     crate::system::wsl_distributions().len(),
@@ -697,7 +697,8 @@ impl App {
         };
         let entries = match place {
             Some(path) if winc_backend::is_remote(path) => {
-                without_local_only(entries, self.terminal_enabled())
+                let mounted = self.local_folder(path).is_some();
+                without_local_only(entries, self.terminal_enabled(), mounted)
             }
             _ => entries,
         };

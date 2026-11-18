@@ -315,6 +315,8 @@ pub enum UserEvent {
     CloseConfirmed(bool),
     /// 确认框中确认把文字粘贴到指定的终端标签（多行文字，且程序未开启括号粘贴）。
     TerminalPaste(u16, String),
+    /// 要粘贴到远端终端标签的图片或文件已在后台传到那台主机：标签，那里的路径或失败的原因。
+    TerminalUploaded(u16, Result<Vec<String>, String>),
     /// 确认框中确认日志中对一个提交的操作（签出该提交、硬重置）。
     GitLogConfirmed(git::log::LogConfirmed),
     /// 确认框中确认移除参数所指的工作树；第二个参数是一并删除的分支（勾选「同时删除分支」时）。
