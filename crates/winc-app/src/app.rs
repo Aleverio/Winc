@@ -642,6 +642,10 @@ impl Hover {
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Drag {
     None,
+    /// 拖动设置卡片的标题行；`grab` 是按下处相对卡片左上角的位置。
+    SettingsCard {
+        grab: (f32, f32),
+    },
     /// 拖选文字。
     ///
     /// `by_word` 表示双击后按词扩展；`origin` 是起点（按词时是起始词的范围）。
