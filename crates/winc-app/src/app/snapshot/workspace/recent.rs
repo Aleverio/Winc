@@ -16,6 +16,41 @@ fn card_height(rows: usize) -> f32 {
 }
 
 #[test]
+fn recent_folder_setting_trims_history_and_updates_the_open_picker() {
+    let mut app = blank_app(false);
+    let dir = sample_folder("recent-setting");
+    let state_path = dir.join("state.json");
+    app.store.config_path = Some(dir.join("config.json"));
+    app.store.state_path = Some(state_path.clone());
+    app.config.recent_folder_limit = Some(31);
+    for n in 0..31 {
+        app.state
+            .remember(&PathBuf::from(format!("/project/{n}")), 31);
+    }
+    app.state.save_to(&state_path).unwrap();
+    app.settings_adjust(Setting::RecentFolderLimit, false);
+    assert_eq!(app.config.recent_folder_limit(), 30);
+    assert_eq!(app.state.recent.len(), 30);
+    assert_eq!(State::load_from(&state_path).recent, app.state.recent);
+    assert_eq!(
+        Config::load_from(&dir.join("config.json"))
+            .0
+            .recent_folder_limit(),
+        30
+    );
+    app.run_action(Action::OpenRecent);
+    assert_eq!(app.overlays.picker.hits.len(), 30);
+
+    let mut config = app.config.clone();
+    config.recent_folder_limit = None;
+    app.adopt_config(config);
+    assert_eq!(app.overlays.picker.hits.len(), 10);
+    assert_eq!(app.state.recent.len(), 10);
+    assert!(app.setting_value(Setting::RecentFolderLimit).1);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn recent_folders_are_listed_filtered_and_opened_from_the_keyboard() {
     let alpha = search_folder("recent-alpha");
     let bravo = sample_folder("recent-bravo");

@@ -17,6 +17,7 @@ impl App {
             self.keymap_changed();
         }
         let new = &self.config;
+        let recent_limit = new.recent_folder_limit();
         let zoom = old.ui_zoom != new.ui_zoom;
         let fonts = (old.editor_font != new.editor_font || old.ui_font != new.ui_font)
             || (old.editor_size != new.editor_size || old.ui_size != new.ui_size)
@@ -52,6 +53,12 @@ impl App {
         let stop_remote =
             old.remote_enabled != new.remote_enabled && new.remote_enabled != Some(true);
 
+        if recent_limit < old.recent_folder_limit() {
+            self.state.recent.truncate(recent_limit);
+            if self.overlays.picker.open && self.overlays.picker.folders {
+                self.picker_refresh();
+            }
+        }
         if fonts || glyph_language {
             // 别的窗口已经用上了这些字体，这里也用得上；万一用不上，留着原来的字体。
             let _ = self.apply_fonts();

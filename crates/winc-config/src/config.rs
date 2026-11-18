@@ -67,6 +67,8 @@ pub struct Config {
     ///
     /// 关闭后每次启动都显示开始页；命令行指定了目录或文件时仍然打开。
     pub restore_folder: Option<bool>,
+    /// 最近打开的目录数量，范围见 [`Config::RECENT_FOLDER_LIMIT_RANGE`]，默认 10。
+    pub recent_folder_limit: Option<usize>,
     /// 把目录拖进已打开目录的窗口时怎样处理，默认每次询问。
     pub drop_folder: Option<FolderDrop>,
     /// 已经打开了目录的窗口里再打开另一个目录时，`true` 在新窗口打开，`false` 在此窗口打开
@@ -461,6 +463,16 @@ pub enum ThemeChoice {
 }
 
 impl Config {
+    /// 最近目录数的有效范围，同时用于配置文件和设置页。
+    pub const RECENT_FOLDER_LIMIT_RANGE: std::ops::RangeInclusive<f32> =
+        10.0..=crate::state::MAX_RECENT as f32;
+
+    /// 最近目录数，未指定时使用下限。
+    pub fn recent_folder_limit(&self) -> usize {
+        self.recent_folder_limit
+            .unwrap_or(*Self::RECENT_FOLDER_LIMIT_RANGE.start() as usize)
+    }
+
     /// 编辑区字号的合法范围（点）。
     ///
     /// 超出范围的值在读入时忽略并报告；上下限为经验值。

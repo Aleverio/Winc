@@ -4,6 +4,25 @@ use super::*;
 
 /// `editor.autoSave` 读三个取值，也读早先版本的开关。
 #[test]
+fn recent_folder_limit_defaults_to_ten_and_accepts_integers_through_one_hundred() {
+    assert_eq!(Config::default().recent_folder_limit(), 10);
+    for n in [10, 31, 100] {
+        let text = format!(r#"{{"editor":{{"recentFolderLimit":{n}}}}}"#);
+        let (config, problems) = Config::parse(&text);
+        assert!(problems.is_empty());
+        assert_eq!(config.recent_folder_limit(), n);
+        assert_eq!(Config::parse(&config.to_json()).0, config);
+    }
+    for invalid in ["9", "101", "31.5", r#""31""#] {
+        let text = format!(r#"{{"editor":{{"recentFolderLimit":{invalid}}}}}"#);
+        let (config, problems) = Config::parse(&text);
+        assert!(!problems.is_empty());
+        assert_eq!(config.recent_folder_limit, None);
+        assert_eq!(config.recent_folder_limit(), 10);
+    }
+}
+
+#[test]
 fn auto_save_reads_its_values_and_the_old_switch() {
     for (value, expected) in [
         (r#""off""#, AutoSave::Off),
@@ -253,6 +272,7 @@ fn round_trips_through_json() {
         hot_exit: Some(false),
         confirm_close: Some(true),
         restore_folder: Some(false),
+        recent_folder_limit: Some(31),
         open_folder_in_new_window: Some(true),
         sticky_scroll: Some(false),
         word_wrap: Some(true),

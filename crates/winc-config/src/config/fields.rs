@@ -112,17 +112,13 @@ const EDITOR: &[Field] = &[
     Field {
         key: "tabWidth",
         read: |config, value, name, problems| {
-            let label = t!("config-label-tab-width");
-            config.tab_width = read_number(value, name, Config::TAB_WIDTH_RANGE, label, problems)
-                .filter(|v| {
-                    let whole = v.fract() == 0.0;
-                    if !whole {
-                        let value = v.to_string();
-                        problems.push(t!("config-not-integer", name = name, value = value));
-                    }
-                    whole
-                })
-                .map(|v| v as usize)
+            config.tab_width = read_count(
+                value,
+                name,
+                Config::TAB_WIDTH_RANGE,
+                t!("config-label-tab-width"),
+                problems,
+            );
         },
         write: |config| config.tab_width.map(|width| Json::Number(width as f64)),
     },
@@ -152,6 +148,19 @@ const EDITOR: &[Field] = &[
     bool_field!("hotExit", hot_exit),
     bool_field!("confirmClose", confirm_close),
     bool_field!("restoreFolder", restore_folder),
+    Field {
+        key: "recentFolderLimit",
+        read: |config, value, name, problems| {
+            config.recent_folder_limit = read_count(
+                value,
+                name,
+                Config::RECENT_FOLDER_LIMIT_RANGE,
+                t!("settings-recent-folder-limit"),
+                problems,
+            );
+        },
+        write: |config| config.recent_folder_limit.map(|n| Json::Number(n as f64)),
+    },
     bool_field!("openFolderInNewWindow", open_folder_in_new_window),
     Field {
         key: "dropFolder",
@@ -903,6 +912,23 @@ fn read_bool(value: &Json, key: &str, problems: &mut Vec<String>) -> Option<bool
         problems.push(t!("config-not-bool", name = key));
     }
     value
+}
+
+/// 读取范围内的整数，拒绝小数。
+fn read_count(
+    value: &Json,
+    key: &str,
+    range: std::ops::RangeInclusive<f32>,
+    label: &str,
+    problems: &mut Vec<String>,
+) -> Option<usize> {
+    read_number(value, key, range, label, problems)?;
+    let n = value.as_number()?;
+    if n.fract() != 0.0 {
+        problems.push(t!("config-not-integer", name = key, value = n.to_string()));
+        return None;
+    }
+    Some(n as usize)
 }
 
 /// 读取数字设置并检查范围，类型不符或超出 `range` 时向 `problems` 记录问题并返回 `None`。

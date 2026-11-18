@@ -255,10 +255,11 @@ pub fn run() {
     app.restore_panel_width();
     app.apply_preview_state();
     // 临时打开（`--wait`、`-`）时不记录现场、不加入最近列表、不备份，下次启动的状态不受影响。
+    app.store.state_path = state_path.filter(|_| !args.one_off());
+    app.apply_recent_folder_limit();
     if args.one_off() {
         app.start_one_off(&args);
     } else {
-        app.store.state_path = state_path;
         app.backup.root = backup_root;
         app.adopt_restored(restored);
         // 测量时没有状态文件：不记录版本，开始页也不显示「首次设置」。

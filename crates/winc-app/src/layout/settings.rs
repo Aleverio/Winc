@@ -133,6 +133,7 @@ impl SettingsPage {
                     Setting::HotExit,
                     Setting::ConfirmClose,
                     Setting::RestoreFolder,
+                    Setting::RecentFolderLimit,
                     Setting::DropFolder,
                     Setting::PreviewOnClick,
                 ]),
@@ -285,6 +286,8 @@ pub enum Setting {
     ConfirmClose,
     /// 启动时打开上次退出时打开的目录和标签。
     RestoreFolder,
+    /// 最近打开的目录数量。
+    RecentFolderLimit,
     /// 粘滞滚动：滚动时在编辑区顶部钉住当前所在的函数、类和标题。
     StickyScroll,
     /// Vim 模式。
@@ -479,6 +482,7 @@ impl Setting {
             Setting::EditorFont
             | Setting::EditorSize
             | Setting::TabWidth
+            | Setting::RecentFolderLimit
             | Setting::AutoSave
             | Setting::HotExit
             | Setting::ConfirmClose
@@ -558,6 +562,7 @@ impl Setting {
             Setting::EditorFont => t!("settings-editor-font"),
             Setting::EditorSize => t!("settings-editor-size"),
             Setting::TabWidth => t!("settings-tab-width"),
+            Setting::RecentFolderLimit => t!("settings-recent-folder-limit"),
             Setting::AutoSave => t!("settings-auto-save"),
             Setting::HotExit => t!("settings-hot-exit"),
             Setting::ConfirmClose => t!("settings-confirm-close"),
@@ -645,6 +650,7 @@ impl Setting {
             Setting::AutoSave => Some(t!("settings-auto-save-desc")),
             Setting::HotExit => Some(t!("settings-hot-exit-desc")),
             Setting::ConfirmClose => Some(t!("settings-confirm-close-desc")),
+            Setting::RecentFolderLimit => Some(t!("settings-recent-folder-limit-desc")),
             Setting::RestoreFolder => Some(t!("settings-restore-folder-desc")),
             Setting::DropFolder => Some(t!("settings-drop-folder-desc")),
             Setting::StickyScroll => Some(t!("settings-sticky-scroll-desc")),
@@ -712,7 +718,8 @@ impl Setting {
             | Setting::FontWeight
             | Setting::BackgroundOpacity
             | Setting::TerminalSize
-            | Setting::TabWidth => SettingControl::Stepper,
+            | Setting::TabWidth
+            | Setting::RecentFolderLimit => SettingControl::Stepper,
             Setting::Theme => SettingControl::Themes,
             Setting::LightTheme | Setting::DarkTheme => SettingControl::ThemeList,
             Setting::SystemTitleBar

@@ -345,7 +345,7 @@ fn switching_folders_keeps_each_folders_tabs() {
         .unwrap()
         .join("twin")
         .join(root_b.file_name().unwrap());
-    app.state.remember(&twin);
+    app.state.remember(&twin, app.config.recent_folder_limit());
     let index = app.state.recent.iter().position(|p| *p == root_b).unwrap();
     let label = app.menu_label(MenuCommand::OpenRecent(index));
     let parent = winc_editor::display_path(root_b.parent().unwrap(), None);
