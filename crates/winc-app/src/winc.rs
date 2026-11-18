@@ -618,6 +618,10 @@ impl Winc {
         targets: &[Target],
         mut token: Option<String>,
     ) {
+        if let Some(open) = crate::cli::remote_open(targets) {
+            self.open_remote(event_loop, open, token);
+            return;
+        }
         let key = match self.window_for(targets) {
             Ok(key) => key,
             Err(folder) => {
@@ -632,6 +636,34 @@ impl Winc {
         if let Some(app) = self.by_key(key) {
             app.set_activation(token);
             app.open_files(targets);
+        }
+    }
+
+    /// 打开 `ssh://` 参数指定的远端项目 `open`：开着该目录的窗口、停在开始页上的空窗口或新建的
+    /// 窗口在后台连接并打开它（见 [`App::open_remote`]）。远端的路径在界面线程上不查询。
+    ///
+    /// `token` 同 [`Self::open_targets`]。
+    fn open_remote(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        open: crate::cli::RemoteOpen,
+        mut token: Option<String>,
+    ) {
+        let found = self.shared.window_with(&open.folder, None);
+        let key = match found.or_else(|| self.blank_window()) {
+            Some(key) => key,
+            None => {
+                self.new_window(event_loop, None, token.take());
+                let Some(key) = self.active_key() else {
+                    return;
+                };
+                key
+            }
+        };
+        self.active = Some(key);
+        if let Some(app) = self.by_key(key) {
+            app.set_activation(token);
+            app.open_remote(open);
         }
     }
 
