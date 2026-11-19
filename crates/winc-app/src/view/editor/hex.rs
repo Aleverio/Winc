@@ -17,7 +17,8 @@ pub(super) fn draw_hex(app: &mut App, frame: &mut Frame<'_>, index: usize) {
     let lh = app.fonts.line_height;
     let (p, size) = (app.palette, app.fonts.code);
     let doc = &app.editor.documents[index];
-    let (id, scroll, rows) = (doc.id, doc.scroll_line, doc.row_count());
+    let (id, rows) = (doc.id, doc.row_count());
+    let scroll = drawn_scroll_line(doc.scroll_line, lh);
     let Some(view) = doc.hex.as_deref() else {
         return;
     };

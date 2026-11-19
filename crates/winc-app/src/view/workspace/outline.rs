@@ -147,6 +147,7 @@ fn draw_rows(
         .scroll
         .clamp(0.0, (content - list.h).max(0.0));
     app.panels.outline.scroll = scroll;
+    let scroll = drawn_scroll(scroll);
     let highlight = app.outline_highlight(&app.outline_rows());
     let focused = app.focus == Focus::Outline;
     let items = &app.panels.outline.items;

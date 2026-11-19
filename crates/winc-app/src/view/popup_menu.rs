@@ -83,7 +83,7 @@ pub(super) fn draw(app: &mut App, frame: &mut Frame<'_>) {
         level.rect = Rect::new(x, y, w, h);
         level.content = content;
         level.scroll = level.scroll.clamp(0.0, (content - h).max(0.0));
-        let mut top = y + POPUP_PAD - level.scroll;
+        let mut top = y + POPUP_PAD - drawn_scroll(level.scroll);
         level.row_rects = level
             .rows
             .iter()

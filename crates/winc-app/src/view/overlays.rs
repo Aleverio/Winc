@@ -508,7 +508,7 @@ pub(super) fn draw_picker(app: &mut App, frame: &mut Frame<'_>) {
         return;
     }
 
-    let scroll = app.overlays.picker.scroll;
+    let scroll = drawn_scroll(app.overlays.picker.scroll);
 
     for i in parts.visible(scroll, app.overlays.picker.hits.len()) {
         let index = app.overlays.picker.hits[i];
@@ -584,7 +584,7 @@ fn draw_remote_rows(
     let Some(rows) = app.overlays.picker.remote.as_ref().map(|shown| &shown.rows) else {
         return hits;
     };
-    let scroll = app.overlays.picker.scroll;
+    let scroll = drawn_scroll(app.overlays.picker.scroll);
     let count = app.overlays.picker.hits.len();
     for i in parts.visible(scroll, count) {
         let Some(item) = rows.get(app.overlays.picker.hits[i]) else {
@@ -695,7 +695,7 @@ fn draw_vim_rows(app: &App, frame: &mut Frame<'_>, parts: &PickerParts) {
         );
         return;
     }
-    let scroll = app.overlays.picker.scroll;
+    let scroll = drawn_scroll(app.overlays.picker.scroll);
     for i in parts.visible(scroll, app.overlays.picker.hits.len()) {
         let Some(item) = rows.get(app.overlays.picker.hits[i]) else {
             continue;
@@ -739,7 +739,7 @@ fn draw_palette_rows(app: &App, frame: &mut Frame<'_>, parts: &PickerParts) {
         return;
     }
 
-    let scroll = app.overlays.picker.scroll;
+    let scroll = drawn_scroll(app.overlays.picker.scroll);
     for i in parts.visible(scroll, app.overlays.picker.hits.len()) {
         let Some(&action) = crate::app::palette().get(app.overlays.picker.hits[i]) else {
             continue;
@@ -800,7 +800,7 @@ fn draw_language_rows(app: &App, frame: &mut Frame<'_>, parts: &PickerParts) {
         return;
     }
     let current = app.editor.active().map(|d| d.highlighter.language().id);
-    let scroll = app.overlays.picker.scroll;
+    let scroll = drawn_scroll(app.overlays.picker.scroll);
     for i in parts.visible(scroll, app.overlays.picker.hits.len()) {
         let Some(language) = LanguageRow::of(app.overlays.picker.hits[i]) else {
             continue;
@@ -862,7 +862,7 @@ fn draw_symbol_rows(app: &App, frame: &mut Frame<'_>, parts: &PickerParts) {
         return;
     };
 
-    let scroll = app.overlays.picker.scroll;
+    let scroll = drawn_scroll(app.overlays.picker.scroll);
     for i in parts.visible(scroll, app.overlays.picker.hits.len()) {
         let Some(symbol) = symbols.items.get(app.overlays.picker.hits[i]) else {
             continue;
@@ -912,7 +912,7 @@ fn draw_folder_rows(
     }
 
     let mut hits = Vec::new();
-    let scroll = app.overlays.picker.scroll;
+    let scroll = drawn_scroll(app.overlays.picker.scroll);
     let parents = crate::app::parents(&app.state.recent);
     let file_parents = crate::app::parents(&app.state.recent_files);
     for i in parts.visible(scroll, app.overlays.picker.hits.len()) {

@@ -88,7 +88,7 @@ pub(in crate::view) fn draw_log(app: &mut App, frame: &mut Frame<'_>, index: usi
     let lh = app.fonts.line_height;
     let (scroll, rows) = {
         let doc = &app.editor.documents[index];
-        (doc.scroll_line, doc.row_count())
+        (drawn_scroll_line(doc.scroll_line, lh), doc.row_count())
     };
     let first = scroll.floor().max(0.0) as usize;
     let visible = (parts.list.h / lh).ceil() as usize + 1;

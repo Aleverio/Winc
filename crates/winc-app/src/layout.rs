@@ -265,6 +265,17 @@ pub fn preview_segments(group: Rect) -> [Rect; 3] {
     [0.0, 1.0, 2.0].map(|i| Rect::new(group.x + (w + gap) * i, group.y, w, group.h))
 }
 
+/// 绘制用的滚动位置（逻辑像素）：取整到整像素，使按整像素取整的文字与底色、选区一起移动。
+pub fn drawn_scroll(scroll: f32) -> f32 {
+    scroll.round()
+}
+
+/// 按行计的滚动位置 `line`（行高 `lh`）绘制时的位置：换算成像素后取整（见 [`drawn_scroll`]）。
+pub fn drawn_scroll_line(line: f64, lh: f32) -> f64 {
+    let lh = f64::from(lh);
+    (line * lh).round() / lh
+}
+
 /// 返回文件树第 `v` 行（从 0 起）的位置和裁剪范围；动画中行序按展开后的状态计算。
 ///
 /// `block` 是正在展开或收起的子行范围（行序，不含末尾），`hidden` 是该范围尚未露出的高度（像素）。

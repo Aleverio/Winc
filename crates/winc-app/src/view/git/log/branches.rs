@@ -56,7 +56,7 @@ pub(super) fn draw_branches(
     let fold = app.git.log.branch_fold.as_ref();
     let rows = fold.map_or_else(|| app.log_branch_rows(), |f| f.rows.clone());
     let filter = &view.query.branches;
-    let top = area.y + LOG_LIST_PAD - app.git.log.branches_scroll;
+    let top = area.y + LOG_LIST_PAD - drawn_scroll(app.git.log.branches_scroll);
     for (i, row) in rows.iter().enumerate() {
         let (y, clip) = panel_slot(fold, (top, i), area);
         let band = Rect::new(slid.x + 6.0, y, slid.w - 12.0, BRANCH_ROW);

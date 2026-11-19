@@ -22,7 +22,7 @@ use crate::app::{
 use crate::field::{FieldView, TextField};
 use crate::icons;
 use crate::keymap::{self, Action};
-use crate::layout::{SearchParts, scrollbar_thumb};
+use crate::layout::{SearchParts, drawn_scroll, drawn_scroll_line, scrollbar_thumb};
 use crate::theme::*;
 
 mod alert;
