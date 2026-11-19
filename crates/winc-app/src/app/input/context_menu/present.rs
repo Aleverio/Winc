@@ -76,6 +76,14 @@ impl MenuIcon {
     }
 }
 
+/// 子菜单 `items` 这一行用谁的图标：第一项打开整个目录组时用它的，其余子菜单没有图标。
+pub(super) fn submenu_lead(items: &[MenuEntry]) -> Option<MenuCommand> {
+    match items.first() {
+        Some(&MenuEntry::Item(command @ MenuCommand::OpenGroup(_), _)) => Some(command),
+        _ => None,
+    }
+}
+
 /// 命令 `command` 的菜单项图标的逻辑尺寸（宽，高）。
 #[cfg(target_os = "macos")]
 fn menu_icon_size(command: MenuCommand) -> (f32, f32) {
@@ -879,8 +887,8 @@ impl App {
                 MenuEntry::Submenu(title, items) => Some(Prepared {
                     label: MenuLabel::plain(title),
                     key: Default::default(),
-                    icon: None,
-                    icon_size: MENU_ICON,
+                    icon: submenu_lead(items).and_then(|c| self.menu_icon(c)),
+                    icon_size: submenu_lead(items).map_or(MENU_ICON, menu_icon_size),
                     enabled: true,
                     checked: false,
                     alternate: false,
