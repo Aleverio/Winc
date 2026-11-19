@@ -1051,3 +1051,55 @@ fn submodule_worktrees_are_listed_and_placed_beside_the_superproject() {
     );
     let _ = std::fs::remove_dir_all(&base);
 }
+
+/// 侧栏底部各栏的标题行（工作树、储藏、大纲）上沿是分隔线：标题行离线下和离一栏下沿一样远。
+#[test]
+fn section_headers_sit_midway_below_their_separator() {
+    let Some((mut app, root)) = git_app("git-section-gaps", false) else {
+        return;
+    };
+    git_in(&root, &["add", "-A"]);
+    git_in(&root, &["commit", "-q", "-m", "base"]);
+    std::fs::write(root.join("src/main.rs"), "fn main() { 1; }\n").unwrap();
+    git_in(&root, &["stash", "push", "-q", "-m", "s"]);
+    std::fs::write(root.join("src/main.rs"), "fn main() { now(); }\n").unwrap();
+    let linked = add_worktree(&root);
+    app.git_refresh();
+    app.run_action(Action::ShowCommit);
+    paint(&mut app);
+    if app.git.commit.worktrees.open {
+        app.press_commit(CommitTarget::Worktrees);
+        app.git.commit.worktrees.motion = None;
+        paint(&mut app);
+    }
+    let band = |app: &App, target: CommitTarget| {
+        (app.hits.commit.iter())
+            .find(|(_, t)| *t == target)
+            .map(|(rect, _)| *rect)
+            .unwrap()
+    };
+    let parts = app.commit_parts();
+    for (area, target) in [
+        (parts.worktrees.unwrap(), CommitTarget::Worktrees),
+        (parts.stashes.unwrap(), CommitTarget::Stashes),
+    ] {
+        let band = band(&app, target);
+        assert_eq!(
+            band.y - (area.y + 1.0),
+            area.bottom() - band.bottom(),
+            "{target:?}"
+        );
+    }
+    // 储藏一组紧贴提交卡片，卡片与标题行之间也只有组内的留白。
+    assert_eq!(parts.stashes.unwrap().bottom(), parts.card.unwrap().y);
+
+    app.run_action(Action::ShowFiles);
+    paint(&mut app);
+    let header = app.outline_header();
+    let (band, _) = *(app.hits.outline.iter())
+        .find(|(_, t)| *t == OutlineTarget::Header)
+        .unwrap();
+    assert_eq!(band.y - (header.y + 1.0), header.bottom() - band.bottom());
+    let _ = std::fs::remove_dir_all(&linked);
+    let _ = std::fs::remove_dir_all(&root);
+}

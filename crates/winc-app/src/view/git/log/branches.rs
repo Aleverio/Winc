@@ -73,7 +73,13 @@ pub(super) fn draw_branches(
             BranchRow::Tag(index) => named(app.git.tags.get(*index)),
             _ => false,
         };
-        let shade = Rect::new(band.x, band.y + 1.0, band.w, band.h - 2.0);
+        // 分组标题行的上沿是分隔线：底色从线下再隔 1 开始，与下沿留的一样。
+        let ruled = matches!(
+            row,
+            BranchRow::Locals { .. } | BranchRow::Remotes { .. } | BranchRow::Tags { .. }
+        );
+        let inset = if ruled { 2.0 } else { 1.0 };
+        let shade = Rect::new(band.x, band.y + inset, band.w, band.h - inset - 1.0);
         if let Some(color) = row_color(p, chosen, false, hovered) {
             frame.rect_clipped(shade, color, RADIUS_ROW, clip);
         }

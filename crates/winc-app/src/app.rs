@@ -45,8 +45,8 @@ pub(crate) use git::branch::picker::{GitAnchor, PickerPart};
 pub(crate) use git::changes::{ChangeTarget, MARK_W, mark_x, ruler_rows};
 pub(crate) use git::commit::{
     COMMIT_ROW, CommitGroup, CommitLabels, CommitName, CommitOverflow, CommitParts, CommitRow,
-    CommitRows, CommitScope, CommitSort, CommitTarget, MESSAGE_LINE, MESSAGE_PAD, OtherGroup,
-    OtherRow, STASH_GAP, StashLine, StashView, SyncState, WorktreeLine,
+    CommitRows, CommitScope, CommitSort, CommitTarget, DRAWER_TOP, MESSAGE_LINE, MESSAGE_PAD,
+    OtherGroup, OtherRow, StashLine, StashView, SyncState, WorktreeLine,
 };
 pub(crate) use input::context_menu::{
     CHECK_COLUMN, ICON_COLUMN, MenuIcon, POPUP_PAD, POPUP_TEXT_X, PopupLevel, PopupMenu, PopupRow,
@@ -73,7 +73,9 @@ pub use workspace::file_drop::DropZone;
 pub use workspace::files::{Pick, PlaceholderAction, TabBar, TabHit};
 pub(crate) use workspace::global::ResultOverflow;
 pub use workspace::global::{GlobalSearch, ResultRow};
-pub(crate) use workspace::outline::{OUTLINE_GAP, has_children as outline_has_children};
+pub(crate) use workspace::outline::{
+    OUTLINE_GAP, OUTLINE_TOP, has_children as outline_has_children,
+};
 pub use workspace::outline::{OutlineEmpty, OutlineKind, OutlineState, OutlineTarget};
 pub use workspace::picker::{
     PICKER_ICON_X, PICKER_MAX_ROWS, PICKER_PAD, PICKER_ROW, PICKER_TEXT_X, PLACES_FOOTER,
