@@ -29,9 +29,10 @@ mod book;
 mod folds;
 mod images;
 pub(crate) mod laid;
-mod links;
+pub(crate) mod links;
 mod live;
 mod live_caret;
+mod paste;
 pub(crate) mod resize;
 mod scroll;
 pub(crate) mod suggest;
@@ -152,7 +153,7 @@ pub(crate) struct MarkdownPreview {
     /// 用到的图片，键为解析后的本地路径。
     pub images: HashMap<PathBuf, ImageSlot>,
     /// 各图片在文件中写的地址，键同 `images`：解码后的图片释放之后据此重新读取。
-    urls: HashMap<PathBuf, String>,
+    pub(crate) urls: HashMap<PathBuf, String>,
     /// docx 包中的图片：键与 `images` 相同（按文档所在目录解析后的路径），值是图片文件的
     /// 内容；读取这些图片时用这里的内容，不读磁盘。
     embedded: HashMap<PathBuf, Arc<[u8]>>,
@@ -280,6 +281,10 @@ pub(crate) struct MarkdownPreview {
     /// 最近一次单击放下的光标（原文字节偏移）：因此重新排版时不为保持光标不动而滚动（见
     /// `laid::old_caret`）。
     pub(crate) clicked: Option<usize>,
+    /// 查过的正文链接，打不开的画上虚下划线。
+    pub(crate) links: links::LinkChecks,
+    /// 右键点中的本地图片的文件，菜单「在新标签中打开图片」打开它。
+    pub(crate) menu_picture: Option<PathBuf>,
     /// 右键点中的图片，菜单「图片大小」调整它。
     pub(crate) menu_image: Option<resize::ImageAt>,
     /// 正在拖动把手调整大小的图片。
@@ -288,6 +293,18 @@ pub(crate) struct MarkdownPreview {
 
 /// 淡入的项：所在顶层块的序号及块内各项的序号，按块的序号排序。
 pub(crate) type Fading = Vec<(usize, Box<[usize]>)>;
+
+/// 重排后各块怎样从原位置过渡到新位置，见 [`BlockMotion`]。
+pub(crate) struct Moves {
+    /// 各块起始时的偏移，同 [`BlockMotion::from`]。
+    pub from: Vec<f32>,
+    /// 淡入的项。
+    pub fading: Fading,
+    /// 换成原文的块：（块，渲染结果从第几项起，这些项另加的起始偏移），按块排序。
+    pub inner: Vec<(usize, u32, f32)>,
+    /// 换回排版的块原来的原文。
+    pub leaving: Vec<laid::Leaving>,
+}
 
 /// 可编辑的预览重排后的过渡动画。
 ///
@@ -301,9 +318,25 @@ pub(crate) struct BlockMotion {
     pub from: Vec<f32>,
     /// 淡入的项。
     pub fading: Fading,
+    /// 换成原文的块里渲染结果另加的偏移，见 [`Moves::inner`]。
+    pub inner: Vec<(usize, u32, f32)>,
+    /// 换回排版的块原来的原文，在原处淡出。
+    pub leaving: Vec<laid::Leaving>,
 }
 
 impl BlockMotion {
+    /// 第 `block` 块换回排版前的原文（在原处淡出）。
+    pub fn leaving(&self, block: usize) -> Option<&laid::Leaving> {
+        self.leaving.iter().find(|l| l.block == block)
+    }
+
+    /// 第 `block` 块中从第几项起另有偏移，以及当前的这段偏移（逻辑像素）。
+    pub fn inner(&self, block: usize) -> Option<(usize, f32)> {
+        let i = self.inner.binary_search_by_key(&block, |(b, ..)| *b).ok()?;
+        let (_, first, d) = self.inner[i];
+        Some((first as usize, d * (1.0 - self.clock.progress())))
+    }
+
     /// 返回第 `block` 块当前相对新位置向下的偏移（逻辑像素）。
     pub fn offset(&self, block: usize) -> f32 {
         self.from
@@ -313,7 +346,7 @@ impl BlockMotion {
 
     /// 是否仍有块未到达新位置。
     pub fn moving(&self) -> bool {
-        self.from.iter().any(|d| d.abs() >= 0.5)
+        self.from.iter().any(|d| d.abs() >= 0.5) || !self.inner.is_empty()
     }
 
     /// 返回第 `block` 块中淡入的项。
@@ -386,6 +419,8 @@ impl Default for MarkdownPreview {
             sender,
             receiver,
             suggest: Default::default(),
+            links: Default::default(),
+            menu_picture: None,
             menu_image: None,
             resizing: None,
             folds: HashMap::new(),
@@ -877,29 +912,34 @@ impl App {
     /// 各块从偏移 `from` 处滑动到新位置，`fading` 中的项淡入。
     ///
     /// 没有需要移动或淡入的内容、或动态效果关闭时不开始动画，直接绘制新的排版。
-    pub(crate) fn start_markdown_motion(&mut self, from: Vec<f32>, fading: Fading) {
+    pub(crate) fn start_markdown_motion(&mut self, moves: Moves) {
+        let Moves {
+            from,
+            fading,
+            inner,
+            leaving,
+        } = moves;
         let still = from.iter().all(|d| d.abs() < 0.5);
-        if still && fading.is_empty() {
+        if still && fading.is_empty() && inner.is_empty() && leaving.is_empty() {
             self.preview.markdown.motion = None;
             return;
         }
+        let motion = |clock| BlockMotion {
+            clock,
+            from,
+            fading,
+            inner,
+            leaving,
+        };
         #[cfg(test)]
         if let Some(at) = self.preview.markdown.frozen {
             let clock = crate::app::Clock::frozen(at, crate::app::animation::MARKDOWN_MOTION);
-            self.preview.markdown.motion = Some(BlockMotion {
-                clock,
-                from,
-                fading,
-            });
+            self.preview.markdown.motion = Some(motion(clock));
             return;
         }
-        self.preview.markdown.motion =
-            self.clock(crate::app::animation::MARKDOWN_MOTION)
-                .map(|clock| BlockMotion {
-                    clock,
-                    from,
-                    fading,
-                });
+        self.preview.markdown.motion = self
+            .clock(crate::app::animation::MARKDOWN_MOTION)
+            .map(motion);
     }
 
     /// 处理预览上的鼠标按下：获取焦点并从该处开始选择文字；双击选中一个词，按住 ⇧ 时扩展选区。
@@ -1008,7 +1048,12 @@ impl App {
     /// 预览获得焦点，点击位置在选区外时取消选区。可编辑的预览中改为将文档的光标移到该处
     /// （点在文档的选区内时不移动）。
     pub(in crate::app) fn markdown_context_target(&mut self, x: f32, y: f32) -> bool {
-        if !self.preview.markdown.area.contains(x, y) || self.markdown_link_at(x, y).is_some() {
+        let pictures = &self.hits.markdown_pictures;
+        let picture = (pictures.iter().rev()).find(|(r, _)| r.contains(x, y));
+        self.preview.markdown.menu_picture = picture.map(|(_, path)| path.clone());
+        // 链接上的右键不在这里处理；包在链接里的图片仍有图片的菜单。
+        let on_link = self.markdown_link_at(x, y).is_some() && picture.is_none();
+        if !self.preview.markdown.area.contains(x, y) || on_link {
             return false;
         }
         self.focus = crate::app::Focus::Editor;

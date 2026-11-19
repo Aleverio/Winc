@@ -1457,6 +1457,7 @@ pub mod cells;
 mod emoji;
 pub mod enter;
 pub mod format;
+pub mod from_html;
 mod front;
 mod html;
 mod mark;

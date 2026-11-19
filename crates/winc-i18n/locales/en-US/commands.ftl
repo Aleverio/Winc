@@ -80,6 +80,7 @@ cmd-markdown-link = Markdown: Insert Link
 cmd-markdown-image = Markdown: Insert Image
 cmd-markdown-focus-mode = Markdown: Toggle Focus Mode
 cmd-markdown-typewriter-mode = Markdown: Toggle Typewriter Mode
+cmd-markdown-paste-plain = Markdown: Paste as Plain Text
 cmd-delete-line = Delete Line
 cmd-delete-all-left = Delete to Line Start
 cmd-indent-lines = Indent Line

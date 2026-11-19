@@ -80,6 +80,7 @@ cmd-markdown-link = Markdown：插入链接
 cmd-markdown-image = Markdown：插入图片
 cmd-markdown-focus-mode = Markdown：切换专注模式
 cmd-markdown-typewriter-mode = Markdown：切换打字机模式
+cmd-markdown-paste-plain = Markdown：粘贴为纯文本
 cmd-delete-line = 删除行
 cmd-delete-all-left = 删除到行首
 cmd-indent-lines = 增加缩进

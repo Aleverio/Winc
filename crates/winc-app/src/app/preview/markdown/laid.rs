@@ -167,9 +167,12 @@ impl Before {
                 (*hash, Arc::clone(block), top + offset - scroll)
             })
             .collect();
+        // 还没在预览里编辑过（只在阅读）时排版里没有光标，按文档现在的版本算：单击放光标
+        // 不改文字，各块照样滑到新位置。
+        let current = app.editor.active().map(|d| d.revision);
         Before {
             blocks,
-            revision: laid.live.as_ref().map(|k| k.2),
+            revision: laid.live.as_ref().map(|k| k.2).or(current),
         }
     }
 
@@ -187,7 +190,7 @@ impl Before {
         scroll: f32,
         muted: Color,
         slide: bool,
-    ) -> (Vec<f32>, crate::app::preview::markdown::Fading) {
+    ) -> crate::app::preview::markdown::Moves {
         let (old, new) = (&self.blocks, &laid.blocks);
         let matched: Vec<Option<usize>> = if old.len() == new.len() {
             (0..new.len()).map(Some).collect()
@@ -221,6 +224,29 @@ impl Before {
         let moved = laid.live.as_ref().map(|k| k.2) == self.revision && self.revision.is_some();
         if !moved && !slide {
             from.fill(0.0);
+        }
+        // 原文和排版互换的块：原文下方的渲染结果和下面的块一起滑动，不在块里跳一下。
+        let (mut inner, mut leaving) = (Vec::new(), Vec::new());
+        for (i, j) in matched.iter().enumerate() {
+            let Some(j) = *j else { continue };
+            if !moved && !slide {
+                break;
+            }
+            match (old[j].1.preview, new[i].1.preview) {
+                // 换成原文：渲染结果从原来的位置滑下去，上面的原文随之露出。
+                (None, Some((first, top))) => inner.push((i, first, -top)),
+                // 换回排版：排版从原来原文下方的位置滑上来，原来的原文在上面淡出。
+                (Some((first, top)), None) => {
+                    leaving.push(Leaving {
+                        block: i,
+                        old: Arc::clone(&old[j].1),
+                        items: first,
+                        offset: from[i],
+                    });
+                    from[i] += top;
+                }
+                _ => {}
+            }
         }
         let mut fading = Vec::new();
         for (i, j) in matched.iter().enumerate() {
@@ -262,8 +288,25 @@ impl Before {
                 fading.push((i, fresh));
             }
         }
-        (from, fading)
+        crate::app::preview::markdown::Moves {
+            from,
+            fading,
+            inner,
+            leaving,
+        }
     }
+}
+
+/// 换回排版的块原来显示的原文：过渡中在原处淡出。
+pub(crate) struct Leaving {
+    /// 所在的块（新排版的序号）。
+    pub(crate) block: usize,
+    /// 原来的排版。
+    pub(crate) old: Arc<LaidBlock>,
+    /// 原文占前面几项（其后是渲染结果）。
+    pub(crate) items: u32,
+    /// 起始时相对新位置向下的偏移（逻辑像素），随过渡归零。
+    pub(crate) offset: f32,
 }
 
 /// 可编辑的预览中显示原文的块的缓存键；各字段均不变时沿用上一次的排版。
@@ -531,6 +574,7 @@ pub(crate) fn lay_out(
             );
             laid.preedit = cx.preedit;
             laid.scrolls = out.scrolls;
+            laid.preview = out.preview;
             Arc::new(laid)
         });
         // 不在需要保留的范围内的块释放要画的项；显示原文的块（光标所在）总是保留。

@@ -506,6 +506,10 @@ pub enum MenuCommand {
     Table(&'static str),
     /// 可编辑的预览中右键点中的图片：宽度改为正文宽度的百分之几，0 表示去掉写明的大小。
     ImageWidth(u32),
+    /// 可编辑的预览：粘贴为纯文本，不改写成 Markdown 的写法。
+    PastePlain,
+    /// 预览中右键点中的本地图片：在新标签中打开。
+    OpenImage,
 }
 
 /// 行尾菜单中可列出的行尾；CR 只在文件本来就是 CR 时才列出。
@@ -734,6 +738,8 @@ impl MenuCommand {
             MenuCommand::NewWindow => t!("cmd-new-window"),
             MenuCommand::BackgroundChoose => t!("settings-background-choose"),
             MenuCommand::BackgroundNone => t!("settings-background-none"),
+            MenuCommand::PastePlain => t!("menu-paste-plain"),
+            MenuCommand::OpenImage => t!("menu-open-image"),
             MenuCommand::ImageWidth(percent) => match percent {
                 25 => "25%",
                 50 => "50%",

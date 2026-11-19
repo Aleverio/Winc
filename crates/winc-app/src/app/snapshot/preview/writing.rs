@@ -561,3 +561,98 @@ fn folding_a_heading_keeps_the_view_still() {
     assert!((top_of(&app, 7) - before).abs() < 1.0);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 打不开的链接（文件不存在、文中没有那个标题）画上虚下划线，悬停时写明原因；网址不查。
+#[test]
+fn broken_links_are_marked() {
+    use crate::app::preview::markdown::links::Broken;
+    let text = "# 标题\n\n[好](short.rs) [坏](missing.md) [锚](#标题) [无](#没有) \
+        [网](https://winc.si/x)\n";
+    let (mut app, dir) = live_doc("md-broken-links", text);
+    paint(&mut app);
+    shoot(&mut app, "md-broken-links");
+    let check = |app: &mut App, url: &str| app.check_markdown_link(url);
+    assert_eq!(check(&mut app, "short.rs"), None);
+    assert_eq!(check(&mut app, "missing.md"), Some(Broken::File));
+    assert_eq!(check(&mut app, "#标题"), None);
+    assert_eq!(check(&mut app, "#没有"), Some(Broken::Heading));
+    assert_eq!(check(&mut app, "https://winc.si/x"), None);
+    // 文件建好、磁盘的变化处理过之后不再标出。
+    std::fs::write(dir.join("missing.md"), "").unwrap();
+    app.preview.markdown.links.clear();
+    assert_eq!(check(&mut app, "missing.md"), None);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 右键菜单「在新标签中打开图片」：本地图片在新标签中打开，包在链接里的图片也有这一项。
+#[test]
+fn images_open_in_a_tab_from_the_menu() {
+    use crate::app::input::context_menu::MenuCommand;
+    let dir = sample_folder("md-image-open");
+    let png = winc_editor::paste::encode_png(200, 120, &[90; 200 * 120 * 4]).unwrap();
+    std::fs::write(dir.join("shot.png"), png).unwrap();
+    let path = dir.join("LIVE.md");
+    std::fs::write(&path, "[![图](shot.png)](https://winc.si)\n\n后文\n").unwrap();
+    let mut app = app_with(&path, false);
+    paint(&mut app);
+    app.set_preview_mode(PreviewMode::Preview);
+    settle(&mut app);
+    let [(image, _)] = app.hits.markdown_pictures.clone()[..] else {
+        panic!("画出了一张本地图片");
+    };
+    right_click(&mut app, (image.x + 20.0, image.y + 20.0));
+    assert!(menu_commands(&app).contains(&(MenuCommand::OpenImage, true)));
+    app.run_menu_command(MenuCommand::OpenImage);
+    settle(&mut app);
+    let opened = app.editor.active().and_then(|d| d.path.clone()).unwrap();
+    assert!(
+        opened.ends_with("md-image-open/shot.png"),
+        "{}",
+        opened.display()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// HTML 块换成原文、换回排版时，渲染结果和下面的块一起滑动：过渡的第一帧还在原来的位置，
+/// 不在块里跳一下。
+#[test]
+fn source_and_rendering_swap_without_a_jump() {
+    let dir = sample_folder("md-swap-slide");
+    let png = winc_editor::paste::encode_png(200, 80, &[90; 200 * 80 * 4]).unwrap();
+    std::fs::write(dir.join("logo.png"), png).unwrap();
+    let path = dir.join("LIVE.md");
+    let text =
+        "前文\n\n<p align=\"center\">\n  <img src=\"logo.png\" alt=\"logo\" />\n</p>\n\n后文\n";
+    std::fs::write(&path, text).unwrap();
+    let mut app = app_with(&path, false);
+    paint(&mut app);
+    app.set_preview_mode(PreviewMode::Preview);
+    settle(&mut app);
+    let image_y = |app: &App| app.hits.markdown_pictures[0].0.y;
+    let rendered = image_y(&app);
+
+    // 点图片：块换成原文，图片排到代码框下面；第一帧图片还在原处，过渡完到了新位置。
+    app.preview.markdown.frozen = Some(std::time::Duration::ZERO);
+    let image = app.hits.markdown_pictures[0].0;
+    super::click(&mut app, (image.x + 10.0, image.y + 10.0));
+    paint(&mut app);
+    assert_eq!(image_y(&app), rendered);
+    // 冻住的时钟不走：去掉过渡，看最后的位置。
+    app.preview.markdown.frozen = None;
+    app.preview.markdown.motion = None;
+    settle(&mut app);
+    let below = image_y(&app);
+    assert!(below > rendered + 20.0, "{below} <= {rendered}");
+
+    // 点别处：换回排版；第一帧图片还在代码框下面，过渡完回到原处。
+    app.preview.markdown.frozen = Some(std::time::Duration::ZERO);
+    put_caret(&mut app, "后文", true);
+    paint(&mut app);
+    assert_eq!(image_y(&app), below);
+    // 冻住的时钟不走：去掉过渡，看最后的位置。
+    app.preview.markdown.frozen = None;
+    app.preview.markdown.motion = None;
+    settle(&mut app);
+    assert_eq!(image_y(&app), rendered);
+    let _ = std::fs::remove_dir_all(&dir);
+}

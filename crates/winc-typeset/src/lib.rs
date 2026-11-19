@@ -77,6 +77,9 @@ pub struct LaidBlock {
     pub preedit: bool,
     /// 比正文宽、可以横向滚动的表格，按项的先后排列。
     pub scrolls: Vec<Scroller>,
+    /// 显示原文的块里原文下方的渲染结果：从第几项起、上边缘（见 [`Out::preview`]）。原文和
+    /// 排版互换时，渲染结果和下面的块一起滑动。
+    pub preview: Option<(u32, f32)>,
     /// 要画的项已经释放时留下的内容（见 [`LaidBlock::shed`]）；项都在时为 `None`。
     shed: Option<Box<Shed>>,
 }
@@ -171,6 +174,7 @@ impl LaidBlock {
             memo,
             preedit: false,
             scrolls: Vec::new(),
+            preview: None,
             shed: None,
         }
     }
@@ -1170,6 +1174,8 @@ pub struct Out {
     pub anchors: Vec<(String, f32)>,
     /// 比正文宽、可以横向滚动的表格。
     pub scrolls: Vec<Scroller>,
+    /// 显示原文的块里原文下方的渲染结果：从第几项起、上边缘（相对块的左上角）。
+    pub preview: Option<(u32, f32)>,
 }
 
 /// 列表相邻两项之间的间距与正文字号之比。

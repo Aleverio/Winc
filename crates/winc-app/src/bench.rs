@@ -48,6 +48,9 @@ enum Mode {
     Typing,
     /// 首帧呈现后切换到只显示预览（可编辑的 Markdown 预览），之后与 [`Mode::Typing`] 相同。
     LiveTyping,
+    /// 首帧呈现后切换到只显示预览（可编辑的 Markdown 预览），之后每十帧按一次 ↓ 或 ↑，光标
+    /// 所在的块换成原文、上一处换回排版；统计每一帧（含过渡动画的各帧）的耗时。
+    LiveMoves,
     /// 首帧呈现后切换到只显示预览（Markdown、SVG），之后与 [`Mode::Scroll`] 相同。
     Preview,
     /// 首帧呈现后打开终端面板并运行给定的命令，统计此后 [`SCROLL_FRAMES`] 帧的耗时后退出。
@@ -77,6 +80,11 @@ pub enum Next {
     Key {
         /// 是否执行 Vim 模式的按键。
         vim: bool,
+        /// 已采集的帧数。
+        step: usize,
+    },
+    /// 移动光标的测量：调用方按已采集的帧数 `step` 决定是否按 ↓ 或 ↑，并请求下一帧。
+    Move {
         /// 已采集的帧数。
         step: usize,
     },
@@ -151,6 +159,7 @@ impl Bench {
             Ok("vim") => Mode::Vim,
             Ok("typing") => Mode::Typing,
             Ok("live-typing") => Mode::LiveTyping,
+            Ok("live-moves") => Mode::LiveMoves,
             Ok("preview") => Mode::Preview,
             Ok("wheel") => Mode::Wheel,
             Ok("picker") => Mode::QuickOpen,
@@ -226,7 +235,7 @@ impl Bench {
                         frames: Vec::new(),
                     });
                 }
-                Mode::Preview | Mode::LiveTyping => return Next::Preview,
+                Mode::Preview | Mode::LiveTyping | Mode::LiveMoves => return Next::Preview,
                 Mode::Terminal(command) => {
                     self.command = Some(command.clone());
                     return Next::Terminal;
@@ -237,14 +246,19 @@ impl Bench {
 
         let terminal = matches!(self.mode, Mode::Terminal(_));
         let keys = matches!(self.mode, Mode::Vim | Mode::Typing | Mode::LiveTyping);
-        let timed = terminal || keys || matches!(self.mode, Mode::Scroll | Mode::Preview);
+        let moves = self.mode == Mode::LiveMoves;
+        let timed = terminal || keys || moves || matches!(self.mode, Mode::Scroll | Mode::Preview);
         // 终端测量只统计命令写入终端之后的帧。
         if !timed || presented < 2 || self.command.is_some() {
             return Next::Continue;
         }
 
         // 切换到预览之后的第一帧排版整篇，不计入按键的耗时。
-        let first = if self.mode == Mode::LiveTyping { 3 } else { 2 };
+        let first = if matches!(self.mode, Mode::LiveTyping | Mode::LiveMoves) {
+            3
+        } else {
+            2
+        };
         if presented > first {
             self.frame_times
                 .push(elapsed + std::mem::take(&mut self.key_time));
@@ -253,6 +267,10 @@ impl Bench {
         if self.frame_times.len() < SCROLL_FRAMES {
             return if terminal {
                 Next::Continue
+            } else if moves {
+                Next::Move {
+                    step: self.frame_times.len(),
+                }
             } else if keys {
                 Next::Key {
                     vim: self.mode == Mode::Vim,

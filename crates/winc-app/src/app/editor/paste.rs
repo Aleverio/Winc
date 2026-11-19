@@ -118,13 +118,18 @@ impl App {
         });
     }
 
-    /// 粘贴到编辑区：剪贴板中有文件时粘贴文件，其次是文本，最后是图片。
+    /// 粘贴到编辑区：剪贴板中有文件时粘贴文件，其次是文本（Markdown 中带结构的 HTML 先写成
+    /// Markdown），最后是图片。
     pub(super) fn paste_into_editor(&mut self) {
         let files = self.clipboard_files();
         if !files.is_empty() {
             self.paste_files(&files);
         } else if let Some(text) = self.clipboard_text() {
-            self.paste_text(text);
+            // 网页、文档里复制的内容写成 Markdown；只有文字时照常粘贴文字。
+            match self.markdown_html_paste() {
+                Some(markdown) => self.run(Command::Insert(markdown)),
+                None => self.paste_text(text),
+            }
         } else if let Some(png) = self.clipboard_png() {
             self.paste_image(&png);
         }

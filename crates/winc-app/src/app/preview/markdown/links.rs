@@ -3,8 +3,74 @@
 
 use super::*;
 
+/// 正文里的链接为什么打不开。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Broken {
+    /// 指向的本地文件不存在。
+    File,
+    /// 文中没有 `#锚点` 对应的标题。
+    Heading,
+}
+
+impl Broken {
+    /// 悬停提示里写的原因。
+    pub(crate) fn reason(self) -> &'static str {
+        match self {
+            Broken::File => t!("preview-markdown-link-file-not-found"),
+            Broken::Heading => t!("preview-markdown-heading-not-found"),
+        }
+    }
+}
+
+/// 查过的链接：所属的文档和版本，各地址的结果。文档改了、换了文档、磁盘上的文件变了时重查。
+#[derive(Debug, Default)]
+pub(crate) struct LinkChecks {
+    of: Option<(DocumentId, u64)>,
+    results: HashMap<String, Option<Broken>>,
+}
+
+impl LinkChecks {
+    /// 已经查过的地址 `url` 的结果。
+    pub(crate) fn get(&self, url: &str) -> Option<Broken> {
+        self.results.get(url).copied().flatten()
+    }
+
+    /// 磁盘上的文件变了：下次都重查。
+    pub(crate) fn clear(&mut self) {
+        self.results.clear();
+    }
+}
+
 impl App {
-    /// 返回预览上 `(x, y)` 处的链接序号（见 [`MarkdownPreview::links`]）。
+    /// 查正文链接 `url` 能否打开（结果记下，下次直接取）：本地文件要存在，`#锚点` 要有对应
+    /// 的标题。网址、脚注和远端主机上的文件不查。
+    pub(crate) fn check_markdown_link(&mut self, url: &str) -> Option<Broken> {
+        let doc = self.editor.active()?;
+        let of = Some((doc.id, doc.revision));
+        if self.preview.markdown.links.of != of {
+            self.preview.markdown.links = LinkChecks {
+                of,
+                results: HashMap::new(),
+            };
+        }
+        if let Some(&known) = self.preview.markdown.links.results.get(url) {
+            return known;
+        }
+        let broken = match url.strip_prefix('#') {
+            Some(anchor) if anchor.starts_with("fn-") || anchor.starts_with("fnref-") => None,
+            Some(anchor) => laid::anchor_box(self, anchor)
+                .is_none()
+                .then_some(Broken::Heading),
+            None => (doc.path.as_deref())
+                .and_then(|path| local_target(path, url))
+                .filter(|target| !self.may_exist(target))
+                .map(|_| Broken::File),
+        };
+        (self.preview.markdown.links.results).insert(url.to_owned(), broken);
+        broken
+    }
+
+    /// 返回预览上 `(x, y)` 处的链接序号（`hits.markdown_links` 中的下标）。
     pub(crate) fn markdown_link_at(&self, x: f32, y: f32) -> Option<usize> {
         if !self.preview.markdown.area.contains(x, y) {
             return None;

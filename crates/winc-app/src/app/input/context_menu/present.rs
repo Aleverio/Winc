@@ -467,9 +467,16 @@ impl App {
                     MenuEntry::Item(MenuCommand::Cut, selected),
                     MenuEntry::Item(MenuCommand::Copy, selected),
                     MenuEntry::Item(MenuCommand::Paste, true),
+                    MenuEntry::Item(MenuCommand::PastePlain, true),
                     MenuEntry::Separator,
                     MenuEntry::Item(MenuCommand::SelectAll, true),
                 ];
+                if self.preview.markdown.menu_picture.is_some() {
+                    menu.extend([
+                        MenuEntry::Separator,
+                        MenuEntry::Item(MenuCommand::OpenImage, true),
+                    ]);
+                }
                 // 右键点在图片上时提供「图片大小」子菜单。
                 if self.preview.markdown.menu_image.is_some() {
                     use crate::app::preview::markdown::resize::PRESETS;
@@ -503,6 +510,12 @@ impl App {
                     MenuEntry::Item(MenuCommand::Copy, self.markdown_selected_text().is_some()),
                     MenuEntry::Item(MenuCommand::SelectAll, true),
                 ];
+                if self.preview.markdown.menu_picture.is_some() {
+                    menu.extend([
+                        MenuEntry::Separator,
+                        MenuEntry::Item(MenuCommand::OpenImage, true),
+                    ]);
+                }
                 // docx、EPUB 的阅读视图由转换得到，阅读标签只有排版后的内容：都没有可以显示的
                 // 源代码。
                 let has_source = self

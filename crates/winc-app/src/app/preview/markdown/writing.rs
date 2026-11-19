@@ -273,6 +273,19 @@ fn chars_in(text: &str, byte: usize, crlf: bool) -> usize {
     head.chars().count() + if crlf { head.matches('\n').count() } else { 0 }
 }
 
+/// 网址 `url` 是否指向一张图片（按问号、井号之前的扩展名判断）。
+pub(super) fn is_image_url(url: &str) -> bool {
+    let path = url
+        .split(['?', '#'])
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let images = [
+        ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".avif", ".bmp",
+    ];
+    url.starts_with("http") && images.iter().any(|ext| path.ends_with(ext))
+}
+
 /// `text` 是否像一个网址。
 pub(super) fn is_url(text: &str) -> bool {
     ["https://", "http://", "mailto:"]

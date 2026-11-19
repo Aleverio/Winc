@@ -379,7 +379,7 @@ fn is_heading(name: &str) -> bool {
 }
 
 /// 取 HTML 标签 `tag`（尖括号里的内容）中属性 `key` 的值；引号可有可无。
-fn attribute(tag: &str, key: &str) -> Option<String> {
+pub(super) fn attribute(tag: &str, key: &str) -> Option<String> {
     let lower = tag.to_ascii_lowercase();
     let mut from = 0;
     while let Some(i) = lower[from..].find(key) {

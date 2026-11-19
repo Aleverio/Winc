@@ -776,6 +776,21 @@ impl App {
                 self.frame.bench.key_handled(started.elapsed());
                 self.request_redraw();
             }
+            Next::Move { step } => {
+                // 每十帧按一次键：向下走八次，再向上走八次，之间的帧画过渡动画。
+                let started = Instant::now();
+                if step % 10 == 0 {
+                    self.start_live_editing();
+                    let down = (step / 10 / 8) % 2 == 0;
+                    let key = match down {
+                        true => winit::keyboard::NamedKey::ArrowDown,
+                        false => winit::keyboard::NamedKey::ArrowUp,
+                    };
+                    self.markdown_key(&winit::keyboard::Key::Named(key), false);
+                }
+                self.frame.bench.key_handled(started.elapsed());
+                self.request_redraw();
+            }
             Next::Preview => {
                 self.set_preview_mode(winc_editor::PreviewMode::Preview);
                 self.request_redraw();

@@ -250,6 +250,7 @@ impl App {
             MarkdownLink => self.markdown_link(false),
             MarkdownImage => self.markdown_link(true),
             MarkdownFocusMode => self.settings_toggle(crate::layout::Setting::MarkdownFocus),
+            MarkdownPastePlain => self.paste_plain(),
             MarkdownTypewriterMode => {
                 self.settings_toggle(crate::layout::Setting::MarkdownTypewriter);
             }
