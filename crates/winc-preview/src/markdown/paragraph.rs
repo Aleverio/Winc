@@ -168,3 +168,26 @@ pub fn link(text: &str, url: Option<&str>, image: bool) -> (String, std::ops::Ra
     };
     (out, at..at)
 }
+
+/// 光标之前的一行文字 `before` 停在链接或图片的地址里时，返回地址开头的位置（字节偏移）和是否
+/// 为图片；地址已经写成网址、锚点，或光标在行内代码里时为 `None`。
+///
+/// 地址里还没有空白、`)` 和 `<`：写成 `<…>` 的地址和带标题的地址不补全。
+pub fn link_target(before: &str) -> Option<(usize, bool)> {
+    let open = before.rfind("](")?;
+    let start = open + 2;
+    let target = &before[start..];
+    if target.contains(|c: char| c.is_whitespace() || matches!(c, ')' | '<' | '>')) {
+        return None;
+    }
+    let url = ["http:", "https:", "mailto:", "www.", "#"];
+    if url.iter().any(|p| target.starts_with(p)) {
+        return None;
+    }
+    if before[..open].matches('`').count() % 2 == 1 {
+        return None;
+    }
+    let bracket = before[..open].rfind('[')?;
+    let image = before[..bracket].ends_with('!');
+    Some((start, image))
+}

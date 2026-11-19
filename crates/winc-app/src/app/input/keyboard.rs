@@ -87,6 +87,10 @@ impl App {
         if self.diagram_view_key(&event.logical_key, &base, cmd) {
             return;
         }
+        // 链接地址的补全列表开着时，选择、写入和关掉列表的键先给它。
+        if self.suggest_key(&event.logical_key) {
+            return;
+        }
 
         // Vim 模式开启时，编辑区的按键先交给 Vim 层，列表中的移动按键换成方向键；Vim 层不处理
         // 的按键继续按原有的顺序处理。

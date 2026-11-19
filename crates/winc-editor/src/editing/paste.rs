@@ -384,6 +384,11 @@ pub fn markdown_links(doc_dir: Option<&Path>, root: Option<&Path>, files: &[Path
     }
 }
 
+/// 链接、图片里指向 `file` 的地址：写法同 [`markdown_links`]，需要时用 `<…>` 括起来。
+pub fn link_target(doc_dir: Option<&Path>, root: Option<&Path>, file: &Path) -> String {
+    escape_link_path(&link_path(doc_dir, root, file))
+}
+
 /// 返回链接中写的路径：在 `root` 或 `doc_dir` 之内时相对 `doc_dir`，否则为绝对路径。
 ///
 /// 远端主机上的文件（虚拟路径）的绝对路径写成那台主机上的路径，不写本机上的虚拟路径。

@@ -78,6 +78,10 @@ pub struct Hits {
     ///
     /// 同一时刻只显示一个表格的滚动条：鼠标所在的表格，或最近一次横向滚动的表格。
     pub(crate) markdown_table_bar: Option<crate::app::preview::markdown::TableBar>,
+    /// 上一帧绘制的链接地址补全列表的卡片；没有画出列表时为 `None`。
+    pub(crate) suggest_card: Option<Rect>,
+    /// 上一帧绘制的链接地址补全列表的各行：位置和行号。
+    pub(crate) suggest: Vec<(Rect, usize)>,
     /// 上一帧绘制的标题指示条和标题列表的可点击位置，见 `view::markdown` 的 `draw_toc`。
     pub(crate) markdown_toc: Vec<(winc_render::Rect, crate::app::preview::markdown::TocTarget)>,
     /// 上一帧标题指示条列出的各标题在内容里的高度（逻辑像素），与 [`TocTarget::Heading`] 的
@@ -134,12 +138,16 @@ impl Hits {
             markdown_table_bar,
             markdown_toc,
             markdown_toc_tops,
+            suggest_card,
+            suggest,
             pdf_thumbs,
             pdf_tools,
             install_links,
             keys_parts,
         } = self;
         start.clear();
+        *suggest_card = None;
+        suggest.clear();
         placeholder.clear();
         folded.clear();
         long_lines.clear();

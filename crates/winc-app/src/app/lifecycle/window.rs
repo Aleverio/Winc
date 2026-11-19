@@ -671,6 +671,7 @@ impl App {
         self.track_commit_bars();
         self.track_search_rows();
         self.track_words();
+        self.track_suggest();
         self.git_follow_active();
         self.relayout();
         self.run_when_loaded();

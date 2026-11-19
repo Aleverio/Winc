@@ -230,6 +230,7 @@ impl App {
             Target::Preview(mode) => Hover::Preview(mode),
             Target::Browser => Hover::Browser,
             Target::MarkdownLink(link) => Hover::MarkdownLink(link),
+            Target::Suggest(row) => Hover::Suggest(row),
             Target::MarkdownToc(target) => Hover::MarkdownToc(target),
             Target::MarkdownText | Target::PdfThumb(_) | Target::Picture => Hover::None,
             Target::PdfTool(tool) => Hover::PdfTool(tool),
@@ -279,6 +280,12 @@ impl App {
         }
         if let Some(control) = self.window_control_at(x, y) {
             return Target::WindowControl(control);
+        }
+        // 链接地址的补全列表浮在文字上。
+        if let Some(card) = self.hits.suggest_card
+            && card.contains(x, y)
+        {
+            return hit(&self.hits.suggest, x, y).map_or(Target::Blocked, Target::Suggest);
         }
         // 浮于编辑区之上的卡片和提示条：只响应其中的按钮，卡片的其余区域遮挡下方的部件。
         if let Some(card) = self.hits.changes_card
@@ -963,6 +970,8 @@ pub(super) enum Target {
     Browser,
     /// Markdown 预览中的链接，参数为其在本帧 `links` 中的下标。
     MarkdownLink(usize),
+    /// 链接地址补全列表的一行，参数为行号。
+    Suggest(usize),
     MarkdownToc(crate::app::preview::markdown::TocTarget),
     /// Markdown 预览中链接以外的区域，用于选择文字。
     MarkdownText,

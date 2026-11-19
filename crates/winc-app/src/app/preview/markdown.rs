@@ -31,6 +31,7 @@ pub(crate) mod laid;
 mod live;
 mod live_caret;
 mod scroll;
+pub(crate) mod suggest;
 mod viewer;
 mod writing;
 pub(crate) use viewer::{DiagramLaid, DiagramTool, DiagramView, MAX_ZOOM, MIN_ZOOM};
@@ -264,6 +265,8 @@ pub(crate) struct MarkdownPreview {
     pub frozen: Option<std::time::Duration>,
     sender: mpsc::Sender<Done>,
     receiver: mpsc::Receiver<Done>,
+    /// 补全链接地址的列表。
+    pub(crate) suggest: suggest::Suggest,
 }
 
 /// 淡入的项：所在顶层块的序号及块内各项的序号，按块的序号排序。
@@ -364,6 +367,7 @@ impl Default for MarkdownPreview {
             frozen: None,
             sender,
             receiver,
+            suggest: Default::default(),
         }
     }
 }

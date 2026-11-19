@@ -117,3 +117,71 @@ fn the_status_bar_counts_words_in_markdown() {
     assert_eq!(app.word_count(), None);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 在 `](` 之后输入时列出目录里的文件：按输入筛选，图片只列图片；回车写入相对路径并补上 `)`，
+/// Esc 关掉后同一个地址里不再列出。
+#[test]
+fn link_paths_are_suggested_while_typing() {
+    use winit::keyboard::{Key, NamedKey};
+    let (mut app, dir) = source_doc("md-suggest", "");
+    std::fs::create_dir_all(dir.join("docs/img")).unwrap();
+    std::fs::write(dir.join("docs/guide.md"), "# 指南\n").unwrap();
+    std::fs::write(dir.join("docs/img/shot.png"), b"png").unwrap();
+    // 文件是测试里新建的：先让文件表重新建起来。
+    app.overlays.picker.stale = true;
+    app.track_suggest();
+    let typed = |app: &mut App, text: &str| {
+        app.run(winc_editor::Command::Insert(text.into()));
+        app.track_suggest();
+    };
+    let listed = |app: &App| -> Vec<String> {
+        let hits = &app.preview.markdown.suggest.hits;
+        hits.iter().map(|(path, _)| path.clone()).collect()
+    };
+
+    typed(&mut app, "见 [指南](gui");
+    assert_eq!(listed(&app), ["docs/guide.md"]);
+    paint(&mut app);
+    shoot(&mut app, "md-suggest");
+    assert!(app.suggest_key(&Key::Named(NamedKey::Enter)));
+    assert_eq!(marked(&app), "见 [指南](docs/guide.md)|");
+
+    // 图片只列图片。列表还没画出来时按键照常交给编辑区。
+    typed(&mut app, "\n![](");
+    assert_eq!(listed(&app), ["docs/img/shot.png"]);
+    assert!(!app.suggest_key(&Key::Named(NamedKey::Escape)));
+    paint(&mut app);
+    // 带修饰键的按键不接管：⇧Tab、⇧↩ 照常交给编辑区。
+    app.pointer.modifiers = winit::keyboard::ModifiersState::SHIFT;
+    assert!(!app.suggest_key(&Key::Named(NamedKey::Tab)));
+    app.pointer.modifiers = Default::default();
+    // Esc 关掉以后，在这个地址里继续输入也不再列出。
+    assert!(app.suggest_key(&Key::Named(NamedKey::Escape)));
+    typed(&mut app, "d");
+    assert!(app.preview.markdown.suggest.at.is_none());
+    assert!(!app.suggest_key(&Key::Named(NamedKey::Enter)));
+    // 只是把光标移进已有的地址里不列出。
+    typed(&mut app, ")");
+    put_caret(&mut app, "guide", true);
+    app.track_suggest();
+    assert!(app.preview.markdown.suggest.at.is_none());
+
+    // 输入改变后选中回到第一项。
+    typed(&mut app, "\n[](");
+    assert!(listed(&app).len() > 1);
+    paint(&mut app);
+    assert!(app.suggest_key(&Key::Named(NamedKey::ArrowDown)));
+    assert_eq!(app.preview.markdown.suggest.selected, 1);
+    typed(&mut app, "d");
+    assert_eq!(app.preview.markdown.suggest.selected, 0);
+
+    // 换到别的标签再回来：没有输入，不再列出。
+    let notes = app.editor.active().unwrap().path.clone().unwrap();
+    app.open_path(&dir.join("short.rs"));
+    app.editor.load_active();
+    app.track_suggest();
+    app.open_path(&notes);
+    app.track_suggest();
+    assert!(app.preview.markdown.suggest.at.is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}

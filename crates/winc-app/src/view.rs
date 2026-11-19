@@ -39,6 +39,7 @@ mod popup_menu;
 pub(crate) mod preview;
 mod settings;
 mod status;
+mod suggest;
 mod terminal;
 mod workspace;
 
@@ -230,6 +231,7 @@ pub fn draw(app: &mut App, frame: &mut Frame<'_>) {
         draw_notice_ghost(app, frame, ghost);
     }
 
+    suggest::draw_suggest(app, frame);
     draw_tree_drag(app, frame);
     draw_tab_drag(app, frame);
 

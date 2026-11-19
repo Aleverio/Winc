@@ -46,3 +46,18 @@ fn blocks_and_links_place_the_caret_where_typing_continues() {
         ("![图](<a b.png>)".to_owned(), 17..17)
     );
 }
+
+#[test]
+fn link_targets_are_found_while_typing_a_path() {
+    assert_eq!(link_target("见 [文档]("), Some((13, false)));
+    assert_eq!(link_target("![图](img/a"), Some((7, true)));
+    // 网址、锚点、已经结束的地址和行内代码里不补全。
+    assert_eq!(link_target("[x](https://a"), None);
+    assert_eq!(link_target("[x](http:"), None);
+    // 只写了网址的开头时仍然补全：`ma`、`ht` 也是文件名的开头。
+    assert_eq!(link_target("[x](ma"), Some((4, false)));
+    assert_eq!(link_target("[x](#a"), None);
+    assert_eq!(link_target("[x](a.md) 后面"), None);
+    assert_eq!(link_target("`[x](a"), None);
+    assert_eq!(link_target("没有链接"), None);
+}

@@ -257,6 +257,7 @@ impl App {
             Target::ResizeEdge(direction) => self.start_resize(direction),
             Target::Tree(_) => self.click_tree(x, y),
             Target::Placeholder(action) => self.run_placeholder_action(action),
+            Target::Suggest(row) => self.accept_suggest(row),
             Target::Diff(target) => self.press_diff(target),
             Target::Log(crate::app::git::log::LogTarget::AuthorEdge) => {
                 let double = self.click_count(x, y) == 2;
