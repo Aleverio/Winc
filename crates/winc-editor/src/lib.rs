@@ -31,6 +31,7 @@ pub use document::disk::{
 };
 pub use document::encoding::Encoding;
 pub use document::large::LargeText;
+pub use document::progress::ReadProgress;
 pub use document::{
     COPY_LIMIT, DiskChange, Document, DocumentId, EDIT_LIMIT, LARGE_FILE, OpenError, PictureState,
     PreviewKind, PreviewMode, Reading, TableState, TableView, Unsupported, looks_binary, size_text,
@@ -208,6 +209,7 @@ impl Editor {
             as_text: doc.reads_as_text(),
             hex: doc.reads_as_hex(),
             encoding: doc.reads_with(),
+            progress: ReadProgress::default(),
         })
     }
 
@@ -713,6 +715,7 @@ pub struct LoadJob {
     hex: bool,
     /// 用户选的编码；有时按它解码。
     encoding: Option<Encoding>,
+    progress: ReadProgress,
 }
 
 impl LoadJob {
@@ -721,12 +724,22 @@ impl LoadJob {
         self.id
     }
 
+    /// 读取的进度，读取期间可以在其他线程上查看。
+    pub fn progress(&self) -> ReadProgress {
+        self.progress.clone()
+    }
+
     /// 读取文件；耗时与文件大小成正比，在后台线程上调用。
     pub fn run(self) -> LoadedFile {
         LoadedFile {
             opened: match self.hex {
                 true => Document::read_hex(&self.path),
-                false => Document::read(&self.path, self.as_text, self.encoding),
+                false => Document::read(
+                    &self.path,
+                    self.as_text,
+                    self.encoding,
+                    Some(&self.progress),
+                ),
             },
             id: self.id,
             path: self.path,

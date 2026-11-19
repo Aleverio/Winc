@@ -218,10 +218,13 @@ pub(super) fn draw_editor(app: &mut App, frame: &mut Frame<'_>) {
         hex::draw_hex(app, frame, index);
         return;
     }
-    // 文件仍在读取（仅读取耗时较长时执行到此处）：提示正在读取的文件名。
+    // 文件仍在读取（仅读取耗时较长时执行到此处）：提示正在读取的文件名和读了多少。
     if app.editor.documents[index].is_pending() {
         let name = app.editor.documents[index].name().into_owned();
-        draw_placeholder(app, frame, t!("editor-reading", name = name), &[]);
+        match app.reading_bar(app.editor.documents[index].id) {
+            Some(fraction) => draw_reading(app, frame, &name, fraction),
+            None => draw_placeholder(app, frame, t!("editor-reading", name = name), &[]),
+        }
         return;
     }
     if let Some(reason) = app.editor.documents[index].unsupported.clone() {

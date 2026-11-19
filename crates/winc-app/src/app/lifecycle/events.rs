@@ -674,6 +674,7 @@ impl App {
                 }
             }
         }
+        earliest(&mut wake, self.reading_tick(now));
         earliest(&mut wake, self.terminal_settle_tick(now));
         earliest(&mut wake, self.auto_save_tick(now));
         let copying = self.copy_tick(now);

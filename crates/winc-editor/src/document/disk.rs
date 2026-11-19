@@ -6,6 +6,8 @@ use super::*;
 use winc_backend::fs::{Metadata, SaveError, SaveOptions, Stamp};
 use winc_i18n::t;
 
+use super::progress::{Counted, ReadProgress};
+
 mod append;
 mod save_job;
 pub use save_job::{HandedSave, SaveJob, Saved};
@@ -366,7 +368,7 @@ impl Document {
         if winc_backend::fs::metadata(path)?.len > LARGE_FILE {
             return Err(too_large());
         }
-        match load_with(path, false, self.encoding)?.text {
+        match load_with(path, false, self.encoding, None)?.text {
             Content::Rope(rope) => Ok(rope.to_string()),
             Content::Large(_) => Err(too_large()),
         }
@@ -757,11 +759,9 @@ impl Document {
     /// 调用）：图片、xlsx 工作簿、docx 和 PDF 只读修改时间（解码、读取另由界面交给后台），其余按
     /// 文本读；同时读适用的 `.editorconfig`。
     pub fn read_any(path: &Path) -> Opened {
-        Self::read(path, false, None)
+        Self::read(path, false, None, None)
     }
 
-    /// 与 [`Document::read_any`] 相同；`as_text` 为 `true` 时图片和二进制文件也按文本读入
-    /// （「以文本方式打开」）。
     /// 打开文件 `path` 的十六进制视图（会访问磁盘，在后台线程上调用）。
     pub(crate) fn read_hex(path: &Path) -> Opened {
         Opened {
@@ -770,7 +770,14 @@ impl Document {
         }
     }
 
-    pub(crate) fn read(path: &Path, as_text: bool, encoding: Option<Encoding>) -> Opened {
+    /// 与 [`Document::read_any`] 相同；`as_text` 为 `true` 时图片和二进制文件也按文本读入
+    /// （「以文本方式打开」），读过的字节计入 `progress`。
+    pub(crate) fn read(
+        path: &Path,
+        as_text: bool,
+        encoding: Option<Encoding>,
+        progress: Option<&ReadProgress>,
+    ) -> Opened {
         let mtime = || {
             winc_backend::fs::metadata(path)
                 .ok()
@@ -791,7 +798,7 @@ impl Document {
             } else if let Some(encoding) = encoding.filter(|e| *e != Encoding::Utf8) {
                 OpenedContent::Text(load_as(path, encoding))
             } else {
-                OpenedContent::Text(load(path, as_text))
+                OpenedContent::Text(load_with(path, as_text, Encoding::Utf8, progress))
             }
         };
         // 远端的文件：内容和 `.editorconfig` 各要一次往返，互不依赖，同时进行。
@@ -913,26 +920,34 @@ fn load_chosen(
     encoding: Encoding,
 ) -> Result<Loaded, OpenError> {
     match chosen {
-        Some(Encoding::Utf8) => load_with(path, true, Encoding::Utf8),
+        Some(Encoding::Utf8) => load_with(path, true, Encoding::Utf8, None),
         Some(chosen) => load_as(path, chosen),
-        None => load_with(path, allow_binary, encoding),
+        None => load_with(path, allow_binary, encoding, None),
     }
 }
 
 /// 读入文件；开头 `BINARY_SNIFF` 字节内含 NUL 时视为二进制文件，`allow_binary` 为 `true` 时
 /// 仍然读入，编码记为 `Binary`。
 pub(super) fn load(path: &Path, allow_binary: bool) -> Result<Loaded, OpenError> {
-    load_with(path, allow_binary, Encoding::Utf8)
+    load_with(path, allow_binary, Encoding::Utf8, None)
 }
 
 /// 与 [`load`] 相同，但非 UTF-8 的文件优先按 `prefer`（用户通过「通过编码重新打开」选择的编码）
-/// 解码。
+/// 解码；已读的字节计入 `progress`。
 ///
 /// 按文档当前的编码重新读取时传入它，避免自动猜测的编码一旦错误，每次重读都得到乱码。
-fn load_with(path: &Path, allow_binary: bool, prefer: Encoding) -> Result<Loaded, OpenError> {
+fn load_with(
+    path: &Path,
+    allow_binary: bool,
+    prefer: Encoding,
+    progress: Option<&ReadProgress>,
+) -> Result<Loaded, OpenError> {
     let mut opened = winc_backend::fs::open(path, BINARY_SNIFF)?;
     let size = opened.metadata.len;
     let mtime = opened.metadata.modified;
+    if let Some(progress) = progress {
+        progress.begin(size);
+    }
 
     if size > OPEN_LIMIT {
         return Err(OpenError::TooLarge(size));
@@ -947,7 +962,7 @@ fn load_with(path: &Path, allow_binary: bool, prefer: Encoding) -> Result<Loaded
     }
 
     if size > LARGE_FILE {
-        let large = LargeText::open(opened.into_handle())?;
+        let large = LargeText::open_counting(opened.into_handle(), progress)?;
         let encoding = match (large.is_utf8(), large.has_bom()) {
             _ if binary => Encoding::Binary,
             (false, _) => Encoding::Lossy,
@@ -973,7 +988,13 @@ fn load_with(path: &Path, allow_binary: bool, prefer: Encoding) -> Result<Loaded
     // 不带 BOM 的 UTF-16 也可能是合法的 UTF-8（夹着 NUL）：直接整个读入识别编码。
     let read = match utf16_unmarked(&head) {
         Some(_) => Err(io::ErrorKind::InvalidData.into()),
-        None => Rope::from_reader(BufReader::with_capacity(64 << 10, opened.reader()?)),
+        None => {
+            let inner = opened.reader()?;
+            Rope::from_reader(BufReader::with_capacity(
+                64 << 10,
+                Counted { inner, progress },
+            ))
+        }
     };
     let (rope, encoding) = match read {
         Ok(mut rope) => {

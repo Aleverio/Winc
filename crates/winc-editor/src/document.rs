@@ -44,6 +44,7 @@ mod parked;
 pub(crate) use parked::Parked;
 pub(crate) mod large;
 mod preview;
+pub(crate) mod progress;
 #[cfg(test)]
 mod tests;
 
