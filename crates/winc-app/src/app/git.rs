@@ -707,10 +707,13 @@ impl App {
             return;
         }
         self.git.followed = Some(doc.id);
-        let (Some(dir), Some(folder)) = (
-            doc.path.as_deref().and_then(Path::parent),
-            self.editor.root(),
-        ) else {
+        // 文件历史跟随它所在的仓库。
+        let history = doc.log.as_deref().filter(|v| v.query.path.is_some());
+        let dir = match history {
+            Some(view) => view.root.as_deref(),
+            None => doc.path.as_deref().and_then(Path::parent),
+        };
+        let (Some(dir), Some(folder)) = (dir, self.editor.root()) else {
             return;
         };
         // 目录之外的文件不改变当前仓库。
@@ -810,6 +813,7 @@ impl App {
             self.git.generation += 1;
             self.carry_checks_in();
         }
+        self.retarget_logs();
         // 不再位于仓库中时提交视图不可用，切换回文件树；焦点位于提交视图时同样移出，
         // 否则键入的文字会进入不可见的输入框。
         if self.git.root.is_none() {
@@ -1079,6 +1083,9 @@ impl App {
                     // 只读了状态的这次刷新没有读其他仓库：列着其他仓库时补读，文件保存后各仓库的
                     // 更改一起更新。
                     others |= !had_refs;
+                    if had_refs {
+                        self.start_waiting_logs();
+                    }
                     if moved {
                         self.reload_logs();
                     }
@@ -1088,6 +1095,7 @@ impl App {
                     self.git.decorations.clear();
                     self.git.problem = Some(e);
                     self.git.missing = outcome.missing;
+                    self.start_waiting_logs();
                 }
             }
             self.git.generation += 1;

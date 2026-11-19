@@ -158,8 +158,8 @@ impl App {
                     }
                 }
                 Loaded::Diff { request, .. } if request != self.git.log.diff_request => {}
-                // 等待结果期间更换了目录：结果属于旧仓库，不在此处打开标签。
-                Loaded::Diff { source, .. } if self.git.root.as_ref() != Some(&source.root) => {}
+                // 等待结果期间关掉了那个仓库的日志：不在此处打开标签。
+                Loaded::Diff { source, .. } if !self.log_open_in(&source.root) => {}
                 Loaded::Diff {
                     source,
                     file,
