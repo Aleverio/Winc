@@ -989,3 +989,65 @@ fn snapshot_worktree_dialog() {
         let _ = std::fs::remove_dir_all(&root);
     }
 }
+
+/// 子模块的主工作树是它的目录，不是 `git` 写的 Git 目录：工作树能列出、切换，主分支不算被别的
+/// 工作树签出；新工作树放在最外层仓库旁边，不放进主仓库的工作目录里。
+#[test]
+fn submodule_worktrees_are_listed_and_placed_beside_the_superproject() {
+    let base = search_folder("git-submodule-worktrees");
+    let (source, main) = (base.join("sub-src"), base.join("main"));
+    for repo in [&source, &main] {
+        std::fs::create_dir_all(repo.join("src")).unwrap();
+        std::fs::write(repo.join("src/main.rs"), "fn main() {}\n").unwrap();
+        if !make_repo(repo) {
+            return;
+        }
+    }
+    let add = ["-c", "protocol.file.allow=always", "submodule", "add", "-q"];
+    git_in(
+        &main,
+        &[&add[..], &[source.to_str().unwrap(), "s1"]].concat(),
+    );
+    git_in(&main, &["commit", "-qam", "sub"]);
+    let mut app = app_with(&main, false);
+    app.config.repository_scan_depth = Some(1);
+    app.settings_toggle(Setting::GitModule);
+    if git_unusable(&app) {
+        return;
+    }
+    let main = app.git.repositories[0].clone();
+    let sub = (app.git.repositories.iter())
+        .position(|r| r.ends_with("s1"))
+        .unwrap();
+    let s1 = app.git.repositories[sub].clone();
+    let trees = main.with_file_name("main.worktrees");
+    app.git_switch_repository(sub);
+    app.git_refresh();
+    assert_eq!(app.worktree_dir_hint("feat"), "main.worktrees/s1-feat");
+
+    create(&mut app, "feat");
+    app.git_refresh();
+    let paths: Vec<&Path> = app.git.worktrees.iter().map(|w| w.path.as_path()).collect();
+    assert_eq!(paths, [s1.as_path(), trees.join("s1-feat").as_path()]);
+    assert_eq!(app.git.current_worktree(), Some(0));
+    assert_eq!(app.git.held_branches(), ["feat"]);
+    assert_eq!(app.new_worktree_dir("next"), Some(trees.join("s1-next")));
+
+    // 工作树选择器列出两个，当前的是子模块的目录；仓库选择器里子模块一行也指向它。
+    app.run_action(Action::ShowCommit);
+    app.open_places(false);
+    let rows = app.overlays.picker.location_rows.clone().unwrap();
+    let current: Vec<&Path> = (rows.iter().filter(|r| r.current))
+        .map(|r| r.path.as_path())
+        .collect();
+    assert_eq!((rows.len(), current), (2, vec![s1.as_path()]));
+    app.close_picker();
+    app.open_places(true);
+    let rows = app.overlays.picker.location_rows.clone().unwrap();
+    assert!(rows.iter().any(|r| r.current && r.path == s1));
+    assert!(
+        rows.iter()
+            .all(|r| !r.path.components().any(|c| c.as_os_str() == ".git"))
+    );
+    let _ = std::fs::remove_dir_all(&base);
+}

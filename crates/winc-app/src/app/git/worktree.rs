@@ -215,8 +215,9 @@ impl App {
         Some(winc_editor::git::worktree_dir(main, folder, home, branch))
     }
 
-    /// 分支操作菜单、日志菜单里写的新工作树的位置：默认位置写相对于仓库所在目录的
-    /// （`winc.worktrees/feat-x`），配置了 `git.worktreeRoot` 时写完整的（主目录写成 `~`）。
+    /// 分支操作菜单、日志菜单里写的新工作树的位置：默认位置写相对于仓库（子模块是最外层的仓库）
+    /// 所在目录的（`winc.worktrees/feat-x`），配置了 `git.worktreeRoot` 时写完整的（主目录写成
+    /// `~`）。
     ///
     /// 还没输入名字时最后一级写「…」。
     pub(crate) fn worktree_dir_hint(&self, branch: &str) -> String {
@@ -226,8 +227,8 @@ impl App {
         };
         let main =
             (self.git.worktrees.first().map(|w| w.path.as_path())).or(self.git.root.as_deref());
-        let parent = main.and_then(Path::parent);
-        match parent {
+        let anchor = main.map(winc_editor::git::worktree_anchor);
+        match anchor.as_deref().and_then(Path::parent) {
             Some(parent) if self.config.git_worktree_root.is_none() => {
                 winc_editor::display_path(&dir, Some(parent))
             }
