@@ -954,7 +954,10 @@ impl App {
                 Err(e) => {
                     let name = winc_editor::display_name(&path);
                     let error = e.to_string();
-                    self.notify(t!("common-trash-delete-failed", name = name, error = error));
+                    self.notify(
+                        NoticeKind::Error,
+                        t!("common-trash-delete-failed", name = name, error = error),
+                    );
                 }
             }
         }

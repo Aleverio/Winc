@@ -447,13 +447,13 @@ impl App {
                     Some(path)
                 };
                 match local {
-                    None => self.notify(t!("workspace-remote-local-only")),
+                    None => self.notify(NoticeKind::Warning, t!("workspace-remote-local-only")),
                     Some(path) => {
                         if let Err(e) = system::open_with_default_app(&path) {
-                            self.notify(t!(
-                                "workspace-open-default-app-failed",
-                                error = e.to_string()
-                            ));
+                            self.notify(
+                                NoticeKind::Error,
+                                t!("workspace-open-default-app-failed", error = e.to_string()),
+                            );
                         }
                     }
                 }
@@ -474,7 +474,7 @@ impl App {
         let local;
         let path = if winc_backend::is_remote(path) {
             let Some(mapped) = self.local_folder(path) else {
-                self.notify(t!("workspace-remote-reveal-unmapped"));
+                self.notify(NoticeKind::Warning, t!("workspace-remote-reveal-unmapped"));
                 return;
             };
             local = mapped;
@@ -483,11 +483,14 @@ impl App {
             path
         };
         if let Err(e) = system::reveal_in_file_manager(path) {
-            self.notify(t!(
-                "workspace-reveal-failed",
-                action = system::reveal_label(),
-                error = e.to_string()
-            ));
+            self.notify(
+                NoticeKind::Error,
+                t!(
+                    "workspace-reveal-failed",
+                    action = system::reveal_label(),
+                    error = e.to_string()
+                ),
+            );
         }
     }
 
@@ -516,17 +519,20 @@ impl App {
         }
         // 远端主机上的目录只能在内置终端中打开：本机的终端程序进不去。
         if remote {
-            self.notify(t!("workspace-remote-terminal"));
+            self.notify(NoticeKind::Warning, t!("workspace-remote-terminal"));
             return;
         }
         if let Err(e) = system::open_terminal(&dir, self.config.external_terminal.as_deref()) {
             let app = self.config.external_terminal.as_deref();
             let app = app.unwrap_or(t!("workspace-terminal-app-fallback"));
-            self.notify(t!(
-                "workspace-open-app-failed",
-                app = app,
-                error = e.to_string()
-            ));
+            self.notify(
+                NoticeKind::Error,
+                t!(
+                    "workspace-open-app-failed",
+                    app = app,
+                    error = e.to_string()
+                ),
+            );
         }
     }
 
@@ -782,7 +788,7 @@ impl App {
                         Some(key) => t!("workspace-deleted-on-disk-key", name = name, key = key),
                         None => t!("workspace-deleted-on-disk", name = name),
                     };
-                    self.notify(message);
+                    self.notify(NoticeKind::Warning, message);
                 }
                 continue;
             }
@@ -847,7 +853,10 @@ impl App {
                 .as_deref()
                 .map(winc_editor::display_name)
                 .unwrap_or_default();
-            self.notify(t!("workspace-save-as-dirty-elsewhere", name = name));
+            self.notify(
+                NoticeKind::Error,
+                t!("workspace-save-as-dirty-elsewhere", name = name),
+            );
             return false;
         }
 
@@ -862,7 +871,10 @@ impl App {
             if let Some(index) = self.editor.index_of(id) {
                 self.activate_tab(index);
             }
-            self.notify(t!("workspace-save-conflict", name = name));
+            self.notify(
+                NoticeKind::Error,
+                t!("workspace-save-conflict", name = name),
+            );
             return false;
         }
         let Some(doc) = self.editor.document_mut(id) else {
@@ -901,11 +913,10 @@ impl App {
                 Ok(None) => {}
                 Err(e) => {
                     let name = doc.name().into_owned();
-                    self.notify(t!(
-                        "workspace-save-failed",
-                        name = name,
-                        error = e.to_string()
-                    ));
+                    self.notify(
+                        NoticeKind::Error,
+                        t!("workspace-save-failed", name = name, error = e.to_string()),
+                    );
                     return false;
                 }
             }
@@ -937,11 +948,10 @@ impl App {
             }
             // 另存为的新位置不以管理员身份重试：那是用户刚选的地方，可以换一个。
             Err(e) if saved_as => {
-                self.notify(t!(
-                    "workspace-save-failed",
-                    name = name,
-                    error = e.to_string()
-                ));
+                self.notify(
+                    NoticeKind::Error,
+                    t!("workspace-save-failed", name = name, error = e.to_string()),
+                );
                 false
             }
             Err(e) => {
@@ -1120,10 +1130,13 @@ impl App {
     #[cfg(all(unix, not(target_os = "macos")))]
     pub(in crate::app) fn pick_failed(&mut self, kind: Pick, error: Option<&str>) {
         self.on_picked(kind, None);
-        self.notify(match error {
-            Some(error) => t!("workspace-picker-failed", error = error),
-            None => t!("workspace-picker-unavailable").to_owned(),
-        });
+        self.notify(
+            NoticeKind::Error,
+            match error {
+                Some(error) => t!("workspace-picker-failed", error = error),
+                None => t!("workspace-picker-unavailable").to_owned(),
+            },
+        );
     }
 
     /// 处理系统面板的选择结果：`path` 为选中的路径，用户取消时为 `None`。

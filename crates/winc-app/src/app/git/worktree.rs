@@ -12,6 +12,7 @@ use winc_i18n::t;
 
 use super::GitState;
 use super::branch::{Then, local_name};
+use crate::app::NoticeKind;
 use crate::app::{AlertButton, App, UserEvent};
 
 /// 新建工作树对话框里输入的名字指的是什么。
@@ -454,7 +455,10 @@ impl App {
                 return;
             }
         }
-        self.notify(t!("git-worktree-close-window-first", name = name));
+        self.notify(
+            NoticeKind::Warning,
+            t!("git-worktree-close-window-first", name = name),
+        );
     }
 
     /// 检查完了，确认移除：写明有多少没提交的改动（有改动时没有默认按钮，↩ 不会误删）；分支
@@ -552,7 +556,10 @@ impl App {
             && let Err(e) = (self.trash)(path)
         {
             let error = e.to_string();
-            self.notify(t!("git-worktree-trash-failed", name = &name, error = error));
+            self.notify(
+                NoticeKind::Error,
+                t!("git-worktree-trash-failed", name = &name, error = error),
+            );
             return;
         }
         let target = self.git_path_arg(path);

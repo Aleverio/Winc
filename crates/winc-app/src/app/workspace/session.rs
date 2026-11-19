@@ -141,11 +141,14 @@ impl App {
     pub(crate) fn open_folder_now(&mut self, path: &Path) {
         if let Err(e) = self.editor.open_folder(path) {
             let name = winc_editor::display_name(path);
-            self.notify(winc_i18n::t!(
-                "workspace-open-folder-failed",
-                name = name,
-                error = e.to_string()
-            ));
+            self.notify(
+                NoticeKind::Error,
+                winc_i18n::t!(
+                    "workspace-open-folder-failed",
+                    name = name,
+                    error = e.to_string()
+                ),
+            );
             return;
         }
 
@@ -405,10 +408,13 @@ impl App {
     /// 最近列表中的目录已不存在（删除、移动，或者外接磁盘未挂载）：从列表中移除并提示。
     pub(in crate::app) fn forget_missing_recent(&mut self, folder: &Path) {
         self.update_state(|state| state.forget(folder));
-        self.notify(winc_i18n::t!(
-            "workspace-recent-missing",
-            path = winc_editor::display_path(folder, None)
-        ));
+        self.notify(
+            NoticeKind::Warning,
+            winc_i18n::t!(
+                "workspace-recent-missing",
+                path = winc_editor::display_path(folder, None)
+            ),
+        );
     }
 
     /// 修改状态（最近目录、各目录的现场）并写入状态文件；失败时在标准错误输出原因。

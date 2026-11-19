@@ -36,6 +36,7 @@ use winc_i18n::t;
 
 use super::diff::worktree_title;
 use super::{App, Focus, UserEvent};
+use crate::app::NoticeKind;
 use crate::layout::SidebarView;
 
 /// 界面线程与各后台任务共用的 [`Git`]。
@@ -966,11 +967,14 @@ impl App {
             format!("{}.{}", found.0, found.1),
             format!("{}.{}", minimum.0, minimum.1),
         );
-        self.notify(t!(
-            "git-version-too-old",
-            version = found.as_str(),
-            minimum = minimum.as_str()
-        ));
+        self.notify(
+            NoticeKind::Warning,
+            t!(
+                "git-version-too-old",
+                version = found.as_str(),
+                minimum = minimum.as_str()
+            ),
+        );
     }
 
     /// 在后台执行一项 Git 任务，完成后以 `done` 唤醒界面线程接收结果。
@@ -1035,7 +1039,10 @@ impl App {
                     let was_truncated = self.git.status.as_ref().is_some_and(|s| s.truncated);
                     if status.truncated && !was_truncated {
                         let count = winc_editor::git::STATUS_LIMIT;
-                        self.notify(t!("git-status-truncated", count = count));
+                        self.notify(
+                            NoticeKind::Warning,
+                            t!("git-status-truncated", count = count),
+                        );
                     }
                     let rows = self.commit_shown().then(|| self.commit_rows());
                     let old = self.git.status.replace(status);

@@ -239,7 +239,7 @@ impl ApplicationHandler<UserEvent> for App {
                 None => winc_i18n::t!("workspace-font-missing", fonts = fonts),
             };
             eprintln!("winc: {message}");
-            self.notify(message);
+            self.notify(NoticeKind::Warning, message);
         }
 
         self.relayout();
@@ -622,6 +622,7 @@ impl App {
             let label = action.map(|a| a.label());
             self.notice.leaving = match (message, self.clock(POPUP_OUT)) {
                 (Some(message), Some(clock)) => Some(NoticeGhost {
+                    kind: self.notice.kind,
                     message,
                     label,
                     clock,

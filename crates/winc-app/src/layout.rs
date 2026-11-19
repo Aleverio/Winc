@@ -87,6 +87,9 @@ pub struct Layout {
     pub terminal: Rect,
     /// 编辑区和终端面板之间的间距：面板在下方时上下拖动调整高度，在右侧时左右拖动调整宽度。
     pub terminal_divider: Rect,
+    /// 编辑区一栏（顶栏那一行连同下面的编辑区），终端面板最大化时铺满这一栏；面板关闭时尺寸
+    /// 为 0。
+    pub column: Rect,
 }
 
 impl Layout {
@@ -221,6 +224,7 @@ impl Layout {
             status,
             terminal: Rect::default(),
             terminal_divider: Rect::default(),
+            column: Rect::default(),
         }
     }
 }

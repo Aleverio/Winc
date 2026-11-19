@@ -1437,18 +1437,24 @@ impl App {
             Ok(saved) => {
                 if let Some(backup) = saved.backup {
                     let path = backup.path.display().to_string();
-                    self.notify(if backup.comments {
-                        t!("settings-config-comments-backed-up", path = path)
-                    } else {
-                        t!("settings-config-backed-up", path = path)
-                    });
+                    self.notify(
+                        NoticeKind::Warning,
+                        if backup.comments {
+                            t!("settings-config-comments-backed-up", path = path)
+                        } else {
+                            t!("settings-config-backed-up", path = path)
+                        },
+                    );
                 }
                 self.store.saved_config = saved.config.clone();
                 if saved.config != self.config {
                     self.adopt_config(saved.config);
                 }
             }
-            Err(e) => self.notify(t!("settings-config-write-failed", error = e.to_string())),
+            Err(e) => self.notify(
+                NoticeKind::Error,
+                t!("settings-config-write-failed", error = e.to_string()),
+            ),
         }
     }
 }

@@ -194,7 +194,10 @@ impl App {
                 });
             }
             Err(reason) => {
-                self.notify(t!("workspace-reopen-failed", error = reason.to_string()));
+                self.notify(
+                    NoticeKind::Error,
+                    t!("workspace-reopen-failed", error = reason.to_string()),
+                );
                 self.request_redraw();
             }
         }
@@ -227,7 +230,10 @@ impl App {
                 }
             }
             Ok(false) => {}
-            Err(reason) => self.notify(t!("workspace-reopen-failed", error = reason.to_string())),
+            Err(reason) => self.notify(
+                NoticeKind::Error,
+                t!("workspace-reopen-failed", error = reason.to_string()),
+            ),
         }
         self.request_redraw();
     }

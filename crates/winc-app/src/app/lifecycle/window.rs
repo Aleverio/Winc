@@ -472,16 +472,11 @@ impl App {
     /// [`Self::place_full_terminal`]。
     fn place_terminal(&mut self) {
         let (shown, right) = self.terminal_shown();
-        // 铺满的程度：0 是平常的大小，1 是铺满；最大化、还原时随时钟过渡。
-        let full = match self.terminal.grow {
-            Some(clock) if self.terminal.maximized => clock.progress(),
-            Some(clock) => 1.0 - clock.progress(),
-            None if self.terminal.maximized => 1.0,
-            None => 0.0,
-        };
+        let full = self.terminal_fill();
         let l = &mut self.layout;
         l.terminal = Rect::default();
         l.terminal_divider = Rect::default();
+        l.column = Rect::default();
         if shown <= 0.0 {
             return;
         }
@@ -492,6 +487,7 @@ impl App {
             l.top_bar.w,
             l.editor.bottom() - l.top_bar.y,
         );
+        l.column = column;
         if full >= 1.0 {
             self.place_full_terminal(column, shown, right);
             return;
@@ -579,23 +575,51 @@ impl App {
         l.search = Rect::default();
     }
 
-    /// 右上角的提示、冲突卡片和输入条所在的区域：平常是编辑区；面板铺满编辑区一栏时，以及从
-    /// 铺满还原的途中，是面板标签栏以下的内容区域。
-    pub(crate) fn overlay_area(&self) -> Rect {
-        let card = self.terminal_content_card();
-        let restoring = self.terminal.grow.is_some() && !self.terminal.maximized;
-        let covered = self.layout.editor.w <= 0.0 || restoring;
-        if !covered || card.w <= 0.0 || card.h <= 0.0 {
-            return self.layout.editor;
+    /// 终端面板铺满编辑区一栏的程度：0 是平常的大小，1 是铺满；最大化、还原时随时钟过渡。
+    pub(in crate::app) fn terminal_fill(&self) -> f32 {
+        match self.terminal.grow {
+            Some(clock) if self.terminal.maximized => clock.progress(),
+            Some(clock) => 1.0 - clock.progress(),
+            None if self.terminal.maximized => 1.0,
+            None => 0.0,
         }
-        let top = card.y + terminal::header_height(card);
-        Rect::new(card.x, top, card.w, card.bottom() - top)
     }
 
-    /// 右上角浮层的上边界（不含留白）：编辑区或面板的查找条打开时是查找条的下边。
+    /// 右上角的提示、冲突卡片和输入条所在的区域：平常是编辑区；面板铺满编辑区一栏时是面板
+    /// 标签栏以下的内容区域。最大化、还原途中按同一进度在两者之间过渡，不随面板的边移动。
+    pub(crate) fn overlay_area(&self) -> Rect {
+        let editor = self.layout.editor;
+        let fill = match self.terminal.grow {
+            Some(_) => self.terminal_fill(),
+            None if editor.w <= 0.0 => 1.0,
+            None => 0.0,
+        };
+        let card = self.terminal_content_card_in(self.layout.column);
+        if fill <= 0.0 || self.layout.terminal.w <= 0.0 || card.w <= 0.0 || card.h <= 0.0 {
+            return editor;
+        }
+        let top = card.y + terminal::header_height(card);
+        let full = Rect::new(card.x, top, card.w, card.bottom() - top);
+        if fill >= 1.0 {
+            return full;
+        }
+        let mix = |a: f32, b: f32| (a + (b - a) * fill).round();
+        let (x, y) = (mix(editor.x, full.x), mix(editor.y, full.y));
+        let (right, bottom) = (
+            mix(editor.right(), full.right()),
+            mix(editor.bottom(), full.bottom()),
+        );
+        Rect::new(x, y, right - x, bottom - y)
+    }
+
+    /// 右上角浮层的上边界（不含留白）：编辑区或面板的查找条打开时是查找条的下边；最大化、
+    /// 还原途中是区域的上边。
     pub(crate) fn overlay_top(&self) -> f32 {
         let area = self.overlay_area();
         if area != self.layout.editor {
+            if self.terminal.grow.is_some() {
+                return area.y;
+            }
             return self.terminal_find_bar().map_or(area.y, |bar| bar.bottom());
         }
         if self.layout.search.h > 0.0 {
