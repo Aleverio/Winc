@@ -87,16 +87,10 @@ impl App {
 
     /// 光标停在链接地址里时：文档、版本、地址开头（字符位置）、是否为图片和已输入的地址。
     fn suggest_context(&self) -> Option<(DocumentId, u64, usize, bool, String)> {
-        if self.focus != Focus::Editor || self.editor.root().is_none() {
+        if self.focus != Focus::Editor || self.editor.root().is_none() || !self.markdown_writing() {
             return None;
         }
         let doc = self.editor.active()?;
-        let markdown = doc.preview_kind() == Some(PreviewKind::Markdown);
-        let editable = doc.edits_text() && doc.readonly_reason().is_none();
-        let shown = doc.preview_mode() != PreviewMode::Preview || self.markdown_live();
-        if !(markdown && editable && shown) {
-            return None;
-        }
         if !doc.selection.is_empty() || !doc.extra_selections().is_empty() {
             return None;
         }

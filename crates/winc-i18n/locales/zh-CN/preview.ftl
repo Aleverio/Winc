@@ -56,6 +56,7 @@ preview-svg-missing-text-path = 沿路径排列的文字
 
 preview-markdown-image-alt = 图片
 preview-markdown-code-copied = 已复制代码
+preview-markdown-link-hint = { $key } 单击打开
 preview-markdown-heading-not-found = 未在文档中找到此标题
 preview-markdown-toc-pin = 钉住标题列表
 preview-markdown-toc-unpin = 取消钉住标题列表

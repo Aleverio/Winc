@@ -9,17 +9,32 @@ use winc_preview::markdown::paragraph::{self, Kind};
 use super::*;
 
 impl App {
-    /// 编辑区是否在编辑 Markdown，使用写作命令的快捷键：可编辑的预览中总是使用，Markdown 文件的
-    /// 源代码在 `markdown.shortcuts` 开着时使用。
+    /// 当前标签是否在编辑 Markdown：可以修改的 Markdown 文件，显示着源代码，或者是可编辑的预览。
+    pub(crate) fn markdown_writing(&self) -> bool {
+        self.markdown_live()
+            || self.editor.active().is_some_and(|d| {
+                d.preview_kind() == Some(PreviewKind::Markdown)
+                    && d.edits_text()
+                    && d.readonly_reason().is_none()
+                    && d.preview_mode() != PreviewMode::Preview
+            })
+    }
+
+    /// 是否淡化光标所在段落以外的文字（专注模式，`markdown.focusMode`）。
+    pub(crate) fn markdown_focus(&self) -> bool {
+        self.config.markdown_focus == Some(true) && self.markdown_writing()
+    }
+
+    /// 是否让光标所在的行停在编辑区中间（打字机模式，`markdown.typewriterMode`）。
+    pub(crate) fn markdown_typewriter(&self) -> bool {
+        self.config.markdown_typewriter == Some(true) && self.markdown_writing()
+    }
+
+    /// 编辑区是否使用写作命令的快捷键：可编辑的预览中总是使用，Markdown 文件的源代码在
+    /// `markdown.shortcuts` 开着时使用。
     pub(crate) fn markdown_keys(&self) -> bool {
         self.markdown_live()
-            || (self.config.markdown_shortcuts != Some(false)
-                && self.editor.active().is_some_and(|d| {
-                    d.preview_kind() == Some(PreviewKind::Markdown)
-                        && d.edits_text()
-                        && d.readonly_reason().is_none()
-                        && d.preview_mode() != PreviewMode::Preview
-                }))
+            || (self.config.markdown_shortcuts != Some(false) && self.markdown_writing())
     }
 
     /// 可编辑的预览中光标在代码块、公式、表格等按原文显示的块里，写作命令不改动它。
@@ -217,6 +232,28 @@ impl App {
         self.request_redraw();
     }
 }
+
+/// 光标 `at`（字符位置）所在的段落：前后到空行为止的首行和末行，各方向最多看
+/// [`PARAGRAPH_LOOK`] 行。
+pub(crate) fn paragraph_lines(rope: &ropey::Rope, at: usize) -> (usize, usize) {
+    let line = rope.char_to_line(at.min(rope.len_chars()));
+    let blank = |l: usize| line_text(rope, l).trim().is_empty();
+    if blank(line) {
+        return (line, line);
+    }
+    let lines = rope.len_lines();
+    let first = (line.saturating_sub(PARAGRAPH_LOOK)..line)
+        .rev()
+        .find(|&l| blank(l))
+        .map_or(line.saturating_sub(PARAGRAPH_LOOK), |l| l + 1);
+    let last = (line + 1..lines.min(line + 1 + PARAGRAPH_LOOK))
+        .find(|&l| blank(l))
+        .map_or((lines - 1).min(line + PARAGRAPH_LOOK), |l| l - 1);
+    (first, last)
+}
+
+/// 找段落的边界时往前、往后各看多少行：很长的一段不再找下去。
+const PARAGRAPH_LOOK: usize = 500;
 
 /// 第 `line` 行的文字，不含换行符。
 fn line_text(rope: &ropey::Rope, line: usize) -> String {

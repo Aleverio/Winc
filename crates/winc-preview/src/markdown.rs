@@ -1461,6 +1461,8 @@ pub(crate) use html::named_entity;
 pub mod math;
 pub mod mermaid;
 pub mod paragraph;
+mod sections;
+pub use sections::Section;
 pub mod reveal;
 #[cfg(test)]
 mod tests;

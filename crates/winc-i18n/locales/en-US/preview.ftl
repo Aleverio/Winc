@@ -56,6 +56,7 @@ preview-svg-missing-text-path = text on paths
 
 preview-markdown-image-alt = Image
 preview-markdown-code-copied = Copied code
+preview-markdown-link-hint = { $key }-click to open
 preview-markdown-heading-not-found = This heading isn’t in the document
 preview-markdown-toc-pin = Pin Heading List
 preview-markdown-toc-unpin = Unpin Heading List

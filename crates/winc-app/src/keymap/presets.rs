@@ -212,6 +212,8 @@ pub(super) const COMMON: &[PresetRow] = &[
         &["ctrl+shift+]"],
     ),
     row(MarkdownImage, Markdown, &["ctrl+cmd+i"], &["ctrl+shift+i"]),
+    row(MarkdownFocusMode, Markdown, &["f8"], &["f8"]),
+    row(MarkdownTypewriterMode, Markdown, &["f9"], &["f9"]),
 ];
 
 /// 共用的键在 Linux 上与 Windows 不同的部分。

@@ -249,6 +249,10 @@ impl App {
             MarkdownTable => self.markdown_table(),
             MarkdownLink => self.markdown_link(false),
             MarkdownImage => self.markdown_link(true),
+            MarkdownFocusMode => self.settings_toggle(crate::layout::Setting::MarkdownFocus),
+            MarkdownTypewriterMode => {
+                self.settings_toggle(crate::layout::Setting::MarkdownTypewriter);
+            }
             DeleteLine => editing(self, Command::DeleteLine),
             DeleteAllLeft => editing(self, Command::DeleteToLineStart),
             IndentLines => editing(self, Command::IndentLines),
@@ -535,7 +539,13 @@ impl App {
             }
             Action::StopConfiguration if !self.run_config_running() => return false,
             // 写作命令只在编辑 Markdown 时可用；其余位置同一个键执行其他命令。
-            action if action.writes_markdown() && !self.markdown_keys() => return false,
+            // 专注、打字机模式在 Markdown 文件里都能切换，不看写作快捷键开没开。
+            Action::MarkdownFocusMode | Action::MarkdownTypewriterMode => {
+                if !self.markdown_writing() {
+                    return false;
+                }
+            }
+            action if action.markdown_only() && !self.markdown_keys() => return false,
             Action::EditRunConfigurations if self.editor.root().is_none() => return false,
             // 窗格的命令只在有东西可拆、可换时可用，否则同一个键执行其他命令或交给终端。
             Action::SplitRight | Action::SplitDown if self.editor.active.is_none() => {

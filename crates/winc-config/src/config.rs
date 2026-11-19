@@ -114,6 +114,10 @@ pub struct Config {
     /// Markdown 文件的源代码是否也使用写作快捷键（标题、列表、链接等），默认为是；可编辑的
     /// 预览总是使用。
     pub markdown_shortcuts: Option<bool>,
+    /// 编辑 Markdown 时是否淡化光标所在段落以外的文字（专注模式），默认为否。
+    pub markdown_focus: Option<bool>,
+    /// 编辑 Markdown 时是否让光标所在的行停在编辑区中间（打字机模式），默认为否。
+    pub markdown_typewriter: Option<bool>,
     /// 是否定时检查更新（启动后 5 秒、之后每天一次），默认为是。
     ///
     /// 关闭后仍可从菜单「检查更新…」手动检查。

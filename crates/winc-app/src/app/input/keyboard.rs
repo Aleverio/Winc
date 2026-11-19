@@ -50,6 +50,7 @@ impl App {
 
         self.reset_blink();
         self.request_redraw();
+        self.scroll.keyed = true;
 
         if matches!(event.logical_key, Key::Named(NamedKey::Escape))
             && self.tree_dragging().is_some()
@@ -1103,6 +1104,7 @@ impl App {
             Ime::Commit(text) => {
                 self.ime.preedit.clear();
                 self.ime.field_preedit.clear();
+                self.scroll.keyed = true;
 
                 let focus = self.focus;
                 match focus {

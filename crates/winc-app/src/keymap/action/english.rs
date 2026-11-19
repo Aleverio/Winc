@@ -81,6 +81,8 @@ impl Action {
             MarkdownTable => "Markdown: Insert Table",
             MarkdownLink => "Markdown: Insert Link",
             MarkdownImage => "Markdown: Insert Image",
+            MarkdownFocusMode => "Markdown: Toggle Focus Mode",
+            MarkdownTypewriterMode => "Markdown: Toggle Typewriter Mode",
             DeleteLine => "Delete Line",
             DeleteAllLeft => "Delete All Left",
             IndentLines => "Indent Line",

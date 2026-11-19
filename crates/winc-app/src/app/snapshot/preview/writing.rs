@@ -185,3 +185,173 @@ fn link_paths_are_suggested_while_typing() {
     assert!(app.preview.markdown.suggest.at.is_none());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 悬停在预览的链接上提示地址，在脚注的编号上提示脚注的内容。
+#[test]
+fn hovering_links_and_footnotes_shows_where_they_go() {
+    let (mut app, dir) = live_doc(
+        "md-hover",
+        "见 [文档](https://winc.si/docs) 和脚注[^a]。\n\n[^a]: 脚注里的说明。\n",
+    );
+    paint(&mut app);
+    let link = |app: &App, url: &str| {
+        let (rect, _) = (app.hits.markdown_links.iter())
+            .find(|(_, u)| u == url)
+            .unwrap()
+            .clone();
+        rect
+    };
+    for (url, name) in [
+        ("#fn-1", "md-hover-note"),
+        ("https://winc.si/docs", "md-hover-link"),
+    ] {
+        let rect = link(&app, url);
+        app.on_mouse_move(rect.x + rect.w / 2.0, rect.y + rect.h / 2.0);
+        assert!(app.pointer.hover.has_tooltip());
+        app.overlays.tooltip.since = Some(
+            std::time::Instant::now()
+                - crate::theme::TOOLTIP_DELAY
+                - crate::app::animation::TOOLTIP_FADE,
+        );
+        shoot(&mut app, name);
+    }
+    assert_eq!(
+        app.preview
+            .markdown
+            .parsed
+            .as_ref()
+            .unwrap()
+            .footnote_text("1")
+            .as_deref(),
+        Some("脚注里的说明。")
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 专注模式淡化光标所在段落以外的文字，打字机模式让光标所在的行停在中间；F8、F9 切换。
+#[test]
+fn focus_and_typewriter_modes_follow_the_caret() {
+    use crate::app::preview::markdown::paragraph_lines;
+    let text: String = (0..80)
+        .map(|i| format!("第 {i} 段的第一行\n第 {i} 段的第二行\n\n"))
+        .collect();
+    let (mut app, dir) = source_doc("md-focus", &text);
+    let rope = app.editor.active().unwrap().text().rope().unwrap().clone();
+    let at = rope.line_to_char(4);
+    assert_eq!(paragraph_lines(&rope, at), (3, 4));
+    assert_eq!(paragraph_lines(&rope, rope.line_to_char(2)), (2, 2));
+
+    // F8、F9 在 Markdown 文件里切换两种模式。
+    assert!(app.run_action(Action::MarkdownFocusMode));
+    assert!(app.run_action(Action::MarkdownTypewriterMode));
+    assert!(app.markdown_focus() && app.markdown_typewriter());
+
+    // 打字机模式：点击放光标时不滚动，免得拖成选区。
+    app.scroll.keyed = false;
+    put_caret(&mut app, "第 40 段的第一行", true);
+    app.ensure_caret_visible();
+    app.scroll.glide = None;
+    let clicked = app.editor.active().unwrap().scroll_line;
+    // 用键盘移动光标后，这一行在编辑区中间。
+    app.scroll.keyed = true;
+    app.ensure_caret_visible();
+    app.scroll.glide = None;
+    let doc = app.editor.active().unwrap();
+    let row = doc.row_at(doc.selection.head) as f64;
+    let visible = app.visible_lines() as f64;
+    assert!((doc.scroll_line - (row + 0.5 - visible / 2.0)).abs() < 1.0);
+    assert!(clicked < doc.scroll_line);
+    shoot(&mut app, "md-focus-source");
+
+    // 可编辑的预览里同样淡化其余的块。
+    app.set_preview_mode(PreviewMode::Preview);
+    settle(&mut app);
+    app.start_live_editing();
+    settle(&mut app);
+    shoot(&mut app, "md-focus-preview");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 点标题左边的箭头收起下面的一节，再点一次展开；收起时光标在这一节里的移到标题末尾。
+#[test]
+fn headings_fold_their_sections_in_the_preview() {
+    let (mut app, dir) = live_doc(
+        "md-fold",
+        "# 甲\n\n第一段\n\n## 子\n\n第二段\n\n# 乙\n\n第三段\n",
+    );
+    let shown = |app: &App| crate::app::preview::markdown::laid::full_text(app).unwrap();
+    let full = app.preview.markdown.height;
+    assert!(shown(&app).contains("第一段"));
+    // 光标放进要收起的一节里，再收起：光标回到标题末尾，这一节不再显示。
+    put_caret(&mut app, "第二段", true);
+    app.start_live_editing();
+    app.toggle_heading_fold("甲");
+    settle(&mut app);
+    assert_eq!(app.live_caret_source(), doc_text(&app).find("\n"));
+    let text = shown(&app);
+    assert!(!text.contains("第一段") && !text.contains("第二段") && text.contains("第三段"));
+    assert!(app.preview.markdown.height < full);
+
+    // 鼠标停在标题上时有可点击的箭头，点一下展开。
+    let laid = app.preview.markdown.layout.as_ref().unwrap();
+    let area = app.preview.markdown.area;
+    let top = area.y - app.preview.markdown.scroll() + laid.pad + laid.tops[0];
+    app.on_mouse_move(area.x + area.w / 2.0, top + 4.0);
+    paint(&mut app);
+    shoot(&mut app, "md-fold");
+    let (arrow, _) = (app.hits.markdown_links.iter())
+        .find(|(_, url)| url.ends_with("fold:甲"))
+        .unwrap()
+        .clone();
+    super::click(&mut app, (arrow.x + arrow.w / 2.0, arrow.y + arrow.h / 2.0));
+    settle(&mut app);
+    assert!(shown(&app).contains("第一段"));
+
+    // 分栏时左边的光标在标题「乙」上：箭头与标出光标所在行的竖条同一列，竖条不再另画。
+    app.set_preview_mode(PreviewMode::Split);
+    app.focus = crate::app::Focus::Editor;
+    put_caret(&mut app, "# 乙", true);
+    settle(&mut app);
+    let laid = app.preview.markdown.layout.as_ref().unwrap();
+    let area = app.preview.markdown.area;
+    let heading = laid.sections.iter().rposition(|s| s.is_some()).unwrap();
+    let top = area.y - app.preview.markdown.scroll() + laid.pad + laid.tops[heading];
+    app.on_mouse_move(area.x + area.w / 2.0, top + 4.0);
+    paint(&mut app);
+    shoot(&mut app, "md-fold-split");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 可编辑的预览中在两处之间来回单击：被点的块原地换成原文，上一处换回排版，内容不会每点
+/// 一次就朝一个方向挪一截。
+#[test]
+fn clicking_back_and_forth_does_not_drift() {
+    // 和常见的 README 开头一样：几个居中的 HTML 块，下面是正文。
+    let centered = |inner: &str| format!("<p align=\"center\">\n  {inner}\n</p>\n\n");
+    let text = [
+        centered("<img src=\"icon.svg\" alt=\"icon\" width=\"128\" />"),
+        "<h1 align=\"center\">Winc</h1>\n\n".to_owned(),
+        centered("A lighter, faster, more comfortable desktop editor."),
+        centered("English | <a href=\"./README.zh-CN.md\">简体中文</a>"),
+        centered("<img alt=\"a\" src=\"a.svg\" />\n  <img alt=\"b\" src=\"b.svg\" />"),
+        centered("<a href=\"https://winc.si\"><img alt=\"Download\" src=\"d.svg\" /></a>"),
+        format!("## Overview\n\n{}\n", "Some text here. ".repeat(300)),
+    ]
+    .concat();
+    let (mut app, dir) = live_doc("md-drift", &text);
+    let area = app.preview.markdown.area;
+    let mut seen = Vec::new();
+    for k in 0..8 {
+        // 每次都点那一块现在所在的位置，和来回点击时一样。
+        let laid = app.preview.markdown.layout.as_ref().unwrap();
+        let block = if k % 2 == 0 { 1 } else { 5 };
+        let h = laid.blocks[block].1.height;
+        let y = area.y - app.preview.markdown.scroll() + laid.pad + laid.tops[block] + h - 10.0;
+        super::click(&mut app, (area.x + area.w / 2.0, y));
+        settle(&mut app);
+        seen.push((app.preview.markdown.scroll(), y));
+    }
+    assert_eq!(seen[0..2], seen[2..4], "{seen:?}");
+    assert_eq!(seen[0..2], seen[6..8], "{seen:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -232,7 +232,8 @@ impl App {
             Target::MarkdownLink(link) => Hover::MarkdownLink(link),
             Target::Suggest(row) => Hover::Suggest(row),
             Target::MarkdownToc(target) => Hover::MarkdownToc(target),
-            Target::MarkdownText | Target::PdfThumb(_) | Target::Picture => Hover::None,
+            Target::MarkdownText(Some(link)) => Hover::MarkdownLinkText(link),
+            Target::MarkdownText(None) | Target::PdfThumb(_) | Target::Picture => Hover::None,
             Target::PdfTool(tool) => Hover::PdfTool(tool),
             Target::Tab(index, on_close) => Hover::Tab(index, on_close),
             Target::RulerChange(hunk) => Hover::RulerChange(hunk),
@@ -520,9 +521,10 @@ impl App {
                 .find(|(rect, _)| rect.contains(x, y));
             return thumb.map_or(Target::Blocked, |&(_, to)| Target::PdfThumb(to));
         }
-        // 在预览上按下时选择文字并获得焦点，以便用键盘滚动和复制。
+        // 在预览上按下时选择文字并获得焦点，以便用键盘滚动和复制。可编辑的预览中停在链接上时
+        // 记下是哪个链接，用来提示地址。
         if self.preview.markdown.area.contains(x, y) {
-            return Target::MarkdownText;
+            return Target::MarkdownText(self.markdown_link_at(x, y));
         }
         if self.picture_at(x, y) {
             return Target::Picture;
@@ -973,8 +975,9 @@ pub(super) enum Target {
     /// 链接地址补全列表的一行，参数为行号。
     Suggest(usize),
     MarkdownToc(crate::app::preview::markdown::TocTarget),
-    /// Markdown 预览中链接以外的区域，用于选择文字。
-    MarkdownText,
+    /// Markdown 预览中可以选择文字的区域；参数为鼠标下的链接（可编辑的预览中单击链接放置
+    /// 光标，不打开它）。
+    MarkdownText(Option<usize>),
     /// 标签，参数为标签下标与是否位于关闭按钮上。
     Tab(usize, bool),
     /// 概览标尺上的改动，参数为改动块的序号。

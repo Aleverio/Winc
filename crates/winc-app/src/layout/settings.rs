@@ -143,6 +143,8 @@ impl SettingsPage {
                     Setting::TextWidth,
                     Setting::MarkdownLineNumbers,
                     Setting::MarkdownShortcuts,
+                    Setting::MarkdownFocus,
+                    Setting::MarkdownTypewriter,
                 ]),
                 plain(vec![
                     Setting::VimMode,
@@ -340,6 +342,10 @@ pub enum Setting {
     MarkdownLineNumbers,
     /// Markdown 文件的源代码也使用写作快捷键（`markdown.shortcuts`）。
     MarkdownShortcuts,
+    /// 编辑 Markdown 时淡化光标所在段落以外的文字（`markdown.focusMode`）。
+    MarkdownFocus,
+    /// 编辑 Markdown 时光标所在的行停在中间（`markdown.typewriterMode`）。
+    MarkdownTypewriter,
     /// 定时检查更新。
     CheckUpdates,
     /// 联网的命令跟随系统的代理设置（`network.systemProxy`）。
@@ -510,7 +516,9 @@ impl Setting {
             | Setting::RemoteImages
             | Setting::TextWidth
             | Setting::MarkdownLineNumbers
-            | Setting::MarkdownShortcuts => SettingsPage::Editor,
+            | Setting::MarkdownShortcuts
+            | Setting::MarkdownFocus
+            | Setting::MarkdownTypewriter => SettingsPage::Editor,
             Setting::Version
             | Setting::Updates
             | Setting::CheckUpdates
@@ -599,6 +607,8 @@ impl Setting {
             Setting::TextWidth => t!("settings-text-width"),
             Setting::MarkdownLineNumbers => t!("settings-markdown-line-numbers"),
             Setting::MarkdownShortcuts => t!("settings-markdown-shortcuts"),
+            Setting::MarkdownFocus => t!("settings-markdown-focus"),
+            Setting::MarkdownTypewriter => t!("settings-markdown-typewriter"),
             Setting::CheckUpdates => t!("settings-check-updates"),
             Setting::Version => t!("settings-version"),
             Setting::Website => t!("settings-website"),
@@ -685,6 +695,8 @@ impl Setting {
             Setting::TextWidth => Some(t!("settings-text-width-desc")),
             Setting::MarkdownLineNumbers => Some(t!("settings-markdown-line-numbers-desc")),
             Setting::MarkdownShortcuts => Some(t!("settings-markdown-shortcuts-desc")),
+            Setting::MarkdownFocus => Some(t!("settings-markdown-focus-desc")),
+            Setting::MarkdownTypewriter => Some(t!("settings-markdown-typewriter-desc")),
             Setting::CheckUpdates => Some(t!("settings-check-updates-desc")),
             // 绘制时换成当前的更新状态（`UpdateState`）。
             Setting::Updates => Some(t!("settings-updates-off")),
@@ -753,6 +765,8 @@ impl Setting {
             | Setting::RemoteImages
             | Setting::MarkdownLineNumbers
             | Setting::MarkdownShortcuts
+            | Setting::MarkdownFocus
+            | Setting::MarkdownTypewriter
             | Setting::CheckUpdates
             | Setting::FormatOnSave
             | Setting::FixOnSave

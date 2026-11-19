@@ -359,7 +359,7 @@ fn command_palette_runs_commands_and_remembers_them() {
             UninstallShellCommand, Unsplit,
         };
         // 窗格的命令只在拆分过、或有不止一个标签时列出。
-        !a.writes_markdown()
+        !a.markdown_only()
             && !matches!(
                 a,
                 InstallShellCommand

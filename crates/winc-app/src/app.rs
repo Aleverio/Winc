@@ -500,6 +500,8 @@ pub enum Hover {
     MarkdownLink(usize),
     /// 链接地址补全列表的第几行。
     Suggest(usize),
+    /// 可编辑的 Markdown 预览中鼠标下的链接（单击放置光标，`⌘` 单击才打开）。
+    MarkdownLinkText(usize),
     /// Markdown 预览左侧的标题指示条或展开的标题列表。
     MarkdownToc(crate::app::preview::markdown::TocTarget),
     /// PDF 预览右下角工具栏上的按钮。
@@ -597,6 +599,8 @@ impl Hover {
                 | Hover::ViewTab(_)
                 | Hover::Outline(OutlineTarget::FoldAll)
                 | Hover::MarkdownToc(preview::markdown::TocTarget::Pin)
+                | Hover::MarkdownLink(_)
+                | Hover::MarkdownLinkText(_)
                 | Hover::Search(_)
                 | Hover::Panel(
                     PanelButton::Tool(_)
@@ -1134,6 +1138,9 @@ impl App {
             }
             self.preview.markdown.toc_rest = toc(hover).then(Instant::now);
             self.preview.markdown.toc_shown = false;
+        }
+        if hover != self.pointer.hover {
+            self.leave_tooltip();
         }
         self.pointer.hover = hover;
         self.overlays.tooltip.since = hover.has_tooltip().then(Instant::now);

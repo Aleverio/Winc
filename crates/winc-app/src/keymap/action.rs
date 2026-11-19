@@ -108,6 +108,10 @@ pub enum Action {
     MarkdownLink,
     /// Markdown 中插入图片；选中的文字作为替代文字。
     MarkdownImage,
+    /// Markdown 中切换专注模式。
+    MarkdownFocusMode,
+    /// Markdown 中切换打字机模式。
+    MarkdownTypewriterMode,
     DeleteLine,
     DeleteAllLeft,
     IndentLines,
@@ -445,6 +449,8 @@ impl Action {
             MarkdownTable => t!("cmd-markdown-table"),
             MarkdownLink => t!("cmd-markdown-link"),
             MarkdownImage => t!("cmd-markdown-image"),
+            MarkdownFocusMode => t!("cmd-markdown-focus-mode"),
+            MarkdownTypewriterMode => t!("cmd-markdown-typewriter-mode"),
             DeleteLine => t!("cmd-delete-line"),
             DeleteAllLeft => t!("cmd-delete-all-left"),
             IndentLines => t!("cmd-indent-lines"),
@@ -691,6 +697,8 @@ impl Action {
             | MarkdownTable
             | MarkdownLink
             | MarkdownImage
+            | MarkdownFocusMode
+            | MarkdownTypewriterMode
             | DeleteLine
             | DeleteAllLeft
             | IndentLines
@@ -872,8 +880,9 @@ impl Action {
         )
     }
 
-    /// 是否为 Markdown 的写作命令（行内格式、段落类型、插入块和链接），只在编辑 Markdown 时可用。
-    pub fn writes_markdown(self) -> bool {
+    /// 是否为只在编辑 Markdown 时可用的命令：行内格式、段落类型、插入块和链接，以及专注、
+    /// 打字机模式。
+    pub fn markdown_only(self) -> bool {
         use Action::*;
         matches!(
             self,
@@ -897,6 +906,8 @@ impl Action {
                 | MarkdownTable
                 | MarkdownLink
                 | MarkdownImage
+                | MarkdownFocusMode
+                | MarkdownTypewriterMode
         )
     }
 
@@ -955,7 +966,9 @@ impl Action {
             | MarkdownMathBlock
             | MarkdownTable
             | MarkdownLink
-            | MarkdownImage => false,
+            | MarkdownImage
+            | MarkdownFocusMode
+            | MarkdownTypewriterMode => false,
             _ => self.group() == Group::Edit,
         }
     }
@@ -1180,6 +1193,8 @@ pub const ACTIONS: &[Action] = {
         MarkdownTable,
         MarkdownLink,
         MarkdownImage,
+        MarkdownFocusMode,
+        MarkdownTypewriterMode,
         DeleteLine,
         DeleteAllLeft,
         IndentLines,
