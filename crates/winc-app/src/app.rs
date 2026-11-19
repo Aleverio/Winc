@@ -79,7 +79,7 @@ pub use workspace::picker::{
     PICKER_ICON_X, PICKER_MAX_ROWS, PICKER_PAD, PICKER_ROW, PICKER_TEXT_X, PLACES_FOOTER,
     PlacesGhost,
 };
-pub(crate) use workspace::recent::{Parent, parents};
+pub(crate) use workspace::recent::{Parent, Recent, parents};
 pub use workspace::session::StartAction;
 pub use workspace::tab_drag::{TabDrag, TabSlide};
 pub use workspace::tool_fold::ToolFold;

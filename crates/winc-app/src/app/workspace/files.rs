@@ -173,6 +173,16 @@ impl App {
         self.open_file(path, false);
     }
 
+    /// 从窗口外打开了文件 `path`（命令行、文件管理器、程序坞、拖入、「打开」面板）：记入最近
+    /// 打开的文件；目录不记。
+    pub(in crate::app) fn note_opened_file(&mut self, path: &Path) {
+        let path = winc_config::files::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        if self.is_folder(&path) || !self.may_be_file(&path) {
+            return;
+        }
+        self.update_state(|state| state.remember_file(&path));
+    }
+
     /// 在预览标签中打开文件 `path`。
     ///
     /// 文件已打开时切换到其标签；否则替换现有的预览标签，没有预览标签时新建一个。
@@ -1158,7 +1168,11 @@ impl App {
         let Some(path) = path else { return };
 
         match kind {
-            Pick::Open | Pick::OpenFolder | Pick::WslFolder(_) => self.open_path(&path),
+            Pick::Open => {
+                self.open_path(&path);
+                self.note_opened_file(&path);
+            }
+            Pick::OpenFolder | Pick::WslFolder(_) => self.open_path(&path),
             Pick::WorktreeFolder => self.worktree_folder_picked(path),
             Pick::AddFolder => self.add_folder(&path),
             Pick::BackgroundImage => self.set_background_image(Some(path)),

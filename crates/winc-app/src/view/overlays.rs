@@ -9,7 +9,7 @@ use winc_i18n::t;
 use super::*;
 use crate::app::{
     ConflictAction, Focus, NoticeAction, NoticeGhost, NoticeKind, PICKER_ICON_X, PICKER_ROW,
-    PICKER_TEXT_X, PickerPart,
+    PICKER_TEXT_X, PickerPart, Recent,
 };
 use crate::icons::Direction;
 use crate::layout::{PickerParts, SearchButton};
@@ -879,8 +879,8 @@ fn draw_symbol_rows(app: &App, frame: &mut Frame<'_>, parts: &PickerParts) {
     }
 }
 
-/// 绘制最近打开的目录：目录图标、目录名，其后是淡色的上级目录；选中或悬停的那一行右端有
-/// 「✕」，点击后从最近列表中移除该目录。返回画出的「✕」，点击和悬停按它们判断。
+/// 绘制最近打开的目录和文件：图标、名字，其后是淡色的上级目录；选中或悬停的那一行右端有
+/// 「✕」，点击后从最近列表中移除这一项。返回画出的「✕」，点击和悬停按它们判断。
 fn draw_folder_rows(
     app: &App,
     frame: &mut Frame<'_>,
@@ -890,7 +890,8 @@ fn draw_folder_rows(
     let list = parts.list;
     if app.overlays.picker.hits.is_empty() {
         let root = app.editor.root();
-        let message = if app.state.recent.iter().any(|f| Some(f.as_path()) != root) {
+        let other = app.state.recent.iter().any(|f| Some(f.as_path()) != root);
+        let message = if other || !app.state.recent_files.is_empty() {
             t!("workspace-picker-no-matching-folders")
         } else {
             t!("workspace-picker-no-recent-folders")
@@ -904,9 +905,15 @@ fn draw_folder_rows(
     let mut hits = Vec::new();
     let scroll = app.overlays.picker.scroll;
     let parents = crate::app::parents(&app.state.recent);
+    let file_parents = crate::app::parents(&app.state.recent_files);
     for i in parts.visible(scroll, app.overlays.picker.hits.len()) {
         let index = app.overlays.picker.hits[i];
-        let (Some(folder), Some(parent)) = (app.state.recent.get(index), parents.get(index)) else {
+        let entry = app.recent_entry(index);
+        let parent = match entry {
+            Some(Recent::Folder(_)) => parents.get(index),
+            _ => file_parents.get(index - app.state.recent.len()),
+        };
+        let (Some(entry), Some(parent)) = (entry, parent) else {
             continue;
         };
         let row = parts.row(i, scroll);
@@ -923,11 +930,21 @@ fn draw_folder_rows(
         // 目录图标与文件列表的文件图标、输入框的放大镜在同一条竖直轴线上。
         let cy = icon_center_y(app, row, app.fonts.ui);
         let x = row.x + PICKER_ICON_X + (icons::FILE_WIDTH - icons::FOLDER_WIDTH) / 2.0;
-        if app.recent_group(folder).is_some() {
-            icons::folders(frame, (x, cy - 6.0), p.folder, clip);
-        } else {
-            icons::folder(frame, (x, cy - 6.0), false, p.folder, clip);
-        }
+        let name = match entry {
+            Recent::Folder(folder) => {
+                if app.recent_group(folder).is_some() {
+                    icons::folders(frame, (x, cy - 6.0), p.folder, clip);
+                } else {
+                    icons::folder(frame, (x, cy - 6.0), false, p.folder, clip);
+                }
+                app.recent_title(folder)
+            }
+            Recent::File(file) => {
+                let name = winc_editor::display_name(file).into_owned();
+                draw_file_icon(frame, p, (row.x + PICKER_ICON_X, cy), &name, clip);
+                name
+            }
+        };
 
         // 「✕」只在选中或悬停时显示，但位置始终预留，名称和上级目录不会因它出现而移动。
         let close = Rect::new(
@@ -945,7 +962,6 @@ fn draw_folder_rows(
 
         // 查询命中的字用强调色标出；截短了的文字下标对不上，不标。上级目录放不下时截短，同名
         // 目录保留区分彼此的部分（见 `fit_parent`）。
-        let name = app.recent_title(folder);
         let (in_name, in_parent) = app.folder_matched(i);
         let room = (close.x - 8.0 - (row.x + PICKER_TEXT_X)).max(0.0);
         let shown = ellipsize(frame, &name, app.fonts.ui, room);
