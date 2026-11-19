@@ -157,7 +157,7 @@ impl App {
     /// 返回当前焦点对应的键位上下文，键位表按它划分适用范围。
     pub(in crate::app) fn key_context(&self) -> Context {
         match self.focus {
-            Focus::Editor if self.markdown_live() => Context::Markdown,
+            Focus::Editor if self.markdown_keys() => Context::Markdown,
             Focus::Editor => Context::Editor,
             Focus::Search => Context::Find,
             Focus::Replace => Context::Replace,

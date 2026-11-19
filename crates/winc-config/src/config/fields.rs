@@ -309,6 +309,7 @@ const TREE: &[Field] = &[
 const MARKDOWN: &[Field] = &[
     bool_field!("remoteImages", markdown_remote_images),
     bool_field!("lineNumbers", markdown_line_numbers),
+    bool_field!("shortcuts", markdown_shortcuts),
     Field {
         key: "textWidth",
         read: |config, value, name, problems| {

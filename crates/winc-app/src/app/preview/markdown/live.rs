@@ -16,12 +16,7 @@ impl App {
             return None;
         }
         let url = content.trim();
-        let is_url = |s: &str| {
-            ["https://", "http://", "mailto:"]
-                .iter()
-                .any(|p| s.len() > p.len() && s.starts_with(p))
-                && !s.contains(char::is_whitespace)
-        };
+        let is_url = super::writing::is_url;
         if !is_url(url) {
             return None;
         }

@@ -670,6 +670,7 @@ impl App {
         self.track_modules();
         self.track_commit_bars();
         self.track_search_rows();
+        self.track_words();
         self.git_follow_active();
         self.relayout();
         self.run_when_loaded();
@@ -761,6 +762,9 @@ impl App {
             }
             Next::Key { vim, step } => {
                 let started = Instant::now();
+                if self.markdown_live() {
+                    self.start_live_editing();
+                }
                 if vim {
                     self.vim_bench_key(step);
                 } else if step % 40 == 39 {

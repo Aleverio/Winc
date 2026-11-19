@@ -16,6 +16,7 @@ mod pdf;
 mod pdf_places;
 mod reading;
 mod tables;
+mod writing;
 
 /// 覆盖常用 Markdown 写法的 README 样本。
 const SAMPLE: &str = r#"<p align="center"><img src="logo.svg" width="64" alt="logo"></p>

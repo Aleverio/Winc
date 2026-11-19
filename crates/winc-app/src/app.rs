@@ -345,6 +345,8 @@ pub enum UserEvent {
     Saved,
     /// 后台已读取一个刚打开的文件。
     Loaded,
+    /// 后台已数好 Markdown 文档的字数。
+    Counted,
     /// 后台已写入一批热退出备份。
     BackedUp,
     /// 跨文件替换已在后台写回全部未打开的文件。
@@ -1069,6 +1071,7 @@ impl App {
             UserEvent::TreeScanned => self.poll_tree_scans(),
             UserEvent::Saved => self.poll_saves(),
             UserEvent::Loaded => self.poll_loads(),
+            UserEvent::Counted => self.poll_words(),
             UserEvent::BackedUp => self.collect_backups(false),
             UserEvent::Replaced => self.poll_replace_all(),
             UserEvent::Wrapped => self.poll_wraps(),

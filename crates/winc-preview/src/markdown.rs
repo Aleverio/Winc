@@ -1460,6 +1460,8 @@ mod shrink;
 pub(crate) use html::named_entity;
 pub mod math;
 pub mod mermaid;
+pub mod paragraph;
 pub mod reveal;
 #[cfg(test)]
 mod tests;
+pub mod words;

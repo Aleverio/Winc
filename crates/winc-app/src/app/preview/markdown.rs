@@ -32,6 +32,7 @@ mod live;
 mod live_caret;
 mod scroll;
 mod viewer;
+mod writing;
 pub(crate) use viewer::{DiagramLaid, DiagramTool, DiagramView, MAX_ZOOM, MIN_ZOOM};
 
 /// docx、EPUB 包中的图片：Markdown 中引用的地址和图片文件的内容。

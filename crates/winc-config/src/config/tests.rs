@@ -316,6 +316,7 @@ fn round_trips_through_json() {
         markdown_remote_images: Some(false),
         markdown_text_width: Some(TextWidth::Wide),
         markdown_line_numbers: Some(false),
+        markdown_shortcuts: Some(false),
         update_auto_check: Some(false),
         confirm_drag_and_drop: Some(false),
         compact_folders: Some(false),
