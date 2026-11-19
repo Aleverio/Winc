@@ -312,6 +312,8 @@ const MARKDOWN: &[Field] = &[
     bool_field!("shortcuts", markdown_shortcuts),
     bool_field!("focusMode", markdown_focus),
     bool_field!("typewriterMode", markdown_typewriter),
+    string_field!("imageFolder", markdown_image_folder),
+    string_field!("imageName", markdown_image_name),
     Field {
         key: "textWidth",
         read: |config, value, name, problems| {

@@ -55,6 +55,8 @@ preview-svg-missing-text-path = text on paths
 ## Markdown preview
 
 preview-markdown-image-alt = Image
+preview-markdown-diagram-expand = Show All
+preview-markdown-diagram-collapse = Show Less
 preview-markdown-code-copied = Copied code
 preview-markdown-link-hint = { $key }-click to open
 preview-markdown-heading-not-found = This heading isn’t in the document

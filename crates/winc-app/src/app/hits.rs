@@ -61,6 +61,8 @@ pub struct Hits {
     pub(crate) notice_button: Option<Rect>,
     /// 上一帧绘制的链接（区域和地址），点击时据此查找。
     pub(crate) markdown_links: Vec<(winc_render::Rect, String)>,
+    /// 上一帧在可编辑的预览中画出的、有原文可改的图片，调整大小用。
+    pub(crate) markdown_images: Vec<crate::app::preview::markdown::resize::ImageAt>,
     /// 上一帧绘制的代码块（屏幕坐标）：鼠标移入、移出时重绘，以显示或隐藏复制按钮。
     pub(crate) markdown_codes: Vec<winc_render::Rect>,
     /// 编辑区顶部钉住的各行，绘制时记录，点击和悬停时使用。
@@ -131,6 +133,7 @@ impl Hits {
             notice_card,
             notice_button,
             markdown_links,
+            markdown_images,
             markdown_codes,
             sticky,
             markdown_copy,
@@ -172,6 +175,7 @@ impl Hits {
         *notice_card = None;
         *notice_button = None;
         markdown_links.clear();
+        markdown_images.clear();
         markdown_codes.clear();
         sticky.clear();
         *markdown_copy = None;

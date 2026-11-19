@@ -7,6 +7,7 @@ mod adopt;
 mod card;
 mod formatters;
 pub(super) mod shortcuts;
+mod text;
 
 use std::ops::RangeInclusive;
 
@@ -927,7 +928,7 @@ impl App {
         let current = match tool_setting(setting) {
             Some((task, id)) => task_commands(&self.config, task).get(id).cloned(),
             None if setting == Setting::TerminalShell => self.config.terminal_shell.clone(),
-            None if setting == Setting::GitPath => self.config.git_path.clone(),
+            None if setting.is_text() => self.text_setting(setting).clone(),
             None => self.font_setting(setting).clone(),
         };
         let mut field = TextField::default();
@@ -1041,12 +1042,15 @@ impl App {
                 self.focus = Focus::Settings;
                 self.set_terminal_shell(value);
             }
-            None if setting == Setting::GitPath => {
+            None if setting.is_text() => {
                 self.settings.editing = None;
                 self.settings.editing_original = None;
                 self.settings.error = None;
                 self.focus = Focus::Settings;
-                self.set_git_path(value);
+                match setting {
+                    Setting::GitPath => self.set_git_path(value),
+                    _ => self.set_text_setting(setting, value),
+                }
             }
             None => self.settings_commit_font(setting, value),
         }

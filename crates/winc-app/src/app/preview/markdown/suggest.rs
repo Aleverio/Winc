@@ -1,9 +1,11 @@
 //! Markdown 中补全链接和图片的地址：在 `](` 之后输入时，在光标下方列出打开的目录里的文件，
-//! 按已输入的文字筛选（打分同快速打开），图片只列图片；选中后写入相对文档的路径。
+//! 按已输入的文字筛选（打分同快速打开），图片只列图片；选中后写入相对文档的路径。地址以 `#`
+//! 开头时列出本文的标题，写入标题的锚点。
 //!
 //! 文字照常输入到文档里，列表只接管 ↑↓、回车、Tab 和 Esc。文件来自快速打开的文件表，不另外
 //! 遍历磁盘。
 
+use winc_preview::markdown::paragraph::Target;
 use winit::keyboard::{Key, NamedKey};
 
 use super::*;
@@ -13,14 +15,22 @@ pub(crate) const SUGGEST_ROWS: usize = 8;
 /// 往光标前看多少个字找 `](`：地址写在一行里，很长的一行不必整行读出。
 const LOOK_BACK: usize = 512;
 
+/// 列出的一项。
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Hit {
+    /// 文件：在文件表中的路径（相对打开的目录，见 `IndexedFile`）和绝对路径。
+    File(String, PathBuf),
+    /// 本文的标题：级别、文字和锚点。
+    Heading(u8, String, String),
+}
+
 /// 补全地址的状态。
 #[derive(Default)]
 pub(crate) struct Suggest {
-    /// 正在补全的地址：文档、地址开头的位置（字符）、是否为图片。
-    pub(crate) at: Option<(DocumentId, usize, bool)>,
-    /// 列出的文件：在文件表中的路径（相对打开的目录，见 `IndexedFile`）和绝对路径，最多
-    /// [`SUGGEST_ROWS`] 个。
-    pub(crate) hits: Vec<(String, PathBuf)>,
+    /// 正在补全的地址：文档、地址开头的位置（字符）和要补全什么。
+    pub(crate) at: Option<(DocumentId, usize, Target)>,
+    /// 列出的各项，最多 [`SUGGEST_ROWS`] 个。
+    pub(crate) hits: Vec<Hit>,
     /// 选中的一项。
     pub(crate) selected: usize,
     /// 算出 `hits` 时的依据：已输入的地址和文件表的文件数；变了才重新筛选。
@@ -40,7 +50,7 @@ impl App {
         if suggest.at.is_none() && suggest.dismissed.is_none() && suggest.seen == now {
             return;
         }
-        let Some((id, revision, start, image, query)) = self.suggest_context() else {
+        let Some((id, revision, start, kind, query)) = self.suggest_context() else {
             let suggest = &mut self.preview.markdown.suggest;
             (suggest.at, suggest.dismissed, suggest.seen) = (None, None, now);
             return;
@@ -54,14 +64,16 @@ impl App {
         if suggest.dismissed == Some((id, start)) {
             return;
         }
-        let same = suggest.at == Some((id, start, image));
+        let same = suggest.at == Some((id, start, kind));
         if !same && !typed {
             suggest.at = None;
             return;
         }
         if !same {
-            (suggest.at, suggest.selected, suggest.basis) = (Some((id, start, image)), 0, None);
-            self.prepare_index();
+            (suggest.at, suggest.selected, suggest.basis) = (Some((id, start, kind)), 0, None);
+            if kind != Target::Anchor {
+                self.prepare_index();
+            }
         }
         let basis = (query, self.overlays.picker.index.len());
         let old = self.preview.markdown.suggest.basis.as_ref();
@@ -70,24 +82,49 @@ impl App {
         }
         // 输入变了时回到第一项：重新排过的列表里原来那一行是另一个文件。
         let refiltered = old.is_some_and(|(query, _)| *query != basis.0);
-        let own = self.editor.active().and_then(|d| d.path.clone());
-        let index = &mut self.overlays.picker.index;
-        let hits: Vec<(String, PathBuf)> = (index.search(&basis.0).into_iter())
-            .filter_map(|i| Some((index.file(i)?.path.to_owned(), index.absolute(i)?)))
-            .filter(|(_, path)| {
-                Some(path) != own.as_ref() && (!image || winc_preview::image::is_image(path))
-            })
-            .take(SUGGEST_ROWS)
-            .collect();
+        let hits = match kind {
+            Target::Anchor => self.heading_hits(&basis.0),
+            Target::File | Target::Image => self.file_hits(&basis.0, kind == Target::Image),
+        };
         let suggest = &mut self.preview.markdown.suggest;
         let selected = if refiltered { 0 } else { suggest.selected };
         suggest.selected = selected.min(hits.len().saturating_sub(1));
         (suggest.hits, suggest.basis) = (hits, Some(basis));
     }
 
-    /// 光标停在链接地址里时：文档、版本、地址开头（字符位置）、是否为图片和已输入的地址。
-    fn suggest_context(&self) -> Option<(DocumentId, u64, usize, bool, String)> {
-        if self.focus != Focus::Editor || self.editor.root().is_none() || !self.markdown_writing() {
+    /// 按已输入的地址 `query` 筛选打开的目录里的文件，`image` 时只列图片；不列文档自己。
+    fn file_hits(&mut self, query: &str, image: bool) -> Vec<Hit> {
+        let own = self.editor.active().and_then(|d| d.path.clone());
+        let index = &mut self.overlays.picker.index;
+        (index.search(query).into_iter())
+            .filter_map(|i| Some((index.file(i)?.path.to_owned(), index.absolute(i)?)))
+            .filter(|(_, path)| {
+                Some(path) != own.as_ref() && (!image || winc_preview::image::is_image(path))
+            })
+            .take(SUGGEST_ROWS)
+            .map(|(path, abs)| Hit::File(path, abs))
+            .collect()
+    }
+
+    /// 本文中文字或锚点含有 `query`（`#` 之后已输入的部分，不分大小写）的标题。
+    fn heading_hits(&self, query: &str) -> Vec<Hit> {
+        let Some(rope) = self.editor.active().and_then(|d| d.text().rope()) else {
+            return Vec::new();
+        };
+        let lines: Vec<String> = rope.lines().map(|l| l.to_string()).collect();
+        let query = query.trim_start_matches('#').to_lowercase();
+        (winc_preview::markdown::paragraph::headings(lines.iter().map(String::as_str)).into_iter())
+            .filter(|(_, text, slug)| {
+                text.to_lowercase().contains(&query) || slug.to_lowercase().contains(&query)
+            })
+            .take(SUGGEST_ROWS)
+            .map(|(level, text, slug)| Hit::Heading(level, text, slug))
+            .collect()
+    }
+
+    /// 光标停在链接地址里时：文档、版本、地址开头（字符位置）、要补全什么和已输入的地址。
+    fn suggest_context(&self) -> Option<(DocumentId, u64, usize, Target, String)> {
+        if self.focus != Focus::Editor || !self.markdown_writing() {
             return None;
         }
         let doc = self.editor.active()?;
@@ -99,10 +136,14 @@ impl App {
         let line = rope.char_to_line(caret);
         let from = rope.line_to_char(line).max(caret.saturating_sub(LOOK_BACK));
         let before = rope.slice(from..caret).to_string();
-        let (start, image) = winc_preview::markdown::paragraph::link_target(&before)?;
+        let (start, kind) = winc_preview::markdown::paragraph::link_target(&before)?;
+        // 文件来自打开的目录；没有打开目录时只补全本文的标题。
+        if kind != Target::Anchor && self.editor.root().is_none() {
+            return None;
+        }
         let query = before[start..].to_owned();
         let start = from + before[..start].chars().count();
-        Some((doc.id, doc.revision, start, image, query))
+        Some((doc.id, doc.revision, start, kind, query))
     }
 
     /// 列表画出来了时处理不带修饰键的 ↑↓（换选中的一项）、回车和 Tab（写入）、Esc（关掉），
@@ -145,13 +186,14 @@ impl App {
         true
     }
 
-    /// 写入第 `i` 个文件的地址：换掉已输入的部分，后面没有 `)` 时补上，光标放在 `)` 之后。
+    /// 写入第 `i` 项：文件写相对文档的路径，标题写 `#锚点`。换掉已输入的部分，后面没有 `)`
+    /// 时补上，光标放在 `)` 之后。
     pub(in crate::app) fn accept_suggest(&mut self, i: usize) {
         let suggest = &mut self.preview.markdown.suggest;
-        let (Some((id, start, _)), Some((_, file))) = (suggest.at, suggest.hits.get(i)) else {
+        let (Some((id, start, _)), Some(hit)) = (suggest.at, suggest.hits.get(i)) else {
             return;
         };
-        let file = file.clone();
+        let hit = hit.clone();
         suggest.at = None;
         self.hits.suggest_card = None;
         let root = self.editor.root().map(Path::to_path_buf);
@@ -162,7 +204,10 @@ impl App {
             return;
         };
         let dir = doc.path.as_deref().and_then(Path::parent);
-        let target = winc_editor::paste::link_target(dir, root.as_deref(), &file);
+        let target = match &hit {
+            Hit::File(_, file) => winc_editor::paste::link_target(dir, root.as_deref(), file),
+            Hit::Heading(_, _, slug) => format!("#{slug}"),
+        };
         let caret = doc.selection.head.min(rope.len_chars());
         let closed = caret < rope.len_chars() && rope.char(caret) == ')';
         let text = if closed { target } else { format!("{target})") };

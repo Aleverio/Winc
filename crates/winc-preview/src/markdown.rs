@@ -449,10 +449,13 @@ pub struct Image {
     pub url: String,
     /// 替代文字：图片无法显示时显示的文字。
     pub alt: String,
-    /// HTML `<img>` 写明的宽度。
+    /// 写明的宽度：HTML 的 `width`、`style="width: …"`，或替代文字末尾的 `|300`。
     pub width: Option<Length>,
-    /// HTML `<img>` 写明的高度（像素）。
+    /// 写明的高度（像素）：HTML 的 `height`、`style="height: …"`，或替代文字末尾的
+    /// `|300x200`。
     pub height: Option<u32>,
+    /// `style="zoom: 50%"` 写明的缩放比例（百分数）：没有写宽高时按原图大小乘以它。
+    pub zoom: Option<u32>,
     /// 深色外观时换用的地址：`<picture>` 里 `media="(prefers-color-scheme: dark)"` 的
     /// `<source>` 的地址（README 常这样为深色主题配一张图）。
     pub dark: Option<String>,
@@ -1167,7 +1170,8 @@ impl Builder<'_> {
                 self.styles.pop();
             }
             TagEnd::Image => {
-                if let Some(image) = self.image.take() {
+                if let Some(mut image) = self.image.take() {
+                    resize::alt_size(&mut image);
                     self.push_image(image);
                 }
             }
@@ -1461,8 +1465,11 @@ pub(crate) use html::named_entity;
 pub mod math;
 pub mod mermaid;
 pub mod paragraph;
+pub mod resize;
 mod sections;
 pub use sections::Section;
+#[cfg(test)]
+mod corpus;
 pub mod reveal;
 #[cfg(test)]
 mod tests;

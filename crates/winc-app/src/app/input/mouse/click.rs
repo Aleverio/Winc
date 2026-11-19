@@ -235,6 +235,11 @@ impl App {
             Target::MarkdownLink(link) => self.open_markdown_link(link),
             Target::MarkdownToc(target) => self.press_toc(target),
             Target::MarkdownText(_) => self.click_markdown(x, y),
+            Target::ImageHandle => {
+                if let Some(image) = self.image_handle_at(x, y) {
+                    self.start_image_resize(image, x);
+                }
+            }
             Target::PdfThumb(to) => self.scroll_pdf_to(to),
             Target::PdfTool(tool) => self.press_pdf_tool(tool),
             Target::Tab(index, true) => {

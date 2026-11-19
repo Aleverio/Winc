@@ -141,6 +141,8 @@ pub(crate) struct Key {
     pub(crate) images: u64,
     /// 代码块是否显示从 1 起的行号（见 `Cx::line_numbers`）。
     pub(crate) numbers: bool,
+    /// mermaid 图最高排多高（逻辑像素，见 `Cx::tall`）。
+    pub(crate) tall: f32,
 }
 
 /// 重排之前各顶层块的排版和绘制位置，重排后据此计算过渡动画（见 `BlockMotion`）。
@@ -392,7 +394,7 @@ pub(crate) fn lay_out(
         .memo
         .prepare(winc_typeset::memo_key(|h| {
             use std::hash::Hash;
-            for v in [key.width, key.base] {
+            for v in [key.width, key.base, key.tall] {
                 v.to_bits().hash(h);
             }
             for c in [key.text, key.background] {
@@ -425,6 +427,7 @@ pub(crate) fn lay_out(
         cell: None,
         preedit: false,
         line_numbers: key.numbers,
+        tall: key.tall,
     };
     let env = Env {
         color: cx.colors.text,

@@ -65,6 +65,8 @@ pub struct Picture {
     pub source: Source,
     /// 是否含透明像素；为 `true` 时绘制在棋盘格上。
     pub transparent: bool,
+    /// 几个像素算一个逻辑像素（见 [`density`]）：Retina 截图为 2，文档里按一半大小显示。
+    pub density: u32,
 }
 
 impl Picture {
@@ -145,7 +147,47 @@ pub fn load(path: &Path) -> Result<Picture, String> {
         file_size,
         source: Source::Raster(pixels),
         transparent,
+        density: density(Some(path), &bytes),
     })
+}
+
+/// 图片的像素密度：几个像素算一个逻辑像素。
+///
+/// 文件名以 `@2x`、`@3x` 结尾时按它；否则看 PNG 的 `pHYs`：144 dpi（macOS 的 Retina 截图）为
+/// 2，216 dpi 为 3。其余（72、96 dpi，或印刷用的 300 dpi）为 1，按像素显示。
+pub fn density(path: Option<&Path>, bytes: &[u8]) -> u32 {
+    let stem = path.and_then(|p| p.file_stem()).and_then(|s| s.to_str());
+    for (suffix, n) in [("@2x", 2), ("@3x", 3)] {
+        if stem.is_some_and(|s| s.ends_with(suffix)) {
+            return n;
+        }
+    }
+    match png_dpi(bytes) {
+        Some(140..=150) => 2,
+        Some(210..=222) => 3,
+        _ => 1,
+    }
+}
+
+/// PNG 的 `pHYs` 写的横向分辨率（dpi）；不是 PNG、没有写或单位不是米时为 `None`。
+///
+/// `pHYs` 在图像数据之前，只读各块的头，遇到 `IDAT` 就停。
+fn png_dpi(bytes: &[u8]) -> Option<u32> {
+    let mut at = bytes.strip_prefix(b"\x89PNG\r\n\x1a\n").map(|_| 8)?;
+    while let Some(head) = bytes.get(at..at + 8) {
+        let len = u32::from_be_bytes(head[..4].try_into().ok()?) as usize;
+        let kind = &head[4..8];
+        if kind == b"IDAT" {
+            return None;
+        }
+        if kind == b"pHYs" {
+            let data = bytes.get(at + 8..at + 8 + 9)?;
+            let ppm = u32::from_be_bytes(data[..4].try_into().ok()?);
+            return (data[8] == 1).then(|| (ppm as f64 * 0.0254).round() as u32);
+        }
+        at = at.checked_add(12 + len)?;
+    }
+    None
 }
 
 /// 按内容识别格式并解码内存中的一张图片 `bytes`（docx 等文档包中的图片）。
@@ -167,6 +209,7 @@ pub fn load_bytes(bytes: &[u8]) -> Result<Picture, String> {
         file_size: bytes.len() as u64,
         source: Source::Raster(pixels),
         transparent,
+        density: density(None, bytes),
     })
 }
 

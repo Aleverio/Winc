@@ -114,6 +114,7 @@ impl App {
                 MenuCommand::Table(op) => {
                     self.live_table_tool(op);
                 }
+                MenuCommand::ImageWidth(percent) => self.resize_image_to(percent),
                 _ => {}
             },
             MenuTarget::Terminal(block) => self.run_terminal_command(command, block),

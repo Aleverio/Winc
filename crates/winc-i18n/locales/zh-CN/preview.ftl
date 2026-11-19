@@ -55,6 +55,8 @@ preview-svg-missing-text-path = 沿路径排列的文字
 ## Markdown 预览
 
 preview-markdown-image-alt = 图片
+preview-markdown-diagram-expand = 展开全部
+preview-markdown-diagram-collapse = 收起
 preview-markdown-code-copied = 已复制代码
 preview-markdown-link-hint = { $key } 单击打开
 preview-markdown-heading-not-found = 未在文档中找到此标题

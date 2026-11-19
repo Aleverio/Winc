@@ -118,6 +118,83 @@ fn the_status_bar_counts_words_in_markdown() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// 可编辑的预览中拖动图片右边的把手或用右键菜单调整大小：写成 `<img width>`，一步撤销；
+/// 「原始大小」改回 `![](…)`。改的是拖动的那张图；光标留在原处，所在的块不换成原文。
+#[test]
+fn images_resize_by_dragging_the_handle_or_from_the_menu() {
+    use winit::event::MouseButton;
+    let dir = sample_folder("md-image-resize");
+    let png = winc_editor::paste::encode_png(400, 200, &[90; 400 * 200 * 4]).unwrap();
+    std::fs::write(dir.join("wide.png"), png).unwrap();
+    let path = dir.join("LIVE.md");
+    let text = "<p align=\"center\">\n  <img src=\"wide.png\" alt=\"logo\" width=\"128\" />\n</p>\n\n\
+        前文\n\n<p align=\"center\">\n  <a href=\"https://winc.si\"><img src=\"wide.png\" \
+        alt=\"下载\" width=\"300\"></a>\n</p>\n\n![图](wide.png)\n\n后文\n";
+    std::fs::write(&path, text).unwrap();
+    let mut app = app_with(&path, false);
+    paint(&mut app);
+    app.set_preview_mode(PreviewMode::Preview);
+    settle(&mut app);
+    let [_, button, _] = app.hits.markdown_images[..] else {
+        panic!("画出了三张可调整的图片");
+    };
+    assert_eq!(button.rect.w, 300.0);
+
+    // 居中的图两边一起变：把手跟着鼠标往左 80，宽度少 160。
+    let handle = button.handle().unwrap();
+    let (x, y) = (handle.x + handle.w / 2.0, handle.y + handle.h / 2.0);
+    app.on_mouse_move(x, y);
+    paint(&mut app);
+    shoot(&mut app, "md-image-handle");
+    app.on_mouse_down(MouseButton::Left);
+    app.on_mouse_move(x - 80.0, y);
+    paint(&mut app);
+    shoot(&mut app, "md-image-resizing");
+    app.on_mouse_up(MouseButton::Left);
+    let changed = "<img src=\"wide.png\" alt=\"下载\" width=\"140\">";
+    assert!(doc_text(&app).contains(changed), "{}", doc_text(&app));
+    assert!(doc_text(&app).contains("alt=\"logo\" width=\"128\""));
+    settle(&mut app);
+    assert!(!app.live_caret_shown());
+    assert_eq!(app.hits.markdown_images[1].rect.w, 140.0);
+
+    // 右键菜单按正文宽度的比例；「原始大小」改回 Markdown 的写法，每次只占一步撤销。
+    let image = app.hits.markdown_images[2].rect;
+    let center = (image.x + image.w / 2.0, image.y + image.h / 2.0);
+    right_click(&mut app, center);
+    use crate::app::input::context_menu::MenuCommand;
+    assert!(menu_commands(&app).contains(&(MenuCommand::ImageWidth(50), true)));
+    app.run_menu_command(MenuCommand::ImageWidth(50));
+    assert!(doc_text(&app).contains("<img src=\"wide.png\" alt=\"图\" width=\"50%\">"));
+    settle(&mut app);
+    right_click(&mut app, center);
+    app.run_menu_command(MenuCommand::ImageWidth(0));
+    assert!(doc_text(&app).contains("\n![图](wide.png)\n"));
+    app.run(winc_editor::Command::Undo);
+    assert!(doc_text(&app).contains("width=\"50%\""));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 粘贴的图片按设置存到图片目录、取设置的名字，链接写成相对文档的路径。
+#[test]
+fn pasted_images_follow_the_folder_and_name_settings() {
+    let (mut app, dir) = source_doc("md-paste-image", "");
+    app.paste_image(b"one");
+    assert_eq!(marked(&app), "![[image]](image.png)");
+    assert!(dir.join("image.png").is_file());
+
+    app.config.markdown_image_folder = Some("${filename}.assets".into());
+    app.config.markdown_image_name = Some("${filename}-shot".into());
+    put_caret(&mut app, "png)", true);
+    app.run(winc_editor::Command::Insert("\n".into()));
+    app.paste_image(b"two");
+    let pasted = "![image](image.png)\n![[NOTES-shot]](NOTES.assets/NOTES-shot.png)";
+    assert_eq!(marked(&app), pasted);
+    let saved = dir.join("NOTES.assets/NOTES-shot.png");
+    assert_eq!(std::fs::read(saved).unwrap(), b"two");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// 在 `](` 之后输入时列出目录里的文件：按输入筛选，图片只列图片；回车写入相对路径并补上 `)`，
 /// Esc 关掉后同一个地址里不再列出。
 #[test]
@@ -134,9 +211,15 @@ fn link_paths_are_suggested_while_typing() {
         app.run(winc_editor::Command::Insert(text.into()));
         app.track_suggest();
     };
+    use crate::app::preview::markdown::suggest::Hit;
     let listed = |app: &App| -> Vec<String> {
         let hits = &app.preview.markdown.suggest.hits;
-        hits.iter().map(|(path, _)| path.clone()).collect()
+        (hits.iter())
+            .map(|hit| match hit {
+                Hit::File(path, _) => path.clone(),
+                Hit::Heading(_, _, slug) => format!("#{slug}"),
+            })
+            .collect()
     };
 
     typed(&mut app, "见 [指南](gui");
@@ -165,6 +248,17 @@ fn link_paths_are_suggested_while_typing() {
     put_caret(&mut app, "guide", true);
     app.track_suggest();
     assert!(app.preview.markdown.suggest.at.is_none());
+
+    // 地址以 `#` 开头时列出本文的标题，写入锚点。
+    typed(&mut app, "\n\n## 安装步骤\n\n见 [安装](#安装");
+    assert_eq!(listed(&app), ["#安装步骤"]);
+    paint(&mut app);
+    assert!(app.suggest_key(&Key::Named(NamedKey::Enter)));
+    assert!(
+        marked(&app).contains("见 [安装](#安装步骤)|"),
+        "{}",
+        marked(&app)
+    );
 
     // 输入改变后选中回到第一项。
     typed(&mut app, "\n[](");
@@ -353,5 +447,117 @@ fn clicking_back_and_forth_does_not_drift() {
     }
     assert_eq!(seen[0..2], seen[2..4], "{seen:?}");
     assert_eq!(seen[0..2], seen[6..8], "{seen:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 很高的 mermaid 图：先缩小字号，缩到下限仍然太高时只显示上面一截，点「展开全部」显示整张，
+/// 再点「收起」。
+#[test]
+fn tall_diagrams_shrink_then_fold_until_expanded() {
+    let nodes: String = (0..60)
+        .map(|i| format!("    n{i}[第 {i} 步] --> n{}\n", i + 1))
+        .collect();
+    let text = format!("# 流程\n\n```mermaid\nflowchart TD\n{nodes}```\n\n尾\n");
+    let (mut app, dir) = live_doc("md-tall", &text);
+    let height = |app: &App| {
+        app.preview.markdown.layout.as_ref().unwrap().blocks[1]
+            .1
+            .height
+    };
+    let cap = (app.preview.markdown.area.h * 0.66).round().max(320.0);
+    let folded = height(&app);
+    assert!(folded <= cap + 40.0, "{folded} > {cap}");
+    shoot(&mut app, "md-tall");
+    let link = |app: &App| {
+        (app.hits.markdown_links.iter())
+            .find(|(_, url)| url.starts_with(winc_typeset::DETAILS))
+            .map(|(rect, _)| *rect)
+            .unwrap()
+    };
+    let rect = link(&app);
+    super::click(&mut app, (rect.x + rect.w / 2.0, rect.y + rect.h / 2.0));
+    settle(&mut app);
+    let open = height(&app);
+    assert!(open > folded * 2.0, "{open} <= {folded}");
+    // 展开后底部是「收起」，点了回到收起的样子。
+    app.preview.markdown.scroll_to(open);
+    settle(&mut app);
+    shoot(&mut app, "md-tall-open");
+    let rect = link(&app);
+    super::click(&mut app, (rect.x + rect.w / 2.0, rect.y + rect.h / 2.0));
+    settle(&mut app);
+    assert_eq!(height(&app), folded);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 视口上方的图片读好、高度从 0 变成图片的高度时，视口顶边的内容不动。
+#[test]
+fn an_image_loading_above_keeps_the_view_still() {
+    let dir = sample_folder("md-image-load");
+    let png = winc_editor::paste::encode_png(40, 300, &[200; 40 * 300 * 4]).unwrap();
+    std::fs::write(dir.join("tall.png"), png).unwrap();
+    let paragraphs: String = (0..80).map(|i| format!("第 {i} 段\n\n")).collect();
+    let path = dir.join("LIVE.md");
+    std::fs::write(&path, format!("![图](tall.png)\n\n{paragraphs}")).unwrap();
+    let mut app = app_with(&path, false);
+    paint(&mut app);
+    app.set_preview_mode(PreviewMode::Preview);
+    settle(&mut app);
+    let image = app.preview.markdown.images.keys().next().cloned().unwrap();
+    // 先当作图片只有 1 像素高（还没读到大小时差不多是这样），之后换回真实的大小。
+    let set_height = |app: &mut App, h: u32| {
+        if let Some(winc_typeset::ImageSlot::Ready { height, .. }) =
+            app.preview.markdown.images.get_mut(&image)
+        {
+            *height = h;
+        }
+        app.preview.markdown.loaded.push(image.clone());
+        app.preview.markdown.images_version += 1;
+    };
+    set_height(&mut app, 1);
+    settle(&mut app);
+    let top_of = |app: &App, i: usize| {
+        let laid = app.preview.markdown.layout.as_ref().unwrap();
+        laid.tops[i] - app.preview.markdown.scroll()
+    };
+    app.preview
+        .markdown
+        .scroll_to(top_of(&app, 40) + app.preview.markdown.scroll());
+    settle(&mut app);
+    let before = top_of(&app, 40);
+    // 读好：上面多了 300 高的图，第 40 块仍在原处。
+    set_height(&mut app, 300);
+    settle(&mut app);
+    assert!(
+        (top_of(&app, 40) - before).abs() < 1.0,
+        "{} != {before}",
+        top_of(&app, 40)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 收起、展开视口里的标题时，视口顶边的内容不动。
+#[test]
+fn folding_a_heading_keeps_the_view_still() {
+    let sections: String = (0..12)
+        .map(|i| format!("## 第 {i} 节\n\n{}\n\n", "正文。".repeat(80)))
+        .collect();
+    let (mut app, dir) = live_doc("md-fold-still", &sections);
+    let top_of = |app: &App, i: usize| {
+        let laid = app.preview.markdown.layout.as_ref().unwrap();
+        laid.tops[i] - app.preview.markdown.scroll()
+    };
+    // 第 3 节的正文顶着视口顶边，第 4 节的标题在视口里。
+    app.preview
+        .markdown
+        .scroll_to(top_of(&app, 7) + app.preview.markdown.scroll() + 20.0);
+    settle(&mut app);
+    let before = top_of(&app, 7);
+    app.toggle_heading_fold("第-4-节");
+    settle(&mut app);
+    assert!((top_of(&app, 7) - before).abs() < 1.0);
+    app.toggle_heading_fold("第-4-节");
+    settle(&mut app);
+    assert!((top_of(&app, 7) - before).abs() < 1.0);
     let _ = std::fs::remove_dir_all(&dir);
 }

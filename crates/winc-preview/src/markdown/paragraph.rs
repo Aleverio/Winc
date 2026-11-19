@@ -169,18 +169,29 @@ pub fn link(text: &str, url: Option<&str>, image: bool) -> (String, std::ops::Ra
     (out, at..at)
 }
 
-/// 光标之前的一行文字 `before` 停在链接或图片的地址里时，返回地址开头的位置（字节偏移）和是否
-/// 为图片；地址已经写成网址、锚点，或光标在行内代码里时为 `None`。
+/// 链接地址要补全的内容。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Target {
+    /// 链接到的文件。
+    File,
+    /// 图片文件。
+    Image,
+    /// 本文的标题（地址以 `#` 开头）。
+    Anchor,
+}
+
+/// 光标之前的一行文字 `before` 停在链接或图片的地址里时，返回地址开头的位置（字节偏移）和要
+/// 补全什么；地址已经写成网址，或光标在行内代码里时为 `None`。
 ///
 /// 地址里还没有空白、`)` 和 `<`：写成 `<…>` 的地址和带标题的地址不补全。
-pub fn link_target(before: &str) -> Option<(usize, bool)> {
+pub fn link_target(before: &str) -> Option<(usize, Target)> {
     let open = before.rfind("](")?;
     let start = open + 2;
     let target = &before[start..];
     if target.contains(|c: char| c.is_whitespace() || matches!(c, ')' | '<' | '>')) {
         return None;
     }
-    let url = ["http:", "https:", "mailto:", "www.", "#"];
+    let url = ["http:", "https:", "mailto:", "www."];
     if url.iter().any(|p| target.starts_with(p)) {
         return None;
     }
@@ -189,5 +200,57 @@ pub fn link_target(before: &str) -> Option<(usize, bool)> {
     }
     let bracket = before[..open].rfind('[')?;
     let image = before[..bracket].ends_with('!');
-    Some((start, image))
+    let kind = match (target.starts_with('#'), image) {
+        (true, false) => Target::Anchor,
+        (true, true) => return None,
+        (false, true) => Target::Image,
+        (false, false) => Target::File,
+    };
+    Some((start, kind))
+}
+
+/// 文中的 ATX 标题（`#` 开头的一行，跳过围栏代码块里的）：级别、文字和锚点。
+///
+/// 锚点按 [`super::slug`] 生成，同名的第二个起加上 `-1`、`-2`，与预览中标题的锚点相同。
+pub fn headings<'a>(lines: impl IntoIterator<Item = &'a str>) -> Vec<(u8, String, String)> {
+    let mut out = Vec::new();
+    let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut fence: Option<(u8, usize)> = None;
+    for line in lines {
+        let line = line.trim_end_matches(['\n', '\r']);
+        let body = line.trim_start_matches(' ');
+        if line.len() - body.len() > 3 {
+            continue;
+        }
+        let mark = body.bytes().next().filter(|b| matches!(b, b'`' | b'~'));
+        if let Some(mark) = mark {
+            let run = body.bytes().take_while(|&b| b == mark).count();
+            if run >= 3 {
+                fence = match fence {
+                    Some((m, n)) if m == mark && run >= n => None,
+                    None => Some((mark, run)),
+                    open => open,
+                };
+                continue;
+            }
+        }
+        if fence.is_some() {
+            continue;
+        }
+        let level = body.bytes().take_while(|&b| b == b'#').count();
+        let rest = &body[level..];
+        if !(1..=6).contains(&level) || !(rest.is_empty() || rest.starts_with([' ', '\t'])) {
+            continue;
+        }
+        let text = rest.trim().trim_end_matches('#').trim_end().to_owned();
+        if text.is_empty() {
+            continue;
+        }
+        let slug = super::slug(&text);
+        let n = seen.entry(slug.clone()).or_default();
+        let slug = if *n == 0 { slug } else { format!("{slug}-{n}") };
+        *n += 1;
+        out.push((level as u8, text, slug));
+    }
+    out
 }

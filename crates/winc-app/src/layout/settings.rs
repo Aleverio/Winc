@@ -145,6 +145,8 @@ impl SettingsPage {
                     Setting::MarkdownShortcuts,
                     Setting::MarkdownFocus,
                     Setting::MarkdownTypewriter,
+                    Setting::MarkdownImageFolder,
+                    Setting::MarkdownImageName,
                 ]),
                 plain(vec![
                     Setting::VimMode,
@@ -346,6 +348,10 @@ pub enum Setting {
     MarkdownFocus,
     /// 编辑 Markdown 时光标所在的行停在中间（`markdown.typewriterMode`）。
     MarkdownTypewriter,
+    /// 粘贴、拖入的图片存放的目录（`markdown.imageFolder`）。
+    MarkdownImageFolder,
+    /// 粘贴的图片的文件名（`markdown.imageName`）。
+    MarkdownImageName,
     /// 定时检查更新。
     CheckUpdates,
     /// 联网的命令跟随系统的代理设置（`network.systemProxy`）。
@@ -518,7 +524,9 @@ impl Setting {
             | Setting::MarkdownLineNumbers
             | Setting::MarkdownShortcuts
             | Setting::MarkdownFocus
-            | Setting::MarkdownTypewriter => SettingsPage::Editor,
+            | Setting::MarkdownTypewriter
+            | Setting::MarkdownImageFolder
+            | Setting::MarkdownImageName => SettingsPage::Editor,
             Setting::Version
             | Setting::Updates
             | Setting::CheckUpdates
@@ -609,6 +617,8 @@ impl Setting {
             Setting::MarkdownShortcuts => t!("settings-markdown-shortcuts"),
             Setting::MarkdownFocus => t!("settings-markdown-focus"),
             Setting::MarkdownTypewriter => t!("settings-markdown-typewriter"),
+            Setting::MarkdownImageFolder => t!("settings-markdown-image-folder"),
+            Setting::MarkdownImageName => t!("settings-markdown-image-name"),
             Setting::CheckUpdates => t!("settings-check-updates"),
             Setting::Version => t!("settings-version"),
             Setting::Website => t!("settings-website"),
@@ -697,6 +707,8 @@ impl Setting {
             Setting::MarkdownShortcuts => Some(t!("settings-markdown-shortcuts-desc")),
             Setting::MarkdownFocus => Some(t!("settings-markdown-focus-desc")),
             Setting::MarkdownTypewriter => Some(t!("settings-markdown-typewriter-desc")),
+            Setting::MarkdownImageFolder => Some(t!("settings-markdown-image-folder-desc")),
+            Setting::MarkdownImageName => Some(t!("settings-markdown-image-name-desc")),
             Setting::CheckUpdates => Some(t!("settings-check-updates-desc")),
             // 绘制时换成当前的更新状态（`UpdateState`）。
             Setting::Updates => Some(t!("settings-updates-off")),
@@ -728,6 +740,14 @@ impl Setting {
             _ => None,
         };
         text.map(Cow::Borrowed)
+    }
+
+    /// 是否为直接填写的一段文字（路径、文件名），始终画成输入框，没有可选的菜单。
+    pub fn is_text(self) -> bool {
+        matches!(
+            self,
+            Setting::GitPath | Setting::MarkdownImageFolder | Setting::MarkdownImageName
+        )
     }
 
     /// 返回设置项右侧的控件种类。
@@ -788,7 +808,9 @@ impl Setting {
             Setting::FormatCommand(_)
             | Setting::FixCommand(_)
             | Setting::TerminalShell
-            | Setting::GitPath => SettingControl::Command,
+            | Setting::GitPath
+            | Setting::MarkdownImageFolder
+            | Setting::MarkdownImageName => SettingControl::Command,
             Setting::SkipOnSave
             | Setting::Language
             | Setting::BackgroundImage
@@ -1390,9 +1412,7 @@ fn row_height(
             let tile = theme_tile_size((row.w - SETTINGS_INSET * 2.0).max(0.0));
             rows * tile.1 + (rows - 1.0) * THEME_GRID_GAP + THEME_GRID_PAD * 2.0
         }
-        SettingControl::Command
-            if !matches!(setting, Setting::TerminalShell | Setting::GitPath) =>
-        {
+        SettingControl::Command if setting != Setting::TerminalShell && !setting.is_text() => {
             SETTINGS_ROW_TALL
         }
         SettingControl::Product => SETTINGS_PRODUCT_H,

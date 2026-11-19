@@ -75,11 +75,14 @@ impl Builder<'_> {
                     |key: &str| attr(key).and_then(|v| v.trim_end_matches("px").parse().ok());
                 // 图片来自 picture 时：其中的 source 声明的浅色地址优先于 img 的地址。
                 let (light, dark) = &mut self.sources;
+                // `style` 里写的宽高优先于属性，和浏览器一样。
+                let style = attr("style").map(|s| css_size(&s)).unwrap_or_default();
                 let image = Image {
                     url: light.take().or_else(|| attr("src")).unwrap_or_default(),
                     alt: attr("alt").unwrap_or_default(),
-                    width: attr("width").and_then(|v| length(&v)),
-                    height: size("height"),
+                    width: style.0.or_else(|| attr("width").and_then(|v| length(&v))),
+                    height: style.1.or_else(|| size("height")),
+                    zoom: style.2,
                     dark: dark.take(),
                 };
                 self.push_image(image);
@@ -487,7 +490,7 @@ pub(crate) fn named_entity(name: &str) -> Option<char> {
 }
 
 /// 换掉常见的 HTML 字符实体和数字实体。
-fn decode_entities(text: &str) -> String {
+pub(super) fn decode_entities(text: &str) -> String {
     if !text.contains('&') {
         return text.to_owned();
     }
@@ -534,6 +537,34 @@ fn has_flag(tag: &str, name: &str) -> bool {
 }
 
 /// HTML 的宽度属性：像素或百分比。
+/// `style` 里写的宽度、高度（像素）和缩放比例（百分数）。
+fn css_size(style: &str) -> (Option<Length>, Option<u32>, Option<u32>) {
+    let mut out = (None, None, None);
+    for decl in style.split(';') {
+        let Some((key, value)) = decl.split_once(':') else {
+            continue;
+        };
+        let value = value.trim();
+        match key.trim().to_ascii_lowercase().as_str() {
+            "width" => out.0 = length(value),
+            "height" => {
+                out.1 = (value.trim_end_matches("px").trim().parse::<f32>().ok())
+                    .filter(|px| *px >= 1.0)
+                    .map(|px| px.round() as u32);
+            }
+            "zoom" => {
+                let percent = match value.strip_suffix('%') {
+                    Some(p) => p.trim().parse::<f32>().ok(),
+                    None => value.parse::<f32>().ok().map(|z| z * 100.0),
+                };
+                out.2 = percent.filter(|p| *p > 0.0).map(|p| p.round() as u32);
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
 fn length(value: &str) -> Option<Length> {
     let value = value.trim();
     if let Some(percent) = value.strip_suffix('%') {

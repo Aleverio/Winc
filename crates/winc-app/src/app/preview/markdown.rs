@@ -32,6 +32,7 @@ pub(crate) mod laid;
 mod links;
 mod live;
 mod live_caret;
+pub(crate) mod resize;
 mod scroll;
 pub(crate) mod suggest;
 mod viewer;
@@ -215,6 +216,8 @@ pub(crate) struct MarkdownPreview {
     pub diagram: Option<DiagramView>,
     /// 鼠标所在代码块在 `codes` 中的序号。
     pub code_hover: Option<usize>,
+    /// 鼠标所在的图片（窗口坐标），显示调整大小的把手。
+    pub(crate) image_hover: Option<winc_render::Rect>,
     /// 上一帧排版的总高度（逻辑像素），滚动时据此限制范围。
     pub height: f32,
     /// 选中的文字：起点和终点（整份文字里的字符偏移，见 `laid::Laid::text`）。
@@ -277,6 +280,10 @@ pub(crate) struct MarkdownPreview {
     /// 最近一次单击放下的光标（原文字节偏移）：因此重新排版时不为保持光标不动而滚动（见
     /// `laid::old_caret`）。
     pub(crate) clicked: Option<usize>,
+    /// 右键点中的图片，菜单「图片大小」调整它。
+    pub(crate) menu_image: Option<resize::ImageAt>,
+    /// 正在拖动把手调整大小的图片。
+    pub(crate) resizing: Option<resize::Resizing>,
 }
 
 /// 淡入的项：所在顶层块的序号及块内各项的序号，按块的序号排序。
@@ -357,6 +364,7 @@ impl Default for MarkdownPreview {
             anchor_flash: None,
             diagram: None,
             code_hover: None,
+            image_hover: None,
             area: winc_render::Rect::default(),
             height: 0.0,
             selection: None,
@@ -378,6 +386,8 @@ impl Default for MarkdownPreview {
             sender,
             receiver,
             suggest: Default::default(),
+            menu_image: None,
+            resizing: None,
             folds: HashMap::new(),
             refold: false,
             clicked: None,
@@ -698,6 +708,7 @@ impl App {
                         Ok(picture) => ImageSlot::Ready {
                             width: picture.width,
                             height: picture.height,
+                            density: picture.density,
                             picture: Some(picture),
                             pixels: Vec::new(),
                             drawing: Vec::new(),
@@ -1002,6 +1013,7 @@ impl App {
         }
         self.focus = crate::app::Focus::Editor;
         if self.markdown_live() {
+            self.preview.markdown.menu_image = self.image_at(x, y);
             self.preview.markdown.menu_source =
                 crate::app::preview::markdown::laid::source_at(self, x, y);
             if let Some(source) = self.preview.markdown.menu_source

@@ -470,6 +470,15 @@ impl App {
                     MenuEntry::Separator,
                     MenuEntry::Item(MenuCommand::SelectAll, true),
                 ];
+                // 右键点在图片上时提供「图片大小」子菜单。
+                if self.preview.markdown.menu_image.is_some() {
+                    use crate::app::preview::markdown::resize::PRESETS;
+                    let sizes = PRESETS.map(|p| MenuEntry::Item(MenuCommand::ImageWidth(p), true));
+                    menu.extend([
+                        MenuEntry::Separator,
+                        MenuEntry::Submenu(t!("menu-image-size").into(), sizes.into()),
+                    ]);
+                }
                 // 光标位于表格中时提供「表格」子菜单，集中列出行、列的编辑操作。
                 if let Some(table) = self.live_table_menu() {
                     menu.extend([

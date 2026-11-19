@@ -233,6 +233,7 @@ impl App {
             Target::Suggest(row) => Hover::Suggest(row),
             Target::MarkdownToc(target) => Hover::MarkdownToc(target),
             Target::MarkdownText(Some(link)) => Hover::MarkdownLinkText(link),
+            Target::ImageHandle => Hover::ImageHandle,
             Target::MarkdownText(None) | Target::PdfThumb(_) | Target::Picture => Hover::None,
             Target::PdfTool(tool) => Hover::PdfTool(tool),
             Target::Tab(index, on_close) => Hover::Tab(index, on_close),
@@ -496,6 +497,10 @@ impl App {
         // 标题指示条和展开的标题列表覆盖在预览文字之上，先于文字判断。
         if let Some(target) = toc {
             return Target::MarkdownToc(target);
+        }
+        // 图片右下角的把手先于图片上的链接。
+        if self.image_handle_at(x, y).is_some() {
+            return Target::ImageHandle;
         }
         // 可编辑的预览中单击文字用于放置光标，便于编辑链接文本；按住 `⌘`（其他平台为 `Ctrl`）
         // 点击才打开链接。复制按钮、折叠块的标题仍然单击生效。
@@ -855,6 +860,10 @@ impl App {
 
         let icon = if let Hover::ResizeEdge(direction) = self.pointer.hover {
             resize_cursor(direction)
+        } else if matches!(self.pointer.drag, Drag::ImageResize)
+            || self.pointer.hover == Hover::ImageHandle
+        {
+            CursorIcon::ColResize
         } else if let Some(drag) = self.tree_dragging() {
             // 鼠标在文件树内但放置没有效果（目标在被拖项自身之内，或被拖项已在该目录中）时显示
             // 禁止图标；在文件树之外松开则不移动，显示普通箭头。
@@ -978,6 +987,8 @@ pub(super) enum Target {
     /// Markdown 预览中可以选择文字的区域；参数为鼠标下的链接（可编辑的预览中单击链接放置
     /// 光标，不打开它）。
     MarkdownText(Option<usize>),
+    /// 可编辑的预览中图片右下角调整大小的把手。
+    ImageHandle,
     /// 标签，参数为标签下标与是否位于关闭按钮上。
     Tab(usize, bool),
     /// 概览标尺上的改动，参数为改动块的序号。

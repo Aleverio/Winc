@@ -49,15 +49,33 @@ fn blocks_and_links_place_the_caret_where_typing_continues() {
 
 #[test]
 fn link_targets_are_found_while_typing_a_path() {
-    assert_eq!(link_target("见 [文档]("), Some((13, false)));
-    assert_eq!(link_target("![图](img/a"), Some((7, true)));
+    assert_eq!(link_target("见 [文档]("), Some((13, Target::File)));
+    assert_eq!(link_target("![图](img/a"), Some((7, Target::Image)));
+    assert_eq!(link_target("[x](#概"), Some((4, Target::Anchor)));
     // 网址、锚点、已经结束的地址和行内代码里不补全。
     assert_eq!(link_target("[x](https://a"), None);
     assert_eq!(link_target("[x](http:"), None);
     // 只写了网址的开头时仍然补全：`ma`、`ht` 也是文件名的开头。
-    assert_eq!(link_target("[x](ma"), Some((4, false)));
-    assert_eq!(link_target("[x](#a"), None);
+    assert_eq!(link_target("[x](ma"), Some((4, Target::File)));
     assert_eq!(link_target("[x](a.md) 后面"), None);
     assert_eq!(link_target("`[x](a"), None);
     assert_eq!(link_target("没有链接"), None);
+}
+
+#[test]
+fn headings_get_the_same_anchors_as_the_preview() {
+    let text = "# 概览\n\n```\n# 不是标题\n```\n## 安装 ##\n#tag\n## 安装\n";
+    let got = headings(text.lines());
+    let slugs: Vec<_> = got
+        .iter()
+        .map(|(l, t, s)| (*l, t.as_str(), s.as_str()))
+        .collect();
+    assert_eq!(
+        slugs,
+        [
+            (1, "概览", "概览"),
+            (2, "安装", "安装"),
+            (2, "安装", "安装-1")
+        ]
+    );
 }

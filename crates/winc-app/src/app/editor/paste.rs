@@ -160,8 +160,8 @@ impl App {
 
     /// 把文件 `files` 粘贴到当前文档中。
     ///
-    /// Markdown 文档中写成链接（图片写成 `![…](…)`），项目之外的图片先复制到文档旁边；其他
-    /// 文档中写成文件的绝对路径，每行一个。
+    /// Markdown 文档中写成链接（图片写成 `![…](…)`），项目之外的图片先复制到图片目录
+    /// （`markdown.imageFolder`）；其他文档中写成文件的绝对路径，每行一个。
     fn paste_files(&mut self, files: &[PathBuf]) {
         if !self.can_paste_into_document() {
             return;
@@ -177,40 +177,47 @@ impl App {
         };
 
         let root = self.editor.root().map(Path::to_path_buf);
-        let targets = match &doc_dir {
-            Some(dir) => match paste::bring_images(dir, root.as_deref(), files) {
-                Ok(targets) => targets,
-                Err(CopyError { path, error, done }) => {
-                    self.notify(
-                        NoticeKind::Error,
-                        t!(
-                            "editor-paste-copy-failed",
-                            name = display_name(&path),
-                            error = error.to_string()
-                        ),
-                    );
-                    // 失败之前复制过来的图片留在磁盘上，同样显示出来。
-                    self.files_created(done.into_iter().filter(|t| !files.contains(t)).collect());
-                    return;
+        let folder = self.markdown_image_folder();
+        let targets = match (&doc_dir, &folder) {
+            (Some(dir), Some(folder)) => {
+                match paste::bring_images(dir, folder, root.as_deref(), files) {
+                    Ok(targets) => targets,
+                    Err(CopyError { path, error, done }) => {
+                        self.notify(
+                            NoticeKind::Error,
+                            t!(
+                                "editor-paste-copy-failed",
+                                name = display_name(&path),
+                                error = error.to_string()
+                            ),
+                        );
+                        // 失败之前复制过来的图片留在磁盘上，同样显示出来。
+                        self.files_created(
+                            done.into_iter().filter(|t| !files.contains(t)).collect(),
+                        );
+                        return;
+                    }
                 }
-            },
-            None => files.to_vec(),
+            }
+            _ => files.to_vec(),
         };
-        let copied: Vec<PathBuf> = targets
+        let mut copied: Vec<PathBuf> = targets
             .iter()
             .filter(|t| !files.contains(t))
             .cloned()
             .collect();
+        // 图片目录可能是刚建的：连同目录一起刷新。
+        copied.extend(folder.filter(|f| !copied.is_empty() && doc_dir.as_ref() != Some(f)));
         let snippet = paste::markdown_links(doc_dir.as_deref(), root.as_deref(), &targets);
         self.insert_snippet(snippet);
         self.files_created(copied);
     }
 
-    /// 把剪贴板中的图片 `png` 粘贴到当前文档：存到 Markdown 文档所在的目录中，插入
-    /// `![image](image.png)` 并选中替代文字。
+    /// 把剪贴板中的图片 `png` 粘贴到当前文档：按 `markdown.imageFolder`、`markdown.imageName`
+    /// 存到图片目录中（默认为文档旁边的 `image.png`），插入 `![主名](…)` 并选中替代文字。
     ///
     /// 其他文档、尚未保存的 Markdown 文档中不能粘贴图片，提示原因。
-    fn paste_image(&mut self, png: &[u8]) {
+    pub(in crate::app) fn paste_image(&mut self, png: &[u8]) {
         let dir = match self.markdown_dir() {
             Some(Some(dir)) => dir,
             Some(None) => {
@@ -226,19 +233,34 @@ impl App {
             return;
         }
 
-        match paste::save_image(&dir, png) {
+        let Some(doc) = self.editor.active().and_then(|d| d.path.clone()) else {
+            return;
+        };
+        let folder = paste::image_folder(&doc, self.config.markdown_image_folder.as_deref());
+        let setting = self.config.markdown_image_name.as_deref();
+        let name = paste::image_name(&doc, setting, local_stamp);
+        match paste::save_image(&folder, &name, png) {
             Ok(path) => {
                 let root = self.editor.root().map(Path::to_path_buf);
                 let snippet =
                     paste::markdown_links(Some(&dir), root.as_deref(), std::slice::from_ref(&path));
                 self.insert_snippet(snippet);
-                self.files_created(vec![path]);
+                let mut created = vec![path];
+                created.extend((folder != dir).then_some(folder));
+                self.files_created(created);
             }
             Err(e) => self.notify(
                 NoticeKind::Error,
                 t!("editor-paste-image-save-failed", error = e.to_string()),
             ),
         }
+    }
+
+    /// 当前 Markdown 文档的图片目录（`markdown.imageFolder`）；文档尚未保存时为 `None`。
+    fn markdown_image_folder(&self) -> Option<PathBuf> {
+        let doc = self.editor.active()?.path.as_deref()?;
+        let setting = self.config.markdown_image_folder.as_deref();
+        Some(paste::image_folder(doc, setting))
     }
 
     /// 在光标处插入 `snippet`，并选中其中的占位文字（有时）。
@@ -345,4 +367,42 @@ impl App {
         self.relayout();
         self.request_redraw();
     }
+}
+
+/// 当前的本地时间，写成 `20261119-153012`，填进图片名的 `${date}`。
+fn local_stamp() -> String {
+    let (y, mo, d, h, mi, sec) = local_time();
+    format!("{y:04}{mo:02}{d:02}-{h:02}{mi:02}{sec:02}")
+}
+
+/// 当前的本地时间：年、月、日、时、分、秒。
+#[cfg(unix)]
+#[allow(unsafe_code)] // localtime_r
+fn local_time() -> (i32, i32, i32, i32, i32, i32) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs()) as libc::time_t;
+    let mut tm = std::mem::MaybeUninit::<libc::tm>::zeroed();
+    // SAFETY: `localtime_r` 只读 `now`、只写传入的结构体，失败时返回空指针。
+    if unsafe { libc::localtime_r(&now, tm.as_mut_ptr()).is_null() } {
+        return (1970, 1, 1, 0, 0, 0);
+    }
+    // SAFETY: 调用成功时结构体已填好。
+    let tm = unsafe { tm.assume_init() };
+    let (y, mo) = (tm.tm_year + 1900, tm.tm_mon + 1);
+    (y, mo, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec)
+}
+
+/// 当前的本地时间：年、月、日、时、分、秒。
+#[cfg(windows)]
+#[allow(unsafe_code)] // GetLocalTime
+fn local_time() -> (i32, i32, i32, i32, i32, i32) {
+    let mut t = std::mem::MaybeUninit::zeroed();
+    // SAFETY: `GetLocalTime` 只写传入的结构体，不会失败。
+    unsafe { windows_sys::Win32::System::SystemInformation::GetLocalTime(t.as_mut_ptr()) };
+    // SAFETY: 调用后结构体已填好。
+    let t: windows_sys::Win32::Foundation::SYSTEMTIME = unsafe { t.assume_init() };
+    let field = i32::from;
+    let (y, mo, d) = (field(t.wYear), field(t.wMonth), field(t.wDay));
+    (y, mo, d, field(t.wHour), field(t.wMinute), field(t.wSecond))
 }

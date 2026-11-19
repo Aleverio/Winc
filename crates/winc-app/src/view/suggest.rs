@@ -19,12 +19,18 @@ pub(super) fn draw_suggest(app: &mut App, frame: &mut Frame<'_>) {
     if suggest.at.is_none() || suggest.hits.is_empty() {
         return;
     }
+    use crate::app::preview::markdown::suggest::Hit;
+    // 文件：文件名和所在目录；标题：标题文字和级别（`H2`）。
     let rows: Vec<(String, String)> = (suggest.hits.iter())
-        .map(|(path, _)| match path.rsplit_once('/') {
-            Some((dir, name)) => (name.to_owned(), dir.to_owned()),
-            None => (path.clone(), String::new()),
+        .map(|hit| match hit {
+            Hit::File(path, _) => match path.rsplit_once('/') {
+                Some((dir, name)) => (name.to_owned(), dir.to_owned()),
+                None => (path.clone(), String::new()),
+            },
+            Hit::Heading(level, text, _) => (text.clone(), format!("H{level}")),
         })
         .collect();
+    let headings = matches!(suggest.hits.first(), Some(Hit::Heading(..)));
     let (size, small) = (app.fonts.ui, app.fonts.ui_small);
     let text_x = ROW_INSET + 8.0 + ICON_COLUMN;
     let widest = (rows.iter())
@@ -69,7 +75,8 @@ pub(super) fn draw_suggest(app: &mut App, frame: &mut Frame<'_>) {
             }
             (p.text, p.text_dim)
         };
-        let (glyph, colors) = crate::theme::file_kind(name);
+        // 标题前面是 Markdown 文件的图标，与文件一栏对齐。
+        let (glyph, colors) = crate::theme::file_kind(if headings { "a.md" } else { name });
         let icon = MenuIcon::File(glyph, colors);
         let (iw, ih) = icon.size();
         let cy = icon_center_y(app, row, size);

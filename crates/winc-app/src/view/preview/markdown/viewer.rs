@@ -176,6 +176,7 @@ fn lay_diagram(
         cell: None,
         preedit: false,
         line_numbers: false,
+        tall: f32::INFINITY,
     };
     let env = Env {
         color: cx.colors.text,

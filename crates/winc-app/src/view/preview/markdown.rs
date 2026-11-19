@@ -11,11 +11,13 @@ use winc_i18n::t;
 use winc_render::{Color, FontKind, Frame, Rect, Stroke};
 
 use crate::app::Hover;
+use crate::app::preview::markdown::resize::ImageAt;
 use crate::app::preview::markdown::{ImageSlot, TableBar, TocTarget};
 use crate::app::{App, Focus, ScrollArea};
 use crate::icons;
 use crate::theme::Palette;
 
+mod resize;
 mod viewer;
 
 pub(in crate::view) use viewer::draw_diagram_view;
@@ -77,6 +79,7 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
         images: app.preview.markdown.images_version,
         // 可编辑的预览在左侧按原文编行号，代码块里不再另编。
         numbers: app.markdown_line_numbers_on() && !app.markdown_live(),
+        tall: (area.h * TALL_SHARE).round().max(TALL_MIN),
     };
     let source = Arc::as_ptr(&parsed) as usize;
     let live = app.live_editing().then(|| app.live_leaf()).flatten();
@@ -184,7 +187,7 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
                     Some(near.clone()),
                 );
                 let y = held.map_or(top - pad, |(i, off)| {
-                    laid.tops[i] + off.min(laid.blocks[i].1.height)
+                    laid.tops[i] + off.min(room_below(&laid, i))
                 });
                 let seen = laid.blocks_in(y, y + area.h);
                 let waits = |i: usize| laid.stale.get(i).copied().unwrap_or(false);
@@ -194,9 +197,11 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
                 (reuse, window) = (Some(laid.fresh()), Some(seen));
                 kept = Some(laid.blocks);
             };
-            // 分帧排版期间保持视口顶边所在的块的屏幕位置，不受其上方的块高度变化的影响。
-            if let Some((i, off)) = held.filter(|_| was_pending || laid.pending()) {
-                let y = laid.tops[i] + off.min(laid.blocks[i].1.height) + pad;
+            // 分帧排版期间、图片读好、收起展开标题后，保持视口顶边所在的块的屏幕位置，不受其
+            // 上方的块高度变化的影响。
+            let anchored = was_pending || laid.pending() || !loaded.is_empty() || refold;
+            if let Some((i, off)) = held.filter(|_| anchored) {
+                let y = laid.tops[i] + off.min(room_below(&laid, i)) + pad;
                 app.preview.markdown.set_scroll(y);
                 still = None;
             }
@@ -273,6 +278,7 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
         })
         .filter(|(a, b)| a < b);
     let focus = app.markdown_focus();
+    let resizable = app.markdown_live();
     let md = &mut app.preview.markdown;
     let selection = md
         .selection
@@ -336,7 +342,7 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
         let fade = motion.as_ref().map_or(1.0, |m| m.clock.progress());
         let fixed = |r: &Rect| Rect::new(left + r.x, top + r.y, r.w, r.h);
         block.visible(area.y - top, area.bottom() - top, &mut shown);
-        frame.with_opacity(opacity, |frame| {
+        frame.with_fade(p.editor_bg, opacity, |frame| {
             for (k, item) in shown
                 .iter()
                 .map(|&k| (k as usize, &block.items[k as usize]))
@@ -432,8 +438,21 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
                     Item::Corners { rect, color, radii } => {
                         frame.rect_corners(at(rect), *color, *radii, area);
                     }
-                    Item::Image { rect, path, .. } => {
+                    Item::Image {
+                        rect,
+                        path,
+                        at: spot,
+                    } => {
                         let r = at(rect);
+                        // 可编辑的预览中有原文可改的图片可以调整大小。
+                        if spot.is_some() && resizable {
+                            let image = ImageAt {
+                                rect: r,
+                                block: i,
+                                item: k,
+                            };
+                            app.hits.markdown_images.push(image);
+                        }
                         let scale = frame.scale();
                         let size = ((r.w * scale).round() as u32, (r.h * scale).round() as u32);
                         let drawn = match md.images.get(path) {
@@ -543,6 +562,8 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
             chosen = Some((bar, off, false));
         }
     }
+    let small = app.fonts.ui_small;
+    resize::draw_image_resize(md, &app.hits.markdown_images, p, small, frame, area);
     // 跳转到的脚注或脚注引用铺一层强调色的底色，慢慢淡出（同标题列表点过的标题）。
     if let Some(((y, h), clock)) = md.anchor_flash {
         let alpha = 0.14 * (1.0 - clock.linear());
@@ -803,6 +824,20 @@ fn draw_heading_folds(
     }
     (lines, covered)
 }
+
+/// 第 `i` 块的上沿到下一块上沿的距离（逻辑像素）：视口顶边落在两块之间的空白里时，按它保持
+/// 视口顶边的位置。
+fn room_below(laid: &Laid, i: usize) -> f32 {
+    let top = laid.tops[i];
+    laid.tops
+        .get(i + 1)
+        .map_or(laid.blocks[i].1.height, |next| next - top)
+}
+
+/// mermaid 图最高占预览区高度的比例：再高的图缩小或收起，一屏里仍能看到图的上下文。
+const TALL_SHARE: f32 = 0.66;
+/// mermaid 图的高度上限的下限（逻辑像素）：窗口很矮时不至于把图压得太扁。
+const TALL_MIN: f32 = 320.0;
 
 /// 标题折叠箭头的大小（逻辑像素）。
 const ARROW: f32 = 8.0;

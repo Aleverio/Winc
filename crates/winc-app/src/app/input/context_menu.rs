@@ -504,6 +504,8 @@ pub enum MenuCommand {
     ///
     /// 操作名与表格工具栏共用，见 `view::preview::markdown` 的 `table_tools`。
     Table(&'static str),
+    /// 可编辑的预览中右键点中的图片：宽度改为正文宽度的百分之几，0 表示去掉写明的大小。
+    ImageWidth(u32),
 }
 
 /// 行尾菜单中可列出的行尾；CR 只在文件本来就是 CR 时才列出。
@@ -732,6 +734,13 @@ impl MenuCommand {
             MenuCommand::NewWindow => t!("cmd-new-window"),
             MenuCommand::BackgroundChoose => t!("settings-background-choose"),
             MenuCommand::BackgroundNone => t!("settings-background-none"),
+            MenuCommand::ImageWidth(percent) => match percent {
+                25 => "25%",
+                50 => "50%",
+                75 => "75%",
+                100 => "100%",
+                _ => t!("menu-image-original-size"),
+            },
             MenuCommand::TextWidth(i) => winc_config::TextWidth::ALL
                 .get(i)
                 .map_or("", |&choice| crate::layout::text_width_label(choice)),

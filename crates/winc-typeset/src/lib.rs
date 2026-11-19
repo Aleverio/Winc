@@ -25,6 +25,8 @@ pub enum ImageSlot {
         width: u32,
         /// 原图的高度（像素）。
         height: u32,
+        /// 几个像素算一个逻辑像素（见 `winc_preview::image::density`）。
+        density: u32,
         /// 解码后的图片；不再需要绘制时释放，为 `None`，需要绘制时重新读取。
         picture: Option<Arc<Picture>>,
         /// 按显示大小绘制的像素。
@@ -638,6 +640,9 @@ pub struct Cx<'a, 'f> {
     pub preedit: bool,
     /// 代码块是否在左侧显示从 1 起的行号。
     pub line_numbers: bool,
+    /// mermaid 图最高排多高（逻辑像素）：更高的图缩小字号，缩到下限仍然太高时收起，只显示上面
+    /// 一截。不限时为无穷大。
+    pub tall: f32,
 }
 
 /// 可编辑的预览中光标所在的叶子块：不排版，显示原文。

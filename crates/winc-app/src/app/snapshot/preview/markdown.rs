@@ -815,6 +815,7 @@ fn markdown_images_render_one_size_at_a_time() {
     let slot = ImageSlot::Ready {
         width: picture.width,
         height: picture.height,
+        density: 1,
         picture: Some(std::sync::Arc::new(picture)),
         pixels: Vec::new(),
         drawing: Vec::new(),

@@ -502,6 +502,8 @@ pub enum Hover {
     Suggest(usize),
     /// 可编辑的 Markdown 预览中鼠标下的链接（单击放置光标，`⌘` 单击才打开）。
     MarkdownLinkText(usize),
+    /// 可编辑的 Markdown 预览中图片右下角调整大小的把手。
+    ImageHandle,
     /// Markdown 预览左侧的标题指示条或展开的标题列表。
     MarkdownToc(crate::app::preview::markdown::TocTarget),
     /// PDF 预览右下角工具栏上的按钮。
@@ -694,6 +696,8 @@ enum Drag {
     Hex,
     /// 在 Markdown 预览中拖选文字（`App::drag_markdown`）。
     MarkdownText,
+    /// 拖动预览中图片右下角的把手调整大小（`App::drag_image_resize`）。
+    ImageResize,
     /// 在表格中拖选单元格（`App::drag_table`）。
     TableCells,
     /// 拖动图片预览中的图片（`App::drag_picture`）；`at` 是上一次的鼠标位置（窗口坐标）。

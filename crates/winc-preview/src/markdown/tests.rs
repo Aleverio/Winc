@@ -791,3 +791,23 @@ fn headings_fold_down_to_the_next_heading_of_their_level() {
         ]
     );
 }
+
+#[test]
+fn image_sizes_written_by_other_editors_are_read() {
+    let image = |text: &str| paragraph(&parse(text).blocks[0]).images[0].clone();
+    // Obsidian：替代文字末尾的 `|宽` 或 `|宽x高`。
+    let a = image("![说明|300](a.png)");
+    assert_eq!(
+        (a.alt.as_str(), a.width, a.height),
+        ("说明", Some(Length::Px(300)), None)
+    );
+    let b = image("![|120x80](a.png)");
+    assert_eq!((b.width, b.height), (Some(Length::Px(120)), Some(80)));
+    // 竖线后面不是数字时照原样留在替代文字里。
+    assert_eq!(image("![a|b](a.png)").alt, "a|b");
+    // Typora：`style` 里的缩放比例和宽高，优先于属性。
+    let c = image("<img src=\"a.png\" style=\"zoom: 50%\">");
+    assert_eq!(c.zoom, Some(50));
+    let d = image("<img src=\"a.png\" width=\"100\" style=\"width: 70%; height: 40px\">");
+    assert_eq!((d.width, d.height), (Some(Length::Percent(7000)), Some(40)));
+}
