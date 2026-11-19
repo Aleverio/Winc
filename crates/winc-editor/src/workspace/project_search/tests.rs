@@ -1072,3 +1072,24 @@ fn extra_folders_are_searched_with_their_name_in_front() {
     both.refresh_file(&other.join("lib/b.rs"), None);
     assert!(files(&both).contains(&"other/lib/b.rs"));
 }
+
+/// 依赖目录往下找两层，更深的不找；隐藏目录和依赖目录里面不再找。
+#[test]
+fn dependency_folders_are_found_two_levels_down() {
+    let dir = winc_config::files::canonicalize(scratch("dependency-folders")).unwrap();
+    for sub in [
+        "node_modules/react/node_modules",
+        "packages/app/node_modules",
+        "packages/app/src",
+        ".venv/lib",
+        ".git/node_modules",
+        "a/b/node_modules",
+    ] {
+        fs::create_dir_all(dir.join(sub)).unwrap();
+    }
+    let found = walk::dependency_folders(&dir);
+    assert_eq!(found, [dir.join(".venv"), dir.join("node_modules")]);
+    let nested = walk::dependency_folders(&dir.join("packages"));
+    assert_eq!(nested, [dir.join("packages/app/node_modules")]);
+    let _ = fs::remove_dir_all(&dir);
+}

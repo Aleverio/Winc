@@ -210,6 +210,40 @@ fn the_places_popup_stays_by_the_name_with_the_terminal_right() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// 项目里找不到定义时到被忽略的依赖目录（`node_modules`）里找，很快找到时不提示正在查找；那里也
+/// 没有时才提示找不到。
+#[test]
+fn definitions_fall_back_to_dependency_folders() {
+    let dir = winc_config::files::canonicalize(sample_folder("definition-deps")).unwrap();
+    let lib = dir.join("node_modules/left-pad");
+    std::fs::create_dir_all(&lib).unwrap();
+    std::fs::write(dir.join(".ignore"), "node_modules/\n").unwrap();
+    std::fs::write(
+        lib.join("index.js"),
+        "function leftPad(text, n) {\n  return text;\n}\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("main.js"), "leftPad('a', 2);\nmissingThing();\n").unwrap();
+    let mut app = app_with(&dir, false);
+    app.open_path(&dir.join("main.js"));
+
+    // 很快找到时直接跳过去，不留下「正在依赖目录中查找」的提示。
+    caret_on(&mut app, "leftPad", 0);
+    app.go_to_definition();
+    assert_eq!(active_name(&app), "index.js");
+    assert_eq!(selected_text(&app), "leftPad");
+    assert!(app.jumps.name_hint.is_none());
+
+    app.open_path(&dir.join("main.js"));
+    caret_on(&mut app, "missingThing", 0);
+    app.go_to_definition();
+    assert_eq!(active_name(&app), "main.js");
+    let hint = app.jumps.name_hint.as_ref().map(|h| h.text.clone());
+    let expected = winc_i18n::t!("editor-definition-not-found", name = "missingThing");
+    assert_eq!(hint, Some(expected));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn usages_skip_other_definitions_comments_and_unrelated_files() {
     let dir = winc_config::files::canonicalize(sample_folder("usages")).unwrap();

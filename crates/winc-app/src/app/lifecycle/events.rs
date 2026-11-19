@@ -800,6 +800,7 @@ impl App {
         earliest(&mut wake, self.format_progress_tick(now));
 
         earliest(&mut wake, self.log_tick(now));
+        earliest(&mut wake, self.definition_tick(now));
 
         if let Some(at) = self.frame.next_frame {
             if now >= at {

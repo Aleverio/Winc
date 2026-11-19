@@ -250,3 +250,4 @@ hex-goto-title = Go to Offset
 hex-goto-placeholder = 0x4E or 78
 hex-goto-total = { $size } in total
 editor-readonly-hex = The hex view is read-only
+editor-definition-in-dependencies = “{ $name }” isn’t defined in the project; searching dependencies…

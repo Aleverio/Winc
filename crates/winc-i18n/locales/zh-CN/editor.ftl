@@ -223,3 +223,4 @@ hex-goto-title = 转到偏移
 hex-goto-placeholder = 0x4E 或 78
 hex-goto-total = 共 { $size }
 editor-readonly-hex = 十六进制视图只能查看
+editor-definition-in-dependencies = 项目中没有「{ $name }」的定义，正在依赖目录中查找…
