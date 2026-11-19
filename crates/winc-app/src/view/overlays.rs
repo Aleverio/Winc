@@ -235,6 +235,15 @@ pub(super) fn draw_goto(app: &mut App, frame: &mut Frame<'_>) {
                     t!("workspace-goto-total", count = total),
                 )
             }
+            crate::app::PromptKind::GoToOffset => {
+                let view = app.editor.active().and_then(|d| d.hex.as_deref());
+                let size = winc_editor::size_text(view.map_or(0, |v| v.size()));
+                (
+                    t!("hex-goto-title"),
+                    t!("hex-goto-placeholder"),
+                    t!("hex-goto-total", size = size),
+                )
+            }
             crate::app::PromptKind::Stash | crate::app::PromptKind::StashFiles(_) => (
                 t!("workspace-stash-title"),
                 t!("workspace-stash-placeholder"),

@@ -270,6 +270,17 @@ impl App {
             return None;
         }
 
+        if self.hex_active() {
+            if let Some(at) = self.hex_byte_at(x, y) {
+                let inside = (self.editor.active().and_then(|d| d.hex.as_deref()))
+                    .is_some_and(|v| v.selection().contains(&at));
+                if !inside {
+                    self.hex_press(x, y);
+                    self.pointer.drag = Drag::None;
+                }
+            }
+            return self.editor.active().map(|d| d.id);
+        }
         let pos = self.pos_at(x.max(l.text.x), y)?;
         let doc = self.editor.active_mut()?;
         if !doc.shows_text() {
@@ -411,10 +422,13 @@ impl App {
                 }
                 menu
             }
-            MenuTarget::Editor(id) => {
+            MenuTarget::Editor(id) => 'editor: {
                 let Some(doc) = self.editor.document(*id) else {
                     return;
                 };
+                if let Some(view) = doc.hex.as_deref() {
+                    break 'editor hex_menu(view.size() > 0);
+                }
                 let bookmarked = doc
                     .bookmarks()
                     .lines()
@@ -574,9 +588,17 @@ impl App {
                 let Some(doc) = self.editor.document(*id) else {
                     return;
                 };
-                let reopen = doc.path.is_some() && !doc.is_large();
-                encoding_menu(reopen, |encoding| {
-                    doc.encoding.writable() && doc.can_save_with(encoding)
+                // 十六进制视图没有文本，按文件的大小判断是不是大文件。
+                let large = doc.is_large()
+                    || (doc.hex.as_deref()).is_some_and(|v| v.size() > winc_editor::LARGE_FILE);
+                let utf8_only = doc.hex.is_some() && large;
+                let reopen = |encoding| {
+                    doc.path.is_some()
+                        && (!large || utf8_only && encoding == winc_editor::Encoding::Utf8)
+                };
+                let hex = doc.path.is_some() && doc.hex.is_none();
+                encoding_menu(reopen, hex, |encoding| {
+                    doc.hex.is_none() && doc.encoding.writable() && doc.can_save_with(encoding)
                 })
             }
             MenuTarget::Language(id) => {
@@ -975,8 +997,9 @@ impl App {
                 MenuCommand::IndentSize(n) => doc.indent_size(tab_width) == n,
                 MenuCommand::LineEnding(eol) => doc.line_ending == eol,
                 MenuCommand::ReopenEncoding(i) | MenuCommand::SaveEncoding(i) => {
-                    CHOICES.get(i).is_some_and(|(e, _)| *e == doc.encoding)
+                    doc.hex.is_none() && CHOICES.get(i).is_some_and(|(e, _)| *e == doc.encoding)
                 }
+                MenuCommand::ReopenHex => doc.hex.is_some(),
                 MenuCommand::UseLanguage(i) => (winc_syntax::languages().get(i))
                     .is_some_and(|l| std::ptr::eq(*l, doc.highlighter.language())),
                 MenuCommand::UsePlainText => doc.highlighter.language().id == "text",

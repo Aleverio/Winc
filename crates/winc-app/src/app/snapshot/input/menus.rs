@@ -777,7 +777,7 @@ fn shoot_alert() {
     }
 }
 
-/// 二进制文件「仍然打开」以后，编码菜单里「通过编码重新打开」的各项可用，选了 UTF-16 LE 就按它
+/// 二进制文件「以文本打开」以后，编码菜单里「通过编码重新打开」的各项可用，选了 UTF-16 LE 就按它
 /// 显示，不再只读。
 #[test]
 fn a_binary_file_can_be_reopened_with_an_encoding() {

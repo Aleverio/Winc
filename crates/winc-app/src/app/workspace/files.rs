@@ -53,6 +53,8 @@ pub enum Pick {
 pub enum PlaceholderAction {
     /// 以文本方式打开二进制文件，只读。
     OpenAsText,
+    /// 按十六进制查看文件的字节。
+    ShowHex,
     /// 读取失败时重试。
     Retry,
     /// 用系统默认应用打开。
@@ -442,6 +444,7 @@ impl App {
 
         match action {
             PlaceholderAction::ShowSource => self.toggle_preview(),
+            PlaceholderAction::ShowHex => self.show_hex(),
             PlaceholderAction::OpenAsText | PlaceholderAction::Retry => {
                 let as_text = action == PlaceholderAction::OpenAsText;
                 // 读好后由 `poll_loads` 换入标签并提示只读的原因。

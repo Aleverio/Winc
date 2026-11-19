@@ -1374,7 +1374,7 @@ impl App {
             .editor
             .documents
             .iter()
-            .find(|d| d.path.as_deref() == Some(canonical.as_path()) && !d.is_pending());
+            .find(|d| d.path.as_deref() == Some(canonical.as_path()) && d.holds_file_text());
         if doc.is_some_and(|d| d.is_large()) {
             if !matches!(target, Target::Refresh(_)) {
                 let name = winc_editor::display_name(&path).into_owned();

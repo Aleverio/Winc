@@ -597,6 +597,7 @@ impl App {
             UserEvent::FormatterReady => self.formatter_ready(),
             UserEvent::StdinRead => self.poll_stdin(),
             UserEvent::ReopenEncoding(id, encoding) => self.reopen_with_encoding(id, encoding),
+            UserEvent::ShowHex(id) => self.show_hex_now(id),
             UserEvent::ImageReady => self.poll_images(),
             UserEvent::Terminal => self.poll_terminal(),
         }

@@ -266,7 +266,7 @@ impl std::fmt::Display for Unsupported {
 }
 
 /// 把文件大小格式化为「2.4 MB」形式的文字：不足 1 KB 时写字节数，否则按 1000 进位并保留一位小数。
-fn size_text(bytes: u64) -> String {
+pub fn size_text(bytes: u64) -> String {
     const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
     if bytes < 1000 {
         return t!("editor-size-bytes", count = bytes);
@@ -490,6 +490,8 @@ pub struct Document {
     ///
     /// 只读、没有对应的文件。
     pub log: Option<Box<crate::git::log::LogView>>,
+    /// 编辑区按十六进制显示文件的字节，而不是文本；只读，文本为空。
+    pub hex: Option<Box<crate::hex::HexView>>,
     /// 切换到预览之前的 `readonly`：SVG 的预览期间强制只读，切回源代码时恢复该值。
     readonly_before_preview: bool,
     /// 分栏预览（`PreviewMode::Split`）：文本仍然显示，右侧的预览由界面管理。
@@ -556,6 +558,8 @@ pub struct Document {
     pending: bool,
     /// 尚未读取的文档在读取时是否把二进制内容也按文本读入（「以文本方式打开」）。
     pending_as_text: bool,
+    /// 尚未读取的文档读取时是否打开成十六进制视图。
+    pending_hex: bool,
     /// 用户通过「通过编码重新打开」选的编码：之后从磁盘重新读取时按它解码，不再识别编码，也不
     /// 再判断是否二进制。
     chosen: Option<Encoding>,
@@ -608,6 +612,7 @@ impl Document {
             table: None,
             diff: None,
             log: None,
+            hex: None,
             readonly_before_preview: false,
             split: false,
             rendered: false,
@@ -638,6 +643,7 @@ impl Document {
             conflict: false,
             pending: false,
             pending_as_text: false,
+            pending_hex: false,
             chosen: None,
         }
     }
@@ -965,6 +971,7 @@ impl Document {
             _ if self.unsupported.is_some() => Some(t!("editor-readonly-unsupported")),
             _ if self.previewing() => Some(t!("editor-readonly-previewing")),
             _ if self.title.is_some() => Some(t!("editor-readonly-tab")),
+            _ if self.hex.is_some() => Some(t!("editor-readonly-hex")),
             _ if self.encoding == Encoding::Binary => Some(t!("editor-readonly-binary")),
             Content::Large(large) if large.has_overlong_lines() => {
                 Some(t!("editor-readonly-long-lines"))

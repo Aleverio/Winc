@@ -5,6 +5,7 @@
 mod area;
 mod caret;
 mod glyphs;
+mod hex;
 pub(super) mod hint;
 mod minimap;
 mod picture;
@@ -213,6 +214,10 @@ pub(super) fn draw_editor(app: &mut App, frame: &mut Frame<'_>) {
         super::git::log::draw_log(app, frame, index);
         return;
     }
+    if app.editor.documents[index].hex.is_some() {
+        hex::draw_hex(app, frame, index);
+        return;
+    }
     // 文件仍在读取（仅读取耗时较长时执行到此处）：提示正在读取的文件名。
     if app.editor.documents[index].is_pending() {
         let name = app.editor.documents[index].name().into_owned();
@@ -223,11 +228,13 @@ pub(super) fn draw_editor(app: &mut App, frame: &mut Frame<'_>) {
         use PlaceholderAction::*;
         let actions: &[(PlaceholderAction, &str)] = match reason {
             Unsupported::Binary(_) => &[
+                (ShowHex, t!("editor-show-hex")),
                 (OpenAsText, t!("editor-open-anyway")),
                 (OpenWithDefaultApp, t!("editor-open-with-default-app")),
                 (Reveal, system::reveal_label()),
             ],
             Unsupported::TooLarge(_) => &[
+                (ShowHex, t!("editor-show-hex")),
                 (OpenWithDefaultApp, t!("editor-open-with-default-app")),
                 (Reveal, system::reveal_label()),
             ],

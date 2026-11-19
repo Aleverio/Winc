@@ -492,6 +492,9 @@ impl App {
             }
             MenuCommand::Cut => self.copy(true),
             MenuCommand::Copy => self.copy(false),
+            MenuCommand::HexCopyText => self.copy_hex(true),
+            MenuCommand::SelectAll if self.hex_active() => self.select_all_hex(),
+            MenuCommand::HexGoTo => self.open_goto(),
             MenuCommand::Paste => self.paste(),
             MenuCommand::Format => self.format_active(),
             MenuCommand::FormatSelection => self.format_selection(),
