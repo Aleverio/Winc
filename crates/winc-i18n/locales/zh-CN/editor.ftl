@@ -113,7 +113,6 @@ editor-large-handed-save = 大文件不能以管理员身份保存
 editor-moved-while-saving = 文件在保存期间被移走
 editor-large-cannot-compare = 文件过大，无法比较
 editor-large-utf8-only = 文件过大，只能按 UTF-8 打开
-editor-file-is-binary = 此文件为二进制文件
 editor-file-read-only = 文件为只读
 editor-temp-file-failed = 无法创建临时文件
 editor-large-original-truncated = 原文件读取失败或已被截短，内容不完整

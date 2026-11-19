@@ -574,9 +574,7 @@ impl App {
                 let Some(doc) = self.editor.document(*id) else {
                     return;
                 };
-                let reopen = doc.path.is_some()
-                    && !doc.is_large()
-                    && doc.encoding != winc_editor::Encoding::Binary;
+                let reopen = doc.path.is_some() && !doc.is_large();
                 encoding_menu(reopen, |encoding| {
                     doc.encoding.writable() && doc.can_save_with(encoding)
                 })

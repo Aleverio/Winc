@@ -27,6 +27,8 @@ pub struct Reread {
     path: PathBuf,
     allow_binary: bool,
     encoding: Encoding,
+    /// 用户选的编码（见 `Document::chosen`）：有时按它解码。
+    chosen: Option<Encoding>,
     revision: u64,
     append: Option<append::Append>,
 }
@@ -40,12 +42,16 @@ impl Reread {
             path,
             allow_binary,
             encoding,
+            chosen,
             revision,
             append,
         } = self;
         let outcome = match append.and_then(|a| a.read(&path)) {
             Some(appended) => Outcome::Appended(appended),
-            None => Outcome::Loaded(load_with(&path, allow_binary, encoding)),
+            None => Outcome::Loaded(match chosen {
+                Some(chosen) => load_as(&path, chosen),
+                None => load_with(&path, allow_binary, encoding),
+            }),
         };
         DiskRead {
             path,
@@ -103,6 +109,8 @@ pub struct DiskTake {
     path: PathBuf,
     /// 发起时文档的编码：非 UTF-8 的文件按该编码重新解码。
     encoding: Encoding,
+    /// 用户选的编码（见 `Document::chosen`）：有时按它解码。
+    chosen: Option<Encoding>,
     /// 发起时文档的内容；可以逐行比较、按一次编辑换上新内容时为 `Some`。
     current: Option<Rope>,
     revision: u64,
@@ -111,7 +119,10 @@ pub struct DiskTake {
 impl DiskTake {
     /// 读取文件，可以逐行比较时算出改动（耗时与文件大小成正比，在后台线程上调用）。
     pub fn read(self) -> DiskTaken {
-        let loaded = load_with(&self.path, self.encoding == Encoding::Binary, self.encoding);
+        let loaded = match self.chosen {
+            Some(chosen) => load_as(&self.path, chosen),
+            None => load_with(&self.path, self.encoding == Encoding::Binary, self.encoding),
+        };
         let changes = match (&loaded, &self.current) {
             (Ok(fresh), Some(current))
                 if !matches!(fresh.encoding, Encoding::Lossy | Encoding::Binary) =>
@@ -391,6 +402,7 @@ impl Document {
         Some(DiskTake {
             path,
             encoding: self.encoding,
+            chosen: self.chosen,
             current,
             revision: self.revision,
         })
@@ -531,6 +543,7 @@ impl Document {
             path,
             allow_binary: self.encoding == Encoding::Binary,
             encoding: self.encoding,
+            chosen: self.chosen,
             revision: self.revision,
             append: self.append_source(),
         })
@@ -587,16 +600,13 @@ impl Document {
     ///
     /// # Errors
     ///
-    /// 文档没有路径、是大文件或二进制文件时返回原因（显示给用户的文字）。
+    /// 文档没有路径或是大文件时返回原因（显示给用户的文字）。二进制文件也可以按选的编码读。
     pub fn begin_reopen_with_encoding(&self, encoding: Encoding) -> Result<EncodingReread, String> {
         let Some(path) = &self.path else {
             return Err(t!("editor-file-no-path").to_owned());
         };
         if self.is_large() {
             return Err(t!("editor-large-utf8-only").to_owned());
-        }
-        if self.encoding == Encoding::Binary {
-            return Err(t!("editor-file-is-binary").to_owned());
         }
         Ok(EncodingReread {
             path: path.clone(),
@@ -618,6 +628,7 @@ impl Document {
         }
         let loaded = read.loaded.map_err(|e| e.to_string())?;
         self.replace_content(loaded);
+        self.chosen = Some(read.encoding);
         Ok(true)
     }
 
@@ -629,6 +640,7 @@ impl Document {
             return false;
         }
         self.encoding = encoding;
+        self.chosen = self.chosen.map(|_| encoding);
         true
     }
 
@@ -864,8 +876,8 @@ fn load_with(path: &Path, allow_binary: bool, prefer: Encoding) -> Result<Loaded
     }
     let head = std::mem::take(&mut opened.head);
 
-    // 大文件只支持按需读取 UTF-8；带 UTF-16 BOM 的大文件无法读取，按二进制文件处理。
-    let binary = looks_binary(&head) || (size > LARGE_FILE && utf16_bom(&head));
+    // 大文件只支持按需读取 UTF-8；UTF-16 的大文件无法读取，按二进制文件处理。
+    let binary = looks_binary(&head) || (size > LARGE_FILE && utf16_text(&head));
 
     if binary && !allow_binary {
         return Err(OpenError::Binary(size));
@@ -895,7 +907,11 @@ fn load_with(path: &Path, allow_binary: bool, prefer: Encoding) -> Result<Loaded
 
     // 合法的 UTF-8 边读边建 rope，内存中不会同时存在整个文件的另一份副本；BOM 的处理与
     // `decode` 相同。只有非 UTF-8（GBK、UTF-16 等）才把整个文件读入内存，交给 `decode` 识别编码。
-    let read = Rope::from_reader(BufReader::with_capacity(64 << 10, opened.reader()?));
+    // 不带 BOM 的 UTF-16 也可能是合法的 UTF-8（夹着 NUL）：直接整个读入识别编码。
+    let read = match utf16_unmarked(&head) {
+        Some(_) => Err(io::ErrorKind::InvalidData.into()),
+        None => Rope::from_reader(BufReader::with_capacity(64 << 10, opened.reader()?)),
+    };
     let (rope, encoding) = match read {
         Ok(mut rope) => {
             let bom = head.starts_with(&UTF8_BOM);

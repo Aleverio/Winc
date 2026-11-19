@@ -131,7 +131,6 @@ editor-large-handed-save = Large files can’t be saved as administrator
 editor-moved-while-saving = The file was moved while it was being saved
 editor-large-cannot-compare = The file is too large to compare
 editor-large-utf8-only = The file is too large; it can only be opened as UTF-8
-editor-file-is-binary = This is a binary file
 editor-file-read-only = The file is read-only
 editor-temp-file-failed = Couldn’t create a temporary file
 editor-large-original-truncated = Reading the original file failed or it was truncated; the content is incomplete

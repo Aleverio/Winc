@@ -487,8 +487,9 @@ fn reads_files_exactly_like_opening_them() {
     near_end.push(0);
     let mut past_end = vec![b'a'; 8192];
     past_end.extend_from_slice(b"\0x\n");
-    let samples: [(&str, Vec<u8>); 8] = [
+    let samples: [(&str, Vec<u8>); 9] = [
         ("plain", b"one\ntwo\n".to_vec()),
+        ("utf16-no-bom", b"o\0n\0e\0\n\0t\0w\0o\0\n\0".to_vec()),
         ("bom-crlf", b"\xEF\xBB\xBFone\r\ntwo\r\n".to_vec()),
         ("lone-cr", b"one\rtwo\rthree".to_vec()),
         ("lossy", b"caf\xE9\nok\n".to_vec()),
