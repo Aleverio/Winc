@@ -500,6 +500,8 @@ pub enum Hover {
     MarkdownLink(usize),
     /// 链接地址补全列表的第几行。
     Suggest(usize),
+    /// 格式工具栏中的按钮。
+    SelectionTool(crate::app::preview::markdown::toolbar::Tool),
     /// 可编辑的 Markdown 预览中鼠标下的链接（单击放置光标，`⌘` 单击才打开）。
     MarkdownLinkText(usize),
     /// 可编辑的 Markdown 预览中图片的把手。

@@ -35,7 +35,9 @@ mod live_caret;
 mod paste;
 pub(crate) mod resize;
 mod scroll;
+pub(crate) mod slash;
 pub(crate) mod suggest;
+pub(crate) mod toolbar;
 mod viewer;
 mod writing;
 pub(crate) use viewer::{DiagramLaid, DiagramTool, DiagramView, MAX_ZOOM, MIN_ZOOM};
@@ -281,6 +283,8 @@ pub(crate) struct MarkdownPreview {
     /// 最近一次单击放下的光标（原文字节偏移）：因此重新排版时不为保持光标不动而滚动（见
     /// `laid::old_caret`）。
     pub(crate) clicked: Option<usize>,
+    /// 鼠标选中文字后的选区，选区不变时显示格式工具栏。
+    pub(crate) toolbar: Option<(DocumentId, winc_core::Selection)>,
     /// 正文链接的检查结果。
     pub(crate) links: links::LinkChecks,
     /// 右键点击的本地图片文件，供菜单「在新标签中打开图片」使用。
@@ -420,6 +424,7 @@ impl Default for MarkdownPreview {
             receiver,
             suggest: Default::default(),
             links: Default::default(),
+            toolbar: None,
             menu_picture: None,
             menu_image: None,
             resizing: None,

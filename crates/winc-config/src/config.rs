@@ -118,6 +118,8 @@ pub struct Config {
     pub markdown_focus: Option<bool>,
     /// 编辑 Markdown 时是否让光标所在的行停在编辑区中间（打字机模式），默认为否。
     pub markdown_typewriter: Option<bool>,
+    /// 可编辑的预览中用鼠标选中文字后是否显示格式工具栏，默认为是。
+    pub markdown_selection_toolbar: Option<bool>,
     /// 粘贴、拖入 Markdown 的图片的目录，相对文档所在的目录，`${filename}` 表示文档主名；未设置
     /// 时为文档所在的目录。
     pub markdown_image_folder: Option<String>,

@@ -3,7 +3,7 @@
 use super::*;
 
 /// 粘贴处：光标所在行中光标之前、之后的文字，以及上一行是否为空（或不存在）。
-struct Spot {
+pub(super) struct Spot {
     before: String,
     after: String,
     blank_above: bool,
@@ -55,7 +55,7 @@ impl App {
         if table.is_none() && !link && !image {
             return None;
         }
-        let spot = self.paste_spot()?;
+        let spot = self.prose_spot()?;
         if let Some(table) = table {
             return Some(spot.block(&table));
         }
@@ -75,7 +75,7 @@ impl App {
     ///
     /// 只有一段文字时就地插入，有多块时单独成块。
     pub(in crate::app) fn markdown_html_paste(&mut self) -> Option<String> {
-        let spot = self.paste_spot()?;
+        let spot = self.prose_spot()?;
         let html = self.clipboard.html()?;
         let converted = winc_preview::markdown::from_html::from_html(&html);
         if !converted.rich {
@@ -103,7 +103,7 @@ impl App {
 
     /// 返回光标处的粘贴处；不是 Markdown 文档、有多个选区，或光标在代码块、公式、HTML 块、
     /// 行内代码中时为 `None`。
-    fn paste_spot(&self) -> Option<Spot> {
+    pub(super) fn prose_spot(&self) -> Option<Spot> {
         let doc = self.editor.active()?;
         if doc.preview_kind() != Some(PreviewKind::Markdown) || !doc.extra_selections().is_empty() {
             return None;

@@ -36,6 +36,8 @@ impl App {
         if event.state != ElementState::Pressed {
             return;
         }
+        // 按键后不再显示格式工具栏，鼠标重新选中时再显示。
+        self.preview.markdown.toolbar = None;
 
         let m = self.pointer.modifiers;
         let cmd = if cfg!(target_os = "macos") {

@@ -7,7 +7,6 @@ mod adopt;
 mod card;
 mod formatters;
 pub(super) mod shortcuts;
-mod text;
 
 use std::ops::RangeInclusive;
 
@@ -756,6 +755,9 @@ impl App {
             Setting::MarkdownShortcuts => self.config.markdown_shortcuts != Some(false),
             Setting::MarkdownFocus => self.config.markdown_focus == Some(true),
             Setting::MarkdownTypewriter => self.config.markdown_typewriter == Some(true),
+            Setting::MarkdownSelectionToolbar => {
+                self.config.markdown_selection_toolbar != Some(false)
+            }
             Setting::CheckUpdates => self.config.update_auto_check != Some(false),
             Setting::SystemTitleBar => self.config.ui_native_title_bar == Some(true),
             Setting::GitModule => self.git_enabled(),
@@ -825,6 +827,7 @@ impl App {
             Setting::MarkdownShortcuts => self.config.markdown_shortcuts = Some(on),
             Setting::MarkdownFocus => self.config.markdown_focus = Some(on),
             Setting::MarkdownTypewriter => self.config.markdown_typewriter = Some(on),
+            Setting::MarkdownSelectionToolbar => self.config.markdown_selection_toolbar = Some(on),
             Setting::CheckUpdates => self.config.update_auto_check = Some(on),
             Setting::SystemTitleBar => self.config.ui_native_title_bar = Some(on),
             Setting::GitModule => self.config.git_enabled = Some(on),
@@ -928,7 +931,7 @@ impl App {
         let current = match tool_setting(setting) {
             Some((task, id)) => task_commands(&self.config, task).get(id).cloned(),
             None if setting == Setting::TerminalShell => self.config.terminal_shell.clone(),
-            None if setting.is_text() => self.text_setting(setting).clone(),
+            None if setting == Setting::GitPath => self.config.git_path.clone(),
             None => self.font_setting(setting).clone(),
         };
         let mut field = TextField::default();
@@ -1042,15 +1045,12 @@ impl App {
                 self.focus = Focus::Settings;
                 self.set_terminal_shell(value);
             }
-            None if setting.is_text() => {
+            None if setting == Setting::GitPath => {
                 self.settings.editing = None;
                 self.settings.editing_original = None;
                 self.settings.error = None;
                 self.focus = Focus::Settings;
-                match setting {
-                    Setting::GitPath => self.set_git_path(value),
-                    _ => self.set_text_setting(setting, value),
-                }
+                self.set_git_path(value);
             }
             None => self.settings_commit_font(setting, value),
         }

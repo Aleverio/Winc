@@ -2,6 +2,8 @@
 //! 按已输入的文字筛选（打分与快速打开相同），图片只列出图片，选中后写入相对文档的路径；地址
 //! 以 `#` 开头时列出本文的标题，写入锚点。
 //!
+//! 在行首或空白之后输入 `/` 时列出写作命令（见 `slash`）。
+//!
 //! 输入的文字仍写入文档，列表只处理 ↑↓、回车、Tab 和 Esc。文件来自快速打开的文件表，不另外
 //! 遍历磁盘。
 
@@ -12,6 +14,8 @@ use super::*;
 
 /// 列出的文件最多几个。
 pub(crate) const SUGGEST_ROWS: usize = 8;
+/// 列表最多显示的行数；项数更多时可以滚动。
+pub(crate) const SUGGEST_VISIBLE: usize = 10;
 /// 往光标前看多少个字找 `](`：地址写在一行里，很长的一行不必整行读出。
 const LOOK_BACK: usize = 512;
 
@@ -22,13 +26,22 @@ pub(crate) enum Hit {
     File(String, PathBuf),
     /// 本文的标题：级别、文字和锚点。
     Heading(u8, String, String),
+    /// 写作命令。
+    Command(super::slash::Slash),
+}
+
+/// 补全的对象：链接地址，或 `/` 之后的命令名。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Kind {
+    Link(Target),
+    Command,
 }
 
 /// 补全地址的状态。
 #[derive(Default)]
 pub(crate) struct Suggest {
-    /// 正在补全的地址：文档、地址开头的位置（字符）和要补全什么。
-    pub(crate) at: Option<(DocumentId, usize, Target)>,
+    /// 正在补全的内容：文档、开头的位置（字符偏移）和补全的对象。
+    pub(crate) at: Option<(DocumentId, usize, Kind)>,
     /// 列出的各项，最多 [`SUGGEST_ROWS`] 个。
     pub(crate) hits: Vec<Hit>,
     /// 选中的一项。
@@ -39,6 +52,12 @@ pub(crate) struct Suggest {
     dismissed: Option<(DocumentId, usize)>,
     /// 上一次看到的文档版本：版本变了（在输入）才打开列表，只移动光标不打开。
     seen: Option<(DocumentId, u64)>,
+    /// 最近使用的命令，最近的在前。
+    pub(crate) recent: Vec<super::slash::Slash>,
+    /// 列表显示的第一项：项数多于可见行数时可以滚动，用键盘换选中项时随之滚动。
+    pub(crate) first: usize,
+    /// 滚轮累计的、不足一行的位移（逻辑像素）。
+    wheel: f32,
 }
 
 impl App {
@@ -71,7 +90,7 @@ impl App {
         }
         if !same {
             (suggest.at, suggest.selected, suggest.basis) = (Some((id, start, kind)), 0, None);
-            if kind != Target::Anchor {
+            if matches!(kind, Kind::Link(Target::File | Target::Image)) {
                 self.prepare_index();
             }
         }
@@ -83,12 +102,16 @@ impl App {
         // 输入变了时回到第一项：重新排过的列表里原来那一行是另一个文件。
         let refiltered = old.is_some_and(|(query, _)| *query != basis.0);
         let hits = match kind {
-            Target::Anchor => self.heading_hits(&basis.0),
-            Target::File | Target::Image => self.file_hits(&basis.0, kind == Target::Image),
+            Kind::Command => self.command_hits(&basis.0),
+            Kind::Link(Target::Anchor) => self.heading_hits(&basis.0),
+            Kind::Link(link) => self.file_hits(&basis.0, link == Target::Image),
         };
         let suggest = &mut self.preview.markdown.suggest;
         let selected = if refiltered { 0 } else { suggest.selected };
         suggest.selected = selected.min(hits.len().saturating_sub(1));
+        if refiltered {
+            suggest.first = 0;
+        }
         (suggest.hits, suggest.basis) = (hits, Some(basis));
     }
 
@@ -127,7 +150,7 @@ impl App {
     }
 
     /// 返回光标所在链接地址的上下文：文档、版本号、地址开头（字符偏移）、补全对象和已输入的地址。
-    fn suggest_context(&self) -> Option<(DocumentId, u64, usize, Target, String)> {
+    fn suggest_context(&self) -> Option<(DocumentId, u64, usize, Kind, String)> {
         if self.focus != Focus::Editor || !self.markdown_writing() {
             return None;
         }
@@ -140,9 +163,18 @@ impl App {
         let line = rope.char_to_line(caret);
         let from = rope.line_to_char(line).max(caret.saturating_sub(LOOK_BACK));
         let before = rope.slice(from..caret).to_string();
-        let (start, kind) = winc_preview::markdown::paragraph::link_target(&before)?;
+        let link = winc_preview::markdown::paragraph::link_target(&before);
+        let (start, kind) = match link {
+            Some((start, target)) => (start, Kind::Link(target)),
+            None => {
+                let at = winc_preview::markdown::paragraph::slash(&before)?;
+                self.prose_spot()?;
+                (at + 1, Kind::Command)
+            }
+        };
         // 补全文件需要打开的目录；没有时只补全本文的标题。
-        if kind != Target::Anchor && self.editor.root().is_none() {
+        let files = matches!(kind, Kind::Link(Target::File | Target::Image));
+        if files && self.editor.root().is_none() {
             return None;
         }
         let query = before[start..].to_owned();
@@ -171,8 +203,17 @@ impl App {
             return false;
         }
         match key {
-            Key::Named(NamedKey::ArrowDown) => suggest.selected = (suggest.selected + 1) % n,
-            Key::Named(NamedKey::ArrowUp) => suggest.selected = (suggest.selected + n - 1) % n,
+            Key::Named(NamedKey::ArrowDown | NamedKey::ArrowUp) => {
+                let down = matches!(key, Key::Named(NamedKey::ArrowDown));
+                let step = if down { 1 } else { n - 1 };
+                suggest.selected = (suggest.selected + step) % n;
+                // 选中项移出可见范围时滚动列表。
+                let (selected, shown) = (suggest.selected, SUGGEST_VISIBLE.min(n));
+                suggest.first = suggest
+                    .first
+                    .min(selected)
+                    .max((selected + 1).saturating_sub(shown));
+            }
             Key::Named(NamedKey::Enter | NamedKey::Tab) => {
                 let selected = suggest.selected;
                 self.accept_suggest(selected);
@@ -190,6 +231,38 @@ impl App {
         true
     }
 
+    /// 鼠标 `(x, y)` 在列表上、项数多于可见行数时按滚轮位移 `dy` 滚动列表，返回是否已处理。
+    pub(in crate::app) fn scroll_suggest(&mut self, (x, y): (f32, f32), dy: f32) -> bool {
+        let over = self
+            .hits
+            .suggest_card
+            .is_some_and(|card| card.contains(x, y));
+        let suggest = &mut self.preview.markdown.suggest;
+        let n = suggest.hits.len();
+        if !over {
+            return false;
+        }
+        if n <= SUGGEST_VISIBLE {
+            return true;
+        }
+        let Some(row) = self
+            .hits
+            .suggest
+            .first()
+            .map(|(r, _)| r.h)
+            .filter(|h| *h > 0.0)
+        else {
+            return true;
+        };
+        suggest.wheel -= dy;
+        let steps = (suggest.wheel / row).trunc();
+        suggest.wheel -= steps * row;
+        let first = suggest.first as isize + steps as isize;
+        suggest.first = first.clamp(0, (n - SUGGEST_VISIBLE) as isize) as usize;
+        self.request_redraw();
+        true
+    }
+
     /// 用第 `i` 项替换已输入的地址（文件写相对路径，标题写 `#锚点`），补上缺少的 `)`，
     /// 并把光标移到 `)` 之后。
     pub(in crate::app) fn accept_suggest(&mut self, i: usize) {
@@ -200,6 +273,16 @@ impl App {
         let hit = hit.clone();
         suggest.at = None;
         self.hits.suggest_card = None;
+        // 命令从 `/` 起替换。
+        if let Hit::Command(command) = hit {
+            self.run_slash(command, start.saturating_sub(1));
+            if self.markdown_live() {
+                self.preview.markdown.goal = None;
+                self.start_live_editing();
+            }
+            self.request_redraw();
+            return;
+        }
         let root = self.editor.root().map(Path::to_path_buf);
         let Some(doc) = self.editor.active().filter(|d| d.id == id) else {
             return;
@@ -211,6 +294,7 @@ impl App {
         let target = match &hit {
             Hit::File(_, file) => winc_editor::paste::link_target(dir, root.as_deref(), file),
             Hit::Heading(_, _, slug) => format!("#{slug}"),
+            Hit::Command(_) => return,
         };
         let caret = doc.selection.head.min(rope.len_chars());
         let closed = caret < rope.len_chars() && rope.char(caret) == ')';

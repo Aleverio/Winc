@@ -209,6 +209,24 @@ pub fn link_target(before: &str) -> Option<(usize, Target)> {
     Some((start, kind))
 }
 
+/// 返回光标之前的一行文字 `before` 中呼出命令列表的 `/` 的位置（字节偏移）。
+///
+/// `/` 位于行首或空白之后，其后到光标之间没有空白；位于链接地址或行内代码中时为 `None`。
+pub fn slash(before: &str) -> Option<usize> {
+    let at = before.rfind('/')?;
+    let query = &before[at + 1..];
+    let head = &before[..at];
+    if query.contains(char::is_whitespace) || query.chars().count() > SLASH_QUERY {
+        return None;
+    }
+    let free = head.is_empty() || head.ends_with(char::is_whitespace);
+    let code = head.matches('`').count() % 2 == 1;
+    (free && !code && link_target(before).is_none()).then_some(at)
+}
+
+/// `/` 之后已输入的命令名的最大长度（字符）：超过时不再视为命令。
+const SLASH_QUERY: usize = 24;
+
 /// 返回文中的 ATX 标题（不含围栏代码块中的）：级别、文字和锚点。
 ///
 /// 锚点按 [`super::slug`] 生成，同名的第二个起加上 `-1`、`-2`，与预览中的锚点相同。

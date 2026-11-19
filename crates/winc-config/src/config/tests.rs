@@ -319,6 +319,7 @@ fn round_trips_through_json() {
         markdown_shortcuts: Some(false),
         markdown_focus: Some(true),
         markdown_typewriter: Some(true),
+        markdown_selection_toolbar: Some(false),
         markdown_image_folder: Some("${filename}.assets".to_string()),
         markdown_image_name: Some("${date}".to_string()),
         update_auto_check: Some(false),

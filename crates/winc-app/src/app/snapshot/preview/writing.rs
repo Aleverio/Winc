@@ -217,6 +217,7 @@ fn link_paths_are_suggested_while_typing() {
             .map(|hit| match hit {
                 Hit::File(path, _) => path.clone(),
                 Hit::Heading(_, _, slug) => format!("#{slug}"),
+                Hit::Command(command) => format!("/{}", command.label()),
             })
             .collect()
     };
@@ -722,5 +723,154 @@ fn identical_tall_diagrams_expand_separately() {
     settle(&mut app);
     assert!(height(&app, 1) > folded * 2.0);
     assert_eq!(height(&app, 2), folded);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 行首或空白之后输入 `/` 时列出写作命令，回车执行并删去 `/命令名`。
+#[test]
+fn slash_lists_writing_commands() {
+    use crate::app::preview::markdown::slash::Slash;
+    use crate::app::preview::markdown::suggest::Hit;
+    use winit::keyboard::{Key, NamedKey};
+    let (mut app, dir) = source_doc("md-slash", "");
+    app.track_suggest();
+    let typed = |app: &mut App, text: &str| {
+        app.run(winc_editor::Command::Insert(text.into()));
+        app.track_suggest();
+    };
+    let first = |app: &App| app.preview.markdown.suggest.hits.first().cloned();
+    typed(&mut app, "/");
+    assert!(app.preview.markdown.suggest.hits.len() >= 8);
+    paint(&mut app);
+    // 选中第一行、悬停第二行，两行的底色之间留有间隙。
+    let (second, _) = app.hits.suggest[1];
+    app.on_mouse_move(second.x + 40.0, second.y + second.h / 2.0);
+    paint(&mut app);
+    shoot(&mut app, "md-slash");
+    // 空行上的标题命令写入记号。
+    typed(&mut app, "h2");
+    assert_eq!(first(&app), Some(Hit::Command(Slash::Heading(2))));
+    paint(&mut app);
+    assert!(app.suggest_key(&Key::Named(NamedKey::Enter)));
+    assert_eq!(marked(&app), "## |");
+    // 有文字的行后面插入代码块，光标在开头的围栏之后，可以输入语言。
+    typed(&mut app, "标题\n\n文字 /daima");
+    assert_eq!(first(&app), Some(Hit::Command(Slash::Code)));
+    paint(&mut app);
+    assert!(app.suggest_key(&Key::Named(NamedKey::Enter)));
+    assert_eq!(marked(&app), "## 标题\n\n文字 \n\n```|\n\n```");
+    // 路径中的 `/` 不呼出命令。
+    typed(&mut app, "见 /usr/bin");
+    assert!(
+        app.preview.markdown.suggest.hits.is_empty() || app.preview.markdown.suggest.at.is_none()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 可编辑的预览中选中文字后显示格式工具栏，按钮执行写作命令；选区改变或关闭设置后不显示。
+#[test]
+fn selecting_text_shows_the_format_toolbar() {
+    use crate::app::preview::markdown::toolbar::Tool;
+    let (mut app, dir) = live_doc("md-toolbar", "前文\n\n这是一段要强调的文字。\n");
+    let select = |app: &mut App, needle: &str| {
+        let text = doc_text(app);
+        let at = text.find(needle).unwrap();
+        let doc = app.editor.active_mut().unwrap();
+        let rope = doc.text().rope().unwrap();
+        let (a, b) = (rope.byte_to_char(at), rope.byte_to_char(at + needle.len()));
+        doc.selection = winc_core::Selection::new(a, b);
+        app.start_live_editing();
+        app.offer_selection_toolbar();
+        paint(app);
+    };
+    select(&mut app, "强调");
+    assert!(app.hits.selection_card.is_some());
+    shoot(&mut app, "md-toolbar");
+    let bold = (app.hits.selection_tools.iter())
+        .find(|(_, t)| *t == Tool::Bold)
+        .map(|(r, _)| *r)
+        .unwrap();
+    super::click(&mut app, (bold.x + bold.w / 2.0, bold.y + bold.h / 2.0));
+    paint(&mut app);
+    assert!(
+        doc_text(&app).contains("要**强调**的"),
+        "{}",
+        doc_text(&app)
+    );
+    assert!(app.hits.selection_card.is_some());
+    assert_eq!(app.active_tools(), [Tool::Bold]);
+    // 选区改变后不再显示。
+    put_caret(&mut app, "文字", true);
+    paint(&mut app);
+    assert!(app.hits.selection_card.is_none());
+    // 关闭设置后不显示。
+    app.config.markdown_selection_toolbar = Some(false);
+    select(&mut app, "前文");
+    assert!(app.hits.selection_card.is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 可编辑的预览中同样可以用 `/` 呼出写作命令。
+#[test]
+fn slash_commands_work_in_the_editable_preview() {
+    use winit::keyboard::{Key, NamedKey};
+    let (mut app, dir) = live_doc("md-slash-live", "前文\n\n");
+    put_caret(&mut app, "前文\n\n", true);
+    app.start_live_editing();
+    app.track_suggest();
+    app.run(winc_editor::Command::Insert("/yinyong".into()));
+    app.track_suggest();
+    assert!(!app.preview.markdown.suggest.hits.is_empty());
+    paint(&mut app);
+    assert!(app.suggest_key(&Key::Named(NamedKey::Enter)));
+    assert_eq!(doc_text(&app), "前文\n\n> ");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 命令列表随选中项滚动，最近用过的命令排在最前；行内公式和日期写在光标处。
+#[test]
+fn slash_list_scrolls_and_remembers_recent_commands() {
+    use crate::app::preview::markdown::slash::Slash;
+    use crate::app::preview::markdown::suggest::Hit;
+    use winit::keyboard::{Key, NamedKey};
+    let (mut app, dir) = source_doc("md-slash-more", "");
+    app.track_suggest();
+    let typed = |app: &mut App, text: &str| {
+        app.run(winc_editor::Command::Insert(text.into()));
+        app.track_suggest();
+    };
+    let press = |app: &mut App, key: NamedKey| {
+        paint(app);
+        assert!(app.suggest_key(&Key::Named(key)));
+    };
+    typed(&mut app, "/");
+    for _ in 0..12 {
+        press(&mut app, NamedKey::ArrowDown);
+    }
+    paint(&mut app);
+    assert_eq!(app.preview.markdown.suggest.first, 3);
+    shoot(&mut app, "md-slash-scroll");
+    // 滚轮在列表上滚动列表，选中项不变。
+    let card = app.hits.suggest_card.unwrap();
+    let inside = (card.x + 20.0, card.y + 20.0);
+    let target = app.scroll_target_at(inside.0, inside.1);
+    app.scroll_target_by(target, inside, false, (0.0, -1000.0));
+    assert_eq!(app.preview.markdown.suggest.first, 15);
+    assert_eq!(app.preview.markdown.suggest.selected, 12);
+    typed(&mut app, "hangnei");
+    press(&mut app, NamedKey::Enter);
+    assert_eq!(marked(&app), "$|$");
+    typed(&mut app, " /riqi");
+    press(&mut app, NamedKey::Enter);
+    let (y, m, d, ..) = crate::system::local_time();
+    let date = format!("$ {y:04}-{m:02}-{d:02}|$");
+    assert!(marked(&app).ends_with(&date), "{}", marked(&app));
+    // 最近用过的日期、行内公式排在最前。
+    typed(&mut app, "\n\n/");
+    let hits = &app.preview.markdown.suggest.hits;
+    assert_eq!(
+        hits[..2],
+        [Hit::Command(Slash::Date), Hit::Command(Slash::InlineMath)]
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

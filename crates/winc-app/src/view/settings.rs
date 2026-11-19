@@ -418,8 +418,8 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
 
     match row.setting.control() {
         SettingControl::Font => draw_field(app, frame, row, clip),
-        // 文本设置项没有选项菜单，以输入框显示。
-        SettingControl::Command if editing || row.setting.is_text() => {
+        // 「Git 程序」是填写的路径，没有可选的菜单：始终画成输入框。
+        SettingControl::Command if editing || row.setting == Setting::GitPath => {
             draw_field(app, frame, row, clip)
         }
         SettingControl::Command => {
@@ -727,11 +727,6 @@ fn draw_field(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect
         }
         Setting::TerminalShell => (None, t!("settings-terminal-shell-placeholder")),
         Setting::GitPath => (app.config.git_path.clone(), t!("settings-git-path-auto")),
-        Setting::MarkdownImageFolder => (
-            app.config.markdown_image_folder.clone(),
-            t!("settings-markdown-image-folder-default"),
-        ),
-        Setting::MarkdownImageName => (app.config.markdown_image_name.clone(), "image"),
         _ => (app.config.editor_font.clone(), t!("settings-font-default")),
     };
     // 字体输入框的文字不进入右端的下拉按钮。

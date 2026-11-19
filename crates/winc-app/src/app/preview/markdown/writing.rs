@@ -164,7 +164,7 @@ impl App {
 
     /// 选中的各行（首行、末行）；只有光标、没有选区时另给出光标在行中的位置（字节偏移）。
     /// 有多个光标时为 `None`。
-    fn selected_lines(&self) -> Option<(usize, usize, Option<usize>)> {
+    pub(super) fn selected_lines(&self) -> Option<(usize, usize, Option<usize>)> {
         let doc = self.editor.active()?;
         let rope = doc.text().rope()?;
         if !doc.extra_selections().is_empty() {
@@ -187,7 +187,13 @@ impl App {
 
     /// 把第 `first` 到 `last` 行（不含末行的换行符）换成 `text`，之后选中 `select`（`text` 中的
     /// 字节偏移）。一次撤销即可恢复。
-    fn replace_lines(&mut self, first: usize, last: usize, text: &str, select: Range<usize>) {
+    pub(super) fn replace_lines(
+        &mut self,
+        first: usize,
+        last: usize,
+        text: &str,
+        select: Range<usize>,
+    ) {
         let Some(doc) = self.editor.active() else {
             return;
         };
@@ -208,7 +214,7 @@ impl App {
     }
 
     /// 在第 `line` 行下面隔一个空行插入块 `block`，光标放在块中的 `at`（字节偏移）。
-    fn insert_below(&mut self, line: usize, block: &str, at: usize) {
+    pub(super) fn insert_below(&mut self, line: usize, block: &str, at: usize) {
         let Some(rope) = self.editor.active().and_then(|d| d.text().rope()) else {
             return;
         };
@@ -256,7 +262,7 @@ pub(crate) fn paragraph_lines(rope: &ropey::Rope, at: usize) -> (usize, usize) {
 const PARAGRAPH_LOOK: usize = 500;
 
 /// 第 `line` 行的文字，不含换行符。
-fn line_text(rope: &ropey::Rope, line: usize) -> String {
+pub(super) fn line_text(rope: &ropey::Rope, line: usize) -> String {
     let text = rope.line(line).to_string();
     text.trim_end_matches(['\n', '\r']).to_owned()
 }

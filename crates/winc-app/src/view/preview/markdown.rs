@@ -19,6 +19,7 @@ use crate::theme::Palette;
 
 mod resize;
 mod table;
+mod toolbar;
 mod viewer;
 
 use table::{draw_table_fades, draw_table_scrollbar, table_toolbar};
@@ -734,6 +735,7 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
     }
     draw_source_numbers(app, frame, area, &arrows);
     draw_broken_links(app, frame, area);
+    toolbar::draw_selection_toolbar(app, frame, area);
     draw_toc(app, frame, area, pad);
 
     // 和编辑区的滚动条一样：平时隐藏，滚动、悬停时显示，可以拖动。

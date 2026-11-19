@@ -446,6 +446,17 @@ fn draw_tooltip(app: &App, frame: &mut Frame<'_>) {
                     ),
                 }
             }
+            // 格式工具栏的按钮：名字和快捷键。
+            Hover::SelectionTool(tool) => {
+                let Some(&(rect, _)) = app.hits.selection_tools.iter().find(|(_, t)| *t == tool)
+                else {
+                    return;
+                };
+                (
+                    rect,
+                    crate::layout::with_key(tool.label(), Some(tool.action())),
+                )
+            }
             // Markdown 预览中的链接：提示地址，脚注的编号提示脚注的内容；可编辑的预览中另起一行
             // 说明怎样打开。
             Hover::MarkdownLink(i) | Hover::MarkdownLinkText(i)

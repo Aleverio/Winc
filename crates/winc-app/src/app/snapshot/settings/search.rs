@@ -70,8 +70,6 @@ fn search_finds_settings_on_every_page() {
             Setting::MarkdownShortcuts,
             Setting::MarkdownFocus,
             Setting::MarkdownTypewriter,
-            Setting::MarkdownImageFolder,
-            Setting::MarkdownImageName,
         ]
     );
 

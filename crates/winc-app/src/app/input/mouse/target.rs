@@ -231,6 +231,7 @@ impl App {
             Target::Browser => Hover::Browser,
             Target::MarkdownLink(link) => Hover::MarkdownLink(link),
             Target::Suggest(row) => Hover::Suggest(row),
+            Target::SelectionTool(tool) => Hover::SelectionTool(tool),
             Target::MarkdownToc(target) => Hover::MarkdownToc(target),
             Target::MarkdownText(Some(link)) => Hover::MarkdownLinkText(link),
             Target::ImageHandle => Hover::ImageHandle,
@@ -288,6 +289,12 @@ impl App {
             && card.contains(x, y)
         {
             return hit(&self.hits.suggest, x, y).map_or(Target::Blocked, Target::Suggest);
+        }
+        if let Some(card) = self.hits.selection_card
+            && card.contains(x, y)
+        {
+            let tool = hit(&self.hits.selection_tools, x, y);
+            return tool.map_or(Target::Blocked, Target::SelectionTool);
         }
         // 浮于编辑区之上的卡片和提示条：只响应其中的按钮，卡片的其余区域遮挡下方的部件。
         if let Some(card) = self.hits.changes_card
@@ -983,6 +990,8 @@ pub(super) enum Target {
     MarkdownLink(usize),
     /// 链接地址补全列表的一行，参数为行号。
     Suggest(usize),
+    /// 格式工具栏中的按钮。
+    SelectionTool(crate::app::preview::markdown::toolbar::Tool),
     MarkdownToc(crate::app::preview::markdown::TocTarget),
     /// Markdown 预览中可以选择文字的区域；参数为鼠标下的链接（可编辑的预览中单击链接放置
     /// 光标，不打开它）。
