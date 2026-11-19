@@ -183,6 +183,33 @@ fn definitions_and_usages_reach_added_folders() {
 
 /// 回归：光标在 `struct Item0` 上列出用法时，其他文件中各自定义的同名 `struct Item0` 被当成
 /// 用法；注释、字符串和文档中的同名文字也被列出；局部变量在整个项目中查找。
+/// 终端在右侧时，定义的浮窗仍在名字下方，不挪到编辑区正中，也不伸到终端上。
+#[cfg(unix)]
+#[test]
+fn the_places_popup_stays_by_the_name_with_the_terminal_right() {
+    let dir = navigation_folder("places-terminal-right");
+    let mut app = app_with(&dir, false);
+    app.open_path(&dir.join("main.py"));
+    crate::app::snapshot::terminal::show_terminal(&mut app, "$ ");
+    app.config.terminal_right = Some(true);
+    app.focus = Focus::Editor;
+    app.relayout();
+
+    caret_on(&mut app, "load", 0);
+    app.go_to_definition();
+    assert!(app.overlays.picker.places.is_some());
+    paint(&mut app);
+    let anchor = app.overlays.picker.places.as_ref().unwrap().anchor;
+    let (x, _) = app.anchor_point(anchor).unwrap();
+    let (picker, editor) = (app.layout.picker, app.layout.editor);
+    let right = editor.right() - crate::theme::SCROLLBAR_HIT - 8.0;
+    let near = (x - 12.0).min(right - picker.w).max(editor.x + 8.0).round();
+    assert_eq!(picker.x, near);
+    assert!(picker.right() <= editor.right());
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn usages_skip_other_definitions_comments_and_unrelated_files() {
     let dir = winc_config::files::canonicalize(sample_folder("usages")).unwrap();

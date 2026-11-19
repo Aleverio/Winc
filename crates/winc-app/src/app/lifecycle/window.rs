@@ -310,13 +310,6 @@ impl App {
             self.gutter_width(),
             status_height,
         );
-        self.place_places();
-        self.place_git_picker();
-        self.animate_picker((w, h));
-        if let Some(bottom) = self.overlays.picker.places_bottom {
-            self.layout.picker.y = bottom - self.layout.picker.h;
-        }
-
         // 差异标签：查找条放在差异的标题栏下面，不盖住标题栏右端的按钮。
         if self.layout.search.h > 0.0 && self.editor.active().is_some_and(|d| d.diff.is_some()) {
             self.layout.search.y += crate::app::diff::DIFF_HEADER;
@@ -326,6 +319,13 @@ impl App {
         self.place_window_controls();
         self.place_panes();
         self.place_editor_parts();
+        // 依附于触发位置的浮层在终端、窗格都排好以后再放。
+        self.place_places();
+        self.place_git_picker();
+        self.animate_picker((w, h));
+        if let Some(bottom) = self.overlays.picker.places_bottom {
+            self.layout.picker.y = bottom - self.layout.picker.h;
+        }
 
         self.place_outline();
         // 搜索和历史差异各有自己的列表，不能命中工作区文件树原来的区域。
