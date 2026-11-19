@@ -5,7 +5,7 @@ use super::*;
 use crate::app::scroll::set_scroll_line;
 
 impl App {
-    /// 记下鼠标所在的 Markdown 预览代码块（显示复制按钮）和图片（显示调整大小的把手）。
+    /// 记录鼠标所在的 Markdown 预览代码块和图片。
     pub(in crate::app) fn track_code_hover(&mut self, x: f32, y: f32) {
         let code = (self.hits.markdown_codes.iter()).position(|r| r.contains(x, y));
         if code != self.preview.markdown.code_hover {

@@ -1,8 +1,8 @@
 //! Markdown 中补全链接和图片的地址：在 `](` 之后输入时，在光标下方列出打开的目录里的文件，
-//! 按已输入的文字筛选（打分同快速打开），图片只列图片；选中后写入相对文档的路径。地址以 `#`
-//! 开头时列出本文的标题，写入标题的锚点。
+//! 按已输入的文字筛选（打分与快速打开相同），图片只列出图片，选中后写入相对文档的路径；地址
+//! 以 `#` 开头时列出本文的标题，写入锚点。
 //!
-//! 文字照常输入到文档里，列表只接管 ↑↓、回车、Tab 和 Esc。文件来自快速打开的文件表，不另外
+//! 输入的文字仍写入文档，列表只处理 ↑↓、回车、Tab 和 Esc。文件来自快速打开的文件表，不另外
 //! 遍历磁盘。
 
 use winc_preview::markdown::paragraph::Target;
@@ -92,7 +92,7 @@ impl App {
         (suggest.hits, suggest.basis) = (hits, Some(basis));
     }
 
-    /// 按已输入的地址 `query` 筛选打开的目录里的文件，`image` 时只列图片；不列文档自己。
+    /// 返回打开的目录中匹配 `query` 的文件，不含当前文档；`image` 为真时只返回图片。
     fn file_hits(&mut self, query: &str, image: bool) -> Vec<Hit> {
         let own = self.editor.active().and_then(|d| d.path.clone());
         let index = &mut self.overlays.picker.index;
@@ -106,12 +106,16 @@ impl App {
             .collect()
     }
 
-    /// 本文中文字或锚点含有 `query`（`#` 之后已输入的部分，不分大小写）的标题。
+    /// 返回本文中文字或锚点含有 `query`（不区分大小写）的标题。
     fn heading_hits(&self, query: &str) -> Vec<Hit> {
         let Some(rope) = self.editor.active().and_then(|d| d.text().rope()) else {
             return Vec::new();
         };
-        let lines: Vec<String> = rope.lines().map(|l| l.to_string()).collect();
+        // 只复制以 `#`、反引号、`~` 开头的行：结果只取决于标题和围栏行。
+        let lines: Vec<String> = (rope.lines())
+            .filter(|l| matches!(l.chars().find(|&c| c != ' '), Some('#' | '`' | '~')))
+            .map(|l| l.to_string())
+            .collect();
         let query = query.trim_start_matches('#').to_lowercase();
         (winc_preview::markdown::paragraph::headings(lines.iter().map(String::as_str)).into_iter())
             .filter(|(_, text, slug)| {
@@ -122,7 +126,7 @@ impl App {
             .collect()
     }
 
-    /// 光标停在链接地址里时：文档、版本、地址开头（字符位置）、要补全什么和已输入的地址。
+    /// 返回光标所在链接地址的上下文：文档、版本号、地址开头（字符偏移）、补全对象和已输入的地址。
     fn suggest_context(&self) -> Option<(DocumentId, u64, usize, Target, String)> {
         if self.focus != Focus::Editor || !self.markdown_writing() {
             return None;
@@ -137,7 +141,7 @@ impl App {
         let from = rope.line_to_char(line).max(caret.saturating_sub(LOOK_BACK));
         let before = rope.slice(from..caret).to_string();
         let (start, kind) = winc_preview::markdown::paragraph::link_target(&before)?;
-        // 文件来自打开的目录；没有打开目录时只补全本文的标题。
+        // 补全文件需要打开的目录；没有时只补全本文的标题。
         if kind != Target::Anchor && self.editor.root().is_none() {
             return None;
         }
@@ -186,8 +190,8 @@ impl App {
         true
     }
 
-    /// 写入第 `i` 项：文件写相对文档的路径，标题写 `#锚点`。换掉已输入的部分，后面没有 `)`
-    /// 时补上，光标放在 `)` 之后。
+    /// 用第 `i` 项替换已输入的地址（文件写相对路径，标题写 `#锚点`），补上缺少的 `)`，
+    /// 并把光标移到 `)` 之后。
     pub(in crate::app) fn accept_suggest(&mut self, i: usize) {
         let suggest = &mut self.preview.markdown.suggest;
         let (Some((id, start, _)), Some(hit)) = (suggest.at, suggest.hits.get(i)) else {

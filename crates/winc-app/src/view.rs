@@ -461,7 +461,7 @@ fn draw_tooltip(app: &App, frame: &mut Frame<'_>) {
                     None if url.starts_with("#fnref-") => return,
                     None => url.clone(),
                 };
-                // 打不开的链接另起一行写原因。
+                // 无法打开的链接另起一行显示原因。
                 let text = match app.preview.markdown.links.get(url) {
                     Some(broken) => format!("{text}\n{}", broken.reason()),
                     None => text,

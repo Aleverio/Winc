@@ -118,8 +118,7 @@ fn the_status_bar_counts_words_in_markdown() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// 可编辑的预览中拖动图片右边的把手或用右键菜单调整大小：写成 `<img width>`，一步撤销；
-/// 「原始大小」改回 `![](…)`。改的是拖动的那张图；光标留在原处，所在的块不换成原文。
+/// 拖动把手或使用右键菜单调整图片大小时，只改写该图片的原文，光标位置和显示方式不变。
 #[test]
 fn images_resize_by_dragging_the_handle_or_from_the_menu() {
     use winit::event::MouseButton;
@@ -140,7 +139,7 @@ fn images_resize_by_dragging_the_handle_or_from_the_menu() {
     };
     assert_eq!(button.rect.w, 300.0);
 
-    // 居中的图两边一起变：把手跟着鼠标往左 80，宽度少 160。
+    // 居中的图片两侧同时改变：把手左移 80，宽度减少 160。
     let handle = button.handle().unwrap();
     let (x, y) = (handle.x + handle.w / 2.0, handle.y + handle.h / 2.0);
     app.on_mouse_move(x, y);
@@ -158,7 +157,7 @@ fn images_resize_by_dragging_the_handle_or_from_the_menu() {
     assert!(!app.live_caret_shown());
     assert_eq!(app.hits.markdown_images[1].rect.w, 140.0);
 
-    // 右键菜单按正文宽度的比例；「原始大小」改回 Markdown 的写法，每次只占一步撤销。
+    // 右键菜单写入百分比宽度，「原始大小」恢复 Markdown 写法，每次占一步撤销。
     let image = app.hits.markdown_images[2].rect;
     let center = (image.x + image.w / 2.0, image.y + image.h / 2.0);
     right_click(&mut app, center);
@@ -175,7 +174,7 @@ fn images_resize_by_dragging_the_handle_or_from_the_menu() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// 粘贴的图片按设置存到图片目录、取设置的名字，链接写成相对文档的路径。
+/// 粘贴的图片按设置的目录和名字保存，链接写成相对文档的路径。
 #[test]
 fn pasted_images_follow_the_folder_and_name_settings() {
     let (mut app, dir) = source_doc("md-paste-image", "");
@@ -450,8 +449,7 @@ fn clicking_back_and_forth_does_not_drift() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// 很高的 mermaid 图：先缩小字号，缩到下限仍然太高时只显示上面一截，点「展开全部」显示整张，
-/// 再点「收起」。
+/// 高于上限的 mermaid 图收起显示，可以展开和收起。
 #[test]
 fn tall_diagrams_shrink_then_fold_until_expanded() {
     let nodes: String = (0..60)
@@ -479,7 +477,7 @@ fn tall_diagrams_shrink_then_fold_until_expanded() {
     settle(&mut app);
     let open = height(&app);
     assert!(open > folded * 2.0, "{open} <= {folded}");
-    // 展开后底部是「收起」，点了回到收起的样子。
+    // 展开后点击「收起」恢复收起时的高度。
     app.preview.markdown.scroll_to(open);
     settle(&mut app);
     shoot(&mut app, "md-tall-open");
@@ -490,7 +488,7 @@ fn tall_diagrams_shrink_then_fold_until_expanded() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// 视口上方的图片读好、高度从 0 变成图片的高度时，视口顶边的内容不动。
+/// 视口上方的图片加载完成后，视口顶边的内容位置不变。
 #[test]
 fn an_image_loading_above_keeps_the_view_still() {
     let dir = sample_folder("md-image-load");
@@ -504,7 +502,7 @@ fn an_image_loading_above_keeps_the_view_still() {
     app.set_preview_mode(PreviewMode::Preview);
     settle(&mut app);
     let image = app.preview.markdown.images.keys().next().cloned().unwrap();
-    // 先当作图片只有 1 像素高（还没读到大小时差不多是这样），之后换回真实的大小。
+    // 先把图片高度设为 1 像素，之后恢复实际高度。
     let set_height = |app: &mut App, h: u32| {
         if let Some(winc_typeset::ImageSlot::Ready { height, .. }) =
             app.preview.markdown.images.get_mut(&image)
@@ -525,7 +523,7 @@ fn an_image_loading_above_keeps_the_view_still() {
         .scroll_to(top_of(&app, 40) + app.preview.markdown.scroll());
     settle(&mut app);
     let before = top_of(&app, 40);
-    // 读好：上面多了 300 高的图，第 40 块仍在原处。
+    // 上方的图片高度增加 300 后，第 40 块的位置不变。
     set_height(&mut app, 300);
     settle(&mut app);
     assert!(
@@ -536,7 +534,7 @@ fn an_image_loading_above_keeps_the_view_still() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// 收起、展开视口里的标题时，视口顶边的内容不动。
+/// 收起、展开视口中的标题时，视口顶边的内容位置不变。
 #[test]
 fn folding_a_heading_keeps_the_view_still() {
     let sections: String = (0..12)
@@ -547,7 +545,7 @@ fn folding_a_heading_keeps_the_view_still() {
         let laid = app.preview.markdown.layout.as_ref().unwrap();
         laid.tops[i] - app.preview.markdown.scroll()
     };
-    // 第 3 节的正文顶着视口顶边，第 4 节的标题在视口里。
+    // 第 3 节的正文位于视口顶边，第 4 节的标题位于视口中。
     app.preview
         .markdown
         .scroll_to(top_of(&app, 7) + app.preview.markdown.scroll() + 20.0);
@@ -562,7 +560,7 @@ fn folding_a_heading_keeps_the_view_still() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// 打不开的链接（文件不存在、文中没有那个标题）画上虚下划线，悬停时写明原因；网址不查。
+/// 指向不存在的文件或标题的链接标为失效，网址不检查。
 #[test]
 fn broken_links_are_marked() {
     use crate::app::preview::markdown::links::Broken;
@@ -577,14 +575,14 @@ fn broken_links_are_marked() {
     assert_eq!(check(&mut app, "#标题"), None);
     assert_eq!(check(&mut app, "#没有"), Some(Broken::Heading));
     assert_eq!(check(&mut app, "https://winc.si/x"), None);
-    // 文件建好、磁盘的变化处理过之后不再标出。
+    // 文件创建并处理磁盘变化后，链接不再标为失效。
     std::fs::write(dir.join("missing.md"), "").unwrap();
     app.preview.markdown.links.clear();
     assert_eq!(check(&mut app, "missing.md"), None);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// 右键菜单「在新标签中打开图片」：本地图片在新标签中打开，包在链接里的图片也有这一项。
+/// 右键菜单「在新标签中打开图片」打开本地图片，包括包在链接中的图片。
 #[test]
 fn images_open_in_a_tab_from_the_menu() {
     use crate::app::input::context_menu::MenuCommand;
@@ -613,8 +611,7 @@ fn images_open_in_a_tab_from_the_menu() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// HTML 块换成原文、换回排版时，渲染结果和下面的块一起滑动：过渡的第一帧还在原来的位置，
-/// 不在块里跳一下。
+/// HTML 块显示原文和恢复排版时，渲染结果在过渡的第一帧位于原来的位置。
 #[test]
 fn source_and_rendering_swap_without_a_jump() {
     let dir = sample_folder("md-swap-slide");
@@ -631,28 +628,99 @@ fn source_and_rendering_swap_without_a_jump() {
     let image_y = |app: &App| app.hits.markdown_pictures[0].0.y;
     let rendered = image_y(&app);
 
-    // 点图片：块换成原文，图片排到代码框下面；第一帧图片还在原处，过渡完到了新位置。
+    // 点击图片后块显示原文：第一帧图片位于原处，过渡结束时位于代码框下方。
     app.preview.markdown.frozen = Some(std::time::Duration::ZERO);
     let image = app.hits.markdown_pictures[0].0;
     super::click(&mut app, (image.x + 10.0, image.y + 10.0));
     paint(&mut app);
     assert_eq!(image_y(&app), rendered);
-    // 冻住的时钟不走：去掉过渡，看最后的位置。
+    // 冻结的时钟不前进：移除过渡后检查最终位置。
     app.preview.markdown.frozen = None;
     app.preview.markdown.motion = None;
     settle(&mut app);
     let below = image_y(&app);
     assert!(below > rendered + 20.0, "{below} <= {rendered}");
 
-    // 点别处：换回排版；第一帧图片还在代码框下面，过渡完回到原处。
+    // 光标移到别处后恢复排版：第一帧图片位于代码框下方，过渡结束时回到原处。
     app.preview.markdown.frozen = Some(std::time::Duration::ZERO);
     put_caret(&mut app, "后文", true);
     paint(&mut app);
     assert_eq!(image_y(&app), below);
-    // 冻住的时钟不走：去掉过渡，看最后的位置。
+    // 冻结的时钟不前进：移除过渡后检查最终位置。
     app.preview.markdown.frozen = None;
     app.preview.markdown.motion = None;
     settle(&mut app);
     assert_eq!(image_y(&app), rendered);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 回归：HTML 块中前一张图片无法加载时，调整的仍是右键点击的图片。
+#[test]
+fn resizing_picks_the_clicked_image_when_an_earlier_one_fails() {
+    use crate::app::input::context_menu::MenuCommand;
+    let dir = sample_folder("md-image-resize-failed");
+    let png = winc_editor::paste::encode_png(200, 80, &[90; 200 * 80 * 4]).unwrap();
+    std::fs::write(dir.join("logo.png"), png).unwrap();
+    let path = dir.join("LIVE.md");
+    let text = "<p align=\"center\">\n  <img src=\"missing.png\" alt=\"无\">\n  \
+        <img src=\"logo.png\" alt=\"标志\">\n</p>\n\n后文\n";
+    std::fs::write(&path, text).unwrap();
+    let mut app = app_with(&path, false);
+    paint(&mut app);
+    app.set_preview_mode(PreviewMode::Preview);
+    settle(&mut app);
+    let [image] = app.hits.markdown_images[..] else {
+        panic!("只画出了读得出的那张");
+    };
+    let center = (image.rect.x + 20.0, image.rect.y + 20.0);
+    right_click(&mut app, center);
+    app.run_menu_command(MenuCommand::ImageWidth(50));
+    let changed =
+        "<img src=\"missing.png\" alt=\"无\">\n  <img src=\"logo.png\" alt=\"标志\" width=\"50%\">";
+    assert!(doc_text(&app).contains(changed), "{}", doc_text(&app));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 指向收起的一节中标题的链接不标为失效，跳转时展开该节。
+#[test]
+fn links_into_folded_sections_unfold_them() {
+    let text = "# 总\n\n见[子](#子)\n\n## 节\n\n### 子\n\n内容\n\n## 后\n\n尾\n";
+    let (mut app, dir) = live_doc("md-fold-anchor", text);
+    app.toggle_heading_fold("节");
+    settle(&mut app);
+    assert!(crate::app::preview::markdown::laid::anchor_box(&app, "子").is_none());
+    assert_eq!(app.check_markdown_link("#子"), None);
+    app.jump_to_anchor("子");
+    settle(&mut app);
+    let id = app.editor.active().unwrap().id;
+    assert!(!app.preview.markdown.folds[&id].contains("节"));
+    assert!(crate::app::preview::markdown::laid::anchor_box(&app, "子").is_some());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 内容相同的两张高图各自记录开合状态。
+#[test]
+fn identical_tall_diagrams_expand_separately() {
+    let nodes: String = (0..60)
+        .map(|i| format!("    n{i}[第 {i} 步] --> n{}\n", i + 1))
+        .collect();
+    let chart = format!("```mermaid\nflowchart TD\n{nodes}```\n");
+    let text = format!("# 流程\n\n{chart}\n{chart}\n尾\n");
+    let (mut app, dir) = live_doc("md-tall-twins", &text);
+    let height = |app: &App, i: usize| {
+        app.preview.markdown.layout.as_ref().unwrap().blocks[i]
+            .1
+            .height
+    };
+    let folded = height(&app, 1);
+    assert_eq!(height(&app, 2), folded);
+    let link = (app.hits.markdown_links.iter())
+        .find(|(_, url)| url.starts_with(winc_typeset::DETAILS))
+        .map(|(rect, _)| *rect)
+        .unwrap();
+    super::click(&mut app, (link.x + link.w / 2.0, link.y + link.h / 2.0));
+    settle(&mut app);
+    assert!(height(&app, 1) > folded * 2.0);
+    assert_eq!(height(&app, 2), folded);
     let _ = std::fs::remove_dir_all(&dir);
 }

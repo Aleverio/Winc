@@ -29,8 +29,7 @@ use winc_typeset::Item;
 use crate::app::preview::markdown::laid::*;
 use crate::layout::drawn_scroll;
 
-/// 以 `(left, top)` 为块的左上角画 `items` 中的底色、文字和线条，超出 `clip` 的不画：换回
-/// 排版的块原来的原文淡出时用。
+/// 以 `(left, top)` 为块的左上角绘制 `items` 中的底色和文字，裁剪到 `clip`。
 fn draw_plain(frame: &mut Frame<'_>, items: &[Item], (left, top): (f32, f32), clip: Rect) {
     let at = |r: &Rect| Rect::new(left + r.x, top + r.y, r.w, r.h);
     for item in items {
@@ -69,15 +68,14 @@ fn draw_plain(frame: &mut Frame<'_>, items: &[Item], (left, top): (f32, f32), cl
     }
 }
 
-/// 打不开的正文链接（文件不存在、文中没有那个标题）下面画一道错误色的虚线。
+/// 在指向不存在的文件或标题的链接下方绘制错误色的虚线。
 fn draw_broken_links(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
     let color = app.palette.error.alpha(0.7);
-    for i in 0..app.hits.markdown_links.len() {
-        if app.markdown_link_is_control(i) {
-            continue;
-        }
-        let (rect, url) = app.hits.markdown_links[i].clone();
-        if app.check_markdown_link(&url).is_none() {
+    // 检查链接需要可变借用 `app`，检查期间暂时移出本帧的链接。
+    let links = std::mem::take(&mut app.hits.markdown_links);
+    for (rect, url) in &links {
+        // 预览控件的地址以 `\u{1}` 开头，不检查。
+        if url.starts_with('\u{1}') || app.check_markdown_link(url).is_none() {
             continue;
         }
         let y = (rect.bottom() - 1.5).round();
@@ -88,6 +86,7 @@ fn draw_broken_links(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
             x += 4.0;
         }
     }
+    app.hits.markdown_links = links;
 }
 
 /// 在 `area`（窗口坐标，逻辑像素）里画当前文档的 Markdown 预览，分栏时是右半边，只看预览时
@@ -261,8 +260,7 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
                 (reuse, window) = (Some(laid.fresh()), Some(seen));
                 kept = Some(laid.blocks);
             };
-            // 分帧排版期间、图片读好、收起展开标题后，保持视口顶边所在的块的屏幕位置，不受其
-            // 上方的块高度变化的影响。
+            // 分帧排版、图片加载完成、收起或展开标题后，视口顶边所在块的屏幕位置不变。
             let anchored = was_pending || laid.pending() || !loaded.is_empty() || refold;
             if let Some((i, off)) = held.filter(|_| anchored) {
                 let y = laid.tops[i] + off.min(room_below(&laid, i)) + pad;
@@ -406,8 +404,7 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
         let fading = motion.as_ref().map_or(&[][..], |m| m.fading(i));
         let fade = motion.as_ref().map_or(1.0, |m| m.clock.progress());
         let fixed = |r: &Rect| Rect::new(left + r.x, top + r.y, r.w, r.h);
-        // 刚换成原文的块：原文下方的渲染结果另有偏移，从原来的位置滑下去；上面的原文只画到
-        // 渲染结果的上边缘，随之露出。
+        // 刚显示原文的块：渲染结果另有偏移，原文裁剪到渲染结果的上边缘。
         let inner = motion.as_ref().and_then(|m| m.inner(i));
         let reach = inner.map_or(0.0, |(_, d)| d.abs());
         block.visible(
@@ -536,7 +533,7 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
                         at: spot,
                     } => {
                         let r = at(rect);
-                        // 可编辑的预览中有原文可改的图片可以调整大小。
+                        // 可编辑的预览中，原文可以改写的图片可调整大小。
                         if spot.is_some() && resizable {
                             let image = ImageAt {
                                 rect: r,
@@ -560,7 +557,7 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
                             None => wanted.push((path.clone(), size)),
                         }
                         images.push(path.clone());
-                        // 本地的图片可以从右键菜单在新标签中打开。
+                        // 本地图片可从右键菜单在新标签中打开。
                         if md.urls.get(path).is_none_or(|u| !u.contains("://")) {
                             app.hits.markdown_pictures.push((r, path.clone()));
                         }
@@ -696,7 +693,7 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
             .iter()
             .rposition(|r| r.start <= source && source <= r.end);
         let shift = motion.as_ref().zip(block).map_or(0.0, |(m, b)| {
-            // 光标在刚换成原文的块的渲染结果里：随渲染结果另外的偏移一起动。
+            // 光标位于刚显示原文的块的渲染结果中时，加上渲染结果的偏移。
             let below = laid.blocks[b]
                 .1
                 .preview
@@ -868,8 +865,7 @@ fn draw_heading_folds(
     (lines, covered)
 }
 
-/// 第 `i` 块的上沿到下一块上沿的距离（逻辑像素）：视口顶边落在两块之间的空白里时，按它保持
-/// 视口顶边的位置。
+/// 返回第 `i` 块的上沿到下一块上沿的距离（逻辑像素）。
 fn room_below(laid: &Laid, i: usize) -> f32 {
     let top = laid.tops[i];
     laid.tops
@@ -877,9 +873,9 @@ fn room_below(laid: &Laid, i: usize) -> f32 {
         .map_or(laid.blocks[i].1.height, |next| next - top)
 }
 
-/// mermaid 图最高占预览区高度的比例：再高的图缩小或收起，一屏里仍能看到图的上下文。
+/// mermaid 图的高度上限占预览区高度的比例。
 const TALL_SHARE: f32 = 0.66;
-/// mermaid 图的高度上限的下限（逻辑像素）：窗口很矮时不至于把图压得太扁。
+/// mermaid 图高度上限的最小值（逻辑像素）。
 const TALL_MIN: f32 = 320.0;
 
 /// 标题折叠箭头的大小（逻辑像素）。

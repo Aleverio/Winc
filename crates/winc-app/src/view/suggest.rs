@@ -20,7 +20,7 @@ pub(super) fn draw_suggest(app: &mut App, frame: &mut Frame<'_>) {
         return;
     }
     use crate::app::preview::markdown::suggest::Hit;
-    // 文件：文件名和所在目录；标题：标题文字和级别（`H2`）。
+    // 文件显示文件名和所在目录，标题显示文字和级别（`H2`）。
     let rows: Vec<(String, String)> = (suggest.hits.iter())
         .map(|hit| match hit {
             Hit::File(path, _) => match path.rsplit_once('/') {
@@ -75,7 +75,7 @@ pub(super) fn draw_suggest(app: &mut App, frame: &mut Frame<'_>) {
             }
             (p.text, p.text_dim)
         };
-        // 标题前面是 Markdown 文件的图标，与文件一栏对齐。
+        // 标题使用 Markdown 文件的图标。
         let (glyph, colors) = crate::theme::file_kind(if headings { "a.md" } else { name });
         let icon = MenuIcon::File(glyph, colors);
         let (iw, ih) = icon.size();

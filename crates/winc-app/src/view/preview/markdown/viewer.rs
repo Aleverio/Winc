@@ -177,6 +177,8 @@ fn lay_diagram(
         preedit: false,
         line_numbers: false,
         tall: f32::INFINITY,
+        repeat: 0,
+        toggles: HashMap::new(),
     };
     let env = Env {
         color: cx.colors.text,

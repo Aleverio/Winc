@@ -38,6 +38,8 @@ fn lay(markdown: &str, width: f32) -> Vec<(Out, f32)> {
             preedit: false,
             line_numbers: false,
             tall: f32::INFINITY,
+            repeat: 0,
+            toggles: HashMap::new(),
         };
         let env = Env {
             color: TEXT,
@@ -211,7 +213,7 @@ fn emoji_sequences_are_laid_out_as_one_piece() {
     }
 }
 
-/// 状态图里来回两条连线、并排的几条连线上的文字互相错开，不叠在一起。
+/// 状态图中往返和并排的连线上的文字不重叠。
 #[test]
 fn edge_labels_do_not_overlap() {
     let source = "```mermaid\nstateDiagram-v2\n\
@@ -226,7 +228,7 @@ fn edge_labels_do_not_overlap() {
         running --> failed: 拿不出结果（input_error / refused / system_error）\n\
         canceled --> [*]\nsucceeded --> [*]\nfailed --> [*]\n```\n";
     let laid = lay(source, 900.0);
-    // 文字的范围按字号估算宽度：汉字一个字号宽，其余半个多。
+    // 按字号估算文字宽度：汉字为一个字号，其余字符为半个字号。
     let boxes: Vec<(String, Rect)> = laid[0]
         .0
         .items

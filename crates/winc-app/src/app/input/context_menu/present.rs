@@ -477,7 +477,7 @@ impl App {
                         MenuEntry::Item(MenuCommand::OpenImage, true),
                     ]);
                 }
-                // 右键点在图片上时提供「图片大小」子菜单。
+                // 右键点击图片时提供「图片大小」子菜单。
                 if self.preview.markdown.menu_image.is_some() {
                     use crate::app::preview::markdown::resize::PRESETS;
                     let sizes = PRESETS.map(|p| MenuEntry::Item(MenuCommand::ImageWidth(p), true));

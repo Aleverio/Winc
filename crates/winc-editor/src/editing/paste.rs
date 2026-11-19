@@ -20,9 +20,9 @@ const IMAGE_EXTENSIONS: [&str; 13] = [
 /// 保存剪贴板中的图片时用的文件名；重名时依次改为 `image-1.png`、`image-2.png` 等。
 const IMAGE_NAME: &str = "image.png";
 
-/// 图片目录、图片名的设置里代表文档主名的占位符。
+/// 图片目录和图片名设置中表示文档主名的占位符。
 const FILENAME: &str = "${filename}";
-/// 图片名的设置里代表粘贴时刻的占位符。
+/// 图片名设置中表示粘贴时刻的占位符。
 const DATE: &str = "${date}";
 
 /// 文件 `path` 粘贴到 Markdown 时是否写成图片（按扩展名判断，不区分大小写）。
@@ -98,9 +98,9 @@ fn free_path(dir: &Path, name: &OsStr, is_dir: bool, naming: Naming) -> PathBuf 
         .expect("候选名字无穷多，总有一个未被占用")
 }
 
-/// 按设置 `folder`（`markdown.imageFolder`）返回 Markdown 文档 `doc` 的图片存放的目录。
+/// 按设置 `folder`（`markdown.imageFolder`）返回文档 `doc` 的图片目录。
 ///
-/// 相对路径从文档所在的目录算起，`${filename}` 换成文档的主名；没有设置时为文档所在的目录。
+/// 相对路径以文档所在的目录为基准，`${filename}` 替换为文档主名；未设置时为文档所在的目录。
 pub fn image_folder(doc: &Path, folder: Option<&str>) -> PathBuf {
     let dir = doc.parent().unwrap_or(Path::new(""));
     match folder.map(str::trim).filter(|f| !f.is_empty()) {
@@ -109,10 +109,10 @@ pub fn image_folder(doc: &Path, folder: Option<&str>) -> PathBuf {
     }
 }
 
-/// 按设置 `name`（`markdown.imageName`）返回粘贴的图片的文件名（含扩展名 `.png`）。
+/// 按设置 `name`（`markdown.imageName`）返回粘贴图片的文件名（含扩展名 `.png`）。
 ///
-/// `${filename}` 换成文档 `doc` 的主名，`${date}` 换成 `date()`；路径分隔符换成 `-`。没有设置
-/// 时为 `image.png`。
+/// `${filename}` 替换为文档 `doc` 的主名，`${date}` 替换为 `date()`，路径分隔符替换为 `-`；
+/// 未设置时为 `image.png`。
 pub fn image_name(doc: &Path, name: Option<&str>, date: impl FnOnce() -> String) -> String {
     let Some(name) = name.map(str::trim).filter(|n| !n.is_empty()) else {
         return IMAGE_NAME.to_owned();
@@ -134,13 +134,13 @@ fn doc_stem(doc: &Path) -> String {
         .unwrap_or_default()
 }
 
-/// 把 PNG 图片 `png` 以 `name` 为名存到目录 `dir` 中（目录不存在时先建好），返回新文件的路径。
+/// 把 PNG 图片 `png` 以 `name` 为名存入目录 `dir`（不存在时创建），返回新文件的路径。
 ///
 /// 重名时依次加 `-1`、`-2`……，不覆盖已有文件。
 ///
 /// # Errors
 ///
-/// 创建目录、文件或写入失败时返回对应的 `std::io::Error`；写到一半失败时删除写了一半的文件。
+/// 创建目录、文件或写入失败时返回对应的 `std::io::Error`；写入中途失败时删除未写完的文件。
 pub fn save_image(dir: &Path, name: &str, png: &[u8]) -> io::Result<PathBuf> {
     winc_backend::fs::create_dir_all(dir)?;
     loop {
@@ -360,7 +360,7 @@ fn copy_symlink(from: &Path, to: &Path) -> io::Result<()> {
 /// 准备粘贴到 Markdown 文档中的文件，返回要写进链接的路径，顺序与 `files` 相同。
 ///
 /// 位于项目目录 `root`（没有项目时为文档所在的目录 `doc_dir`）之外的图片先复制到图片目录
-/// `into` 中（不存在时先建好），重名时加 `-1`、`-2`……；其余文件原样引用。
+/// `into`（不存在时创建），重名时加 `-1`、`-2`……；其余文件直接引用。
 ///
 /// # Errors
 ///

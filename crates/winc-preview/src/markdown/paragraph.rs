@@ -180,8 +180,8 @@ pub enum Target {
     Anchor,
 }
 
-/// 光标之前的一行文字 `before` 停在链接或图片的地址里时，返回地址开头的位置（字节偏移）和要
-/// 补全什么；地址已经写成网址，或光标在行内代码里时为 `None`。
+/// 返回光标之前的一行文字 `before` 所在链接或图片地址的开头（字节偏移）和补全对象；地址是
+/// 网址或位于行内代码中时为 `None`。
 ///
 /// 地址里还没有空白、`)` 和 `<`：写成 `<…>` 的地址和带标题的地址不补全。
 pub fn link_target(before: &str) -> Option<(usize, Target)> {
@@ -209,9 +209,9 @@ pub fn link_target(before: &str) -> Option<(usize, Target)> {
     Some((start, kind))
 }
 
-/// 文中的 ATX 标题（`#` 开头的一行，跳过围栏代码块里的）：级别、文字和锚点。
+/// 返回文中的 ATX 标题（不含围栏代码块中的）：级别、文字和锚点。
 ///
-/// 锚点按 [`super::slug`] 生成，同名的第二个起加上 `-1`、`-2`，与预览中标题的锚点相同。
+/// 锚点按 [`super::slug`] 生成，同名的第二个起加上 `-1`、`-2`，与预览中的锚点相同。
 pub fn headings<'a>(lines: impl IntoIterator<Item = &'a str>) -> Vec<(u8, String, String)> {
     let mut out = Vec::new();
     let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();

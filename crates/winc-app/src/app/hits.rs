@@ -61,9 +61,9 @@ pub struct Hits {
     pub(crate) notice_button: Option<Rect>,
     /// 上一帧绘制的链接（区域和地址），点击时据此查找。
     pub(crate) markdown_links: Vec<(winc_render::Rect, String)>,
-    /// 上一帧在可编辑的预览中画出的、有原文可改的图片，调整大小用。
+    /// 上一帧在可编辑的预览中绘制的、原文可以改写的图片。
     pub(crate) markdown_images: Vec<crate::app::preview::markdown::resize::ImageAt>,
-    /// 上一帧画出的本地图片和它的文件，右键菜单「在新标签中打开图片」用。
+    /// 上一帧绘制的本地图片及其文件。
     pub(crate) markdown_pictures: Vec<(winc_render::Rect, std::path::PathBuf)>,
     /// 上一帧绘制的代码块（屏幕坐标）：鼠标移入、移出时重绘，以显示或隐藏复制按钮。
     pub(crate) markdown_codes: Vec<winc_render::Rect>,

@@ -777,7 +777,7 @@ impl App {
                 self.request_redraw();
             }
             Next::Move { step } => {
-                // 每十帧按一次键：向下走八次，再向上走八次，之间的帧画过渡动画。
+                // 每 10 帧按一次方向键：先向下 8 次，再向上 8 次。
                 let started = Instant::now();
                 if step % 10 == 0 {
                     self.start_live_editing();

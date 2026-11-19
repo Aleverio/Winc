@@ -1,5 +1,4 @@
-//! 可编辑的预览中调整图片大小：鼠标所在的图片右边外侧画一道细竖条作把手，拖动时画出新的
-//! 大小和尺寸。
+//! 可编辑的预览中调整图片大小的绘制：悬停时的把手，拖动时的新大小与尺寸。
 
 use winc_render::{Color, FontKind, Frame, Rect};
 
@@ -8,8 +7,8 @@ use crate::app::preview::markdown::resize::{ImageAt, OUTLINE_GAP};
 use crate::icons;
 use crate::theme::Palette;
 
-/// 画悬停的图片右边的把手，或拖动中的新大小（框、把手和底部的尺寸）。
-/// `images` 是这一帧画出的可调整的图片，`size` 是尺寸的字号。
+/// 绘制悬停图片的把手或拖动中的新大小；`images` 是本帧绘制的可调整图片，
+/// `size` 是尺寸文字的字号。
 pub(super) fn draw_image_resize(
     md: &MarkdownPreview,
     images: &[ImageAt],
@@ -34,7 +33,7 @@ pub(super) fn draw_image_resize(
         let text_w = frame.measure(FontKind::Ui, size, &label) + 12.0;
         let m = frame.metrics(FontKind::Ui, size);
         let pill_h = (m.ascent + m.descent + 6.0).round();
-        // 尺寸写在框底部正中，避开右边的把手。
+        // 尺寸位于框底部正中，避开右侧的把手。
         let pill = Rect::new(
             (shape.x + (shape.w - text_w) / 2.0).round(),
             shape.bottom() - pill_h - 6.0,
@@ -73,14 +72,14 @@ pub(super) fn draw_image_resize(
     }
 }
 
-/// 图片外面 1 逻辑像素、颜色为 `color` 的细框。
+/// 绘制图片外 1 逻辑像素宽、颜色为 `color` 的外框。
 fn draw_outline(frame: &mut Frame<'_>, color: Color, image: Rect, area: Rect) {
     let r = image.inset(-OUTLINE_GAP, -OUTLINE_GAP).inset(0.5, 0.5);
     let lines = icons::rounded_outline(r.x, r.y, r.w, r.h, 2.0);
     frame.stroke(&lines, 1.0, color, area);
 }
 
-/// 把手：页面底色上一道灰色的细竖条。
+/// 绘制把手。
 fn draw_handle(frame: &mut Frame<'_>, p: &Palette, handle: Rect, area: Rect) {
     frame.rect_clipped(handle, p.text.alpha(p.text.a * 0.35), handle.w / 2.0, area);
 }

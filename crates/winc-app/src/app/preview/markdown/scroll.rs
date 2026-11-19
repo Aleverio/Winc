@@ -181,7 +181,9 @@ impl App {
     pub(in crate::app) fn jump_to_anchor(&mut self, anchor: &str) {
         let Some((top, height)) = crate::app::preview::markdown::laid::anchor_box(self, anchor)
         else {
-            self.flash(t!("preview-markdown-heading-not-found"));
+            if !self.unfold_to_anchor(anchor) {
+                self.flash(t!("preview-markdown-heading-not-found"));
+            }
             return;
         };
         let lower = anchor.to_lowercase();

@@ -315,11 +315,9 @@ fn add_column(line: &mut String, col: usize, fill: &str) {
     }
 }
 
-/// 把表格软件复制出的制表符分隔的文字 `text` 写成 GFM 表格，第一行作表头；不是这样的文字时
-/// 返回 `None`。
+/// 把制表符分隔的文字 `text` 写成 GFM 表格，第一行作表头；不符合时返回 `None`。
 ///
-/// 至少两行、每行列数相同、表头没有空格子。单元格里的 `|` 转义，换行（引号括起的多行
-/// 单元格）不认。
+/// 要求至少两行、每行列数相同、表头没有空单元格；单元格中的 `|` 转义，不支持多行单元格。
 pub fn from_tsv(text: &str) -> Option<String> {
     let rows: Vec<Vec<&str>> = text
         .trim_end_matches(['\n', '\r'])
@@ -330,7 +328,7 @@ pub fn from_tsv(text: &str) -> Option<String> {
     if rows.len() < 2 || columns < 2 || rows.iter().any(|row| row.len() != columns) {
         return None;
     }
-    // 表头没有空格子：用制表符缩进的代码、命令不当作表格。
+    // 表头有空单元格时不作为表格，排除用制表符缩进的代码。
     if rows[0].iter().any(|c| c.trim().is_empty()) {
         return None;
     }

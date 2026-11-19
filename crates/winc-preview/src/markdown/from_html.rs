@@ -1,21 +1,20 @@
-//! 剪贴板里的 HTML（从网页、文档复制的内容）转成 Markdown：按元素的语义转换，不应用样式表。
+//! 把剪贴板中的 HTML 转换为 Markdown：按元素语义转换，不应用样式表。
 //!
-//! 容忍不规范的写法：标签不配对、`<br>`、`<img>` 不关闭、属性不加引号都照常读。只认常用的
-//! 元素，其余元素只保留文字；`script`、`style`、`head` 等里面的内容丢掉。
+//! 容忍不配对的标签、不关闭的 `<br>`、`<img>` 和不加引号的属性；未识别的元素只保留文字，
+//! `script`、`style`、`head` 等元素的内容不输出。
 
-use crate::convert::link_target;
+use crate::convert::destination;
 
-/// 转换的结果。
+/// 转换结果。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Converted {
     /// Markdown 原文。
     pub text: String,
-    /// 是否有文字以外的结构（标题、列表、链接、强调、表格、代码、图片、引用）：没有时按纯文本
-    /// 粘贴更准，例如从代码编辑器复制的、只带颜色的代码。
+    /// 是否含有文字以外的结构（标题、列表、链接、强调、表格、代码、图片、引用）。
     pub rich: bool,
 }
 
-/// 把 HTML `html` 转成 Markdown。
+/// 把 HTML `html` 转换为 Markdown。
 pub fn from_html(html: &str) -> Converted {
     let mut w = Writer::default();
     for token in Tokens(html) {
@@ -28,14 +27,14 @@ pub fn from_html(html: &str) -> Converted {
     w.finish()
 }
 
-/// HTML 中的一项：开始标签（小写的名字、属性原文）、结束标签、文字（实体未还原）。
+/// HTML 中的一项：开始标签（小写名字与属性原文）、结束标签或文字（实体未解码）。
 enum Token<'a> {
     Open(String, &'a str),
     Close(String),
     Text(&'a str),
 }
 
-/// 依次读出各项；注释、文档类型声明、处理指令跳过，不成标签的 `<` 当作文字。
+/// 依次读出 HTML 中的各项；跳过注释、文档类型声明和处理指令，不构成标签的 `<` 作为文字。
 struct Tokens<'a>(&'a str);
 
 impl<'a> Iterator for Tokens<'a> {
@@ -97,12 +96,12 @@ fn tag_end(body: &str) -> Option<usize> {
     None
 }
 
-/// 属性 `key` 的值（实体已还原）。
+/// 返回属性 `key` 的值（实体已解码）。
 fn attr(attrs: &str, key: &str) -> Option<String> {
     super::html::attribute(&format!(" {attrs}"), key)
 }
 
-/// 包着后面内容的块：引用，或列表里的一项（续行缩进 `indent` 个空格）。
+/// 包含后续内容的块：引用，或列表中的一项（续行缩进 `indent` 个空格）。
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Frame {
     Quote,
@@ -110,14 +109,14 @@ enum Frame {
     Item { indent: usize },
 }
 
-/// 行内的强调、代码和链接：记下开始处在行内缓冲中的位置。
+/// 行内的强调、代码或链接。
 #[derive(Debug, Clone, PartialEq)]
 enum Span {
-    /// 强调：结束标签的名字、标记（`**`、`*`、`~~`）。
+    /// 强调：结束标签名和标记（`**`、`*`、`~~`）。
     Mark(String, &'static str),
     Code,
     Link(String),
-    /// 不改变样式的同名标签（`<b style="font-weight:normal">`），只为配对。
+    /// 不改变样式的标签（如 `<b style="font-weight:normal">`），仅用于配对。
     Plain(String),
 }
 
@@ -126,38 +125,40 @@ struct Writer {
     out: String,
     rich: bool,
     stack: Vec<Frame>,
-    /// 下一块是列表项的第一块，用这个记号开头。
+    /// 列表项第一块的记号，写出后清空。
     marker: Option<String>,
-    /// 上一块写在列表项里：下一项紧接着写，不空行。
+    /// 上一块是否位于列表项中：是时下一项不加空行。
     after_item: bool,
-    /// 上一块续行的前缀：和下一块之间的空行只带两块共有的那部分前缀。
+    /// 上一块续行的前缀；块之间的空行只保留两块共有的前缀。
     last_prefix: String,
-    /// 行内缓冲：还没写出的一段文字。
+    /// 尚未写出的行内文字。
     inline: String,
     spans: Vec<(Span, usize)>,
     heading: Option<usize>,
-    /// 预排版文字：（内容，语言）。
+    /// 预排版文字的内容和语言。
     pre: Option<(String, String)>,
     table: Option<Table>,
-    /// 在丢掉内容的元素里的层数（`script`、`style`……）。
+    /// 位于内容不输出的元素中的层数。
     skip: usize,
 }
 
 #[derive(Default)]
 struct Table {
     rows: Vec<Vec<String>>,
-    /// 当前格的内容在行内缓冲中的开始位置。
+    /// 当前单元格的内容在行内缓冲中的开始位置。
     cell: Option<usize>,
-    /// 里面又嵌了几层表格：嵌的表格只取文字。
+    /// 嵌套表格的层数：嵌套的表格只保留文字。
     nested: usize,
 }
 
 impl Writer {
     fn open(&mut self, name: &str, attrs: &str) {
-        if self.skip > 0 || matches!(name, "script" | "style" | "head" | "title" | "template") {
-            if !is_void(name) {
-                self.skip += 1;
-            }
+        // 只按同类的开始、结束标签计层数，其中的其他标签不计入。
+        if is_skipped(name) {
+            self.skip += 1;
+            return;
+        }
+        if self.skip > 0 {
             return;
         }
         if let Some((text, lang)) = self.pre.as_mut() {
@@ -182,7 +183,7 @@ impl Writer {
                     self.inline.push_str("<br>");
                     return;
                 }
-                // 格子里的段落、列表只当作分隔，内容连在一起。
+                // 单元格中的块元素只作为分隔，内容合并为一行。
                 _ if is_block(name) => {
                     self.inline.push(' ');
                     return;
@@ -244,10 +245,11 @@ impl Writer {
             "br" => self.inline.push_str("\\\n"),
             "img" => {
                 let alt = attr(attrs, "alt").unwrap_or_default();
-                match attr(attrs, "src").filter(|s| !s.starts_with("data:")) {
+                match attr(attrs, "src").filter(|s| absolute(s)) {
                     Some(src) => {
                         let alt = escape(alt.trim());
-                        self.inline.push_str(&format!("![{alt}]({})", target(&src)));
+                        self.inline
+                            .push_str(&format!("![{alt}]({})", destination(&src)));
                         self.rich = true;
                     }
                     None => self.inline.push_str(&escape(&alt)),
@@ -299,7 +301,7 @@ impl Writer {
 
     fn close(&mut self, name: &str) {
         if self.skip > 0 {
-            if matches!(name, "script" | "style" | "head" | "title" | "template") {
+            if is_skipped(name) {
                 self.skip -= 1;
             }
             return;
@@ -416,7 +418,7 @@ impl Writer {
         }
     }
 
-    /// 关上第 `from` 层及更里面的行内样式。
+    /// 关闭第 `from` 层及更内层的行内样式。
     fn close_spans(&mut self, from: usize) {
         while self.spans.len() > from {
             let Some((span, at)) = self.spans.pop() else {
@@ -444,11 +446,9 @@ impl Writer {
                     self.wrap(&inner, &ticks, &ticks);
                 }
                 Span::Link(href) => {
-                    let usable = !href.is_empty()
-                        && !href.starts_with('#')
-                        && !href.to_ascii_lowercase().starts_with("javascript:");
+                    let usable = absolute(&href);
                     if usable && !inner.trim().is_empty() {
-                        let close = format!("]({})", target(&href));
+                        let close = format!("]({})", destination(&href));
                         self.wrap(&inner, "[", &close);
                     } else {
                         self.inline.push_str(&inner);
@@ -458,7 +458,7 @@ impl Writer {
         }
     }
 
-    /// 用 `open`、`close` 包住 `inner`：两端的空白挪到标记外面；只有空白时不包。
+    /// 用 `open`、`close` 包住 `inner`，两端空白移到标记外；只有空白时不加标记。
     fn wrap(&mut self, inner: &str, open: &str, close: &str) {
         let body = inner.trim();
         if body.is_empty() {
@@ -472,7 +472,7 @@ impl Writer {
         self.rich = true;
     }
 
-    /// 写出行内缓冲中的一段。
+    /// 写出行内缓冲中的文字。
     fn flush(&mut self) {
         self.close_spans(0);
         let text = std::mem::take(&mut self.inline);
@@ -494,7 +494,7 @@ impl Writer {
         }
     }
 
-    /// 结束当前的列表项：只有记号、没有内容的一项写出记号。
+    /// 结束当前列表项；没有内容的项只写出记号。
     fn end_item(&mut self) {
         if let Some(i) = self
             .stack
@@ -511,7 +511,7 @@ impl Writer {
         }
     }
 
-    /// 写一块 `text`（可以有几行），每行前面加上所在的引用、列表项的前缀。
+    /// 写出一块 `text`，每行加上所在引用、列表项的前缀。
     fn emit(&mut self, text: &str) {
         let marker = self.marker.take();
         let (mut first, mut rest) = (String::new(), String::new());
@@ -567,7 +567,7 @@ impl Writer {
         if rows.is_empty() || columns == 0 {
             return;
         }
-        // 只有一格的表格（网页排版用的）当作一段文字。
+        // 只有一格的表格作为一段文字。
         if rows.len() == 1 && columns == 1 {
             self.emit(&rows[0][0]);
             return;
@@ -606,7 +606,7 @@ impl Writer {
     }
 }
 
-/// 段落、标题、列表、引用这类块元素。
+/// 是否为块元素（段落、标题、列表、引用等）。
 fn is_block(name: &str) -> bool {
     matches!(
         name,
@@ -639,8 +639,15 @@ fn is_block(name: &str) -> bool {
     )
 }
 
-fn is_void(name: &str) -> bool {
-    matches!(name, "br" | "img" | "hr" | "input" | "meta" | "link")
+/// 是否为内容不输出的元素。
+fn is_skipped(name: &str) -> bool {
+    matches!(name, "script" | "style" | "head" | "title" | "template")
+}
+
+/// 地址 `url` 是否为绝对地址（带协议或 `mailto:`）；相对地址不写成链接和图片。
+fn absolute(url: &str) -> bool {
+    let url = url.trim().to_ascii_lowercase();
+    url.contains("://") || url.starts_with("mailto:")
 }
 
 fn span_name(span: &Span) -> &str {
@@ -651,7 +658,7 @@ fn span_name(span: &Span) -> &str {
     }
 }
 
-/// `class="language-rust"`（或 `lang-rust`）中的语言名。
+/// 返回 `class` 中 `language-`、`lang-` 之后的语言名。
 fn code_lang(attrs: &str) -> String {
     let class = attr(attrs, "class").unwrap_or_default();
     (class.split_whitespace())
@@ -672,17 +679,7 @@ fn longest_run(text: &str, c: char) -> usize {
     best
 }
 
-/// 链接、图片的地址：含空白、括号时用 `<…>` 括起来。
-fn target(url: &str) -> String {
-    let url = url.trim();
-    if url.contains(|c: char| c.is_whitespace() || matches!(c, '(' | ')' | '<' | '>')) {
-        format!("<{}>", link_target(url))
-    } else {
-        url.to_owned()
-    }
-}
-
-/// 转义文字中会被当成标记的字符：反斜杠、`*`、反引号、方括号、`<`，以及不在词中间的 `_`。
+/// 转义会被解析为标记的字符：反斜杠、`*`、反引号、方括号、`<`，以及不在词中的 `_`。
 fn escape(text: &str) -> String {
     let chars: Vec<char> = text.chars().collect();
     let mut out = String::with_capacity(text.len());
@@ -699,7 +696,7 @@ fn escape(text: &str) -> String {
     out
 }
 
-/// 段首会被当成标题、引用、列表记号的写法前面加反斜杠。
+/// 段首像标题、引用或列表记号时在前面加反斜杠。
 fn escape_start(text: &str) -> String {
     let digits = text.chars().take_while(char::is_ascii_digit).count();
     let listy = (digits > 0 && text[digits..].starts_with(". "))

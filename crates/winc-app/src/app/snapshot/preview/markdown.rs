@@ -122,7 +122,7 @@ fn pasting_urls_and_spreadsheet_cells_rewrites_them() {
     select(&mut app, "文档");
     assert!(app.markdown_paste("https://a.dev").is_some());
 
-    // 没有选区时图片的网址写成图片，表格软件的单元格写成单独成块的表格。
+    // 没有选区时图片网址写成图片，表格单元格写成单独成块的表格。
     put_caret(&mut app, "见文档。", true);
     let image = app.markdown_paste("https://a.dev/shot.PNG?raw=1");
     assert_eq!(image.as_deref(), Some("![](https://a.dev/shot.PNG?raw=1)"));
@@ -134,8 +134,7 @@ fn pasting_urls_and_spreadsheet_cells_rewrites_them() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// 从网页复制的内容（剪贴板里带结构的 HTML）粘贴成 Markdown，单独成块；只带颜色的代码、
-/// 「粘贴为纯文本」照常粘贴文字。
+/// 剪贴板中带结构的 HTML 粘贴为 Markdown；没有结构的 HTML 和「粘贴为纯文本」粘贴文字。
 #[test]
 fn pasting_web_content_writes_markdown() {
     let (mut app, dir) = live_doc("md-paste-html", "前文\n");
@@ -155,10 +154,23 @@ fn pasting_web_content_writes_markdown() {
         Some("<div><span style=\"color:#00f\">fn</span> main() {}</div>".into());
     app.paste();
     assert!(doc_text(&app).ends_with("winc.si)fn main() {}\n"));
+    // 选中文字后粘贴 HTML 链接时，以选中的文字作为链接文字。
+    app.run(winc_editor::Command::Insert("\n\n说明".into()));
+    let doc = app.editor.active_mut().unwrap();
+    let end = doc.text().rope().unwrap().len_chars() - 1;
+    doc.selection = winc_core::Selection::new(end - 2, end);
+    app.clipboard.copied = Some("https://winc.si".into());
+    app.clipboard.copied_html = Some("<a href=\"https://winc.si\">https://winc.si</a>".into());
+    app.paste();
+    assert!(
+        doc_text(&app).ends_with("\n\n[说明](https://winc.si)\n"),
+        "{}",
+        doc_text(&app)
+    );
     app.clipboard.copied = Some("纯".into());
     app.clipboard.copied_html = Some("<b>纯</b>".into());
     assert!(app.run_action(crate::keymap::Action::MarkdownPastePlain));
-    assert!(doc_text(&app).ends_with("fn main() {}纯\n"));
+    assert!(doc_text(&app).ends_with("(https://winc.si)纯\n"));
     let _ = std::fs::remove_dir_all(&dir);
 }
 

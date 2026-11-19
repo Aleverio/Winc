@@ -141,7 +141,7 @@ pub(crate) struct Key {
     pub(crate) images: u64,
     /// 代码块是否显示从 1 起的行号（见 `Cx::line_numbers`）。
     pub(crate) numbers: bool,
-    /// mermaid 图最高排多高（逻辑像素，见 `Cx::tall`）。
+    /// mermaid 图的高度上限（逻辑像素，见 `Cx::tall`）。
     pub(crate) tall: f32,
 }
 
@@ -167,8 +167,7 @@ impl Before {
                 (*hash, Arc::clone(block), top + offset - scroll)
             })
             .collect();
-        // 还没在预览里编辑过（只在阅读）时排版里没有光标，按文档现在的版本算：单击放光标
-        // 不改文字，各块照样滑到新位置。
+        // 排版中没有光标时（未在预览中编辑）取文档当前的版本号。
         let current = app.editor.active().map(|d| d.revision);
         Before {
             blocks,
@@ -225,7 +224,7 @@ impl Before {
         if !moved && !slide {
             from.fill(0.0);
         }
-        // 原文和排版互换的块：原文下方的渲染结果和下面的块一起滑动，不在块里跳一下。
+        // 原文与排版互换的块：渲染结果随下方的块一起滑动。
         let (mut inner, mut leaving) = (Vec::new(), Vec::new());
         for (i, j) in matched.iter().enumerate() {
             let Some(j) = *j else { continue };
@@ -233,9 +232,9 @@ impl Before {
                 break;
             }
             match (old[j].1.preview, new[i].1.preview) {
-                // 换成原文：渲染结果从原来的位置滑下去，上面的原文随之露出。
+                // 显示原文：渲染结果从原位置下移。
                 (None, Some((first, top))) => inner.push((i, first, -top)),
-                // 换回排版：排版从原来原文下方的位置滑上来，原来的原文在上面淡出。
+                // 恢复排版：排版从原来渲染结果的位置上移，原文淡出。
                 (Some((first, top)), None) => {
                     leaving.push(Leaving {
                         block: i,
@@ -297,15 +296,15 @@ impl Before {
     }
 }
 
-/// 换回排版的块原来显示的原文：过渡中在原处淡出。
+/// 刚恢复排版的块原来显示的原文。
 pub(crate) struct Leaving {
-    /// 所在的块（新排版的序号）。
+    /// 块序号（新排版中）。
     pub(crate) block: usize,
     /// 原来的排版。
     pub(crate) old: Arc<LaidBlock>,
-    /// 原文占前面几项（其后是渲染结果）。
+    /// 原文所占的项数（其后为渲染结果）。
     pub(crate) items: u32,
-    /// 起始时相对新位置向下的偏移（逻辑像素），随过渡归零。
+    /// 起始时相对新位置向下的偏移（逻辑像素）。
     pub(crate) offset: f32,
 }
 
@@ -471,6 +470,8 @@ pub(crate) fn lay_out(
         preedit: false,
         line_numbers: key.numbers,
         tall: key.tall,
+        repeat: 0,
+        toggles: HashMap::new(),
     };
     let env = Env {
         color: cx.colors.text,
@@ -486,7 +487,16 @@ pub(crate) fn lay_out(
     let mut stale = Vec::new();
     let near = near.filter(|_| parsed.blocks.len() > SHED_BLOCKS);
     let mut fresh = 0usize;
+    // 内容相同的块从第二个起使用不同的键，并带上序号，各自记录开合状态。
+    let mut repeats: HashMap<u64, u32> = HashMap::new();
     for (i, (block, &hash)) in parsed.blocks.iter().zip(&parsed.hashes).enumerate() {
+        let repeat = *repeats.entry(hash).and_modify(|n| *n += 1).or_insert(0);
+        let hash = match repeat {
+            0 => hash,
+            n => winc_typeset::memo_key(|h| std::hash::Hash::hash(&(hash, n), h)),
+        };
+        cx.repeat = repeat;
+        cx.toggles.clear();
         // 收起的一节里的块不排版，占一个高度为 0 的空块，换一个键存：展开时重新排。
         if hidden[i] {
             starts.push(chars);

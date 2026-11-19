@@ -71,7 +71,7 @@ impl Clipboard {
         }
     }
 
-    /// 返回剪贴板中的 HTML（网页、文档里复制的内容带着的）；没有时返回 `None`。
+    /// 返回剪贴板中的 HTML；没有时返回 `None`。
     pub(in crate::app) fn html(&mut self) -> Option<String> {
         #[cfg(test)]
         {

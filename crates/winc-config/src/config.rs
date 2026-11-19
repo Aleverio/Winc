@@ -118,11 +118,11 @@ pub struct Config {
     pub markdown_focus: Option<bool>,
     /// 编辑 Markdown 时是否让光标所在的行停在编辑区中间（打字机模式），默认为否。
     pub markdown_typewriter: Option<bool>,
-    /// 粘贴、拖入 Markdown 的图片存放的目录：相对文档所在的目录，`${filename}` 代表文档的主名
-    /// （如 `${filename}.assets`）；没写时与文档在同一目录。
+    /// 粘贴、拖入 Markdown 的图片的目录，相对文档所在的目录，`${filename}` 表示文档主名；未设置
+    /// 时为文档所在的目录。
     pub markdown_image_folder: Option<String>,
-    /// 粘贴的图片的文件名（不含扩展名）：`${filename}` 代表文档的主名，`${date}` 代表粘贴的时刻；
-    /// 没写时为 `image`。
+    /// 粘贴图片的文件名（不含扩展名），`${filename}` 表示文档主名，`${date}` 表示粘贴时刻，
+    /// 未设置时为 `image`。
     pub markdown_image_name: Option<String>,
     /// 是否定时检查更新（启动后 5 秒、之后每天一次），默认为是。
     ///

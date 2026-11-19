@@ -65,7 +65,7 @@ pub struct Picture {
     pub source: Source,
     /// 是否含透明像素；为 `true` 时绘制在棋盘格上。
     pub transparent: bool,
-    /// 几个像素算一个逻辑像素（见 [`density`]）：Retina 截图为 2，文档里按一半大小显示。
+    /// 每个逻辑像素对应的像素数（见 [`density`]）。
     pub density: u32,
 }
 
@@ -151,10 +151,10 @@ pub fn load(path: &Path) -> Result<Picture, String> {
     })
 }
 
-/// 图片的像素密度：几个像素算一个逻辑像素。
+/// 返回图片的像素密度：每个逻辑像素对应的像素数。
 ///
-/// 文件名以 `@2x`、`@3x` 结尾时按它；否则看 PNG 的 `pHYs`：144 dpi（macOS 的 Retina 截图）为
-/// 2，216 dpi 为 3。其余（72、96 dpi，或印刷用的 300 dpi）为 1，按像素显示。
+/// 主名以 `@2x`、`@3x` 结尾时取 2、3；否则按 PNG 的 `pHYs`：约 144 dpi 为 2，
+/// 约 216 dpi 为 3，其余为 1。
 pub fn density(path: Option<&Path>, bytes: &[u8]) -> u32 {
     let stem = path.and_then(|p| p.file_stem()).and_then(|s| s.to_str());
     for (suffix, n) in [("@2x", 2), ("@3x", 3)] {
@@ -169,9 +169,9 @@ pub fn density(path: Option<&Path>, bytes: &[u8]) -> u32 {
     }
 }
 
-/// PNG 的 `pHYs` 写的横向分辨率（dpi）；不是 PNG、没有写或单位不是米时为 `None`。
+/// 返回 PNG 的 `pHYs` 中的横向分辨率（dpi）；不是 PNG、没有 `pHYs` 或单位不是米时为 `None`。
 ///
-/// `pHYs` 在图像数据之前，只读各块的头，遇到 `IDAT` 就停。
+/// `pHYs` 位于图像数据之前，读到 `IDAT` 时停止。
 fn png_dpi(bytes: &[u8]) -> Option<u32> {
     let mut at = bytes.strip_prefix(b"\x89PNG\r\n\x1a\n").map(|_| 8)?;
     while let Some(head) = bytes.get(at..at + 8) {

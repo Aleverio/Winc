@@ -418,7 +418,7 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
 
     match row.setting.control() {
         SettingControl::Font => draw_field(app, frame, row, clip),
-        // 直接填写的路径、文件名没有可选的菜单：始终画成输入框。
+        // 文本设置项没有选项菜单，以输入框显示。
         SettingControl::Command if editing || row.setting.is_text() => {
             draw_field(app, frame, row, clip)
         }

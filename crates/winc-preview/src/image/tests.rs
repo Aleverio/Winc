@@ -478,7 +478,7 @@ fn interlaced_pngs_shrink_without_decoding_the_whole_picture() {
 
 #[test]
 fn retina_screenshots_count_two_pixels_per_point() {
-    // 只有块头的 PNG：IHDR、pHYs（每米 `ppm` 个像素）、IDAT；校验码不读。
+    // 只含 IHDR、pHYs（每米 `ppm` 个像素）、IDAT 块头的 PNG，不含有效的校验码。
     let png = |ppm: u32, unit: u8| {
         let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
         let mut chunk = |kind: &[u8], data: &[u8]| {
@@ -497,7 +497,7 @@ fn retina_screenshots_count_two_pixels_per_point() {
     };
     assert_eq!(density(None, &png(5669, 1)), 2);
     assert_eq!(density(None, &png(3780, 1)), 1);
-    // 印刷用的 300 dpi 按像素显示；单位不是米时不认。
+    // 300 dpi 的密度为 1；单位不是米时忽略 `pHYs`。
     assert_eq!(density(None, &png(11811, 1)), 1);
     assert_eq!(density(None, &png(5669, 0)), 1);
     assert_eq!(density(Some(Path::new("icon@3x.png")), b""), 3);

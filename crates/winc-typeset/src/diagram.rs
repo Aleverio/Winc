@@ -39,11 +39,11 @@ const EDGE_THICK: f32 = 2.5;
 /// 图中文字的字号与正文字号之比：正文 16 逻辑像素时为 14 逻辑像素。
 const TEXT_RATIO: f32 = 0.875;
 
-/// 高于上限（`Cx::tall`）的图最多把字号缩到默认的多少：再小就看不清，改为收起。
+/// 高于上限（`Cx::tall`）的图字号缩小的下限，为默认字号的比例。
 const TALL_MIN_SCALE: f32 = 0.6;
 /// 收起的图底部渐隐的高度（逻辑像素）。
 const FADE: f32 = 48.0;
-/// 渐隐分几层画。
+/// 渐隐的层数。
 const FADE_STEPS: usize = 12;
 /// 「展开全部」「收起」一行的高度（逻辑像素）。
 const TOGGLE_ROW: f32 = 40.0;
@@ -167,7 +167,7 @@ pub(crate) struct Label {
     h: f32,
 }
 
-/// 一张图的展开状态在 `Cx::toggled` 里的键：按源码算，与 `<details>` 的键分开。
+/// 返回图的源码哈希，用于开合标识（见 `Cx::toggle_id`）。
 fn tall_id(source: &str) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -226,9 +226,8 @@ impl Cx<'_, '_> {
             }
             size = next;
         }
-        // 高于上限：缩到下限以内能放下时缩小字号；放不下时不缩，收起，只显示上面一截。这样
-        // 收起和展开时字号相同，展开只是露出下面的部分。
-        let id = tall_id(source);
+        // 缩到下限以内能放下时缩小字号，否则保持字号并收起。
+        let id = self.toggle_id(tall_id(source));
         let open = self.toggled.contains(&id);
         let tall = self.tall;
         let floor = self.base * TEXT_RATIO * TALL_MIN_SCALE;
@@ -247,7 +246,7 @@ impl Cx<'_, '_> {
         let toggle = h > tall;
         let w = bounds.1 - bounds.0;
         let dx = x + ((width - w) / 2.0).max(0.0) - bounds.0;
-        // 收起时只留截断线以上的部分：跨过截断线的不画，免得伸到下面的「展开全部」上。
+        // 收起时只保留完全位于截断线以上的项。
         let keep = |item: &Item| !clipped || item.span_y().1 <= tall;
         out.extend(
             items
@@ -273,7 +272,7 @@ impl Cx<'_, '_> {
                 true => winc_i18n::t!("preview-markdown-diagram-expand"),
                 false => winc_i18n::t!("preview-markdown-diagram-collapse"),
             };
-            // 一行正中是一枚淡底的按钮：文字和指向展开方向的箭头。
+            // 开合按钮：文字和指向展开方向的箭头。
             let size = self.base * 0.8125;
             let text_w = self.frame.measure(FontKind::Ui, size, label);
             let (arrow, gap, pad) = (size * 0.32, size * 0.4, size * 0.9);
@@ -462,8 +461,8 @@ impl Cx<'_, '_> {
         self.put_label(label, cx, cy, out);
     }
 
-    /// 写各条连线上的文字：`placed` 是（连线序号，文字中心，底色）。连线都画完再写，文字不被
-    /// 后画的线压住；相互重叠的文字沿与流向垂直的方向错开，不超出图的宽高 `size`。
+    /// 写出连线上的文字，`placed` 是（连线序号，文字中心，底色）；重叠的文字沿与流向垂直的方向
+    /// 错开，不超出图的宽高 `size`。
     fn edge_labels(
         &mut self,
         labels: &[Label],
@@ -478,7 +477,7 @@ impl Cx<'_, '_> {
         let half = |k: usize| (labels[k].w / 2.0 + px, labels[k].h / 2.0 + py);
         let across = matches!(dir, Dir::Down | Dir::Up);
         for i in 1..placed.len() {
-            // 和前面的每一块比，重叠时往离开它的一侧推；推过之后再从头比，至多几轮。
+            // 与之前的文字重叠时向远离的一侧移动，最多重复 `placed.len()` 轮。
             for _ in 0..placed.len() {
                 let (k, (x, y), _) = placed[i];
                 let (hw, hh) = half(k);

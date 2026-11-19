@@ -348,9 +348,9 @@ pub enum Setting {
     MarkdownFocus,
     /// 编辑 Markdown 时光标所在的行停在中间（`markdown.typewriterMode`）。
     MarkdownTypewriter,
-    /// 粘贴、拖入的图片存放的目录（`markdown.imageFolder`）。
+    /// 粘贴、拖入的图片的目录（`markdown.imageFolder`）。
     MarkdownImageFolder,
-    /// 粘贴的图片的文件名（`markdown.imageName`）。
+    /// 粘贴图片的文件名（`markdown.imageName`）。
     MarkdownImageName,
     /// 定时检查更新。
     CheckUpdates,
@@ -742,7 +742,7 @@ impl Setting {
         text.map(Cow::Borrowed)
     }
 
-    /// 是否为直接填写的一段文字（路径、文件名），始终画成输入框，没有可选的菜单。
+    /// 是否为文本设置项（路径、文件名），以输入框显示。
     pub fn is_text(self) -> bool {
         matches!(
             self,

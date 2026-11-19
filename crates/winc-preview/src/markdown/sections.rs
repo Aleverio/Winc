@@ -25,16 +25,12 @@ impl Markdown {
         if main > 0 && matches!(self.blocks[main - 1], Block::Rule(None)) {
             main -= 1;
         }
-        let mut seen: HashMap<String, usize> = HashMap::new();
-        (self.blocks.iter().enumerate())
-            .map(|(i, block)| {
-                let Block::Heading(level, inline) = block else {
+        let keys = self.heading_keys();
+        (self.blocks.iter().zip(keys).enumerate())
+            .map(|(i, (block, key))| {
+                let (Block::Heading(level, _), Some(key)) = (block, key) else {
                     return None;
                 };
-                let slug = slug(&inline.text);
-                let n = seen.entry(slug.clone()).or_default();
-                let key = if *n == 0 { slug } else { format!("{slug}-{n}") };
-                *n += 1;
                 let next = (self.blocks[i + 1..main].iter())
                     .position(|b| matches!(b, Block::Heading(l, _) if l <= level))
                     .map_or(main, |j| i + 1 + j);
@@ -43,6 +39,23 @@ impl Markdown {
                     key,
                     end: next,
                 })
+            })
+            .collect()
+    }
+
+    /// 返回各顶层块作为标题时的锚点，同名的第二个起加上 `-1`、`-2`；不是标题时为 `None`。
+    pub fn heading_keys(&self) -> Vec<Option<String>> {
+        let mut seen: HashMap<String, usize> = HashMap::new();
+        (self.blocks.iter())
+            .map(|block| {
+                let Block::Heading(_, inline) = block else {
+                    return None;
+                };
+                let slug = slug(&inline.text);
+                let n = seen.entry(slug.clone()).or_default();
+                let key = if *n == 0 { slug } else { format!("{slug}-{n}") };
+                *n += 1;
+                Some(key)
             })
             .collect()
     }

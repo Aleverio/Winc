@@ -118,15 +118,18 @@ impl App {
         });
     }
 
-    /// 粘贴到编辑区：剪贴板中有文件时粘贴文件，其次是文本（Markdown 中带结构的 HTML 先写成
-    /// Markdown），最后是图片。
+    /// 粘贴到编辑区：依次尝试剪贴板中的文件、文本和图片。
     pub(super) fn paste_into_editor(&mut self) {
         let files = self.clipboard_files();
         if !files.is_empty() {
             self.paste_files(&files);
         } else if let Some(text) = self.clipboard_text() {
-            // 网页、文档里复制的内容写成 Markdown；只有文字时照常粘贴文字。
-            match self.markdown_html_paste() {
+            // 网址和表格单元格的改写（`markdown_paste`）优先于 HTML 的转换。
+            let markdown = match self.markdown_paste(&text) {
+                Some(markdown) => Some(markdown),
+                None => self.markdown_html_paste(),
+            };
+            match markdown {
                 Some(markdown) => self.run(Command::Insert(markdown)),
                 None => self.paste_text(text),
             }
@@ -165,8 +168,8 @@ impl App {
 
     /// 把文件 `files` 粘贴到当前文档中。
     ///
-    /// Markdown 文档中写成链接（图片写成 `![…](…)`），项目之外的图片先复制到图片目录
-    /// （`markdown.imageFolder`）；其他文档中写成文件的绝对路径，每行一个。
+    /// Markdown 文档中写成链接（图片写成 `![…](…)`），项目之外的图片先复制到图片目录；其他文档
+    /// 中写成文件的绝对路径，每行一个。
     fn paste_files(&mut self, files: &[PathBuf]) {
         if !self.can_paste_into_document() {
             return;
@@ -196,7 +199,7 @@ impl App {
                                 error = error.to_string()
                             ),
                         );
-                        // 失败之前复制过来的图片留在磁盘上，同样显示出来。
+                        // 失败之前已复制的图片保留在磁盘上，同样刷新显示。
                         self.files_created(
                             done.into_iter().filter(|t| !files.contains(t)).collect(),
                         );
@@ -211,15 +214,14 @@ impl App {
             .filter(|t| !files.contains(t))
             .cloned()
             .collect();
-        // 图片目录可能是刚建的：连同目录一起刷新。
+        // 图片目录可能是新建的，一并刷新。
         copied.extend(folder.filter(|f| !copied.is_empty() && doc_dir.as_ref() != Some(f)));
         let snippet = paste::markdown_links(doc_dir.as_deref(), root.as_deref(), &targets);
         self.insert_snippet(snippet);
         self.files_created(copied);
     }
 
-    /// 把剪贴板中的图片 `png` 粘贴到当前文档：按 `markdown.imageFolder`、`markdown.imageName`
-    /// 存到图片目录中（默认为文档旁边的 `image.png`），插入 `![主名](…)` 并选中替代文字。
+    /// 把剪贴板中的图片 `png` 存入图片目录，在当前文档中插入 `![主名](…)` 并选中替代文字。
     ///
     /// 其他文档、尚未保存的 Markdown 文档中不能粘贴图片，提示原因。
     pub(in crate::app) fn paste_image(&mut self, png: &[u8]) {
@@ -261,7 +263,7 @@ impl App {
         }
     }
 
-    /// 当前 Markdown 文档的图片目录（`markdown.imageFolder`）；文档尚未保存时为 `None`。
+    /// 返回当前文档的图片目录（`markdown.imageFolder`）；文档尚未保存时为 `None`。
     fn markdown_image_folder(&self) -> Option<PathBuf> {
         let doc = self.editor.active()?.path.as_deref()?;
         let setting = self.config.markdown_image_folder.as_deref();
@@ -374,40 +376,8 @@ impl App {
     }
 }
 
-/// 当前的本地时间，写成 `20261119-153012`，填进图片名的 `${date}`。
+/// 返回当前本地时间，格式为 `20261119-153012`，用于图片名中的 `${date}`。
 fn local_stamp() -> String {
-    let (y, mo, d, h, mi, sec) = local_time();
+    let (y, mo, d, h, mi, sec) = crate::system::local_time();
     format!("{y:04}{mo:02}{d:02}-{h:02}{mi:02}{sec:02}")
-}
-
-/// 当前的本地时间：年、月、日、时、分、秒。
-#[cfg(unix)]
-#[allow(unsafe_code)] // localtime_r
-fn local_time() -> (i32, i32, i32, i32, i32, i32) {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs()) as libc::time_t;
-    let mut tm = std::mem::MaybeUninit::<libc::tm>::zeroed();
-    // SAFETY: `localtime_r` 只读 `now`、只写传入的结构体，失败时返回空指针。
-    if unsafe { libc::localtime_r(&now, tm.as_mut_ptr()).is_null() } {
-        return (1970, 1, 1, 0, 0, 0);
-    }
-    // SAFETY: 调用成功时结构体已填好。
-    let tm = unsafe { tm.assume_init() };
-    let (y, mo) = (tm.tm_year + 1900, tm.tm_mon + 1);
-    (y, mo, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec)
-}
-
-/// 当前的本地时间：年、月、日、时、分、秒。
-#[cfg(windows)]
-#[allow(unsafe_code)] // GetLocalTime
-fn local_time() -> (i32, i32, i32, i32, i32, i32) {
-    let mut t = std::mem::MaybeUninit::zeroed();
-    // SAFETY: `GetLocalTime` 只写传入的结构体，不会失败。
-    unsafe { windows_sys::Win32::System::SystemInformation::GetLocalTime(t.as_mut_ptr()) };
-    // SAFETY: 调用后结构体已填好。
-    let t: windows_sys::Win32::Foundation::SYSTEMTIME = unsafe { t.assume_init() };
-    let field = i32::from;
-    let (y, mo, d) = (field(t.wYear), field(t.wMonth), field(t.wDay));
-    (y, mo, d, field(t.wHour), field(t.wMinute), field(t.wSecond))
 }

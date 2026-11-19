@@ -3,7 +3,7 @@
 
 use super::*;
 
-/// 正文里的链接为什么打不开。
+/// 正文链接无法打开的原因。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Broken {
     /// 指向的本地文件不存在。
@@ -13,7 +13,7 @@ pub(crate) enum Broken {
 }
 
 impl Broken {
-    /// 悬停提示里写的原因。
+    /// 返回悬停提示中显示的原因。
     pub(crate) fn reason(self) -> &'static str {
         match self {
             Broken::File => t!("preview-markdown-link-file-not-found"),
@@ -22,7 +22,7 @@ impl Broken {
     }
 }
 
-/// 查过的链接：所属的文档和版本，各地址的结果。文档改了、换了文档、磁盘上的文件变了时重查。
+/// 已检查的链接：所属文档、版本号和各地址的结果。
 #[derive(Debug, Default)]
 pub(crate) struct LinkChecks {
     of: Option<(DocumentId, u64)>,
@@ -30,20 +30,19 @@ pub(crate) struct LinkChecks {
 }
 
 impl LinkChecks {
-    /// 已经查过的地址 `url` 的结果。
+    /// 返回已检查的地址 `url` 的结果。
     pub(crate) fn get(&self, url: &str) -> Option<Broken> {
         self.results.get(url).copied().flatten()
     }
 
-    /// 磁盘上的文件变了：下次都重查。
+    /// 清空结果，磁盘上的文件变化后调用。
     pub(crate) fn clear(&mut self) {
         self.results.clear();
     }
 }
 
 impl App {
-    /// 查正文链接 `url` 能否打开（结果记下，下次直接取）：本地文件要存在，`#锚点` 要有对应
-    /// 的标题。网址、脚注和远端主机上的文件不查。
+    /// 返回正文链接 `url` 无法打开的原因，结果按文档版本号缓存；网址、脚注和远端文件不检查。
     pub(crate) fn check_markdown_link(&mut self, url: &str) -> Option<Broken> {
         let doc = self.editor.active()?;
         let of = Some((doc.id, doc.revision));
@@ -58,9 +57,13 @@ impl App {
         }
         let broken = match url.strip_prefix('#') {
             Some(anchor) if anchor.starts_with("fn-") || anchor.starts_with("fnref-") => None,
-            Some(anchor) => laid::anchor_box(self, anchor)
-                .is_none()
-                .then_some(Broken::Heading),
+            // 收起的一节中的块没有排版，同时按解析结果中的标题查找。
+            Some(anchor) => {
+                let key = percent_decode(anchor).to_lowercase();
+                let parsed = self.preview.markdown.parsed.as_ref();
+                let titled = parsed.is_some_and(|p| p.heading_keys().contains(&Some(key)));
+                (laid::anchor_box(self, anchor).is_none() && !titled).then_some(Broken::Heading)
+            }
             None => (doc.path.as_deref())
                 .and_then(|path| local_target(path, url))
                 .filter(|target| !self.may_exist(target))

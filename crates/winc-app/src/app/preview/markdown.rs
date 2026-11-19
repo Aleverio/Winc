@@ -217,7 +217,7 @@ pub(crate) struct MarkdownPreview {
     pub diagram: Option<DiagramView>,
     /// 鼠标所在代码块在 `codes` 中的序号。
     pub code_hover: Option<usize>,
-    /// 鼠标所在的图片（窗口坐标），显示调整大小的把手。
+    /// 鼠标所在图片的范围（窗口坐标）。
     pub(crate) image_hover: Option<winc_render::Rect>,
     /// 上一帧排版的总高度（逻辑像素），滚动时据此限制范围。
     pub height: f32,
@@ -281,28 +281,28 @@ pub(crate) struct MarkdownPreview {
     /// 最近一次单击放下的光标（原文字节偏移）：因此重新排版时不为保持光标不动而滚动（见
     /// `laid::old_caret`）。
     pub(crate) clicked: Option<usize>,
-    /// 查过的正文链接，打不开的画上虚下划线。
+    /// 正文链接的检查结果。
     pub(crate) links: links::LinkChecks,
-    /// 右键点中的本地图片的文件，菜单「在新标签中打开图片」打开它。
+    /// 右键点击的本地图片文件，供菜单「在新标签中打开图片」使用。
     pub(crate) menu_picture: Option<PathBuf>,
-    /// 右键点中的图片，菜单「图片大小」调整它。
+    /// 右键点击的图片，供菜单「图片大小」使用。
     pub(crate) menu_image: Option<resize::ImageAt>,
-    /// 正在拖动把手调整大小的图片。
+    /// 正在拖动把手的图片。
     pub(crate) resizing: Option<resize::Resizing>,
 }
 
 /// 淡入的项：所在顶层块的序号及块内各项的序号，按块的序号排序。
 pub(crate) type Fading = Vec<(usize, Box<[usize]>)>;
 
-/// 重排后各块怎样从原位置过渡到新位置，见 [`BlockMotion`]。
+/// 重排后各块从原位置到新位置的过渡，见 [`BlockMotion`]。
 pub(crate) struct Moves {
     /// 各块起始时的偏移，同 [`BlockMotion::from`]。
     pub from: Vec<f32>,
     /// 淡入的项。
     pub fading: Fading,
-    /// 换成原文的块：（块，渲染结果从第几项起，这些项另加的起始偏移），按块排序。
+    /// 刚显示原文的块：（块序号，渲染结果的第一项，渲染结果的起始偏移），按块序号排序。
     pub inner: Vec<(usize, u32, f32)>,
-    /// 换回排版的块原来的原文。
+    /// 刚恢复排版的块原来的原文。
     pub leaving: Vec<laid::Leaving>,
 }
 
@@ -318,19 +318,19 @@ pub(crate) struct BlockMotion {
     pub from: Vec<f32>,
     /// 淡入的项。
     pub fading: Fading,
-    /// 换成原文的块里渲染结果另加的偏移，见 [`Moves::inner`]。
+    /// 刚显示原文的块中渲染结果的偏移，见 [`Moves::inner`]。
     pub inner: Vec<(usize, u32, f32)>,
-    /// 换回排版的块原来的原文，在原处淡出。
+    /// 刚恢复排版的块原来的原文，在原处淡出。
     pub leaving: Vec<laid::Leaving>,
 }
 
 impl BlockMotion {
-    /// 第 `block` 块换回排版前的原文（在原处淡出）。
+    /// 返回第 `block` 块恢复排版前的原文。
     pub fn leaving(&self, block: usize) -> Option<&laid::Leaving> {
         self.leaving.iter().find(|l| l.block == block)
     }
 
-    /// 第 `block` 块中从第几项起另有偏移，以及当前的这段偏移（逻辑像素）。
+    /// 返回第 `block` 块中渲染结果的第一项和当前偏移（逻辑像素）。
     pub fn inner(&self, block: usize) -> Option<(usize, f32)> {
         let i = self.inner.binary_search_by_key(&block, |(b, ..)| *b).ok()?;
         let (_, first, d) = self.inner[i];
@@ -1051,7 +1051,7 @@ impl App {
         let pictures = &self.hits.markdown_pictures;
         let picture = (pictures.iter().rev()).find(|(r, _)| r.contains(x, y));
         self.preview.markdown.menu_picture = picture.map(|(_, path)| path.clone());
-        // 链接上的右键不在这里处理；包在链接里的图片仍有图片的菜单。
+        // 链接上的右键点击不在此处理，包在链接中的图片除外。
         let on_link = self.markdown_link_at(x, y).is_some() && picture.is_none();
         if !self.preview.markdown.area.contains(x, y) || on_link {
             return false;

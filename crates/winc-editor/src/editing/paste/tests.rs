@@ -36,7 +36,7 @@ fn saved_images_never_overwrite() {
     assert_eq!(second, dir.join("image-1.png"));
     assert_eq!(fs::read(&first).unwrap(), b"one");
     assert_eq!(fs::read(&second).unwrap(), b"two");
-    // 设置的图片目录还不存在时先建好。
+    // 图片目录不存在时先创建。
     let third = save_image(&dir.join("assets/notes"), "shot.png", b"three").unwrap();
     assert_eq!(third, dir.join("assets/notes/shot.png"));
     let _ = fs::remove_dir_all(&dir);
@@ -65,7 +65,7 @@ fn image_folder_and_name_follow_the_settings() {
         image_name(doc, Some("${filename}-${date}"), date),
         "notes-20261119-153012.png"
     );
-    // 没写 `${date}` 时不取时间；名字里的路径分隔符换掉。
+    // 没有 `${date}` 时不读取时间；名字中的路径分隔符被替换。
     let name = image_name(doc, Some("a/b"), || unreachable!());
     assert_eq!(name, "a-b.png");
 }
@@ -219,7 +219,7 @@ fn images_from_outside_the_project_are_copied_next_to_the_document() {
     assert_eq!(targets[1], docs.join("photo-1.JPG"));
     assert_eq!(fs::read_to_string(&targets[1]).unwrap(), "out");
     assert_eq!(targets[2], dir.join("report.pdf"));
-    // 设置了图片目录时复制到那里，目录不存在时先建好。
+    // 设置了图片目录时复制到该目录，不存在时先创建。
     let assets = docs.join("notes.assets");
     let targets = bring_images(&docs, &assets, Some(&project), &files[1..2]).unwrap();
     assert_eq!(targets, [assets.join("photo.JPG")]);

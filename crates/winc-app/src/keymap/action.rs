@@ -112,7 +112,7 @@ pub enum Action {
     MarkdownFocusMode,
     /// Markdown 中切换打字机模式。
     MarkdownTypewriterMode,
-    /// Markdown 中粘贴为纯文本：不把网页内容、网址、表格单元格改写成 Markdown。
+    /// Markdown 中粘贴为纯文本。
     MarkdownPastePlain,
     DeleteLine,
     DeleteAllLeft,

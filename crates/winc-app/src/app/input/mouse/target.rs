@@ -498,7 +498,7 @@ impl App {
         if let Some(target) = toc {
             return Target::MarkdownToc(target);
         }
-        // 图片右下角的把手先于图片上的链接。
+        // 图片的把手优先于图片上的链接。
         if self.image_handle_at(x, y).is_some() {
             return Target::ImageHandle;
         }
@@ -987,7 +987,7 @@ pub(super) enum Target {
     /// Markdown 预览中可以选择文字的区域；参数为鼠标下的链接（可编辑的预览中单击链接放置
     /// 光标，不打开它）。
     MarkdownText(Option<usize>),
-    /// 可编辑的预览中图片右下角调整大小的把手。
+    /// 可编辑的预览中图片的把手。
     ImageHandle,
     /// 标签，参数为标签下标与是否位于关闭按钮上。
     Tab(usize, bool),

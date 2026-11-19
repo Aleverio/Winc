@@ -134,7 +134,7 @@ fn spreadsheet_cells_become_a_table() {
         from_tsv(text).as_deref(),
         Some("| 名称 | 数量 |\n| --- | --- |\n| 苹果 | 3 |\n| a\\|b |  |\n")
     );
-    // 一行、一列、列数不齐的都不是表格。
+    // 只有一行、一列或列数不同时不是表格。
     assert_eq!(from_tsv("a\tb"), None);
     assert_eq!(from_tsv("a\nb"), None);
     assert_eq!(from_tsv("a\tb\nc"), None);

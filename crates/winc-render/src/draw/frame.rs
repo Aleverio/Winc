@@ -32,7 +32,7 @@ pub struct Frame<'a> {
     ///
     /// 由 [`Frame::with_opacity`] 临时相乘。
     pub(crate) opacity: f32,
-    /// 颜色向哪种底色混合、保留原色的比例，见 [`Frame::with_fade`]。
+    /// 颜色混合的底色和原色保留的比例，见 [`Frame::with_fade`]。
     pub(crate) toward: Option<(Color, f32)>,
     /// 背景色，`0xAARRGGBB`。
     pub(crate) background: u32,
@@ -92,11 +92,10 @@ impl Frame<'_> {
         result
     }
 
-    /// 以 `amount`（0–1）把其中绘制的颜色向纯色底 `backdrop` 混合后执行 `paint`，用于淡化
-    /// 画在纯色底上的一组内容。
+    /// 执行 `paint`，其中绘制的颜色按 `amount`（0–1）向纯色底 `backdrop` 混合。
     ///
-    /// 画在 `backdrop` 上时与整体不透明度看起来一样，但不透明的部分仍然不透明，重叠处照旧互相
-    /// 遮挡；图片按不透明度变淡。有窗口背景图时底色不是纯色，改用 [`Self::with_opacity`]。
+    /// 不透明的颜色仍不透明，重叠处保持遮挡；图片按不透明度变淡。有窗口背景图时改用
+    /// [`Self::with_opacity`]。
     pub fn with_fade<R>(
         &mut self,
         backdrop: Color,
@@ -177,7 +176,7 @@ impl Frame<'_> {
         color.alpha(color.a * self.opacity)
     }
 
-    /// 图片的整体不透明度：图片不能向底色混合，按不透明度变淡。
+    /// 返回绘制图片时的整体不透明度（0–255）。
     fn pixel_opacity(&self) -> u32 {
         let fade = self.toward.map_or(1.0, |(_, k)| k);
         (self.opacity * fade * 255.0).round() as u32

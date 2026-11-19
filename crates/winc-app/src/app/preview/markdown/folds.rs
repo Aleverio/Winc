@@ -23,6 +23,43 @@ impl App {
         self.request_redraw();
     }
 
+    /// 锚点 `anchor`（未解码）位于收起的一节中时展开包含它的各节，排版后跳转；返回是否展开了。
+    pub(in crate::app) fn unfold_to_anchor(&mut self, anchor: &str) -> bool {
+        let key = crate::app::preview::markdown::percent_decode(anchor).to_lowercase();
+        let (Some(id), Some(parsed), Some(laid)) = (
+            self.editor.active().map(|d| d.id),
+            self.preview.markdown.parsed.as_ref(),
+            self.preview.markdown.layout.as_ref(),
+        ) else {
+            return false;
+        };
+        let Some(block) = parsed
+            .heading_keys()
+            .iter()
+            .position(|k| k.as_ref() == Some(&key))
+        else {
+            return false;
+        };
+        let Some(folds) = self.preview.markdown.folds.get_mut(&id) else {
+            return false;
+        };
+        let around: Vec<String> = (laid.sections.iter().enumerate())
+            .filter_map(|(i, s)| s.as_ref().filter(|s| i < block && block < s.end))
+            .map(|s| s.key.clone())
+            .filter(|k| folds.contains(k))
+            .collect();
+        if around.is_empty() {
+            return false;
+        }
+        for k in &around {
+            folds.remove(k);
+        }
+        self.preview.markdown.refold = true;
+        self.preview.markdown.pending_anchor = Some((id, anchor.to_owned()));
+        self.request_redraw();
+        true
+    }
+
     /// 光标在键为 `key` 的一节里时移到标题末尾。
     fn leave_folded_section(&mut self, key: &str) {
         let Some(laid) = self.preview.markdown.layout.as_ref() else {

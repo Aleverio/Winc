@@ -273,7 +273,7 @@ fn chars_in(text: &str, byte: usize, crlf: bool) -> usize {
     head.chars().count() + if crlf { head.matches('\n').count() } else { 0 }
 }
 
-/// 网址 `url` 是否指向一张图片（按问号、井号之前的扩展名判断）。
+/// 网址 `url` 是否指向图片（按 `?`、`#` 之前的扩展名判断）。
 pub(super) fn is_image_url(url: &str) -> bool {
     let path = url
         .split(['?', '#'])
