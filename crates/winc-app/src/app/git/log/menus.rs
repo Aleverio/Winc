@@ -99,8 +99,8 @@ impl App {
 
     /// 日志里提交 `oid` 的菜单里哪些操作可用。
     ///
-    /// 另一个 Git 操作还在运行，或者正停在合并、变基中间时，会修改仓库的操作都不可用；撤销、推送
-    /// 只在日志与提交视图是同一个仓库时可用。
+    /// 另一个 Git 操作还在运行，或者正停在合并、变基中间时，会修改仓库的操作都不可用；撤销、推送、
+    /// 修正和压缩只在日志与提交视图是同一个仓库时可用。
     pub(in crate::app) fn log_commit_actions(&self, oid: &str) -> CommitActions {
         let status = self.git.status.as_ref();
         let busy =
@@ -118,6 +118,7 @@ impl App {
             parent: commits
                 .iter()
                 .any(|c| c.oid == oid && !c.parents.is_empty()),
+            changes: same && status.is_some_and(|s| !s.entries.is_empty()),
         }
     }
 
@@ -175,6 +176,8 @@ impl App {
             MenuCommand::LogNewTag => self.open_tag_prompt(oid),
             MenuCommand::LogInteractiveRebase => self.start_interactive_rebase(oid),
             MenuCommand::LogReword => self.start_reword(oid),
+            MenuCommand::LogFixup => self.start_commit_into(oid, false),
+            MenuCommand::LogSquashInto => self.start_commit_into(oid, true),
             MenuCommand::LogDropCommit => self.start_drop_commit(oid),
             MenuCommand::LogPushUpTo => self.start_push_up_to(oid),
             MenuCommand::LogUndoCommit => {

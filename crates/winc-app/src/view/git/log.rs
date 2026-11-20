@@ -610,7 +610,11 @@ fn draw_list(
         draw_uncommitted(app, frame, (list, y, text_x), graph, uncommitted, hits);
     }
 
-    for i in rows {
+    let cuts = match graphless {
+        true => Vec::new(),
+        false => long_cuts(view, rows.clone(), line),
+    };
+    for i in rows.clone() {
         let commit = &view.commits[i];
         let y = list.y + top + (i as f64 - scroll) as f32 * lh;
         let row = Rect::new(list.x, y, list.w, lh);
@@ -627,11 +631,11 @@ fn draw_list(
         }
 
         if let Some(graph) = view.graph.get(i).filter(|_| !graphless) {
-            let cuts = long_cuts(view, i, line);
+            let cuts = cuts.get(i - rows.start).map_or(&[][..], Vec::as_slice);
             draw_graph_row(
                 app,
                 frame,
-                (graph, line, &cuts),
+                (graph, line, cuts),
                 (commit, i),
                 (graph_x, y, fill),
                 list,

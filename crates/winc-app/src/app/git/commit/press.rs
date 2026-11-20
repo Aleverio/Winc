@@ -120,6 +120,7 @@ impl App {
             // 按住 ⌥ 时按钮写的是「提交并推送」（见 `App::commit_pushes`）。
             CommitTarget::Commit if self.commit_pushes() => self.confirm_commit_and_push(),
             CommitTarget::Commit => self.git_commit(),
+            CommitTarget::Amend if self.git.commit.into.is_some() => self.cancel_commit_into(),
             CommitTarget::Amend => self.toggle_amend(),
             CommitTarget::NextStep => self.git_sync(),
             CommitTarget::InitRepository => self.git_init(),

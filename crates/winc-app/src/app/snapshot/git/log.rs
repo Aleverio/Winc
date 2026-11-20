@@ -2,6 +2,7 @@
 
 use super::*;
 
+mod measure;
 mod menu;
 
 /// 在列表中无法完整显示的长说明，用于检查截短与悬停提示。
@@ -935,6 +936,7 @@ fn a_tag_can_be_created_on_a_commit_from_the_log() {
         on_head: None,
         child: false,
         parent: true,
+        changes: true,
     };
     let menu = log_commit_menu(actions, "main", Vec::new(), &[]);
     for command in [MenuCommand::LogNewTag, MenuCommand::LogCopyShortOid] {

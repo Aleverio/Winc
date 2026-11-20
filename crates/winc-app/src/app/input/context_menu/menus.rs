@@ -259,6 +259,8 @@ pub struct CommitActions {
     pub child: bool,
     /// 它有父提交（不是第一个提交）。
     pub parent: bool,
+    /// 提交视图里有可以提交的更改：可以修正、压缩到这个提交。
+    pub changes: bool,
 }
 
 /// 日志里一个提交的右键菜单，分组和顺序与 IDEA 的日志菜单相同：复制与拣选；签出与比较；重置、
@@ -308,6 +310,8 @@ pub fn log_commit_menu(
         Item(LogUndoCommit, enabled && actions.undo),
         Separator,
         Item(LogReword, enabled && history),
+        Item(LogFixup, enabled && history && actions.changes),
+        Item(LogSquashInto, enabled && history && actions.changes),
         Item(LogDropCommit, enabled && history),
         Item(LogInteractiveRebase, enabled && history),
         Item(LogPushUpTo, enabled && history && actions.push),

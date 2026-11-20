@@ -801,6 +801,7 @@ impl App {
                             self.git.commit.skipped.clear();
                             self.git.commit.reset_checks();
                             self.git.commit.amend = false;
+                            self.finish_commit_into(&message);
                             self.git.commit.no_verify = false;
                             self.git.commit.draft = None;
                             if left > 0 {

@@ -91,7 +91,7 @@ pub(in crate::view) fn draw_commit(
     let size = app.fonts.ui_small;
     let text = commit_button_text(app);
     app.set_commit_labels(CommitLabels {
-        amend: AMEND_TEXT + frame.measure(FontKind::Ui, size, t!("git-commit-amend")) + AMEND_END,
+        amend: AMEND_TEXT + frame.measure(FontKind::Ui, size, &amend_text(app)) + AMEND_END,
         button: frame.measure(FontKind::Ui, size, &text),
         undo: frame.measure(FontKind::Ui, size, t!("git-commit-undo")),
         push: frame.measure(FontKind::Ui, size, t!("git-commit-push-button")),
@@ -933,7 +933,7 @@ fn draw_card(
     if let Some(amend) = parts.amend {
         let hovered = app.pointer.hover == Hover::Commit(CommitTarget::Amend);
         let cy = amend.y + amend.h / 2.0;
-        let state = app.git.commit.amend.then_some(true);
+        let state = (app.git.commit.amend || app.git.commit.into.is_some()).then_some(true);
         let border = p.text_dim.alpha(if hovered { 1.0 } else { 0.55 });
         let ink = if hovered { p.text } else { p.text_muted };
         let check = (amend.x + AMEND_CHECK, cy);
@@ -947,7 +947,7 @@ fn draw_card(
             clip,
         );
         let x = amend.x + AMEND_TEXT;
-        ui_text_small(frame, app, x, amend, t!("git-commit-amend"), ink, clip);
+        ui_text_small(frame, app, x, amend, &amend_text(app), ink, clip);
         hits.push((amend, CommitTarget::Amend));
     }
 
@@ -1068,6 +1068,9 @@ fn commit_button_text(app: &App) -> String {
     let text = match (busy, operation, app.git.commit.amend) {
         _ if let Some((oid, _)) = done => t!("git-commit-button-committed", oid = oid.as_str()),
         _ if app.commit_pushes() => return t!("menu-commit-and-push").to_owned(),
+        (false, None, _) if app.git.commit.into.is_some() => {
+            return t!("git-commit-button-rebase").to_owned();
+        }
         (true, ..) => t!("git-commit-button-committing").to_owned(),
         (false, Some(Operation::Rebase), _) => t!("git-commit-button-continue-rebase").to_owned(),
         (false, Some(Operation::Merge), _) => t!("git-commit-button-finish-merge").to_owned(),
@@ -1083,6 +1086,20 @@ fn commit_button_text(app: &App) -> String {
         Some(CommitScope::Staged(count)) => t!("git-commit-button-files", count = count),
         Some(CommitScope::All(_)) => t!("git-commit-button-all").to_owned(),
         Some(CommitScope::Nothing) | None => text,
+    }
+}
+
+/// 提交信息上方那一行勾选项的文字：「修改上次提交」，修正、压缩到历史提交时写明到哪个提交。
+fn amend_text(app: &App) -> String {
+    match &app.git.commit.into {
+        Some(into) => {
+            let commit = crate::app::git::log::short(&into.oid);
+            match into.squash {
+                true => t!("git-commit-into-squash", commit = commit),
+                false => t!("git-commit-into-fixup", commit = commit),
+            }
+        }
+        None => t!("git-commit-amend").to_owned(),
     }
 }
 

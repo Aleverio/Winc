@@ -164,6 +164,7 @@ fn a_commit_menu_lists_its_branches_and_tags() {
         on_head: None,
         child: false,
         parent: true,
+        changes: true,
     };
     let titles = |menu: &[MenuEntry]| -> Vec<String> {
         (menu.iter())
@@ -750,7 +751,7 @@ fn pull_from_and_push_to_choose_another_remote() {
     assert_eq!((shown.remote.as_str(), shown.total), ("origin", 0));
     app.choose_form_base(Some("mirror".into()));
     assert_eq!(form(&app).subjects, ["镜像上的提交"]);
-    // 远程上没有的分支不能拉取。
+    // 本地没有记下的远程分支不能拉取。
     let dialog = app.overlays.form_dialog.as_mut().unwrap();
     dialog.name.set_text("nope");
     let dialog = app.overlays.form_dialog.as_ref().unwrap();
@@ -796,6 +797,14 @@ fn pull_from_and_push_to_choose_another_remote() {
     assert_eq!(git(&mirror, &["rev-parse", "refs/heads/main"]), head);
     let upstream = git(&work, &["rev-parse", "--abbrev-ref", "@{upstream}"]);
     assert_eq!(upstream.as_deref(), Some("origin/main"));
+
+    // 游离的 `HEAD` 上没有分支：两个对话框都不打开，说明原因。
+    git(&work, &["switch", "-q", "--detach"]).unwrap();
+    app.git_refresh();
+    for action in [Action::GitPullFrom, Action::GitPushTo] {
+        app.run_action(action);
+        assert!(app.overlays.form_dialog.is_none(), "{action:?}");
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 

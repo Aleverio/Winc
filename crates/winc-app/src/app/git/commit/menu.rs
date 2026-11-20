@@ -161,11 +161,13 @@ impl App {
         let clean = status.is_some_and(|s| s.entries.is_empty());
         let mut entries = Vec::new();
         let enabled = idle && (!clean || self.git.commit.amend);
+        // 并入历史提交时提交以后要变基，不再推送、同步。
+        let pushes = enabled && self.git.commit.into.is_none();
         if push {
-            entries.push(MenuEntry::Item(MenuCommand::CommitPush, enabled));
+            entries.push(MenuEntry::Item(MenuCommand::CommitPush, pushes));
         }
         entries.extend([
-            MenuEntry::Item(MenuCommand::CommitSync, enabled),
+            MenuEntry::Item(MenuCommand::CommitSync, pushes),
             MenuEntry::Separator,
         ]);
         entries.extend([
@@ -224,8 +226,10 @@ impl App {
 
     /// 提交，成功以后推送（`sync` 时同步）。
     pub(super) fn git_commit_then(&mut self, sync: bool) {
-        self.git.commit.push_after = true;
-        self.git.commit.sync_after = sync;
+        // 并入历史提交时提交以后要变基，不推送。
+        let push = self.git.commit.into.is_none();
+        self.git.commit.push_after = push;
+        self.git.commit.sync_after = sync && push;
         self.git_commit();
         // 没有真的开始提交（没写信息、没勾文件），就不留着「之后推送」。
         if !self.git.commit.busy {

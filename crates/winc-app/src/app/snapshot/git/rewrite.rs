@@ -246,6 +246,81 @@ fn the_commit_menu_follows_where_the_commit_is() {
     assert!(label.tooltip.is_some_and(|t| t.contains(".worktrees")));
 }
 
+/// 修正到此提交：提交卡片写好 `fixup! 说明`，按钮是「提交并变基」；提交以后更改并入目标，
+/// 说明不变，之后的提交还在。
+#[test]
+fn fixup_folds_the_changes_into_the_commit() {
+    use crate::app::git::commit::CommitTarget;
+    let Some((mut app, dir)) = four_commits("rewrite-fixup") else {
+        return;
+    };
+    std::fs::write(dir.join("b.txt"), "b2").unwrap();
+    app.git_refresh();
+    paint(&mut app);
+    let b = rev(&dir, "HEAD~2");
+    let menu = commit_menu(&mut app, &b);
+    assert!(menu.contains(&(MenuCommand::LogFixup, true)));
+    app.run_menu_command(MenuCommand::LogFixup);
+    paint(&mut app);
+    assert_eq!(app.git.commit.message.text(), "fixup! b");
+    assert_eq!(app.focus, Focus::CommitMessage);
+
+    // 取消勾选那一行：恢复原来写的说明；再来一次后提交。
+    app.press_commit(CommitTarget::Amend);
+    assert!(app.git.commit.into.is_none());
+    assert_eq!(app.git.commit.message.text(), "");
+    app.overlays.context_menu = None;
+    commit_menu(&mut app, &b);
+    app.run_menu_command(MenuCommand::LogFixup);
+    paint(&mut app);
+    app.git_commit();
+    app.poll_commit();
+    app.poll_branch_ops();
+    assert!(app.git.commit.into.is_none());
+    assert_eq!(subjects(&dir), ["d", "c", "b", "a"]);
+    let shown = Command::new("git")
+        .arg("-C")
+        .arg(&dir)
+        .args(["show", "HEAD~2:b.txt"])
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8_lossy(&shown.stdout), "b2");
+}
+
+/// 压缩到此提交：补充的说明写在 `squash!` 下面，提交以后两段说明都留在目标里；工作区干净时
+/// 两项都不能用。
+#[test]
+fn squash_into_keeps_both_messages() {
+    let Some((mut app, dir)) = four_commits("rewrite-squash") else {
+        return;
+    };
+    let menu = commit_menu(&mut app, &rev(&dir, "HEAD~1"));
+    assert!(menu.contains(&(MenuCommand::LogSquashInto, false)));
+    app.overlays.context_menu = None;
+    std::fs::write(dir.join("c.txt"), "c2").unwrap();
+    app.git_refresh();
+    paint(&mut app);
+    commit_menu(&mut app, &rev(&dir, "HEAD~1"));
+    app.run_menu_command(MenuCommand::LogSquashInto);
+    paint(&mut app);
+    assert_eq!(app.git.commit.message.text(), "squash! c\n\n");
+    app.git.commit.message.insert("补充说明");
+    app.git_commit();
+    app.poll_commit();
+    app.poll_branch_ops();
+    assert_eq!(subjects(&dir), ["d", "c", "b", "a"]);
+    let message = Command::new("git")
+        .arg("-C")
+        .arg(&dir)
+        .args(["log", "-1", "--format=%B", "HEAD~1"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&message.stdout).trim_end(),
+        "c\n\n补充说明"
+    );
+}
+
 #[test]
 #[ignore = "截图，手动运行"]
 fn snapshot_history_edits() {
@@ -291,4 +366,20 @@ fn snapshot_history_edits() {
     paint(&mut app);
     std::thread::sleep(std::time::Duration::from_millis(400));
     shoot(&mut app, "git-rebase-ref");
+}
+
+#[test]
+#[ignore = "截图，手动运行"]
+fn snapshot_fixup_card() {
+    let Some((mut app, dir)) = four_commits("rewrite-fixup-shot") else {
+        return;
+    };
+    git_in(&dir, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
+    std::fs::write(dir.join("b.txt"), "b2").unwrap();
+    app.git_refresh();
+    commit_menu(&mut app, &rev(&dir, "HEAD~2"));
+    app.run_menu_command(MenuCommand::LogFixup);
+    paint(&mut app);
+    std::thread::sleep(std::time::Duration::from_millis(600));
+    shoot(&mut app, "git-fixup-card");
 }

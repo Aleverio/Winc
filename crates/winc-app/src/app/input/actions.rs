@@ -468,6 +468,10 @@ impl App {
             {
                 self.flash(winc_i18n::t!("git-not-a-repository"));
             }
+            // 拉取自…、推送到…按当前分支选目标：游离的 `HEAD` 上没有分支可用。
+            GitPullFrom | GitPushTo if !self.on_branch() => {
+                self.flash(winc_i18n::t!("git-not-on-branch"));
+            }
             GitSwitchBranch => self.switch_branch_from_command(),
             GitNewBranch => self.open_branch_dialog(None, None),
             GitStash => self.open_stash_prompt(),

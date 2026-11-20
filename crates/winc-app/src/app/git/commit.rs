@@ -23,6 +23,7 @@ mod drawer;
 pub(crate) use drawer::{DRAWER_CLOSED, DRAWER_TOP, Drawer};
 mod worktrees;
 pub(crate) use worktrees::WorktreeLine;
+mod into;
 mod last;
 mod menu;
 mod others;
@@ -753,6 +754,8 @@ pub(crate) struct CommitState {
     undo_drawn: Option<LastCommit>,
     /// 是否修改上一次提交。
     pub amend: bool,
+    /// 提交以后并入的历史提交（「修正到此提交」「压缩到此提交」）。
+    pub(crate) into: Option<super::rewrite::Autosquash>,
     /// 打开「修改上一次提交」之前由用户填写的提交信息，关闭该模式时恢复。
     draft: Option<String>,
     /// 各位置写了一半的提交信息：切换仓库、工作树时不丢。
@@ -973,6 +976,7 @@ impl Default for CommitState {
             undo: Slide::default(),
             undo_drawn: None,
             amend: false,
+            into: None,
             draft: None,
             drafts: HashMap::new(),
             staging: false,
@@ -1149,6 +1153,7 @@ impl App {
             && self.commit_parts().push.is_none()
             && !self.git.commit.busy
             && !self.git.commit.amend
+            && self.git.commit.into.is_none()
             && (self.git.status.as_ref()).is_some_and(|s| s.operation.is_none())
     }
 

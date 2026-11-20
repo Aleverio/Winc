@@ -272,3 +272,27 @@ fn a_branch_that_moved_is_not_rebased() {
     assert_eq!(subjects(&root), ["d", "c", "b", "a"]);
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// `fixup!` 并入目标只留目标的说明，`squash!` 把两段说明都留下；未提交的更改还在。
+#[test]
+fn autosquash_folds_fixups_and_squashes_into_their_targets() {
+    let Some((git, root)) = repository("rebase-autosquash", &["a", "b", "c"]) else {
+        return;
+    };
+    let base = oid_of(&root, "a");
+    std::fs::write(root.join("b"), "b2").unwrap();
+    run(&root, &["commit", "-qam", "fixup! b"]);
+    std::fs::write(root.join("b"), "b3").unwrap();
+    run(&root, &["commit", "-qam", "squash! b", "-m", "more"]);
+    std::fs::write(root.join("c"), "dirty").unwrap();
+    let b = oid_of(&root, "b");
+    assert!(!git.autosquash(&root, &b, Some(&base)).unwrap());
+    // 目标已被改写、不在分支上：不变基。
+    assert!(git.autosquash(&root, &b, Some(&base)).is_err());
+    assert_eq!(subjects(&root), ["c", "b", "a"]);
+    let message = run(&root, &["log", "-1", "--format=%B", "HEAD~1"]);
+    assert_eq!(message.trim_end(), "b\n\nmore");
+    assert_eq!(run(&root, &["show", "HEAD~1:b"]), "b3");
+    assert_eq!(std::fs::read_to_string(root.join("c")).unwrap(), "dirty");
+    let _ = std::fs::remove_dir_all(&root);
+}

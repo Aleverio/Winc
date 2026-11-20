@@ -754,13 +754,17 @@ impl App {
         if self.git.branch.running.is_some() || self.git.remotes.is_empty() {
             return false;
         }
-        let on_branch = (self.git.status.as_ref())
-            .is_some_and(|s| matches!(s.head, Some(winc_editor::git::Head::Branch(_))));
         match part {
             PickerPart::Pull => self.has_upstream(),
-            PickerPart::Push => on_branch,
+            PickerPart::Push => self.on_branch(),
             _ => true,
         }
+    }
+
+    /// `HEAD` 是否在一个分支上（不是游离的 `HEAD`）。
+    pub(crate) fn on_branch(&self) -> bool {
+        (self.git.status.as_ref())
+            .is_some_and(|s| matches!(s.head, Some(winc_editor::git::Head::Branch(_))))
     }
 
     /// 操作一段里的 `part` 现在能不能用：新建分支、新建工作树始终可用，其余见

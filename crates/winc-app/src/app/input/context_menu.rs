@@ -389,6 +389,10 @@ pub enum MenuCommand {
     LogInteractiveRebase,
     /// 日志里的提交：编辑提交说明（`HEAD` 修改上一次提交，更早的提交变基）。
     LogReword,
+    /// 日志里的提交：把要提交的更改修正到它（`fixup!`），只留它原来的说明。
+    LogFixup,
+    /// 日志里的提交：把要提交的更改压缩到它（`squash!`），两段说明都留下。
+    LogSquashInto,
     /// 日志里的提交：删除它，之后的提交重新应用（先确认）。
     LogDropCommit,
     /// 日志里 `HEAD` 指向的提交：撤销提交，更改留在暂存区（先确认）。
@@ -636,6 +640,8 @@ impl MenuCommand {
             MenuCommand::LogTag(op, _) => op.label(),
             MenuCommand::LogInteractiveRebase => t!("menu-log-interactive-rebase"),
             MenuCommand::LogReword => t!("menu-log-reword"),
+            MenuCommand::LogFixup => t!("menu-log-fixup"),
+            MenuCommand::LogSquashInto => t!("menu-log-squash-into"),
             MenuCommand::LogDropCommit => t!("menu-log-drop-commit"),
             MenuCommand::LogUndoCommit => t!("menu-log-undo-commit"),
             MenuCommand::LogPushUpTo => t!("menu-log-push-up-to"),

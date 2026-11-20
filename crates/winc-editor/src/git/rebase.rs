@@ -288,7 +288,44 @@ impl Git {
         });
         let _ = winc_backend::fs::remove_file(&local);
         result?;
-        let state = path_of("rebase-merge")?;
+        self.rebase_stopped(root)
+    }
+
+    /// 把目标提交 `oid` 之后的 `fixup!`、`squash!` 提交并入各自的目标（`git rebase
+    /// --autosquash`），返回变基是否暂停；`base` 是 `oid` 的父提交，为 `None` 时从根提交开始。
+    ///
+    /// 待办列表和压缩后的说明都按 `git` 生成的使用，不打开编辑器。未提交的更改由 `--autostash`
+    /// 暂存并在结束后恢复。
+    ///
+    /// # Errors
+    ///
+    /// 仓库未获信任、`oid` 已不在当前分支上（读取范围后分支被改写）、出现冲突或 `git` 运行失败时
+    /// 返回原因；出现冲突时变基停在冲突处。
+    pub fn autosquash(&self, root: &Path, oid: &str, base: Option<&str>) -> Result<bool, String> {
+        self.require_trust(root)?;
+        self.on_branch(root, oid)?;
+        let args = [
+            "rebase",
+            "--interactive",
+            "--autosquash",
+            "--autostash",
+            "--no-rebase-merges",
+            base.unwrap_or("--root"),
+        ];
+        self.run_prepared(root, &args, OPERATION_TIMEOUT, |command| {
+            command
+                .env("GIT_SEQUENCE_EDITOR", ":")
+                .env("GIT_EDITOR", ":");
+        })?;
+        self.rebase_stopped(root)
+    }
+
+    /// 变基是否停着（冲突以外的原因，如 [`RebaseAction::Edit`]）。
+    fn rebase_stopped(&self, root: &Path) -> Result<bool, String> {
+        let mut command = self.command(root);
+        command.args(["rev-parse", "--git-path", "rebase-merge"]);
+        let out = self.run(&mut command, STATUS_TIMEOUT, &Cancel::default())?;
+        let state = String::from_utf8_lossy(&out).trim().to_owned();
         Ok(winc_backend::fs::exists(crate::host::resolve(root, &state)))
     }
 }
