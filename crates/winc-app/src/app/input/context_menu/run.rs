@@ -31,6 +31,12 @@ impl App {
             MenuTarget::Tree(path) => self.run_tree_command(command, path),
             MenuTarget::Tab(id) => self.run_tab_command(command, id),
             MenuTarget::CommitFile(path) => self.run_commit_file_command(command, path),
+            // 提交上的分支子菜单：分支按弹出菜单时的列表解释。
+            MenuTarget::LogCommit(_) if let MenuCommand::GitBranch(op, i) = command => {
+                if let Some(branch) = menu.branches.get(i).cloned() {
+                    self.run_branch_op(op, branch);
+                }
+            }
             MenuTarget::LogCommit(oid) => self.run_log_commit_command(command, &oid),
             MenuTarget::LogFile(i, path) => self.run_log_file_command(command, i, path),
             MenuTarget::SearchResult(path, m) => self.run_search_result_command(command, path, m),

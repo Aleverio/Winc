@@ -1,5 +1,6 @@
 //! 弹出菜单：右键点中的是什么、各项的文字和勾选、交给系统菜单显示。
 
+use winc_editor::git::Ref;
 use winc_i18n::t;
 
 use super::*;
@@ -337,6 +338,10 @@ impl App {
     ///
     /// 目标文档已不存在时不弹出。
     pub(in crate::app) fn open_context_menu(&mut self, target: MenuTarget, at: (f32, f32)) {
+        // 提交菜单里的操作都在日志所在的仓库里做：先换到这个仓库，菜单按它的分支列出。
+        if matches!(target, MenuTarget::LogCommit(_)) {
+            self.follow_log_root();
+        }
         let entries = match &target {
             &MenuTarget::AddLanguage(task) => {
                 let listed = match task {
@@ -726,7 +731,27 @@ impl App {
                         .status
                         .as_ref()
                         .is_some_and(|s| s.operation.is_some());
-                log_commit_menu(!busy, &self.current_branch_label(), &tags)
+                // 指向这个提交的分支，各自的操作与分支面板中相同；分支列表属于提交视图所在的
+                // 仓库，还没换过去（日志没有仓库）时不列出。
+                let (held, stale) = (self.git.held_branches(), self.git.stale_branches());
+                let all = &self.git.branches;
+                let same = self.active_log_root() == self.git.root.as_deref();
+                let branches = (commit.iter().filter(|_| same).flat_map(|c| &c.refs))
+                    .filter_map(|r| match r {
+                        Ref::Head(name) | Ref::Branch(name) => {
+                            all.iter().position(|b| !b.remote && b.name == *name)
+                        }
+                        Ref::Remote(name) => all.iter().position(|b| b.remote && b.name == *name),
+                        _ => None,
+                    })
+                    .map(|i| {
+                        let running = self.git.branch.running.is_some();
+                        let ops =
+                            crate::app::git::branch::branch_ops(i, all, &held, &stale, running);
+                        (all[i].name.clone(), ops)
+                    })
+                    .collect();
+                log_commit_menu(!busy, &self.current_branch_label(), branches, &tags)
             }
             MenuTarget::LogColumns => self.log_columns_menu(),
             MenuTarget::LogDate | MenuTarget::LogPath | MenuTarget::LogAuthor => {
@@ -821,6 +846,7 @@ impl App {
             MenuTarget::BranchOps(_) | MenuTarget::CommitMore => {
                 (self.git.branches.clone(), self.git.stashes.clone())
             }
+            MenuTarget::LogCommit(_) => (self.git.branches.clone(), Vec::new()),
             MenuTarget::StashRow(_) | MenuTarget::StashList => {
                 (Vec::new(), self.git.stashes.clone())
             }

@@ -244,13 +244,21 @@ pub fn tab_menu(
     ]
 }
 
-/// 日志里一个提交的右键菜单：签出、在新工作树中签出、新建分支、新建标签，拣选、还原，把当前
-/// 分支重置到此提交（软、混合、硬在子菜单里，各自做什么写在副标题里），以及复制提交号与说明。
+/// 日志里一个提交的右键菜单：签出、在新工作树中签出、新建分支、新建标签，指向这个提交的各分支、
+/// 标签的子菜单，拣选、还原，把当前分支重置到此提交（软、混合、硬在子菜单里，各自做什么写在
+/// 副标题里），以及复制提交号与说明。
 ///
 /// `enabled` 为 `false`（另一个 Git 操作还在运行，或者正停在合并、变基中间）时，会修改
 /// 仓库的几项灰显。`branch` 是当前分支名（分离的 `HEAD` 时为「HEAD」），写进重置子菜单
-/// 的标题。
-pub fn log_commit_menu(enabled: bool, branch: &str, tags: &[&str]) -> Vec<MenuEntry> {
+/// 的标题。`branches` 是指向这个提交的分支：名字和该分支的操作（见
+/// [`crate::app::git::branch::branch_ops`]）。分支不超过 [`BRANCH_SUBMENUS`] 个、标签不超过
+/// [`TAG_SUBMENUS`] 个时各自一个子菜单，多了收进「分支」「标签」一个子菜单。
+pub fn log_commit_menu(
+    enabled: bool,
+    branch: &str,
+    branches: Vec<(String, Vec<MenuEntry>)>,
+    tags: &[&str],
+) -> Vec<MenuEntry> {
     use crate::app::git::branch::TagOp;
     use MenuCommand::*;
     use MenuEntry::{Item, Separator, Submenu};
@@ -261,14 +269,23 @@ pub fn log_commit_menu(enabled: bool, branch: &str, tags: &[&str]) -> Vec<MenuEn
         Item(LogNewBranch, enabled),
         Item(LogNewTag, enabled),
     ];
-    // 提交上的标签：每个一个子菜单（推送、删除、从远程删除）。
-    for (i, name) in tags.iter().enumerate() {
-        let ops = TagOp::ALL
-            .into_iter()
-            .map(|op| Item(LogTag(op, i), enabled))
-            .collect();
-        menu.push(Submenu(t!("menu-log-tag", name = *name), ops));
-    }
+    // 提交上的分支、标签：每个一个子菜单，多了收进一个子菜单。
+    let branch_title = |name: &str| t!("menu-log-branch", name = name);
+    let group = t!("menu-log-branches");
+    menu.extend(ref_submenus(branches, BRANCH_SUBMENUS, branch_title, group));
+    let tags = (tags.iter().enumerate())
+        .map(|(i, name)| {
+            let ops = TagOp::ALL.map(|op| Item(LogTag(op, i), enabled));
+            ((*name).to_owned(), ops.into())
+        })
+        .collect();
+    let tag_title = |name: &str| t!("menu-log-tag", name = name);
+    menu.extend(ref_submenus(
+        tags,
+        TAG_SUBMENUS,
+        tag_title,
+        t!("menu-log-tags"),
+    ));
     menu.extend([
         Separator,
         Item(LogCherryPick, enabled),
@@ -294,6 +311,30 @@ pub fn log_commit_menu(enabled: bool, branch: &str, tags: &[&str]) -> Vec<MenuEn
         Item(LogGoTo, true),
     ]);
     menu
+}
+
+/// 提交菜单中直接列出的分支子菜单最多几个，多了收进「分支」子菜单。
+pub const BRANCH_SUBMENUS: usize = 2;
+/// 提交菜单中直接列出的标签子菜单最多几个，多了收进「标签」子菜单。
+pub const TAG_SUBMENUS: usize = 1;
+
+/// 把引用 `refs`（名字和操作）排成子菜单：不超过 `max` 个时每个一个以 `title(名字)` 为题的
+/// 子菜单，多了放进以 `group` 为题的一个子菜单，里面每个引用一个以名字为题的子菜单。
+fn ref_submenus(
+    refs: Vec<(String, Vec<MenuEntry>)>,
+    max: usize,
+    title: impl Fn(&str) -> String,
+    group: &str,
+) -> Vec<MenuEntry> {
+    if refs.len() <= max {
+        let each = |(name, ops): (String, Vec<MenuEntry>)| MenuEntry::Submenu(title(&name), ops);
+        return refs.into_iter().map(each).collect();
+    }
+    let each = |(name, ops)| MenuEntry::Submenu(name, ops);
+    vec![MenuEntry::Submenu(
+        group.to_owned(),
+        refs.into_iter().map(each).collect(),
+    )]
 }
 
 /// 日志详情里一个改动文件的右键菜单：显示这次的差异、打开工作区里的文件、显示文件历史，

@@ -1347,3 +1347,29 @@ fn only_online_commands_follow_the_proxy() {
     assert!(!online(&["commit", "-m", "x"]));
     assert!(!online(&["-c", "core.fsmonitor=false", "stash", "push"]));
 }
+
+/// 拉取的方式按 `branch.<分支>.rebase` 优先、`pull.rebase` 其次读出；都没有配置时为 `None`。
+#[test]
+fn the_pull_mode_reads_the_branch_setting_first() {
+    let Some(git) = real_git() else {
+        return;
+    };
+    let dir = crate::test_util::scratch("git-pull-mode");
+    let sh = |args: &[&str]| {
+        let ok = Command::new("git")
+            .arg("-C")
+            .arg(&dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok, "git {args:?}");
+    };
+    sh(&["init", "-q", "-b", "main"]);
+    assert_eq!(git.pull_rebases(&dir), None);
+    sh(&["config", "pull.rebase", "merges"]);
+    assert_eq!(git.pull_rebases(&dir), Some(true));
+    sh(&["config", "branch.main.rebase", "false"]);
+    assert_eq!(git.pull_rebases(&dir), Some(false));
+    let _ = std::fs::remove_dir_all(&dir);
+}

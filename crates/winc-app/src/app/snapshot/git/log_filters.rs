@@ -477,6 +477,13 @@ fn log_columns_can_be_hidden_shown_and_widened() {
     let full = app.log_author_full();
     assert!(full < AUTHOR_DEFAULT, "{full}");
     assert_eq!(app.git.log.author_fit.map(|(_, w)| w), Some(full));
+    // 重取以后按新的一批重新算，提交数相同也不沿用上一次的结果。
+    let key = |app: &App| app.git.log.author_fit.unwrap().0;
+    let before = key(&app);
+    let log = app.editor.active_mut().unwrap().log.as_deref_mut().unwrap();
+    log.reset();
+    paint(&mut app);
+    assert_ne!(key(&app).1, before.1);
     // 截图：列表放得下名字时作者、时间两列的间距（`log-columns`）。
     app.state.log_branches = Some(false);
     app.git.log.details_w = Some(300.0);

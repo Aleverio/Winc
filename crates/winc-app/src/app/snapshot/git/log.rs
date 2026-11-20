@@ -927,7 +927,7 @@ fn a_tag_can_be_created_on_a_commit_from_the_log() {
         .oid
         .clone();
     // 右键菜单里有「新建标签…」和「复制短提交号」。
-    let menu = crate::app::input::context_menu::log_commit_menu(true, "main", &[]);
+    let menu = crate::app::input::context_menu::log_commit_menu(true, "main", Vec::new(), &[]);
     for command in [MenuCommand::LogNewTag, MenuCommand::LogCopyShortOid] {
         assert!(
             menu.contains(&MenuEntry::Item(command, true)),

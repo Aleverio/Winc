@@ -101,6 +101,9 @@ pub(crate) const BRANCHES_W: f32 = 200.0;
 /// 拖动后分支面板的最小、最大宽度（逻辑像素）。
 const BRANCHES_RANGE: (f32, f32) = (140.0, 480.0);
 
+/// 作者一列宽度的依据：日志标签、重取次数、是否还是重取之前的提交、提交数和字号。
+pub(crate) type AuthorFitKey = (DocumentId, u64, bool, usize, u32);
+
 /// 日志标签的几何。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct LogParts {
@@ -440,9 +443,11 @@ pub(crate) struct LogState {
     pub branches_w: Option<f32>,
     /// 拖动左边缘后作者一列的宽度（逻辑像素）；`None` 是按作者名字算出的宽度（`author_fit`）。
     pub author_w: Option<f32>,
-    /// 按已读取的提交中最宽的作者名字算出的作者一列宽度，和算它时的依据（日志标签、提交数、
-    /// 字号）；绘制时更新。
-    pub author_fit: Option<((DocumentId, usize, u32), f32)>,
+    /// 按已读取的提交中最宽的作者名字算出的作者一列宽度，和算它时的依据（见
+    /// [`AuthorFitKey`]）；绘制时更新。
+    pub author_fit: Option<(AuthorFitKey, f32)>,
+    /// 时间一列的宽度，和算它时的字号、界面语言；绘制时更新。
+    pub date_fit: Option<((u32, winc_i18n::Locale), f32)>,
     /// 分支面板里名字截短了的行（[`App::log_branch_rows`] 的下标）；悬停时提示全名。
     ///
     /// 绘制时更新。
@@ -573,6 +578,7 @@ impl Default for LogState {
             branches_w: None,
             author_w: None,
             author_fit: None,
+            date_fit: None,
             long_branches: Vec::new(),
             branches_scroll: 0.0,
             branches_max: 0.0,

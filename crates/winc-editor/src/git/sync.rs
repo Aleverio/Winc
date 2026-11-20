@@ -49,6 +49,16 @@ pub const MINIMUM_VERSION: (u32, u32) = (2, 24);
 /// 支持 `push --force-if-includes` 的最低 `git` 版本。
 const FORCE_IF_INCLUDES: (u32, u32) = (2, 30);
 
+/// 解释 `pull.rebase`、`branch.<分支>.rebase` 的值：变基为 `Some(true)`，合并为
+/// `Some(false)`，认不出来时为 `None`。
+fn rebase_value(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "true" | "yes" | "on" | "1" | "merges" | "m" | "interactive" | "i" => Some(true),
+        "false" | "no" | "off" | "0" => Some(false),
+        _ => None,
+    }
+}
+
 /// 从 `git version` 的输出（`git version 2.54.0 (Apple Git-157)`、
 /// `git version 2.47.1.windows.2`）读出主、次版本号。
 pub(super) fn parse_version(output: &str) -> Option<(u32, u32)> {
@@ -112,7 +122,7 @@ impl Git {
     ///
     /// 没有上游、出现冲突、未跟踪的文件会被拉取到的文件覆盖时返回 `git` 给出的原因。
     pub fn pull(&self, root: &Path) -> Result<String, String> {
-        let configured = (self.config(root, "pull.rebase", &Cancel::default())).is_some();
+        let configured = self.pull_rebases(root).is_some();
         let pull: &[&str] = if configured {
             &["pull", "--autostash"]
         } else {
@@ -273,6 +283,23 @@ impl Git {
         command.args(["rev-list", "--count", range]);
         let stdout = self.run(&mut command, STATUS_TIMEOUT, cancel)?;
         Ok(String::from_utf8_lossy(&stdout).trim().parse().unwrap_or(0))
+    }
+
+    /// 返回拉取当前分支时配置的方式：`branch.<分支>.rebase` 优先，其次 `pull.rebase`；为
+    /// `true`、`merges`、`interactive` 时是变基（`Some(true)`），为 `false` 时是合并，都没有
+    /// 配置时为 `None`。
+    pub fn pull_rebases(&self, root: &Path) -> Option<bool> {
+        let cancel = Cancel::default();
+        let mut command = self.command(root);
+        command.args(["symbolic-ref", "--quiet", "--short", "HEAD"]);
+        let branch = self.run(&mut command, STATUS_TIMEOUT, &cancel).ok();
+        let branch = branch.map(|b| String::from_utf8_lossy(&b).trim().to_owned());
+        let keys = (branch.map(|b| format!("branch.{b}.rebase")).into_iter())
+            .chain(["pull.rebase".to_owned()]);
+        let value = keys
+            .into_iter()
+            .find_map(|key| self.config(root, &key, &cancel))?;
+        rebase_value(&value)
     }
 
     /// 返回配置项 `key` 的值；未配置时为 `None`。

@@ -152,17 +152,84 @@ fn tags_can_be_pushed_and_deleted_locally_and_remotely() {
     assert_eq!(tags(&work).trim(), "");
 }
 
+/// 提交菜单列出指向它的分支、标签：分支不超过两个、标签只有一个时各自一个子菜单，多了收进
+/// 「分支」「标签」一个子菜单。
 #[test]
-fn a_commit_menu_lists_its_tags() {
+fn a_commit_menu_lists_its_branches_and_tags() {
     use crate::app::input::context_menu::{MenuEntry, log_commit_menu};
-    let menu = log_commit_menu(true, "main", &["v1", "v2"]);
-    let submenus: Vec<&str> = (menu.iter())
-        .filter_map(|entry| match entry {
-            MenuEntry::Submenu(title, _) if title.contains('v') => Some(title.as_str()),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(submenus.len(), 2);
+    let titles = |menu: &[MenuEntry]| -> Vec<String> {
+        (menu.iter())
+            .filter_map(|entry| match entry {
+                MenuEntry::Submenu(title, _) => Some(title.clone()),
+                _ => None,
+            })
+            .filter(|title| title.contains("分支") || title.contains("标签"))
+            .collect()
+    };
+    let refs = |names: &[&str]| -> Vec<(String, Vec<MenuEntry>)> {
+        names
+            .iter()
+            .map(|n| ((*n).to_owned(), Vec::new()))
+            .collect()
+    };
+    let menu = log_commit_menu(true, "main", refs(&["main", "dev"]), &["v1"]);
+    assert_eq!(titles(&menu), ["分支「main」", "分支「dev」", "标签「v1」"]);
+    let menu = log_commit_menu(true, "main", refs(&["a", "b", "c"]), &["v1", "v2"]);
+    assert_eq!(titles(&menu), ["分支", "标签"]);
+    let grouped = menu.iter().find_map(|entry| match entry {
+        MenuEntry::Submenu(title, items) if title == "分支" => Some(items),
+        _ => None,
+    });
+    assert_eq!(titles(grouped.unwrap()).len(), 0);
+    assert_eq!(grouped.unwrap().len(), 3);
+}
+
+/// 日志里右键一个提交：从指向它的分支的子菜单把这个分支合并到当前分支。
+#[test]
+fn a_branch_on_a_commit_merges_from_the_commit_menu() {
+    use crate::app::git::branch::BranchOp;
+    use crate::app::input::context_menu::MenuTarget;
+    let dir = search_folder("git-log-branch-merge");
+    if !make_repo(&dir) {
+        return;
+    }
+    git_in(&dir, &["switch", "-q", "-c", "dev"]);
+    std::fs::write(dir.join("dev.txt"), "dev\n").unwrap();
+    git_in(&dir, &["add", "dev.txt"]);
+    git_in(&dir, &["commit", "-q", "-m", "dev 上的提交"]);
+    git_in(&dir, &["switch", "-q", "main"]);
+    let Some(mut app) = git_app(&dir) else {
+        return;
+    };
+    app.git_refresh();
+    assert!(show_all_log(&mut app));
+    paint(&mut app);
+    let view = app.editor.active().unwrap().log.as_deref().unwrap();
+    let dev_tip = view
+        .commits
+        .iter()
+        .find(|c| c.subject == "dev 上的提交")
+        .unwrap();
+    let oid = dev_tip.oid.clone();
+    let row = app.log_parts().list;
+    app.open_context_menu(MenuTarget::LogCommit(oid), (row.x + 200.0, row.y + 40.0));
+    paint(&mut app);
+    shoot(&mut app, "git-log-commit-branch-menu");
+    let dev = (app.git.branches.iter())
+        .position(|b| !b.remote && b.name == "dev")
+        .unwrap();
+    let merge = MenuCommand::GitBranch(BranchOp::Merge, dev);
+    assert!(menu_commands(&app).contains(&(merge, true)));
+    app.run_menu_command(merge);
+    app.poll_branch_ops();
+    let merged = Command::new("git")
+        .arg("-C")
+        .arg(&dir)
+        .args(["merge-base", "--is-ancestor", "dev", "main"])
+        .status()
+        .unwrap();
+    assert!(merged.success());
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -646,6 +713,7 @@ fn pull_from_and_push_to_choose_another_remote() {
     app.run_action(Action::GitPullFrom);
     let shown = form(&app);
     assert_eq!(shown.direction, Direction::Pull);
+    assert!(!app.overlays.form_dialog.as_ref().unwrap().copy);
     assert_eq!((shown.remote.as_str(), shown.total), ("origin", 0));
     app.choose_form_base(Some("mirror".into()));
     assert_eq!(form(&app).subjects, ["镜像上的提交"]);
@@ -672,10 +740,12 @@ fn pull_from_and_push_to_choose_another_remote() {
     std::fs::write(work.join("local.txt"), "本地\n").unwrap();
     git(&work, &["add", "local.txt"]).unwrap();
     git(&work, &["commit", "-q", "-m", "本地提交"]).unwrap();
+    // 仓库配置为变基拉取：「变基」默认勾上。
+    git(&work, &["config", "pull.rebase", "true"]).unwrap();
     app.git_refresh();
     app.run_action(Action::GitPullFrom);
+    assert!(app.overlays.form_dialog.as_ref().unwrap().copy);
     app.choose_form_base(Some("mirror".into()));
-    app.overlays.form_dialog.as_mut().unwrap().copy = true;
     app.submit_form_dialog();
     app.poll_branch_ops();
     assert_eq!(subject(&work, "HEAD").as_deref(), Some("本地提交"));

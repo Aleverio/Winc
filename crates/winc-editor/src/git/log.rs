@@ -172,6 +172,11 @@ impl LogView {
             if refetch || generation == self.generation)
     }
 
+    /// 重取的次数：每次重取（换筛选条件、刷新）加一。
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
     /// 要取下一批时调用：返回要后台取的那一批，后台把结果交给 [`LogView::finish`]。
     ///
     /// 已经取完或正在取时返回 `None`；后台跑着重取之前的请求时也返回 `None`，并记下跑完之后再取。

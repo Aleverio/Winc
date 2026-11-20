@@ -122,6 +122,7 @@ pub(in crate::view) fn draw_log(app: &mut App, frame: &mut Frame<'_>, index: usi
     let animate = app.animate_status();
     let pills = app.git.log.pills.sync(&LogPill::ALL, pills, animate);
     fit_log_author(app, frame, index);
+    fit_log_date(app, frame);
     {
         let app = &*app;
         let Some(view) = app.editor.documents[index].log.as_deref() else {
@@ -574,7 +575,7 @@ fn draw_list(
         false => 0.0,
     };
     let hash_x = list.right() - SCROLLBAR_HIT - hash_w;
-    let date_w = date_width(app, frame);
+    let date_w = app.git.log.date_fit.map_or(0.0, |(_, w)| w);
     let date_x = hash_x - if columns.date { date_w } else { 0.0 };
     let author_w = columns.author.map_or(0.0, |w| log_author_width(w, show));
     let author_x = date_x - author_w;
@@ -790,10 +791,14 @@ fn draw_author_and_time(
     );
 }
 
-/// 时间一列的宽度（逻辑像素）：列表中时间各种写法（今天、昨天、今年、往年）里最宽的一种，加上
-/// 左边的留白。
-fn date_width(app: &App, frame: &mut Frame<'_>) -> f32 {
+/// 算出时间一列的宽度（逻辑像素）：列表中时间各种写法（今天、昨天、今年、往年）里最宽的一种，
+/// 加上左边的留白；字号和界面语言都没变时沿用上次的结果。
+fn fit_log_date(app: &mut App, frame: &mut Frame<'_>) {
     let size = app.fonts.ui_small;
+    let key = (size.to_bits(), winc_i18n::locale());
+    if app.git.log.date_fit.is_some_and(|(k, _)| k == key) {
+        return;
+    }
     let forms = [
         t!("git-time-today", time = "00:00"),
         t!("git-time-yesterday", time = "00:00"),
@@ -803,18 +808,25 @@ fn date_width(app: &App, frame: &mut Frame<'_>) -> f32 {
     let widest = (forms.iter())
         .map(|form| frame.measure(FontKind::Mono, size, form))
         .fold(0.0, f32::max);
-    (widest + DATE_PAD).ceil()
+    app.git.log.date_fit = Some((key, (widest + DATE_PAD).ceil()));
 }
 
 /// 按第 `index` 个标签已读取的提交中最宽的作者名字算出作者一列的宽度（见
-/// [`crate::app::git::log::author_fit`]）；标签、提交数和字号都没变时沿用上次的结果。
+/// [`crate::app::git::log::author_fit`]）；依据（[`crate::app::git::log::AuthorFitKey`]）没变时
+/// 沿用上次的结果。
 fn fit_log_author(app: &mut App, frame: &mut Frame<'_>, index: usize) {
     let doc = &app.editor.documents[index];
     let Some(view) = doc.log.as_deref() else {
         return;
     };
     let size = app.fonts.ui_small;
-    let key = (doc.id, view.commits.len(), size.to_bits());
+    let key = (
+        doc.id,
+        view.generation(),
+        view.stale,
+        view.commits.len(),
+        size.to_bits(),
+    );
     if app.git.log.author_fit.is_some_and(|(k, _)| k == key) {
         return;
     }
