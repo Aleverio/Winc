@@ -86,7 +86,7 @@ fn the_setting_keeps_markdown_keys_to_the_editable_preview() {
     app.config.markdown_shortcuts = Some(false);
     assert_eq!(app.key_context(), Context::Editor);
     assert!(!app.action_available(Action::MarkdownHeading1));
-    // 可编辑的预览中照常使用。
+    // 可编辑的预览中同样使用。
     app.set_preview_mode(PreviewMode::Preview);
     settle(&mut app);
     assert_eq!(app.key_context(), Context::Markdown);
@@ -111,6 +111,14 @@ fn the_status_bar_counts_words_in_markdown() {
     app.track_words();
     assert_eq!(app.word_count(), Some((11, 3)));
     shoot(&mut app, "md-words");
+    // 没有选区时字数与光标位置无关。
+    let doc = app.editor.active().unwrap();
+    let key = (doc.id, doc.revision, 0, 0);
+    for at in [0, 3] {
+        app.editor.active_mut().unwrap().selection = winc_core::Selection::point(at);
+        app.track_words();
+        assert_eq!(app.status.words.done, Some((key, 11, 0)));
+    }
     app.open_path(&dir.join("short.rs"));
     app.editor.load_active();
     app.track_words();
@@ -229,12 +237,12 @@ fn link_paths_are_suggested_while_typing() {
     assert!(app.suggest_key(&Key::Named(NamedKey::Enter)));
     assert_eq!(marked(&app), "见 [指南](docs/guide.md)|");
 
-    // 图片只列图片。列表还没画出来时按键照常交给编辑区。
+    // 图片只列图片。列表绘制之前按键交给编辑区。
     typed(&mut app, "\n![](");
     assert_eq!(listed(&app), ["docs/img/shot.png"]);
     assert!(!app.suggest_key(&Key::Named(NamedKey::Escape)));
     paint(&mut app);
-    // 带修饰键的按键不接管：⇧Tab、⇧↩ 照常交给编辑区。
+    // 带修饰键的按键不接管：⇧Tab、⇧↩ 交给编辑区。
     app.pointer.modifiers = winit::keyboard::ModifiersState::SHIFT;
     assert!(!app.suggest_key(&Key::Named(NamedKey::Tab)));
     app.pointer.modifiers = Default::default();
@@ -386,7 +394,7 @@ fn headings_fold_their_sections_in_the_preview() {
     assert!(!text.contains("第一段") && !text.contains("第二段") && text.contains("第三段"));
     assert!(app.preview.markdown.height < full);
 
-    // 鼠标停在标题上时有可点击的箭头，点一下展开。
+    // 鼠标停在标题上时显示箭头，单击展开。
     let laid = app.preview.markdown.layout.as_ref().unwrap();
     let area = app.preview.markdown.area;
     let top = area.y - app.preview.markdown.scroll() + laid.pad + laid.tops[0];
@@ -416,8 +424,7 @@ fn headings_fold_their_sections_in_the_preview() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// 可编辑的预览中在两处之间来回单击：被点的块原地换成原文，上一处换回排版，内容不会每点
-/// 一次就朝一个方向挪一截。
+/// 可编辑的预览中在两处之间来回单击时内容不漂移。
 #[test]
 fn clicking_back_and_forth_does_not_drift() {
     // 和常见的 README 开头一样：几个居中的 HTML 块，下面是正文。
@@ -694,7 +701,15 @@ fn links_into_folded_sections_unfold_them() {
     app.jump_to_anchor("子");
     settle(&mut app);
     let id = app.editor.active().unwrap().id;
-    assert!(!app.preview.markdown.folds[&id].contains("节"));
+    assert!(!app.preview.markdown.folds.contains_key(&id));
+    assert!(crate::app::preview::markdown::laid::anchor_box(&app, "子").is_some());
+    // 在标题列表中点收起的一节里的标题同样展开。
+    app.toggle_heading_fold("节");
+    settle(&mut app);
+    assert_eq!(app.hits.markdown_toc_blocks.len(), 4);
+    app.press_toc(crate::app::preview::markdown::TocTarget::Heading(2));
+    settle(&mut app);
+    assert!(!app.preview.markdown.folds.contains_key(&id));
     assert!(crate::app::preview::markdown::laid::anchor_box(&app, "子").is_some());
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -872,5 +887,11 @@ fn slash_list_scrolls_and_remembers_recent_commands() {
         hits[..2],
         [Hit::Command(Slash::Date), Hit::Command(Slash::InlineMath)]
     );
+    // 改写整行的命令同样记为最近使用。
+    typed(&mut app, "biaoti");
+    press(&mut app, NamedKey::Enter);
+    typed(&mut app, "\n\n/");
+    let hits = &app.preview.markdown.suggest.hits;
+    assert_eq!(hits[0], Hit::Command(Slash::Heading(1)));
     let _ = std::fs::remove_dir_all(&dir);
 }

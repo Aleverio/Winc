@@ -48,8 +48,8 @@ pub(super) struct Prefix<'a> {
 /// 列表项的记号：`-`、`*`、`+`，或者 `1.`、`1)`；后面的空格；是否为任务列表。
 #[derive(Debug)]
 pub(super) struct Marker<'a> {
-    bullet: &'a str,
-    gap: &'a str,
+    pub(super) bullet: &'a str,
+    pub(super) gap: &'a str,
     pub(super) task: bool,
     /// 任务框是否勾上了。
     pub(super) checked: bool,

@@ -436,6 +436,12 @@ impl Default for MarkdownPreview {
 }
 
 impl MarkdownPreview {
+    /// 标签 `id` 关闭后释放其滚动位置和收起的标题。
+    pub(crate) fn forget(&mut self, id: DocumentId) {
+        self.scrolls.remove(&id);
+        self.folds.remove(&id);
+    }
+
     /// 和 `other` 交换各本书的阅读位置。
     pub(super) fn trade_places(&mut self, other: &mut MarkdownPreview) {
         std::mem::swap(&mut self.book, &mut other.book);

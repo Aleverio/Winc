@@ -1,6 +1,6 @@
 //! 预览中收起、展开标题下面的一节：点标题左边的箭头切换，收起的标题按文档记下。
 //!
-//! 收起的块不排版，见 `laid::hidden_blocks`；光标所在的一节照常显示。
+//! 收起的块不排版，见 `laid::hidden_blocks`；光标所在的一节始终显示。
 
 use super::*;
 
@@ -16,6 +16,8 @@ impl App {
         if folding {
             folds.insert(key.to_owned());
             self.leave_folded_section(key);
+        } else if folds.is_empty() {
+            self.preview.markdown.folds.remove(&id);
         }
         // 各块从原来的位置滑到新位置：收起的一节合上，展开的一节从标题下面展开。
         self.preview.markdown.refold = true;
@@ -26,10 +28,9 @@ impl App {
     /// 锚点 `anchor`（未解码）位于收起的一节中时展开包含它的各节，排版后跳转；返回是否展开了。
     pub(in crate::app) fn unfold_to_anchor(&mut self, anchor: &str) -> bool {
         let key = crate::app::preview::markdown::percent_decode(anchor).to_lowercase();
-        let (Some(id), Some(parsed), Some(laid)) = (
+        let (Some(id), Some(parsed)) = (
             self.editor.active().map(|d| d.id),
             self.preview.markdown.parsed.as_ref(),
-            self.preview.markdown.layout.as_ref(),
         ) else {
             return false;
         };
@@ -43,9 +44,9 @@ impl App {
         let Some(folds) = self.preview.markdown.folds.get_mut(&id) else {
             return false;
         };
-        let around: Vec<String> = (laid.sections.iter().enumerate())
-            .filter_map(|(i, s)| s.as_ref().filter(|s| i < block && block < s.end))
-            .map(|s| s.key.clone())
+        let around: Vec<String> = (parsed.sections().into_iter().enumerate())
+            .filter_map(|(i, s)| s.filter(|s| i < block && block < s.end))
+            .map(|s| s.key)
             .filter(|k| folds.contains(k))
             .collect();
         if around.is_empty() {
@@ -53,6 +54,9 @@ impl App {
         }
         for k in &around {
             folds.remove(k);
+        }
+        if folds.is_empty() {
+            self.preview.markdown.folds.remove(&id);
         }
         self.preview.markdown.refold = true;
         self.preview.markdown.pending_anchor = Some((id, anchor.to_owned()));

@@ -134,18 +134,15 @@ impl App {
 
     /// 执行工具栏中的按钮 `tool`；之后的选区上仍显示工具栏。
     pub(in crate::app) fn run_selection_tool(&mut self, tool: Tool) {
-        match tool {
-            Tool::Bold => self.live_format("**"),
-            Tool::Italic => self.live_format("*"),
-            Tool::Strike => self.live_format("~~"),
-            Tool::Code => self.live_format("`"),
-            Tool::Highlight => self.live_format("=="),
-            Tool::Link => self.markdown_link(false),
-        }
-        if tool != Tool::Link {
-            self.offer_selection_toolbar();
-        } else {
-            self.preview.markdown.toolbar = None;
+        match tool.mark() {
+            Some(mark) => {
+                self.live_format(mark);
+                self.offer_selection_toolbar();
+            }
+            None => {
+                self.markdown_link(false);
+                self.preview.markdown.toolbar = None;
+            }
         }
     }
 }

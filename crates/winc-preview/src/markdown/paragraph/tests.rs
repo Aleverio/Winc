@@ -34,6 +34,23 @@ fn quotes_and_lists_toggle_on_every_selected_line() {
 }
 
 #[test]
+fn task_boxes_join_existing_list_items() {
+    let lines = ["文字", "- 项", "2. 序", "> 引", "- [x] 完"];
+    assert_eq!(
+        texts(&lines, Kind::Task),
+        [
+            "- [ ] 文字",
+            "- [ ] 项",
+            "2. [ ] 序",
+            "> - [ ] 引",
+            "- [x] 完"
+        ]
+    );
+    // 都是任务时去掉任务框，记号保留。
+    assert_eq!(texts(&["- [ ] a", "1. [x] b"], Kind::Task), ["- a", "1. b"]);
+}
+
+#[test]
 fn blocks_and_links_place_the_caret_where_typing_continues() {
     assert_eq!(fenced("```", ""), ("```\n\n```".to_owned(), 3));
     assert_eq!(fenced("$$", "x^2"), ("$$\nx^2\n$$".to_owned(), 6));
@@ -64,7 +81,8 @@ fn link_targets_are_found_while_typing_a_path() {
 
 #[test]
 fn headings_get_the_same_anchors_as_the_preview() {
-    let text = "# 概览\n\n```\n# 不是标题\n```\n## 安装 ##\n#tag\n## 安装\n";
+    let text =
+        "# 概览\n\n```\n# 不是标题\n```\n## 安装 ##\n#tag\n## 安装\n# C#\n## [链接](a.md) **粗**\n";
     let got = headings(text.lines());
     let slugs: Vec<_> = got
         .iter()
@@ -75,7 +93,9 @@ fn headings_get_the_same_anchors_as_the_preview() {
         [
             (1, "概览", "概览"),
             (2, "安装", "安装"),
-            (2, "安装", "安装-1")
+            (2, "安装", "安装-1"),
+            (1, "C#", "c"),
+            (2, "链接 粗", "链接-粗")
         ]
     );
 }

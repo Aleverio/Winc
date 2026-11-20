@@ -609,8 +609,7 @@ impl App {
             }
             return;
         }
-        // 用键盘移动时离边缘留一行；点击放光标时点的地方本来就看得见，只在被挡住时露出来，
-        // 不为留边距而滚动，来回点击时内容不会一点点挪动。
+        // 用键盘移动时离边缘留一行，点击时只在被挡住时滚动。
         let keyed = self.scroll.keyed;
         let md = &mut self.preview.markdown;
         let (scroll, view) = (md.scroll(), md.area.h);

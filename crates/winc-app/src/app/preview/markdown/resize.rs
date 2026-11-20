@@ -190,9 +190,19 @@ impl App {
         true
     }
 
-    /// 返回图片原文的开头（字节偏移）、所在顶层块的结尾，以及图片是否位于顶层块开头。
+    /// 返回图片原文的开头（字节偏移）、所在顶层块的结尾，以及图片是否位于顶层块开头；排版
+    /// 落后于文字时为 `None`。
     fn image_source(&self, image: ImageAt) -> Option<(usize, usize, bool)> {
-        let laid = self.preview.markdown.layout.as_ref()?;
+        let md = &self.preview.markdown;
+        let revision = self.editor.active()?.revision;
+        let parsed = md
+            .parsed
+            .as_ref()
+            .map(|p| std::sync::Arc::as_ptr(p) as usize);
+        let laid = md.layout.as_ref().filter(|l| Some(l.source) == parsed)?;
+        if md.checked != Some(revision) {
+            return None;
+        }
         let item = laid.blocks.get(image.block)?.1.items.get(image.item)?;
         let Item::Image {
             at: Some((_, at)), ..

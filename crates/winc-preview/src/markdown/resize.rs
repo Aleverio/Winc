@@ -261,7 +261,7 @@ fn value(width: Width) -> String {
     }
 }
 
-/// 写成 `![alt](src "title")`，`alt` 中的方括号和反斜杠转义。
+/// 写成 `![alt](src "title")`，`alt` 中的方括号和反斜杠、`title` 中的引号和反斜杠转义。
 fn image_markdown(alt: &str, src: &str, title: Option<&str>) -> String {
     let mut out = String::from("![");
     for c in alt.chars() {
@@ -273,7 +273,8 @@ fn image_markdown(alt: &str, src: &str, title: Option<&str>) -> String {
     out.push_str("](");
     out.push_str(&crate::convert::destination(src));
     if let Some(title) = title {
-        out.push_str(&format!(" \"{}\"", title.replace('"', "\\\"")));
+        let title = title.replace('\\', "\\\\").replace('"', "\\\"");
+        out.push_str(&format!(" \"{title}\""));
     }
     out.push(')');
     out
@@ -289,7 +290,7 @@ pub(super) fn alt_size(image: &mut super::Image) {
 }
 
 /// 拆分替代文字末尾的 `|W` 或 `|WxH`，返回其前的文字、宽和高；
-/// 没有尺寸或宽为 0 时返回 `None`。
+/// 没有尺寸或宽、高为 0 时返回 `None`。
 pub(super) fn split_alt_size(alt: &str) -> Option<(&str, u32, Option<u32>)> {
     let (alt, size) = alt.rsplit_once('|')?;
     let (w, h) = match size.split_once('x') {
@@ -298,8 +299,8 @@ pub(super) fn split_alt_size(alt: &str) -> Option<(&str, u32, Option<u32>)> {
     };
     let w = w.trim().parse::<u32>().ok().filter(|&w| w > 0)?;
     let h = match h.map(|h| h.trim().parse::<u32>()) {
-        Some(Ok(h)) => Some(h),
-        Some(Err(_)) => return None,
+        Some(Ok(h)) if h > 0 => Some(h),
+        Some(_) => return None,
         None => None,
     };
     Some((alt.trim_end(), w, h))

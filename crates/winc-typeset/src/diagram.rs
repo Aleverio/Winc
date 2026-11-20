@@ -169,10 +169,8 @@ pub(crate) struct Label {
 
 /// 返回图的源码哈希，用于开合标识（见 `Cx::toggle_id`）。
 fn tall_id(source: &str) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    ("mermaid-tall", source).hash(&mut h);
-    h.finish()
+    use std::hash::Hash;
+    super::memo::key(|h| ("mermaid-tall", source).hash(h))
 }
 
 impl Cx<'_, '_> {

@@ -60,6 +60,18 @@ impl Markdown {
             .collect()
     }
 
+    /// 返回有文字的顶层标题：级别、文字和锚点（见 [`Markdown::heading_keys`]）。
+    pub fn headings(&self) -> Vec<(u8, String, String)> {
+        (self.blocks.iter().zip(self.heading_keys()))
+            .filter_map(|(block, key)| match block {
+                Block::Heading(level, inline) if !inline.text.trim().is_empty() => {
+                    Some((*level, inline.text.trim().to_owned(), key?))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
     /// 编号为 `number` 的脚注的文字（去掉末尾跳回正文的 ↩）；没有这条脚注时为 `None`。
     pub fn footnote_text(&self, number: &str) -> Option<String> {
         let blocks = self.blocks.iter().find_map(|block| match block {

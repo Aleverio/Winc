@@ -81,3 +81,21 @@ fn skipped_elements_and_relative_addresses() {
         <img src=\"logo.png\" alt=\"标志\"></p>";
     assert_eq!(md(html), "指南 [信](mailto:a@b.c)标志\n");
 }
+
+#[test]
+fn plain_text_stays_plain() {
+    // 波浪线和美元符号不成为删除线和公式；段末的换行去掉，文字中的反斜杠保留。
+    assert_eq!(
+        md("<p>1~2 和 3~4，$5-$10</p>"),
+        "1\\~2 和 3\\~4，\\$5-\\$10\n"
+    );
+    assert_eq!(
+        md("<p>路径 C:\\<br></p><p><br>下一段</p>"),
+        "路径 C:\\\\\n\n下一段\n"
+    );
+    // 序号超过 9 位的起始值不用。
+    assert_eq!(
+        md("<ol start=\"4294967295\"><li>a</li><li>b</li></ol>"),
+        "1. a\n2. b\n"
+    );
+}

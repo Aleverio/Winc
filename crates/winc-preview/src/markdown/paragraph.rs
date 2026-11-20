@@ -32,16 +32,19 @@ pub enum Kind {
     Ordered,
     /// 无序列表。
     Bullet,
+    /// 任务列表。
+    Task,
 }
 
-/// 把各行 `lines`（不含换行符）改成 `kind`；各行已经都是这一种时改回正文（标题、列表）或去掉
-/// 一层（引用）。空行不变。
+/// 把各行 `lines`（不含换行符）改成 `kind`；各行已经都是这一种时改回正文（标题、列表）、去掉
+/// 一层（引用）或去掉任务框（任务列表）。空行不变。
 pub fn change(lines: &[&str], kind: Kind) -> Vec<Line> {
     let filled = || lines.iter().filter(|l| !l.trim().is_empty());
     let all = match kind {
         Kind::Heading(0) => false,
         Kind::Heading(level) => filled().all(|l| heading(parse(l).rest).0 == level),
         Kind::Quote => filled().all(|l| !parse(l).quote.is_empty()),
+        Kind::Task => filled().all(|l| parse(l).marker.is_some_and(|m| m.task)),
         Kind::Ordered | Kind::Bullet => filled().all(|l| {
             parse(l)
                 .marker
@@ -76,6 +79,21 @@ pub fn change(lines: &[&str], kind: Kind) -> Vec<Line> {
                     body,
                 ),
                 Kind::Quote => (format!("> {lead}"), body),
+                // 列表项保留原来的记号，其余的行改为无序列表项。
+                Kind::Task => {
+                    let item = match prefix.marker.as_ref() {
+                        Some(m) => {
+                            format!("{}{}{}{}", prefix.quote, prefix.indent, m.bullet, m.gap)
+                        }
+                        None => format!("{lead}- "),
+                    };
+                    let task = match prefix.marker.as_ref() {
+                        _ if all => "",
+                        Some(m) if m.checked => "[x] ",
+                        _ => "[ ] ",
+                    };
+                    (format!("{item}{task}"), body)
+                }
                 Kind::Ordered | Kind::Bullet => {
                     let marker = prefix.marker.as_ref();
                     let base = match marker {
@@ -229,10 +247,9 @@ const SLASH_QUERY: usize = 24;
 
 /// 返回文中的 ATX 标题（不含围栏代码块中的）：级别、文字和锚点。
 ///
-/// 锚点按 [`super::slug`] 生成，同名的第二个起加上 `-1`、`-2`，与预览中的锚点相同。
+/// 文字和锚点取自只含这些标题的解析结果（见 [`super::Markdown::headings`]），与预览相同。
 pub fn headings<'a>(lines: impl IntoIterator<Item = &'a str>) -> Vec<(u8, String, String)> {
-    let mut out = Vec::new();
-    let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut found = String::new();
     let mut fence: Option<(u8, usize)> = None;
     for line in lines {
         let line = line.trim_end_matches(['\n', '\r']);
@@ -255,20 +272,10 @@ pub fn headings<'a>(lines: impl IntoIterator<Item = &'a str>) -> Vec<(u8, String
         if fence.is_some() {
             continue;
         }
-        let level = body.bytes().take_while(|&b| b == b'#').count();
-        let rest = &body[level..];
-        if !(1..=6).contains(&level) || !(rest.is_empty() || rest.starts_with([' ', '\t'])) {
-            continue;
+        if heading(body).0 > 0 {
+            found.push_str(body);
+            found.push_str("\n\n");
         }
-        let text = rest.trim().trim_end_matches('#').trim_end().to_owned();
-        if text.is_empty() {
-            continue;
-        }
-        let slug = super::slug(&text);
-        let n = seen.entry(slug.clone()).or_default();
-        let slug = if *n == 0 { slug } else { format!("{slug}-{n}") };
-        *n += 1;
-        out.push((level as u8, text, slug));
     }
-    out
+    super::parse(&found).headings()
 }

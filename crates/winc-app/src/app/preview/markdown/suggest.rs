@@ -130,17 +130,29 @@ impl App {
     }
 
     /// 返回本文中文字或锚点含有 `query`（不区分大小写）的标题。
+    ///
+    /// 预览已解析本文时取解析结果中的标题，否则只解析各行中的 ATX 标题。
     fn heading_hits(&self, query: &str) -> Vec<Hit> {
-        let Some(rope) = self.editor.active().and_then(|d| d.text().rope()) else {
+        let Some(doc) = self.editor.active() else {
             return Vec::new();
         };
-        // 只复制以 `#`、反引号、`~` 开头的行：结果只取决于标题和围栏行。
-        let lines: Vec<String> = (rope.lines())
-            .filter(|l| matches!(l.chars().find(|&c| c != ' '), Some('#' | '`' | '~')))
-            .map(|l| l.to_string())
-            .collect();
+        let md = &self.preview.markdown;
+        let headings = match md.parsed.as_ref().filter(|_| md.doc == Some(doc.id)) {
+            Some(parsed) => parsed.headings(),
+            None => {
+                let Some(rope) = doc.text().rope() else {
+                    return Vec::new();
+                };
+                // 只复制以 `#`、反引号、`~` 开头的行：结果只取决于标题和围栏行。
+                let lines: Vec<String> = (rope.lines())
+                    .filter(|l| matches!(l.chars().find(|&c| c != ' '), Some('#' | '`' | '~')))
+                    .map(|l| l.to_string())
+                    .collect();
+                winc_preview::markdown::paragraph::headings(lines.iter().map(String::as_str))
+            }
+        };
         let query = query.trim_start_matches('#').to_lowercase();
-        (winc_preview::markdown::paragraph::headings(lines.iter().map(String::as_str)).into_iter())
+        (headings.into_iter())
             .filter(|(_, text, slug)| {
                 text.to_lowercase().contains(&query) || slug.to_lowercase().contains(&query)
             })
@@ -273,6 +285,9 @@ impl App {
         let hit = hit.clone();
         suggest.at = None;
         self.hits.suggest_card = None;
+        if self.editor.active().is_none_or(|d| d.id != id) {
+            return;
+        }
         // 命令从 `/` 起替换。
         if let Hit::Command(command) = hit {
             self.run_slash(command, start.saturating_sub(1));
@@ -284,7 +299,7 @@ impl App {
             return;
         }
         let root = self.editor.root().map(Path::to_path_buf);
-        let Some(doc) = self.editor.active().filter(|d| d.id == id) else {
+        let Some(doc) = self.editor.active() else {
             return;
         };
         let Some(rope) = doc.text().rope() else {

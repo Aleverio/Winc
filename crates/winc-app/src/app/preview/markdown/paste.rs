@@ -59,16 +59,8 @@ impl App {
         if let Some(table) = table {
             return Some(spot.block(&table));
         }
-        // 网址含括号时用尖括号包裹，括号不会被解析为链接的结尾。
-        let url = if url.contains(['(', ')']) {
-            format!("<{url}>")
-        } else {
-            url.to_owned()
-        };
-        Some(match image {
-            true => format!("![]({url})"),
-            false => format!("[{selected}]({url})"),
-        })
+        let text = if image { "" } else { selected.as_str() };
+        Some(winc_preview::markdown::paragraph::link(text, Some(url), image).0)
     }
 
     /// 返回 Markdown 中粘贴剪贴板 HTML 时写成的 Markdown；HTML 没有结构时为 `None`。

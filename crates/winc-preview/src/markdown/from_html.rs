@@ -204,8 +204,10 @@ impl Writer {
             }
             "ul" | "ol" => {
                 self.flush();
+                // 有序列表的序号最多 9 位。
                 let next = attr(attrs, "start")
-                    .and_then(|s| s.parse().ok())
+                    .and_then(|s| s.trim().parse().ok())
+                    .filter(|&n| n <= 999_999_999)
                     .unwrap_or(1);
                 let ordered = name == "ol";
                 self.stack.push(Frame::List { ordered, next });
@@ -219,8 +221,9 @@ impl Writer {
                 });
                 let marker = match list {
                     Some((true, next)) => {
-                        *next += 1;
-                        format!("{}. ", *next - 1)
+                        let number = *next;
+                        *next = (number + 1).min(999_999_999);
+                        format!("{number}. ")
                     }
                     _ => "- ".to_owned(),
                 };
@@ -476,7 +479,7 @@ impl Writer {
     fn flush(&mut self) {
         self.close_spans(0);
         let text = std::mem::take(&mut self.inline);
-        let text = text.trim().trim_end_matches('\\').trim_end();
+        let text = trim_breaks(&text);
         let heading = self.heading.take();
         if text.is_empty() {
             return;
@@ -679,7 +682,7 @@ fn longest_run(text: &str, c: char) -> usize {
     best
 }
 
-/// 转义会被解析为标记的字符：反斜杠、`*`、反引号、方括号、`<`，以及不在词中的 `_`。
+/// 转义会被解析为标记的字符：反斜杠、`*`、反引号、方括号、`<`、`~`、`$`，以及不在词中的 `_`。
 fn escape(text: &str) -> String {
     let chars: Vec<char> = text.chars().collect();
     let mut out = String::with_capacity(text.len());
@@ -688,12 +691,33 @@ fn escape(text: &str) -> String {
         let underscore = c == '_'
             && !(inside_word(i.checked_sub(1).and_then(|k| chars.get(k)))
                 && inside_word(chars.get(i + 1)));
-        if matches!(c, '\\' | '*' | '`' | '[' | ']' | '<') || underscore {
+        if matches!(c, '\\' | '*' | '`' | '[' | ']' | '<' | '~' | '$') || underscore {
             out.push('\\');
         }
         out.push(c);
     }
     out
+}
+
+/// 去掉 `text` 两端的空白和换行（`\` 加换行）。
+fn trim_breaks(text: &str) -> &str {
+    let mut text = text.trim();
+    loop {
+        let trimmed = (text.strip_prefix("\\\n").map(str::trim_start)).or_else(|| {
+            text.strip_suffix('\\')
+                .filter(|t| !escaped(t))
+                .map(str::trim_end)
+        });
+        match trimmed {
+            Some(t) => text = t,
+            None => return text,
+        }
+    }
+}
+
+/// `text` 末尾是否有奇数个反斜杠，即紧随其后的字符被转义。
+fn escaped(text: &str) -> bool {
+    text.bytes().rev().take_while(|&b| b == b'\\').count() % 2 == 1
 }
 
 /// 段首像标题、引用或列表记号时在前面加反斜杠。

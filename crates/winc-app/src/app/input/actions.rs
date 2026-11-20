@@ -539,8 +539,8 @@ impl App {
                 return false;
             }
             Action::StopConfiguration if !self.run_config_running() => return false,
-            // 写作命令只在编辑 Markdown 时可用；其余位置同一个键执行其他命令。
-            // 专注、打字机模式在 Markdown 文件里都能切换，不看写作快捷键开没开。
+            // 写作命令只在编辑 Markdown 时可用；其余位置同一个键执行其他命令。专注、打字机模式
+            // 不受 `markdown.shortcuts` 影响。
             Action::MarkdownFocusMode | Action::MarkdownTypewriterMode => {
                 if !self.markdown_writing() {
                     return false;

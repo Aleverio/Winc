@@ -22,10 +22,10 @@ impl Broken {
     }
 }
 
-/// 已检查的链接：所属文档、版本号和各地址的结果。
+/// 已检查的链接：所属文档、版本号、解析的版本号和各地址的结果。
 #[derive(Debug, Default)]
 pub(crate) struct LinkChecks {
-    of: Option<(DocumentId, u64)>,
+    of: Option<(DocumentId, u64, Option<u64>)>,
     results: HashMap<String, Option<Broken>>,
 }
 
@@ -45,7 +45,7 @@ impl App {
     /// 返回正文链接 `url` 无法打开的原因，结果按文档版本号缓存；网址、脚注和远端文件不检查。
     pub(crate) fn check_markdown_link(&mut self, url: &str) -> Option<Broken> {
         let doc = self.editor.active()?;
-        let of = Some((doc.id, doc.revision));
+        let of = Some((doc.id, doc.revision, self.preview.markdown.checked));
         if self.preview.markdown.links.of != of {
             self.preview.markdown.links = LinkChecks {
                 of,

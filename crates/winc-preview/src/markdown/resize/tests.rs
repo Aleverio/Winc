@@ -23,6 +23,8 @@ fn markdown_images_become_html_with_a_width() {
     // 去掉大小：没有写明大小时不修改，`|300` 被去掉。
     assert_eq!(resize("![a](b.png)", None, true), None);
     assert_eq!(apply("![a |300x200](b.png)", None), "![a](b.png)");
+    // 高为 0 的不算写明的大小。
+    assert_eq!(resize("![a |300x0](b.png)", None, true), None);
     // 无法识别的写法不修改。
     assert_eq!(resize("![a][ref]", Some(Width::Px(10)), true), None);
 }
@@ -57,6 +59,8 @@ fn removing_the_size_turns_plain_html_back_into_markdown() {
     assert_eq!(apply(text, None), "![a \\[b\\]](<my%20shot.png>)");
     let text = "<img src=\"a.png\" alt=\"&amp;\" title=\"t\" width=\"1\">";
     assert_eq!(apply(text, None), "![&](a.png \"t\")");
+    let text = "<img src=\"a.png\" title='a\\ \"b\"' width=\"1\">";
+    assert_eq!(apply(text, None), "![](a.png \"a\\\\ \\\"b\\\"\")");
     // 带其他属性时保留 HTML，只去掉大小。
     let text = "<img src=\"a.png\" class=x width=\"1\">";
     assert_eq!(apply(text, None), "<img src=\"a.png\" class=x>");

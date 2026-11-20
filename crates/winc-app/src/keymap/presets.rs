@@ -458,7 +458,7 @@ pub(super) const IDEA_LINUX: &[PresetRow] = &[
 
 /// VS Code 方案。
 pub(super) const VSCODE: &[PresetRow] = &[
-    // ⌘K 是组合键的第一下，插入链接换成 ⌥⌘K。
+    // ⌘K 是组合键的前缀，插入链接使用 ⌥⌘K。
     row(MarkdownLink, Markdown, &["alt+cmd+k"], &["ctrl+alt+k"]),
     row(NextError, Terminal, &["f8"], &["f8"]),
     row(PreviousError, Terminal, &["shift+f8"], &["shift+f8"]),

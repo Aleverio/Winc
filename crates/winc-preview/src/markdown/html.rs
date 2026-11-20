@@ -556,7 +556,6 @@ fn has_flag(tag: &str, name: &str) -> bool {
         .any(|word| word.eq_ignore_ascii_case(name))
 }
 
-/// HTML 的宽度属性：像素或百分比。
 /// 返回 `style` 中写明的宽度、高度（像素）和缩放比例（百分数）。
 fn css_size(style: &str) -> (Option<Length>, Option<u32>, Option<u32>) {
     let mut out = (None, None, None);
@@ -585,6 +584,7 @@ fn css_size(style: &str) -> (Option<Length>, Option<u32>, Option<u32>) {
     out
 }
 
+/// HTML 的宽度属性：像素或百分比。
 fn length(value: &str) -> Option<Length> {
     let value = value.trim();
     if let Some(percent) = value.strip_suffix('%') {

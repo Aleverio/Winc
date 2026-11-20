@@ -201,13 +201,13 @@ impl Slash {
     }
 
     /// 返回整行改成这一种时的记号和对应的段落种类；不是这类命令时为 `None`。
-    fn line(self) -> Option<(String, Option<Kind>)> {
+    fn line(self) -> Option<(String, Kind)> {
         Some(match self {
-            Slash::Heading(n) => (format!("{} ", "#".repeat(n.into())), Some(Kind::Heading(n))),
-            Slash::Bullet => ("- ".into(), Some(Kind::Bullet)),
-            Slash::Ordered => ("1. ".into(), Some(Kind::Ordered)),
-            Slash::Quote => ("> ".into(), Some(Kind::Quote)),
-            Slash::Task => ("- [ ] ".into(), None),
+            Slash::Heading(n) => (format!("{} ", "#".repeat(n.into())), Kind::Heading(n)),
+            Slash::Bullet => ("- ".into(), Kind::Bullet),
+            Slash::Ordered => ("1. ".into(), Kind::Ordered),
+            Slash::Quote => ("> ".into(), Kind::Quote),
+            Slash::Task => ("- [ ] ".into(), Kind::Task),
             _ => return None,
         })
     }
@@ -294,22 +294,18 @@ impl App {
             return;
         };
         let content = line_text(rope, line);
-        if let Some((mark, kind)) = command.line() {
-            // 空行写入记号；有文字的行按段落命令改写（任务列表在文字前加记号）。
-            match kind.filter(|_| !content.trim().is_empty()) {
-                Some(kind) => self.markdown_paragraph(kind),
-                None => {
-                    let text = format!("{mark}{}", content.trim_start());
-                    let at = mark.len() + content.trim_start().len();
-                    self.replace_lines(line, line, &text, at..at);
-                }
-            }
-            return;
-        }
         let recent = &mut self.preview.markdown.suggest.recent;
         recent.retain(|c| *c != command);
         recent.insert(0, command);
         recent.truncate(RECENT);
+        if let Some((mark, kind)) = command.line() {
+            // 空行写入记号；有文字的行按段落命令改写。
+            match content.trim().is_empty() {
+                true => self.replace_lines(line, line, &mark, mark.len()..mark.len()),
+                false => self.markdown_paragraph(kind),
+            }
+            return;
+        }
         if let Some(text) = command.inline() {
             let at = text.find(CARET).unwrap_or(text.len());
             let caret = self.editor.active().map_or(0, |d| d.selection.head);

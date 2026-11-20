@@ -332,10 +332,7 @@ pub(crate) fn live_key(live: &crate::app::preview::markdown::LiveLeaf, preedit: 
 
 /// 重排之前光标所在的那一行的高度（相对内容顶部，不含留白），重排后据此保持它在屏幕上不动。
 ///
-/// `clicked` 是刚单击放下的光标：与现在的光标相同时返回 `None`，不滚动。单击时被点的块原地
-/// 换成原文，上一处显示原文的块换回排版，下面的内容随之上下挪，来回点击两处时回到同样的位置；
-/// 若补偿这些变化，排版后的文字（例如 HTML 块）对不回原文的那一行，每来回一次内容都会朝一个
-/// 方向挪一截。
+/// `clicked` 是刚单击放下的光标，与现在的光标相同时返回 `None`。
 pub(crate) fn old_caret(
     app: &App,
     old: Option<&Laid>,
@@ -373,8 +370,8 @@ pub(crate) fn keep_caret_still(app: &mut App, still: Option<(usize, f32)>, laid:
     }
 }
 
-/// 收起的标题下面不显示的顶层块：`folded` 是收起的标题，光标在 `caret` 块时它所在的一节照常
-/// 显示。
+/// 收起的标题下面不显示的顶层块：`folded` 是收起的标题，光标在 `caret` 块时它所在的一节
+/// 始终显示。
 pub(crate) fn hidden_blocks(
     sections: &[Option<winc_preview::markdown::Section>],
     folded: Option<&HashSet<String>>,

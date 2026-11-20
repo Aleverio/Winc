@@ -340,7 +340,7 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
             Some((byte(a), byte(b)))
         })
         .filter(|(a, b)| a < b);
-    let focus = app.markdown_focus();
+    let focus = app.markdown_focus() && app.focus == crate::app::Focus::Editor;
     let resizable = app.markdown_live();
     let md = &mut app.preview.markdown;
     let selection = md
@@ -373,7 +373,11 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, area: Rect) {
         .saturating_sub(1);
     // 专注模式：光标所在的块以外画得淡一些。
     let focused = live_caret.filter(|_| focus).and_then(|source| {
-        (laid.ranges.iter()).rposition(|r| r.start <= source && source <= r.end)
+        let i = laid
+            .ranges
+            .partition_point(|r| r.start <= source)
+            .checked_sub(1)?;
+        (source <= laid.ranges[i].end).then_some(i)
     });
     for (i, (_, block)) in laid.blocks.iter().enumerate().skip(first) {
         let opacity = match focused {
@@ -1023,13 +1027,14 @@ fn draw_toc(app: &mut App, frame: &mut Frame<'_>, area: Rect, pad: f32) {
         return;
     }
     // 各标题：（级别，文字，所在顶层块的上边缘，块高）。
-    let headings: Vec<(u8, String, f32, f32)> = parsed
+    let headings: Vec<(u8, String, f32, f32, usize)> = parsed
         .blocks
         .iter()
         .zip(laid.tops.iter().zip(&laid.blocks))
-        .filter_map(|(block, (&top, (_, laid)))| match block {
+        .enumerate()
+        .filter_map(|(i, (block, (&top, (_, laid))))| match block {
             winc_preview::markdown::Block::Heading(level, inline) => {
-                Some((*level, heading_title(&inline.text), top, laid.height))
+                Some((*level, heading_title(&inline.text), top, laid.height, i))
             }
             _ => None,
         })
@@ -1076,7 +1081,7 @@ fn draw_toc(app: &mut App, frame: &mut Frame<'_>, area: Rect, pad: f32) {
     // 点过的标题在正文里铺一层强调色的底色，慢慢淡出。底色与正文同宽，左右与表格、代码块的
     // 边缘对齐。
     if let Some((i, clock)) = app.preview.markdown.toc_flash
-        && let Some(&(_, _, top, height)) = headings.get(i)
+        && let Some(&(_, _, top, height, _)) = headings.get(i)
     {
         let alpha = 0.14 * (1.0 - clock.linear());
         let band = Rect::new(left, y0 - scroll + top, width, height);
@@ -1300,6 +1305,7 @@ fn draw_toc(app: &mut App, frame: &mut Frame<'_>, area: Rect, pad: f32) {
     hits.push((bars, TocTarget::Bars));
     app.hits.markdown_toc = hits;
     app.hits.markdown_toc_tops = headings.iter().map(|h| h.2).collect();
+    app.hits.markdown_toc_blocks = headings.iter().map(|h| h.4).collect();
     app.preview.markdown.toc_current = current;
 }
 

@@ -698,7 +698,7 @@ fn format_commands_toggle_inline_marks_in_the_live_preview() {
     let before = doc_text(&app);
     assert!(app.run_action(Action::MarkdownItalic));
     assert_eq!(doc_text(&app), before);
-    // 换成源代码后照常可用（`markdown.shortcuts` 默认开着），关掉后同一个键执行其他命令。
+    // 源代码中同样可用（`markdown.shortcuts` 默认开着），关闭后同一个键执行其他命令。
     app.set_preview_mode(PreviewMode::Source);
     paint(&mut app);
     assert!(app.action_available(Action::MarkdownBold));
