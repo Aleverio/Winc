@@ -345,6 +345,7 @@ fn round_trips_through_json() {
         terminal_enabled: Some(true),
         terminal_font: Some("Menlo".to_owned()),
         terminal_size: Some(12.0),
+        terminal_font_weight: Some(450),
         terminal_scrollback: Some(5000),
         option_as_meta: Some(OptionAsMeta::Both),
         terminal_minimum_contrast: Some(4.5),

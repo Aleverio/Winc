@@ -44,6 +44,22 @@ macro_rules! string_field {
     };
 }
 
+/// 字重设置：范围见 [`Config::FONT_WEIGHT_RANGE`]，读出时取整。
+macro_rules! weight_field {
+    ($field:ident) => {
+        Field {
+            key: "fontWeight",
+            read: |config, value, name, problems| {
+                let label = t!("config-label-font-weight");
+                let range = Config::FONT_WEIGHT_RANGE;
+                config.$field =
+                    read_number(value, name, range, label, problems).map(|w| w.round() as u16);
+            },
+            write: |config| config.$field.map(|weight| number(f32::from(weight))),
+        }
+    };
+}
+
 /// 配置文件中的各节（顶层值为对象的键）和其中的设置，按写出的顺序排列。
 pub(super) const SECTIONS: &[(&str, &[Field])] = &[
     ("editor", EDITOR),
@@ -233,20 +249,7 @@ const UI: &[Field] = &[
         },
         write: |config| config.ui_zoom.map(|zoom| number(f32::from(zoom))),
     },
-    Field {
-        key: "fontWeight",
-        read: |config, value, name, problems| {
-            let label = t!("config-label-font-weight");
-            let range = Config::FONT_WEIGHT_RANGE;
-            config.ui_font_weight =
-                read_number(value, name, range, label, problems).map(|w| w.round() as u16);
-        },
-        write: |config| {
-            config
-                .ui_font_weight
-                .map(|weight| number(f32::from(weight)))
-        },
-    },
+    weight_field!(ui_font_weight),
     string_field!("backgroundImage", ui_background_image),
     Field {
         key: "backgroundOpacity",
@@ -556,6 +559,7 @@ const TERMINAL: &[Field] = &[
         },
         write: |config| config.terminal_size.map(number),
     },
+    weight_field!(terminal_font_weight),
     string_field!("shell", terminal_shell),
     bool_field!("shellIntegration", terminal_shell_integration),
     bool_field!("confirmClose", terminal_confirm_close),
