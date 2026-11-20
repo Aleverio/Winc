@@ -183,6 +183,7 @@ impl SettingsPage {
                 plain(vec![Setting::GitStagingArea, Setting::GitTree]),
                 plain(vec![Setting::DiffInline, Setting::GitInlineBlame]),
                 plain(vec![
+                    Setting::GitPullMode,
                     Setting::GitConfirmPush,
                     Setting::GitRememberCredentials,
                     Setting::GitAutoFetch,
@@ -432,6 +433,8 @@ pub enum Setting {
     GitStagingArea,
     /// 点击工作树时在哪个窗口打开它（`git.openWorktree`）。
     GitOpenWorktree,
+    /// 拉取、同步时合并还是变基（`git.pull`）。
+    GitPullMode,
     /// 把目录拖进已打开目录的窗口时怎样处理（`dropFolder`）。
     DropFolder,
     /// `git` 程序的路径（`git.path`）；未设置时在 `PATH` 里查找。
@@ -556,6 +559,7 @@ impl Setting {
             | Setting::TerminalOptionAsMeta => SettingsPage::Terminal,
             Setting::GitStagingArea
             | Setting::GitOpenWorktree
+            | Setting::GitPullMode
             | Setting::GitPath
             | Setting::GitConfirmPush
             | Setting::GitRememberCredentials
@@ -654,6 +658,7 @@ impl Setting {
             Setting::GitTree => t!("settings-git-tree"),
             Setting::GitStagingArea => t!("settings-git-staging-area"),
             Setting::GitOpenWorktree => t!("settings-git-open-worktree"),
+            Setting::GitPullMode => t!("settings-git-pull"),
             Setting::GitPath => t!("settings-git-path"),
             Setting::TerminalModule => t!("settings-terminal-module"),
             Setting::RemoteModule => t!("settings-remote-module"),
@@ -726,6 +731,7 @@ impl Setting {
             Setting::GitTree => Some(t!("settings-git-tree-desc")),
             Setting::GitStagingArea => Some(t!("settings-git-staging-area-desc")),
             Setting::GitOpenWorktree => Some(t!("settings-git-open-worktree-desc")),
+            Setting::GitPullMode => Some(t!("settings-git-pull-desc")),
             Setting::GitPath => Some(t!("settings-git-path-desc")),
             Setting::TerminalShell => Some(t!("settings-terminal-shell-desc")),
             Setting::TerminalCopyOnSelect => Some(t!("settings-terminal-copy-on-select-desc")),
@@ -817,7 +823,8 @@ impl Setting {
             | Setting::TerminalOptionAsMeta
             | Setting::DropFolder
             | Setting::AutoSave
-            | Setting::GitOpenWorktree => SettingControl::Choice,
+            | Setting::GitOpenWorktree
+            | Setting::GitPullMode => SettingControl::Choice,
             Setting::AddLanguage | Setting::AddFixLanguage => SettingControl::Action,
             Setting::KeySearch => SettingControl::Search,
             Setting::Version => SettingControl::Product,
@@ -914,6 +921,16 @@ pub fn open_worktree_label(choice: winc_config::WorktreeOpen) -> &'static str {
         Ask => t!("settings-git-open-worktree-ask"),
         NewWindow => t!("settings-git-open-worktree-new"),
         CurrentWindow => t!("settings-git-open-worktree-current"),
+    }
+}
+
+/// 返回拉取方式 `choice` 在设置中显示的名称。
+pub fn pull_mode_label(choice: winc_config::PullMode) -> &'static str {
+    use winc_config::PullMode::{Config, Merge, Rebase};
+    match choice {
+        Config => t!("settings-git-pull-config"),
+        Merge => t!("settings-git-pull-merge"),
+        Rebase => t!("settings-git-pull-rebase"),
     }
 }
 

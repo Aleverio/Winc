@@ -259,6 +259,8 @@ pub struct Config {
     pub git_path: Option<String>,
     /// 点击工作树时在哪个窗口打开它，默认每次询问。
     pub git_open_worktree: Option<WorktreeOpen>,
+    /// 拉取、同步时怎样并入上游的提交，默认按 Git 的配置。
+    pub git_pull: Option<PullMode>,
     /// 新建工作树时复制过去的被忽略的文件（gitignore 写法的 glob，如 `.env*`），默认不复制。
     pub git_worktree_copy: Vec<String>,
     /// 保存时先格式化，默认为否。
@@ -359,6 +361,32 @@ pub enum FolderDrop {
 impl FolderDrop {
     /// 全部取值，按设置菜单中的顺序排列。
     pub const ALL: [Self; 3] = [Self::Ask, Self::Add, Self::Open];
+}
+
+/// 拉取当前分支时怎样并入上游的提交。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PullMode {
+    /// 按 Git 的配置（`branch.<分支>.rebase`、`pull.rebase`），都没有配置时合并。
+    #[default]
+    Config,
+    /// 合并（`git pull --no-rebase`）。
+    Merge,
+    /// 把本地提交变基到上游之上（`git pull --rebase`）。
+    Rebase,
+}
+
+impl PullMode {
+    /// 全部取值，按设置菜单中的顺序排列。
+    pub const ALL: [Self; 3] = [Self::Config, Self::Merge, Self::Rebase];
+
+    /// 是否变基；按 Git 配置时为 `None`。
+    pub fn rebase(self) -> Option<bool> {
+        match self {
+            Self::Config => None,
+            Self::Merge => Some(false),
+            Self::Rebase => Some(true),
+        }
+    }
 }
 
 /// 点击工作树时在哪个窗口打开它。

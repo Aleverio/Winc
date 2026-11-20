@@ -1279,6 +1279,13 @@ impl App {
         self.request_redraw();
     }
 
+    /// 设置拉取、同步时合并还是变基。
+    pub(in crate::app) fn set_pull_mode(&mut self, choice: winc_config::PullMode) {
+        self.config.git_pull = Some(choice);
+        self.save_config();
+        self.request_redraw();
+    }
+
     /// 设置 Vim 模式下无名寄存器与系统剪贴板的同步方式。
     pub(in crate::app) fn set_vim_clipboard(&mut self, choice: winc_config::VimClipboard) {
         self.config.vim_clipboard = Some(choice);

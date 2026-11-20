@@ -369,6 +369,7 @@ fn round_trips_through_json() {
         repository_scan_depth: Some(4),
         git_worktree_root: Some("~/worktrees".to_string()),
         git_open_worktree: Some(WorktreeOpen::NewWindow),
+        git_pull: Some(PullMode::Rebase),
         git_path: Some("C:\\Tools\\wslgit.exe".to_string()),
         remote_enabled: Some(true),
         remote_local_folders: BTreeMap::from([
@@ -779,5 +780,22 @@ fn open_worktree_reads_its_three_values_and_rejects_others() {
     }
     let (config, problems) = Config::parse(r#"{ "git": { "openWorktree": "tab" } }"#);
     assert_eq!(config.git_open_worktree, None);
+    assert_eq!(problems.len(), 1);
+}
+
+#[test]
+fn pull_reads_its_three_values_and_rejects_others() {
+    for (text, expected) in [
+        ("config", PullMode::Config),
+        ("merge", PullMode::Merge),
+        ("rebase", PullMode::Rebase),
+    ] {
+        let json = format!(r#"{{ "git": {{ "pull": "{text}" }} }}"#);
+        let (config, problems) = Config::parse(&json);
+        assert_eq!(config.git_pull, Some(expected));
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+    let (config, problems) = Config::parse(r#"{ "git": { "pull": "ff" } }"#);
+    assert_eq!(config.git_pull, None);
     assert_eq!(problems.len(), 1);
 }

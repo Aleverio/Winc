@@ -677,6 +677,28 @@ const GIT: &[Field] = &[
         },
     },
     Field {
+        key: "pull",
+        read: |config, value, name, problems| {
+            config.git_pull = match value.as_str() {
+                Some("config") => Some(PullMode::Config),
+                Some("merge") => Some(PullMode::Merge),
+                Some("rebase") => Some(PullMode::Rebase),
+                _ => {
+                    problems.push(t!("config-pull-invalid", name = name));
+                    None
+                }
+            };
+        },
+        write: |config| {
+            let value = match config.git_pull? {
+                PullMode::Config => "config",
+                PullMode::Merge => "merge",
+                PullMode::Rebase => "rebase",
+            };
+            Some(Json::String(value.into()))
+        },
+    },
+    Field {
         key: "worktreeCopy",
         read: |config, value, name, problems| {
             let Some(items) = value.as_array() else {
