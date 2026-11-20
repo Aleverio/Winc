@@ -298,6 +298,10 @@ pub enum Action {
     /// 打开运行配置文件。
     EditRunConfigurations,
     ClearTerminal,
+    /// 复制终端的选区。
+    TerminalCopy,
+    /// 把剪贴板粘贴到终端（见 `App::terminal_paste`）。
+    TerminalPaste,
     NewTerminal,
     CloseTerminal,
     NextTerminal,
@@ -598,6 +602,8 @@ impl Action {
             StopConfiguration => t!("cmd-stop-configuration"),
             EditRunConfigurations => t!("cmd-edit-run-configurations"),
             ClearTerminal => t!("cmd-clear-terminal"),
+            TerminalCopy => t!("cmd-terminal-copy"),
+            TerminalPaste => t!("cmd-terminal-paste"),
             NewTerminal => t!("cmd-new-terminal"),
             CloseTerminal => t!("cmd-close-terminal"),
             NextTerminal => t!("cmd-next-terminal"),
@@ -836,6 +842,8 @@ impl Action {
             | StopConfiguration
             | EditRunConfigurations
             | ClearTerminal
+            | TerminalCopy
+            | TerminalPaste
             | NewTerminal
             | CloseTerminal
             | NextTerminal
@@ -1024,6 +1032,8 @@ impl Action {
             | Action::StopConfiguration
             | Action::EditRunConfigurations
             | Action::ClearTerminal
+            | Action::TerminalCopy
+            | Action::TerminalPaste
             | Action::NewTerminal
             | Action::CloseTerminal
             | Action::NextTerminal
@@ -1072,6 +1082,8 @@ impl Action {
                 | Cut
                 | Copy
                 | Paste
+                | TerminalCopy
+                | TerminalPaste
                 | FindNext
                 | FindPrevious
                 | ReplaceOne
@@ -1324,6 +1336,8 @@ pub const ACTIONS: &[Action] = {
         EditRunConfigurations,
         NewTerminal,
         ClearTerminal,
+        TerminalCopy,
+        TerminalPaste,
         FindInTerminal,
         MaximizeTerminal,
         ScrollTerminalTop,

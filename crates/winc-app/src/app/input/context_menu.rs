@@ -869,7 +869,12 @@ impl MenuCommand {
         if self == MenuCommand::NewFile {
             return None;
         }
-        let action = self.action()?;
+        // 终端里的复制、粘贴另有终端的命令和键。
+        let action = match (self.action()?, context) {
+            (Action::Copy, Context::Terminal) => Action::TerminalCopy,
+            (Action::Paste, Context::Terminal) => Action::TerminalPaste,
+            (action, _) => action,
+        };
         let stroke = keymap::single_stroke(action, context)?;
         match keymap::lookup(&keymap::current(), stroke, None, context) {
             keymap::Lookup::Run(actions) if actions.first() == Some(&action) => Some(stroke),

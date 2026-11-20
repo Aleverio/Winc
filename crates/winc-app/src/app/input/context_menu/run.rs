@@ -474,7 +474,7 @@ impl App {
             _ => {}
         }
         match command {
-            MenuCommand::Copy => self.terminal_copy(),
+            MenuCommand::Copy => self.terminal_copy(false),
             MenuCommand::Paste => self.terminal_paste(),
             MenuCommand::SelectAll => self.terminal_select_all(),
             MenuCommand::TerminalFind => self.open_terminal_find(),
