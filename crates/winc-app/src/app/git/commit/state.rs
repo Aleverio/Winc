@@ -155,7 +155,7 @@ impl CommitState {
     /// 界面改动了暂存区：此前发出的读取结果不再采用，勾选框的缓存作废。
     pub(in crate::app) fn index_changed(&mut self) {
         self.index_version += 1;
-        self.checks += 1;
+        self.picks.touch();
     }
 
     /// 刚读到的状态是否已经过时：暂存的操作尚未写完，或者这次读取开始于某次暂存的操作之前。

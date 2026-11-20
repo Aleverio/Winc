@@ -801,7 +801,6 @@ impl App {
                                 }
                             }
                             // 勾上的都提交了；取消勾选的各处改动还在工作区里，下次重新勾选。
-                            self.git.commit.skipped.clear();
                             self.git.commit.reset_checks();
                             self.git.commit.amend = false;
                             self.finish_commit_into(&message);

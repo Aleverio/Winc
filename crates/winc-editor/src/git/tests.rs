@@ -288,6 +288,11 @@ fn failures_pick_the_line_that_explains() {
 ///
 /// 找不到 `git` 时返回 `None`。
 pub(super) fn real_git() -> Option<Git> {
+    real_git_with(None)
+}
+
+/// 同 [`real_git`]，`program` 是代替 `git` 运行的程序（模拟旧版本的脚本）。
+pub(super) fn real_git_with(program: Option<&str>) -> Option<Git> {
     let mut vars: Vec<_> = std::env::vars_os().collect();
     for (k, v) in [
         ("GIT_AUTHOR_NAME", "t"),
@@ -300,7 +305,7 @@ pub(super) fn real_git() -> Option<Git> {
     ] {
         vars.push((k.into(), v.into()));
     }
-    Git::find(&Shell::with_vars(vars)).ok()
+    Git::find_with(&Shell::with_vars(vars), program).ok()
 }
 
 /// 在临时目录里建立一个真实的仓库并运行 `git`。
@@ -585,6 +590,87 @@ fn risk_fingerprints_stay_the_same_across_versions() {
         ]
     );
     assert_eq!(risks.fingerprint, 0x1b4d_c5af_9d50_b560);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 分别读出的各范围配置拼成 `--show-scope` 的格式；只有仓库的配置开启了
+/// `extensions.worktreeConfig` 时才另读工作树的配置。
+#[test]
+fn scopes_read_one_by_one_join_like_show_scope() {
+    let joined = join_scopes(&[
+        ("global", b"user.name\nt\0"),
+        ("local", b"core.fsmonitor\nsh x\0core.bare\nfalse\0"),
+        ("worktree", b""),
+    ]);
+    assert_eq!(
+        joined,
+        b"global\0user.name\nt\0local\0core.fsmonitor\nsh x\0local\0core.bare\nfalse\0"
+    );
+    assert!(worktree_config(
+        b"core.bare\nfalse\0extensions.worktreeconfig\ntrue\0"
+    ));
+    assert!(worktree_config(b"extensions.worktreeconfig\0"));
+    assert!(!worktree_config(b"extensions.worktreeconfig\nfalse\0"));
+    assert!(!worktree_config(b"core.bare\nfalse\0"));
+}
+
+/// 回归：2.26 以前的 `git` 没有 `--show-scope`，读不出仓库的配置，每个仓库都要求信任。改为
+/// 按范围分别读取，结果（含 `include` 进来的配置）和指纹与 `--show-scope` 相同。
+///
+/// 找不到 `git` 时跳过。
+#[test]
+fn reading_scopes_one_by_one_finds_the_same_risks() {
+    let shell = Shell::with_vars(std::env::vars_os().collect());
+    let Ok(git) = Git::find(&shell) else {
+        return;
+    };
+    let dir = crate::test_util::scratch("trust-scopes");
+    let root = winc_config::files::canonicalize(&dir).unwrap();
+    let sh = |args: &[&str]| {
+        let ok = Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(args)
+            .output()
+            .unwrap()
+            .status
+            .success();
+        assert!(ok, "git {args:?}");
+    };
+    sh(&["init", "-q", "-b", "main"]);
+    sh(&["config", "core.fsmonitor", "sh -c true"]);
+    sh(&["config", "core.hooksPath", "tools/hooks"]);
+    std::fs::write(root.join(".git/extra"), "[filter \"x\"]\n\tclean = cat\n").unwrap();
+    sh(&["config", "include.path", "extra"]);
+
+    let mut command = git.at(&root);
+    command.args(["config", "--list", "--show-scope", "-z"]);
+    let scoped = git
+        .run(&mut command, SHOW_TIMEOUT, &Cancel::default())
+        .unwrap();
+    let by_scope = git.config_by_scope(&root).unwrap();
+    let risks = |out: &[u8]| parse_risks(out, &root, None, None);
+    let (expected, found) = (risks(&scoped), risks(&by_scope));
+    assert!(
+        found.items.contains(&"filter.x.clean = cat".to_owned()),
+        "{found:?}"
+    );
+    assert_eq!(found, expected);
+
+    // 不认识 `--show-scope` 的 `git`（按 2.25 的样子以 129 退出）：检查照常得出同样的结果。
+    #[cfg(unix)]
+    {
+        let fake = dir.join("old-git");
+        let body = "#!/bin/sh\nfor a in \"$@\"; do\n  if [ \"$a\" = --show-scope ]; then\n    \
+                    echo \"error: unknown option \\`show-scope'\" >&2; exit 129\n  fi\ndone\n\
+                    exec git \"$@\"\n";
+        winc_backend::testing::write_script(&fake, body);
+        let old = Git::find_with(&shell, Some(&fake.to_string_lossy())).unwrap();
+        let inspected = old.inspect(&root).unwrap();
+        assert_eq!(inspected.items, expected.items);
+        assert_eq!(inspected.fingerprint, expected.fingerprint);
+    }
 
     let _ = std::fs::remove_dir_all(&dir);
 }

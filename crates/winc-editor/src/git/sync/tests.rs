@@ -3,7 +3,7 @@
 //!
 //! 远程是同一台机器上的裸仓库；依赖本机 `git`，找不到时跳过。
 
-use super::super::tests::real_git;
+use super::super::tests::{real_git, real_git_with};
 use super::*;
 
 /// 在 `dir` 中运行 `git args`，失败时 panic。
@@ -265,4 +265,38 @@ fn an_explicit_pull_mode_overrides_the_git_config() {
     ));
     assert_eq!(merges(&work), "0");
     assert_eq!(sh(&work, &["log", "-1", "--format=%s"]), "ours");
+}
+
+/// 回归：2.27 以前的 `git` 合并方式拉取时不接受 `--autostash`，拉取总是失败。这时不带它：
+/// 工作区干净、改动不冲突时照常拉取。
+#[cfg(unix)]
+#[test]
+fn merging_pulls_work_with_git_before_merge_autostash() {
+    let (work, remote) = three_lines("pull-old-git");
+    // 按 2.25 的样子：报出旧版本号，合并方式的拉取遇到 `--autostash` 时退出。
+    let fake = work.join("../pull-old-git-program");
+    let body = "#!/bin/sh\n\
+                case \" $* \" in *' version '*) echo 'git version 2.25.1'; exit 0;; esac\n\
+                case \" $* \" in *' pull '*' --autostash '*) case \" $* \" in *' --rebase '*) ;; \
+                *) echo 'fatal: --[no-]autostash option is only valid with --rebase.' >&2; \
+                exit 128;; esac;; esac\n\
+                exec git \"$@\"\n";
+    winc_backend::testing::write_script(&fake, body);
+    let Some(git) = real_git_with(Some(&fake.to_string_lossy())) else {
+        return;
+    };
+    push_from_peer("pull-old-git-peer", &remote, "b.txt", "theirs\n");
+    std::fs::write(work.join("a.txt"), "one\ntwo\nTHREE\n").unwrap();
+    git.pull(&work, Some(false)).unwrap();
+    assert!(work.join("b.txt").exists());
+    assert_eq!(sh(&work, &["status", "--porcelain"]), "M a.txt");
+
+    push_from_peer("pull-old-git-peer-2", &remote, "c.txt", "theirs\n");
+    git.pull_from(&work, "origin", "main", false).unwrap();
+    assert!(work.join("c.txt").exists());
+    // 变基方式的拉取一直接受 `--autostash`。
+    push_from_peer("pull-old-git-peer-3", &remote, "d.txt", "theirs\n");
+    git.pull(&work, Some(true)).unwrap();
+    assert!(work.join("d.txt").exists());
+    assert_eq!(sh(&work, &["status", "--porcelain"]), "M a.txt");
 }

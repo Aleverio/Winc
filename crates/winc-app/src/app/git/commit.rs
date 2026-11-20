@@ -760,15 +760,11 @@ pub(crate) struct CommitState {
     draft: Option<String>,
     /// 各位置写了一半的提交信息：切换仓库、工作树时不丢。
     drafts: HashMap<PathBuf, String>,
-    /// 勾选框的状态每被界面改动一次加 1，见 [`CommitRows::members_state`]。
-    checks: u64,
     /// 是否显示暂存区：为真时各项的状态取自暂存区，列表分出「已暂存的更改」一组；为假（默认）
     /// 时是勾选式，勾选记在下面几项中，提交时才写入暂存区。
     staging: bool,
-    /// 勾选式下用户取消勾选的文件；其余已跟踪的文件都勾着。
-    excluded: HashSet<PathBuf>,
-    /// 勾选式下用户勾上的未跟踪文件；其余未跟踪的文件都不勾。
-    included: HashSet<PathBuf>,
+    /// 勾选式下的勾选，提交时才写入暂存区。
+    picks: picks::Checks,
     /// 勾选式下在其他仓库中勾上的文件：提交时连同当前仓库勾上的文件，各自提交到所在的仓库。
     /// 其他仓库的文件默认都不勾。
     other_checked: HashSet<PathBuf>,
@@ -795,8 +791,6 @@ pub(crate) struct CommitState {
     pub(crate) quiet_open: Option<bool>,
     /// 其他仓库各行的缓存（见 [`App::commit_other_rows`]）。
     other_rows: std::cell::RefCell<Option<(others::OtherRowsKey, Vec<others::OtherRow>)>>,
-    /// 勾选式下勾上的文件里取消勾选的各处改动：这些文件只提交其余的改动。
-    skipped: HashMap<PathBuf, Vec<Skip>>,
     /// 上一次见到的 `HEAD`：变化（切换分支、在别处提交）时按处的勾选作废，记下的行号不再对应。
     head: Option<String>,
     /// 等待写入暂存区的操作，按顺序逐个执行（见 [`App::pump_staging`]）。
@@ -918,7 +912,6 @@ impl CommitState {
         if self.staging != on {
             self.staging = on;
             self.reset_checks();
-            self.skipped.clear();
             self.index.clear();
             self.layout += 1;
         }
@@ -926,14 +919,12 @@ impl CommitState {
 
     /// 清除勾选式下的全部勾选，回到默认（提交完成以后）。
     pub(super) fn reset_checks(&mut self) {
-        self.excluded.clear();
-        self.included.clear();
-        self.checks += 1;
+        self.picks.reset();
     }
 
-    /// 勾选的版本：勾选每变一次加 1。
+    /// 勾选的版本：勾选每变一次加 1（见 [`picks::Checks::version`]）。
     pub(crate) fn checks(&self) -> u64 {
-        self.checks
+        self.picks.version()
     }
 
     /// 清掉选中的文件和多选（换目录时）。
@@ -959,8 +950,7 @@ impl Default for CommitState {
             draft: None,
             drafts: HashMap::new(),
             staging: false,
-            excluded: HashSet::new(),
-            included: HashSet::new(),
+            picks: picks::Checks::default(),
             other_checked: HashSet::new(),
             other_skipped: HashMap::new(),
             other_heads: HashMap::new(),
@@ -971,7 +961,6 @@ impl Default for CommitState {
             other_folds: HashSet::new(),
             quiet_open: None,
             other_rows: Default::default(),
-            skipped: HashMap::new(),
             head: None,
             staging_queue: VecDeque::new(),
             staging_running: false,
@@ -992,7 +981,6 @@ impl Default for CommitState {
             compact: true,
             collapsed_dirs: Default::default(),
             layout: 0,
-            checks: 0,
             rows: RefCell::new(None),
             scroll: 0.0,
             motion: None,

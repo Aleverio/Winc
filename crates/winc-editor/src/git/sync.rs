@@ -48,6 +48,8 @@ pub const MINIMUM_VERSION: (u32, u32) = (2, 24);
 
 /// 支持 `push --force-if-includes` 的最低 `git` 版本。
 const FORCE_IF_INCLUDES: (u32, u32) = (2, 30);
+/// 合并方式的拉取接受 `--autostash` 的最低版本；更早的只在变基时接受。
+const MERGE_AUTOSTASH: (u32, u32) = (2, 27);
 
 /// 解释 `pull.rebase`、`branch.<分支>.rebase` 的值：变基为 `Some(true)`，合并为
 /// `Some(false)`，认不出来时为 `None`。
@@ -118,18 +120,29 @@ impl Git {
     /// 未配置 `pull.rebase` 时 `git` 拒绝拉取分叉的分支，因此这时显式按合并方式拉取。未提交的更改
     /// 由 `git` 先储藏、拉取完成后恢复（`--autostash`）：工作区有改动时拉取不会因此被拒绝；拉取
     /// 产生冲突时，更改在合并或变基结束（继续或放弃）后恢复。恢复的结果见 [`Git::carried`]。
+    /// 2.27 以前的 `git` 合并时不接受 `--autostash`，这时不带：更改会被拉取的内容覆盖时 `git`
+    /// 拒绝拉取，更改不会丢失。
     ///
     /// # Errors
     ///
     /// 没有上游、出现冲突、未跟踪的文件会被拉取到的文件覆盖时返回 `git` 给出的原因。
     pub fn pull(&self, root: &Path, rebase: Option<bool>) -> Result<String, String> {
-        let pull: &[&str] = match rebase {
-            Some(true) => &["pull", "--rebase", "--autostash"],
-            Some(false) => &["pull", "--no-rebase", "--autostash"],
-            None if self.pull_rebases(root).is_some() => &["pull", "--autostash"],
-            None => &["pull", "--no-rebase", "--autostash"],
-        };
-        self.operate(root, pull)
+        let configured = rebase.is_none().then(|| self.pull_rebases(root)).flatten();
+        let mut args = vec!["pull"];
+        match (rebase, configured) {
+            (Some(true), _) => args.push("--rebase"),
+            (Some(false), _) | (None, None) => args.push("--no-rebase"),
+            (None, Some(_)) => {}
+        }
+        if rebase.or(configured) == Some(true) || self.merge_autostash(root) {
+            args.push("--autostash");
+        }
+        self.operate(root, &args)
+    }
+
+    /// 合并方式的拉取能否带 `--autostash`（见 [`MERGE_AUTOSTASH`]）。
+    fn merge_autostash(&self, root: &Path) -> bool {
+        self.version(root, &Cancel::default()) >= Some(MERGE_AUTOSTASH)
     }
 
     /// 从远程 `remote` 的分支 `branch` 拉取到当前分支，`rebase` 为真时变基、否则合并，返回
@@ -149,14 +162,11 @@ impl Git {
             return Err(winc_i18n::t!("git-push-no-remote").to_owned());
         }
         let mode = if rebase { "--rebase" } else { "--no-rebase" };
-        let args = [
-            "pull",
-            mode,
-            "--autostash",
-            "--end-of-options",
-            remote,
-            branch,
-        ];
+        let mut args = vec!["pull", mode];
+        if rebase || self.merge_autostash(root) {
+            args.push("--autostash");
+        }
+        args.extend(["--end-of-options", remote, branch]);
         self.operate(root, &args)
     }
 

@@ -606,7 +606,7 @@ impl App {
                 continue;
             }
             commit.other_checked.insert(path.clone());
-            match commit.skipped.remove(path).filter(|s| !s.is_empty()) {
+            match commit.picks.take_skips(path).filter(|s| !s.is_empty()) {
                 Some(skipped) => commit.other_skipped.insert(path.clone(), skipped),
                 None => commit.other_skipped.remove(path),
             };
@@ -633,18 +633,9 @@ impl App {
         for entry in &status.entries {
             let path = &entry.path;
             let on = commit.other_checked.remove(path);
-            commit.included.remove(path);
-            commit.excluded.remove(path);
-            match (on, entry.untracked()) {
-                (true, true) => _ = commit.included.insert(path.clone()),
-                (false, false) => _ = commit.excluded.insert(path.clone()),
-                _ => {}
-            }
-            if let Some(skipped) = commit.other_skipped.remove(path).filter(|_| on) {
-                commit.skipped.insert(path.clone(), skipped);
-            }
+            let skips = commit.other_skipped.remove(path);
+            commit.picks.restore(path, (entry.untracked(), on), skips);
         }
-        commit.checks += 1;
     }
 
     /// 其他仓库中勾上或暂存了、但不随这次提交写入的文件数：`committed` 是一并提交的仓库。
