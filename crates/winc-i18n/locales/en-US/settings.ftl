@@ -97,6 +97,7 @@ settings-terminal-position = Panel Position
 settings-terminal-tab-position = Tab Position
 settings-terminal-font = Font
 settings-terminal-size = Font Size
+settings-terminal-font-weight = Font Weight
 settings-terminal-copy-on-select = Copy on Select
 settings-terminal-confirm-close = Confirm Before Closing
 settings-system-proxy = Use System Proxy

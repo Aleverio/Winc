@@ -97,6 +97,7 @@ settings-terminal-position = 面板位置
 settings-terminal-tab-position = 标签位置
 settings-terminal-font = 字体
 settings-terminal-size = 字号
+settings-terminal-font-weight = 字重
 settings-terminal-copy-on-select = 选中时复制
 settings-terminal-confirm-close = 关闭前确认
 settings-system-proxy = 使用系统代理
