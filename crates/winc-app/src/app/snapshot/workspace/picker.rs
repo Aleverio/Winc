@@ -4,6 +4,54 @@
 use super::*;
 
 #[test]
+fn quick_open_finds_visited_ignored_files_without_listing_unvisited_ones() {
+    let dir = sample_folder("picker-ignored-history");
+    let project = dir.join("workspace");
+    std::fs::create_dir(&project).unwrap();
+    std::fs::write(project.join(".gitignore"), ".env*\n").unwrap();
+    std::fs::write(project.join(".env"), "one\ntwo\n").unwrap();
+    std::fs::write(project.join(".env.local"), "").unwrap();
+    std::fs::write(project.join("env.txt"), "").unwrap();
+    let mut app = app_with(&project, false);
+    let root = app.editor.root().unwrap().to_path_buf();
+    let results = |app: &mut App, query: &str| {
+        app.open_picker();
+        app.overlays.picker.input.set_text(query);
+        app.picker_refresh();
+        let picker = &app.overlays.picker;
+        picker
+            .hits
+            .iter()
+            .map(|&i| picker.index.file(i).unwrap().path.to_owned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(results(&mut app, "env"), ["env.txt"]);
+    app.close_picker();
+    app.open_path(&root.join(".env"));
+    assert_eq!(results(&mut app, ".env"), [".env"]);
+    assert_eq!(app.picker_matched(0), [0, 1, 2, 3]);
+    app.close_picker();
+    app.close_tab(app.editor.active.unwrap());
+    app.open_path(&root.join("env.txt"));
+    let mut found = results(&mut app, "env");
+    found.sort();
+    assert_eq!(found, [".env", "env.txt"]);
+    assert_eq!(results(&mut app, ".env:2"), [".env"]);
+    app.picker_accept();
+    let doc = app.editor.active().unwrap();
+    assert_eq!(doc.path.as_deref(), Some(root.join(".env").as_path()));
+    assert_eq!(doc.text().pos_to_line_col(doc.selection.head), (1, 0));
+    app.history.files.clear();
+    assert_eq!(results(&mut app, ".env"), [".env"]);
+    app.close_picker();
+    app.close_tab(app.editor.active.unwrap());
+    app.history.files.push(root.join(".env"));
+    std::fs::remove_file(root.join(".env")).unwrap();
+    assert!(results(&mut app, ".env").is_empty());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn picker_lists_matches_and_opens_the_selected_file() {
     let dir = search_folder("picker");
     let mut app = app_with(&dir, false);
