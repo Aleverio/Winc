@@ -728,7 +728,6 @@ impl Setting {
             Setting::GitOpenWorktree => Some(t!("settings-git-open-worktree-desc")),
             Setting::GitPath => Some(t!("settings-git-path-desc")),
             Setting::TerminalShell => Some(t!("settings-terminal-shell-desc")),
-            Setting::TerminalFontWeight => Some(t!("settings-terminal-font-weight-desc")),
             Setting::TerminalCopyOnSelect => Some(t!("settings-terminal-copy-on-select-desc")),
             Setting::TerminalConfirmClose => Some(t!("settings-terminal-confirm-close-desc")),
             Setting::TerminalPrompt => Some(t!("settings-terminal-prompt-desc")),

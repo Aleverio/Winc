@@ -79,7 +79,7 @@ impl App {
         self.config.ui_font_weight.unwrap_or(Config::FONT_WEIGHT)
     }
 
-    /// 返回终端文字的字重（`terminal.fontWeight`）；未配置时跟随全局字重。
+    /// 返回终端文字的字重（`terminal.fontWeight`）；没有调整过时同全局字重。
     pub(in crate::app) fn terminal_font_weight(&self) -> u16 {
         self.config
             .terminal_font_weight

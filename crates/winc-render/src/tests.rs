@@ -451,6 +451,40 @@ fn font_weight_changes_the_ink_of_every_kind_of_font() {
     }
 }
 
+/// 终端的字重与其余文字分开：终端的文字（含后备字体中的汉字）按终端的字重画，编辑区不变；
+/// 两者相同时画出的完全一样。
+#[cfg(target_os = "macos")]
+#[test]
+fn the_terminal_weight_changes_only_the_terminal_ink() {
+    let sf = FontSpec::Path("/System/Library/Fonts/SFNSMono.ttf".into());
+    let ink = |(weight, terminal): (u16, u16), kind: FontKind, c: char| {
+        let mut renderer =
+            Renderer::offscreen(60.0, 40.0, 1.0, Color::hex(0x000000), None, None).unwrap();
+        renderer
+            .set_fonts(std::slice::from_ref(&sf), &[], &[], weight, terminal)
+            .unwrap();
+        renderer.draw(|frame| {
+            let all = frame.bounds();
+            let text = c.to_string();
+            frame.text(kind, 30.0, 5.0, 32.0, &text, Color::hex(0xffffff), all);
+        });
+        let image = renderer.image().unwrap();
+        image.pixels.iter().map(|p| p & 0xff).sum::<u32>()
+    };
+    for c in ['H', '中'] {
+        let regular = ink((400, 400), FontKind::Terminal, c);
+        assert_eq!(ink((400, 400), FontKind::Mono, c), regular, "{c}");
+        let bold = ink((400, 700), FontKind::Terminal, c);
+        assert!(
+            bold as f32 > regular as f32 * 1.15,
+            "{c}：{regular} → {bold}"
+        );
+        assert_eq!(ink((400, 700), FontKind::Mono, c), regular, "{c}");
+        // 全局调粗、终端仍是常规字重：终端不随之变粗。
+        assert_eq!(ink((700, 400), FontKind::Terminal, c), regular, "{c}");
+    }
+}
+
 /// 缩放绘制位图：每个目标像素取最近的源像素，超出裁剪范围的部分不绘制。
 #[test]
 fn scaled_pixels_take_the_nearest_source_pixel() {

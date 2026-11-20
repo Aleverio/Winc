@@ -1,7 +1,8 @@
 //! 字体：按需 mmap 字体文件，不扫描系统字体库。
 //!
 //! 槽位依次是等宽字体、界面字体、等宽字体的斜体、数学字体、终端字体及其斜体，其后是按优先级
-//! 排列的后备字体，最后是用户在字体列表中写在主字体之后的字体；斜体和后备字体在首次需要时才
+//! 排列的后备字体；终端的字重与其余文字不同时，接着是按终端字重打开的另一份后备字体（彩色
+//! emoji 除外）。最后是用户在字体列表中写在主字体之后的字体。斜体和后备字体在首次需要时才
 //! 映射文件。候选路径按平台给出，用户配置的字体排在最前面。
 
 use std::fs::{File, Metadata};
@@ -577,12 +578,11 @@ pub(crate) struct Fonts {
     ascii: [[Option<(u8, u16)>; 128]; FontKind::COUNT],
     /// 平台后备字体的槽位范围。
     fallbacks: Range<u8>,
-    /// 终端字重与编辑区不同时，终端专用的一份后备字体槽位范围；相同时与 `fallbacks` 相同。
-    terminal_fallbacks: Range<u8>,
+    /// 终端字重与其余文字不同时终端依次尝试的后备字体槽位：按终端字重另开的一份，彩色 emoji
+    /// 仍是 `emoji`；字重相同时为空，终端用 `fallbacks`。
+    terminal_fallbacks: Vec<u8>,
     /// 彩色 emoji 字体所在的后备槽位；默认按 emoji 显示的字符先在这里找。
     emoji: u8,
-    /// 终端专用后备字体中的彩色 emoji 槽位；没有终端专用后备字体时与 `emoji` 相同。
-    terminal_emoji: u8,
     /// 等宽字体、界面字体和终端字体的列表中写在主字体之后的字体所在的槽位范围，依次尝试。
     listed: [Range<u8>; 3],
 }
@@ -612,9 +612,9 @@ impl Fonts {
 
     /// 同 [`Self::load`]，终端用 `terminal_weight`；超出 100 至 900 时取最接近的值。
     ///
-    /// 终端字重与其余文字不同时，终端始终使用自己的字体槽位（没有单独设置终端字体时用等宽字体
-    /// 的候选），后备字体也另加载一份，使终端里的汉字、符号同样使用终端的字重；相同时与编辑区
-    /// 共用字体，不重复加载。
+    /// 终端字重与其余文字不同时，终端始终使用自己的字体槽位（没有单独设置终端字体时用等宽字体），
+    /// 缺字时的顺序与字重相同时一样；后备字体也另开一份（彩色 emoji 除外），使终端里的汉字、
+    /// 符号同样使用终端的字重。相同时与编辑区共用字体，不重复加载。
     pub(crate) fn load_with(
         mono: &[FontSpec],
         ui: &[FontSpec],
@@ -644,15 +644,15 @@ impl Fonts {
         let italic = italic_candidates(&mono_file, &mono);
         // 数学字体一开始就映射（只是映射文件，很快）：度量要用到它，`metrics` 不能再去加载。
         let math = first_existing(&candidates.math, shift).map_or(Slot::Missing, Slot::Ready);
-        // 终端字重与其余文字不同时，终端缺字依次用等宽字体、界面字体的候选补齐，全部按终端的
-        // 字重打开；相同的候选只列一次。
+        // 终端字重与其余文字不同时不能借用等宽、界面字体的槽位：按与字重相同时一样的顺序（终端的
+        // 列表，再是选定的等宽字体及其列表、界面字体及其列表）列出，全部按终端的字重打开；相同的
+        // 文件只列一次。
         let mut terminal_files = listed[2].clone();
         if separate_terminal {
-            let rest = listed[0]
-                .iter()
-                .chain(&candidates.mono)
-                .chain(&listed[1])
-                .chain(&candidates.ui);
+            let rest = std::iter::once(&mono_file)
+                .chain(&listed[0])
+                .chain(std::iter::once(&ui_file))
+                .chain(&listed[1]);
             for file in rest {
                 if !terminal_files.contains(file) {
                     terminal_files.push(file.clone());
@@ -689,23 +689,22 @@ impl Fonts {
                 .map(|choices| Slot::Pending(choices, shift)),
         );
         let fallbacks = FALLBACK..slots.len() as u8;
-        // 终端字重不同时后备字体也另存一份，按终端的字重打开：终端里的汉字常来自后备字体。
-        let (terminal_fallbacks, terminal_emoji) = if separate_terminal {
-            let start = slots.len() as u8;
-            slots.extend(
-                candidates
-                    .fallbacks
-                    .iter()
-                    .cloned()
-                    .map(|choices| Slot::Pending(choices, terminal_shift)),
-            );
-            (start..slots.len() as u8, start + candidates.emoji as u8)
-        } else {
-            (fallbacks.clone(), emoji)
-        };
+        // 终端字重不同时后备字体另开一份，按终端的字重打开：终端里的汉字常来自后备字体。彩色
+        // emoji 没有字重，仍用同一个槽位。
+        let mut terminal_fallbacks = Vec::new();
+        if separate_terminal {
+            for (i, choices) in candidates.fallbacks.into_iter().enumerate() {
+                if i == candidates.emoji {
+                    terminal_fallbacks.push(emoji);
+                } else {
+                    terminal_fallbacks.push(slots.len() as u8);
+                    slots.push(Slot::Pending(choices, terminal_shift));
+                }
+            }
+        }
         // 列表中主字体之外的字体到第一次用到时才打开。排在主字体之前的字体刚才已打不开，到时
         // 再试一次即成为 `Missing`。终端字重与其余文字相同时，没有单独设置终端字体就用等宽
-        // 字体，终端的列表不再使用；不同时终端的列表是上面补齐的等宽、界面字体候选。
+        // 字体，终端的列表不再使用；不同时终端的列表是上面补齐的等宽、界面字体。
         let chosen = [Some(&mono_file), Some(&ui_file), terminal_file.as_ref()];
         let sources = [&listed[0], &listed[1], &terminal_files];
         let shift_of = |i: usize| if i == 2 { terminal_shift } else { shift };
@@ -729,7 +728,6 @@ impl Fonts {
             fallbacks,
             terminal_fallbacks,
             emoji,
-            terminal_emoji,
             listed,
         };
 
@@ -872,8 +870,8 @@ impl Fonts {
         // 先找主字体及其列表中的字体，再找其他主字体及其列表（斜体没有的字符用正体，终端字体
         // 没有的用等宽字体），最后是后备字体。斜体、终端字体不作为其他字体的后备。
         //
-        // 终端字重与其余文字不同时，终端列表已经按顺序包含等宽字体和界面字体的候选，后备字体
-        // 也有一份按终端字重另外打开的，不再经过编辑区、界面的槽位，否则缺字会画成别的字重。
+        // 终端字重与其余文字不同时，终端的列表已经按顺序包含等宽字体和界面字体，后备字体也有一份
+        // 按终端字重另外打开的，不再经过编辑区、界面的槽位，否则缺字会画成别的字重。
         let separate_terminal = self.terminal_shift != self.shift;
         let [mono, ui, terminal] = self.listed.clone();
         let with = |slot: u8, listed: Range<u8>| std::iter::once(slot).chain(listed);
@@ -898,20 +896,15 @@ impl Fonts {
                 .collect(),
         };
         let terminal_kind = matches!(kind, FontKind::Terminal | FontKind::TerminalItalic);
-        order.extend(if separate_terminal && terminal_kind {
-            self.terminal_fallbacks.clone()
+        if separate_terminal && terminal_kind {
+            order.extend_from_slice(&self.terminal_fallbacks);
         } else {
-            self.fallbacks.clone()
-        });
+            order.extend(self.fallbacks.clone());
+        }
         // 默认按 emoji 显示的字符优先使用彩色 emoji 字体：顺序在前的符号字体、
         // 中文字体和主字体常带有同一字符的单色字形。
         if winc_emoji::presentation(c) {
-            let emoji = if separate_terminal && terminal_kind {
-                self.terminal_emoji
-            } else {
-                self.emoji
-            };
-            order.insert(0, emoji);
+            order.insert(0, self.emoji);
         }
 
         let mut result = (primary, 0);

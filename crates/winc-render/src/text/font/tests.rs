@@ -194,23 +194,26 @@ fn the_terminal_uses_its_own_font_or_the_editor_font() {
 
 #[test]
 fn a_separate_terminal_weight_uses_its_own_fallback_faces() {
-    // 终端字重与全局不同：终端有自己的槽位，后备字体也另加载一份；汉字缺字时用终端的那一份。
+    // 终端字重与全局不同：终端有自己的槽位，后备字体也另开一份；汉字缺字时用终端的那一份。
     let mut fonts = Fonts::load_with(&[], &[], &[], 400, 300).expect("系统里有等宽字体");
     assert_eq!(fonts.resolve(FontKind::Terminal, 'a').0, TERMINAL);
     assert_ne!(fonts.resolve(FontKind::Mono, 'a').0, TERMINAL);
-    assert_ne!(fonts.terminal_fallbacks, fonts.fallbacks);
-    let (slot, _) = fonts.resolve(FontKind::Terminal, '中');
-    assert!(
-        slot == TERMINAL
-            || fonts.listed[2].contains(&slot)
-            || fonts.terminal_fallbacks.contains(&slot),
-        "{slot}"
-    );
+    assert_eq!(fonts.terminal_fallbacks.len(), fonts.fallbacks.len());
+    let (cjk, _) = fonts.resolve(FontKind::Terminal, '中');
+    assert!(!fonts.fallbacks.contains(&cjk), "{cjk}");
+    // 缺字时的顺序同字重相同时：终端没有单独的字体列表时只多出界面字体一项，不列平台的其他
+    // 候选字体。
+    assert!(fonts.listed[2].len() <= 1, "{:?}", fonts.listed[2]);
+    // 彩色 emoji 没有字重，终端与其余文字共用一个槽位。
+    assert!(fonts.terminal_fallbacks.contains(&fonts.emoji));
+    let (slot, _) = fonts.resolve(FontKind::Terminal, '😀');
+    let (shared, _) = fonts.resolve(FontKind::Mono, '😀');
+    assert_eq!(slot, shared);
 
     // 与全局字重相同：和编辑区共用字体，不重复加载后备字体。
     let mut fonts = Fonts::load_with(&[], &[], &[], 400, 400).expect("系统里有等宽字体");
     assert_eq!(fonts.resolve(FontKind::Terminal, 'a').0, MONO);
-    assert_eq!(fonts.terminal_fallbacks, fonts.fallbacks);
+    assert!(fonts.terminal_fallbacks.is_empty());
 }
 
 #[test]

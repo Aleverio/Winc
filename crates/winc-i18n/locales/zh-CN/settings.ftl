@@ -203,7 +203,6 @@ settings-remote-module-desc = 通过 SSH 打开远程主机上的目录，连接
 settings-terminal-copy-on-select-desc = 选中文字后自动复制到剪贴板
 settings-terminal-confirm-close-desc = 关闭仍有程序运行的标签页前先确认
 settings-terminal-shell-desc = 新终端使用的 Shell，路径含空格时加双引号
-settings-terminal-font-weight-desc = 终端文字的字重，未设置时跟随全局字重
 settings-terminal-prompt-desc = 替换默认提示符，显示目录、Git 分支和退出状态
 settings-terminal-shell-integration-desc = { $platform ->
     [windows] 按命令分块显示 WSL 输出，自动加载 Python 环境

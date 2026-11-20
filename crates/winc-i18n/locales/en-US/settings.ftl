@@ -203,7 +203,6 @@ settings-remote-module-desc = Open folders on remote hosts over SSH, running a s
 settings-terminal-copy-on-select-desc = Copy selected text to the clipboard automatically
 settings-terminal-confirm-close-desc = Ask before closing a tab that’s still running a program
 settings-terminal-shell-desc = Shell for new terminals; quote paths that contain spaces
-settings-terminal-font-weight-desc = Weight of the terminal text; follows the global font weight when unset
 settings-terminal-prompt-desc = Replace the default prompt with the folder, Git branch and exit status
 settings-terminal-shell-integration-desc = { $platform ->
     [windows] Group WSL output by command and load Python environments automatically
