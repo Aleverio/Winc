@@ -340,6 +340,43 @@ impl LogView {
         self.commits.len().max(1)
     }
 
+    /// 提交 `oid` 是否在 `HEAD` 上（是 `HEAD` 或它的祖先），按已列出的提交和父提交判断。
+    ///
+    /// 按说明、作者、路径、日期筛选过，或 `HEAD` 不在列表里时，列出的提交连不起来，返回 `None`。
+    /// 列表按 `--date-order` 排列，子提交都在父提交前面，`HEAD` 到 `oid` 之间的提交已经列出。
+    pub fn on_head(&self, oid: &str) -> Option<bool> {
+        let query = &self.query;
+        if query.graphless() || query.rewrites_parents() || query.since_days.is_some() {
+            return None;
+        }
+        let head = self
+            .commits
+            .iter()
+            .position(|c| (c.refs.iter()).any(|r| matches!(r, Ref::Head(_) | Ref::Detached)))?;
+        let target = self.commits.iter().position(|c| c.oid == oid)?;
+        if target < head {
+            return Some(false);
+        }
+        // 从 `HEAD` 沿父提交往下走；只有排在 `HEAD` 和 `oid` 之间的提交可能在路上。
+        let rows = &self.commits[head..=target];
+        let index: std::collections::HashMap<&str, usize> = (rows.iter().enumerate())
+            .map(|(i, c)| (c.oid.as_str(), i))
+            .collect();
+        let mut reached = vec![false; rows.len()];
+        reached[0] = true;
+        for i in 0..rows.len() {
+            if !reached[i] {
+                continue;
+            }
+            for parent in &rows[i].parents {
+                if let Some(&j) = index.get(parent.as_str()) {
+                    reached[j] = true;
+                }
+            }
+        }
+        Some(reached[rows.len() - 1])
+    }
+
     /// 选中的提交号。
     pub fn selected_oid(&self) -> Option<&str> {
         self.selected

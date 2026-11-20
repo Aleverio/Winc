@@ -191,22 +191,26 @@ impl Git {
         Carried::Restored
     }
 
-    /// 返回推送到 `target` 会送出的提交：最新的在前、最多 `limit` 个提交的标题，以及这样的提交
-    /// 一共多少个。
+    /// 返回把 `head`（`HEAD` 或一个提交号）推送到 `target` 会送出的提交：最新的在前、最多
+    /// `limit` 个提交的标题，以及这样的提交一共多少个。
     ///
     /// # Errors
     ///
-    /// 远程名、分支名以 `-` 开头，或 `git` 运行失败时返回原因。
+    /// 远程名、分支名、`head` 以 `-` 开头，或 `git` 运行失败时返回原因。
     pub fn outgoing(
         &self,
         root: &Path,
         target: Outgoing<'_>,
+        head: &str,
         limit: usize,
     ) -> Result<(Vec<String>, usize), String> {
+        if head.starts_with('-') {
+            return Err(winc_i18n::t!("git-rebase-not-on-branch").to_owned());
+        }
         let cancel = Cancel::default();
         let range: Vec<String> = match target {
-            Outgoing::Upstream => vec!["@{upstream}..HEAD".into()],
-            Outgoing::Publish => ["HEAD", "--not", "--remotes"].map(String::from).into(),
+            Outgoing::Upstream => vec![format!("@{{upstream}}..{head}")],
+            Outgoing::Publish => [head, "--not", "--remotes"].map(String::from).into(),
             Outgoing::To { remote, branch } => {
                 if remote.starts_with('-') || branch.starts_with('-') {
                     return Err(winc_i18n::t!("git-push-no-remote").to_owned());
@@ -215,9 +219,9 @@ impl Git {
                 let mut command = self.command(root);
                 command.args(["rev-parse", "--verify", "--quiet", &tracking]);
                 match self.run(&mut command, STATUS_TIMEOUT, &cancel) {
-                    Ok(_) => vec![format!("{tracking}..HEAD")],
+                    Ok(_) => vec![format!("{tracking}..{head}")],
                     // `--remotes=<名字>` 匹配 `refs/remotes/<名字>/*`。
-                    Err(_) => vec!["HEAD".into(), "--not".into(), format!("--remotes={remote}")],
+                    Err(_) => vec![head.into(), "--not".into(), format!("--remotes={remote}")],
                 }
             }
         };

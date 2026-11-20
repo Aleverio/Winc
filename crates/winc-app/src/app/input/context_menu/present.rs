@@ -725,12 +725,6 @@ impl App {
                 let tags: Vec<&str> = (commit.iter().flat_map(|c| &c.refs))
                     .filter_map(crate::app::git::log::menus::tag_name)
                     .collect();
-                let busy = self.git.branch.running.is_some()
-                    || self
-                        .git
-                        .status
-                        .as_ref()
-                        .is_some_and(|s| s.operation.is_some());
                 // 指向这个提交的分支，各自的操作与分支面板中相同；分支列表属于提交视图所在的
                 // 仓库，还没换过去（日志没有仓库）时不列出。
                 let (held, stale) = (self.git.held_branches(), self.git.stale_branches());
@@ -751,7 +745,8 @@ impl App {
                         (all[i].name.clone(), ops)
                     })
                     .collect();
-                log_commit_menu(!busy, &self.current_branch_label(), branches, &tags)
+                let actions = self.log_commit_actions(oid);
+                log_commit_menu(actions, &self.current_branch_label(), branches, &tags)
             }
             MenuTarget::LogColumns => self.log_columns_menu(),
             MenuTarget::LogDate | MenuTarget::LogPath | MenuTarget::LogAuthor => {
@@ -790,7 +785,10 @@ impl App {
         // 菜单上显示的快捷键按菜单弹出的位置取：文件树中取文件树的键位，编辑区中取编辑区的键位。
         let context = match &target {
             MenuTarget::Tree(_) => Context::Tree,
-            MenuTarget::Editor(_) | MenuTarget::Diff(..) | MenuTarget::Markdown => Context::Editor,
+            MenuTarget::Editor(_)
+            | MenuTarget::Diff(..)
+            | MenuTarget::Markdown
+            | MenuTarget::LogCommit(_) => Context::Editor,
             MenuTarget::Terminal(_) | MenuTarget::TerminalTab(_) => Context::Terminal,
             MenuTarget::SearchResult(..) => Context::Panel,
             MenuTarget::CommitFile(_) => Context::Changes,

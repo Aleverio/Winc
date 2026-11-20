@@ -98,6 +98,7 @@ git-op-tag-delete = deleting tag “{ $name }”
 git-op-tag-delete-remote = deleting tag “{ $name }” from the remote
 git-no-remote = No remote is configured
 git-branch-rename = Rename Branch…
+git-tag-new-branch = New Branch from This Tag…
 git-tag-push = Push to Remote
 git-tag-delete = Delete Tag
 git-tag-delete-remote = Delete from Remote
@@ -372,6 +373,7 @@ git-push-confirm-sync = Sync with { $upstream }?
 git-push-confirm-sync-detail = Pulls { $behind } and pushes { $ahead } commits with { $target }.
 git-push-confirm-sync-button = Sync
 git-push-form-title = Push { $branch }
+git-push-form-title-upto = Push { $branch } up to { $commit }
 git-push-form-remote = Remote
 git-push-form-branch = Branch
 git-push-form-commits = Commits
@@ -778,7 +780,8 @@ git-blame-failed = Couldn’t load blame: { $error }
 git-blame-uncommitted = Uncommitted changes
 git-blame-line-uncommitted = This line hasn’t been committed
 git-rebase-not-on-branch = This commit isn’t on the current branch
-git-rebase-has-merges = The range contains merge commits, so it can’t be rebased interactively
+git-rebase-has-merges = There are merge commits after this commit, so its history can’t be rewritten
+git-rebase-moved = The current branch changed in the meantime; try again
 git-op-rebase = rebasing interactively
 git-op-rebase-load = reading commits
 git-rebase-title = Interactive Rebase
@@ -798,6 +801,21 @@ git-rebase-pushed-warning = { $count ->
    *[other] { $count } of these commits are already pushed; you’ll need to force push afterward
 }
 git-rebase-message-placeholder = Set a commit to Reword to edit its message here
+git-reword-title = Edit Commit Message
+git-reword-commit = Commit
+git-reword-message = Message
+git-reword-button = Save
+git-reword-pushed-warning = This commit is already pushed; you’ll need to force push after saving
+git-op-reword = editing the commit message
+git-op-drop-commit = dropping commit { $commit }
+git-drop-commit-confirm = Drop “{ $subject }”?
+git-drop-commit-confirm-detail = Its changes will be removed from the current branch.
+git-drop-commit-confirm-later = { $count ->
+    [one] 1 later commit will be reapplied.
+   *[other] { $count } later commits will be reapplied.
+}
+git-drop-commit-confirm-pushed = This commit is already pushed; you’ll need to force push afterward.
+git-drop-commit-confirm-button = Drop Commit
 git-merge-three-pane = Three-Way
 git-merge-panes-not-utf8 = Can’t show a three-way merge for “{ $name }”: the file isn’t UTF-8
 git-merge-close-three-pane = Exit Three-Way

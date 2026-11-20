@@ -460,6 +460,7 @@ const IDS: &[(Action, &[&str], &[&str])] = &[
     (ChangesRollback, &["ChangesView.Revert"], &[]),
     (GitShowLog, &["ActivateVersionControlToolWindow"], &[]),
     (GitGoToRevision, &["Vcs.Log.GoToRef"], &[]),
+    (GitRewordCommit, &["Git.Reword.Commit"], &[]),
     (GitSwitchBranch, &["Git.Branches"], &[]),
     (GitFetch, &["Git.Fetch"], &[]),
     (GitPull, &["Vcs.UpdateProject"], &[]),

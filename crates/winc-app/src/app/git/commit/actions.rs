@@ -153,7 +153,7 @@ impl App {
                 PushIntent::Publish(_) => winc_editor::git::Outgoing::Publish,
                 _ => winc_editor::git::Outgoing::Upstream,
             };
-            let read = (tool.ok()).map(|git| git.outgoing(&root, target, PUSH_PREVIEW));
+            let read = (tool.ok()).map(|git| git.outgoing(&root, target, "HEAD", PUSH_PREVIEW));
             let (subjects, total) = read.and_then(Result::ok).unwrap_or_default();
             *slot.lock().unwrap_or_else(PoisonError::into_inner) = Some((intent, subjects, total));
         });
@@ -216,16 +216,16 @@ impl App {
         self.run_push(intent);
     }
 
-    /// 推送对话框按了主按钮：推到 `remote` 的分支 `target`，`tags` 为真时一并推送全部标签；
-    /// 勾选了「不再询问」（`never`）时写入配置。
+    /// 推送对话框按了主按钮：把 `upto`（`None` 时是 `HEAD`）推到 `remote` 的分支 `target`，
+    /// `tags` 为真时一并推送全部标签；勾选了「不再询问」（`never`）时写入配置。
     ///
-    /// 目标仍是打开时的 `defaults`、也不推送标签时与直接推送相同（[`App::run_push`]）；发布时
-    /// 把目标设为上游。
+    /// 推送 `HEAD`、目标仍是打开时的 `defaults`、也不推送标签时与直接推送相同
+    /// （[`App::run_push`]）；发布时把目标设为上游。
     pub(in crate::app) fn submit_push(
         &mut self,
         intent: PushIntent,
         defaults: (String, String),
-        (remote, target): (String, String),
+        (upto, remote, target): (Option<String>, String, String),
         tags: bool,
         never: bool,
     ) {
@@ -233,7 +233,7 @@ impl App {
             self.config.git_confirm_push = Some(false);
             self.save_config();
         }
-        if !tags && (&remote, &target) == (&defaults.0, &defaults.1) {
+        if upto.is_none() && !tags && (&remote, &target) == (&defaults.0, &defaults.1) {
             self.run_push(intent);
             return;
         }
@@ -251,7 +251,8 @@ impl App {
                 true => keep_changes(git, root, t!("git-op-pull"), |git| git.pull(root))?.1,
                 false => Then::Nothing,
             };
-            let summary = git.push_to(root, &remote, &target, tags, track)?;
+            let head = upto.as_deref().unwrap_or("HEAD");
+            let summary = git.push_to(root, (head, &remote, &target), tags, track)?;
             Ok((summary, then))
         });
     }

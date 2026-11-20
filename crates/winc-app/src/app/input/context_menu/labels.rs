@@ -160,7 +160,7 @@ impl App {
                 Some(branch) => MenuLabel::plain(&t!("menu-log-checkout-branch", branch = branch)),
                 None => MenuLabel::plain(command.label()),
             },
-            // 有能签出的本地分支指着它时签出那个分支，否则游离地签出提交；建在哪儿写在下面。
+            // 有能签出的本地分支指着它时签出那个分支，否则游离地签出提交；建在哪儿写在悬停提示里。
             MenuCommand::LogNewWorktree => {
                 let branch = self.log_checkout_branch(oid);
                 let branch = branch.and_then(|b| self.log_worktree_branch(&b));
@@ -173,8 +173,8 @@ impl App {
                 };
                 MenuLabel {
                     title,
-                    subtitle: Some(self.worktree_dir_hint(&dir)),
-                    tooltip: None,
+                    subtitle: None,
+                    tooltip: Some(self.worktree_dir_hint(&dir)),
                 }
             }
             _ => {
@@ -255,10 +255,16 @@ impl App {
             }
             _ => None,
         };
+        // 新工作树建在哪儿写在悬停提示里，与日志菜单相同。
+        let tooltip = match command {
+            MenuCommand::GitBranch(BranchOp::NewWorktree, i) => (self.git.branches.get(i))
+                .map(|b| self.worktree_dir_hint(crate::app::git::branch::local_name(b))),
+            _ => None,
+        };
         MenuLabel {
             title,
             subtitle,
-            tooltip: None,
+            tooltip,
         }
     }
 

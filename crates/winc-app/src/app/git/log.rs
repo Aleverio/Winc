@@ -294,6 +294,8 @@ pub enum LogConfirmed {
     DeleteTag(String, winc_editor::git::TagTarget),
     /// 移除一个远程仓库。
     RemoveRemote(String),
+    /// 删除范围里的第一个提交，之后的提交重新应用（[`App::drop_commit`]）。
+    DropCommit(Box<winc_editor::git::RebasePlan>),
 }
 
 /// 一个提交上的本地分支；签出时优先签出该分支，不进入分离的 `HEAD`。

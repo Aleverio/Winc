@@ -248,6 +248,8 @@ pub enum Action {
     ChangesRollback,
     GitShowLog,
     GitGoToRevision,
+    /// 日志：编辑选中提交的说明。
+    GitRewordCommit,
     /// 在只读标签中打开 Git 操作的输出。
     GitShowOutput,
     /// 克隆仓库。
@@ -577,6 +579,7 @@ impl Action {
             ChangesRollback => t!("cmd-changes-rollback"),
             GitShowLog => t!("cmd-git-show-log"),
             GitGoToRevision => t!("cmd-git-go-to-revision"),
+            GitRewordCommit => t!("cmd-git-reword-commit"),
             GitShowOutput => t!("cmd-git-show-output"),
             GitClone => t!("cmd-git-clone"),
             GitInit => t!("cmd-git-init"),
@@ -819,6 +822,7 @@ impl Action {
             | ChangesRollback
             | GitShowLog
             | GitGoToRevision
+            | GitRewordCommit
             | GitShowOutput
             | GitClone
             | GitInit
@@ -1012,6 +1016,7 @@ impl Action {
             | Action::ChangesRollback
             | Action::GitShowLog
             | Action::GitGoToRevision
+            | Action::GitRewordCommit
             | Action::GitShowOutput
             | Action::GitClone
             | Action::GitInit
@@ -1317,6 +1322,7 @@ pub const ACTIONS: &[Action] = {
         ChangesRollback,
         GitShowLog,
         GitGoToRevision,
+        GitRewordCommit,
         GitShowOutput,
         GitClone,
         GitInit,

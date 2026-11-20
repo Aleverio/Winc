@@ -244,17 +244,28 @@ pub fn tab_menu(
     ]
 }
 
-/// 日志里一个提交的右键菜单：签出、在新工作树中签出、新建分支、新建标签，指向这个提交的各分支、
-/// 标签的子菜单，拣选、还原，把当前分支重置到此提交（软、混合、硬在子菜单里，各自做什么写在
-/// 副标题里），以及复制提交号与说明。
+/// 提交菜单里哪些操作可用。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CommitActions {
+    /// 没有别的 Git 操作在运行，也没有停在合并、变基中间：会修改仓库的操作可用。
+    pub enabled: bool,
+    /// 这个提交是可以撤销的上一次提交。
+    pub undo: bool,
+    /// 有可以推送到的远程。
+    pub push: bool,
+    /// 提交是否在当前分支上；日志里判断不出时为 `None`，操作时再检查。
+    pub on_head: Option<bool>,
+}
+
+/// 日志里一个提交的右键菜单，分组和顺序与 IDEA 的日志菜单相同：复制与拣选；签出与比较；重置、
+/// 还原与撤销；改写历史与推送；指向这个提交的各分支、标签的子菜单，新建分支、标签；转到。
 ///
-/// `enabled` 为 `false`（另一个 Git 操作还在运行，或者正停在合并、变基中间）时，会修改
-/// 仓库的几项灰显。`branch` 是当前分支名（分离的 `HEAD` 时为「HEAD」），写进重置子菜单
-/// 的标题。`branches` 是指向这个提交的分支：名字和该分支的操作（见
+/// `actions` 说明哪些操作可用。`branch` 是当前分支名（分离的 `HEAD` 时为「HEAD」），写进重置
+/// 子菜单的标题。`branches` 是指向这个提交的分支：名字和该分支的操作（见
 /// [`crate::app::git::branch::branch_ops`]）。分支不超过 [`BRANCH_SUBMENUS`] 个、标签不超过
 /// [`TAG_SUBMENUS`] 个时各自一个子菜单，多了收进「分支」「标签」一个子菜单。
 pub fn log_commit_menu(
-    enabled: bool,
+    actions: CommitActions,
     branch: &str,
     branches: Vec<(String, Vec<MenuEntry>)>,
     tags: &[&str],
@@ -263,11 +274,40 @@ pub fn log_commit_menu(
     use MenuCommand::*;
     use MenuEntry::{Item, Separator, Submenu};
 
+    let enabled = actions.enabled;
+    // 改写历史、推送只对当前分支上的提交；已经在当前分支上的提交不用拣选。
+    let (history, foreign) = (
+        actions.on_head != Some(false),
+        actions.on_head != Some(true),
+    );
     let mut menu = vec![
+        Item(LogCopyOid, true),
+        Item(LogCopyShortOid, true),
+        Item(LogCopyMessage, true),
+        Item(LogCopyPatch, true),
+        Item(LogCherryPick, enabled && foreign),
+        Separator,
         Item(LogCheckout, enabled),
         Item(LogNewWorktree, enabled),
-        Item(LogNewBranch, enabled),
-        Item(LogNewTag, enabled),
+        Item(LogCompareRevision, true),
+        Separator,
+        Submenu(
+            t!("menu-log-reset-branch", branch = branch),
+            vec![
+                Item(LogResetSoft, enabled),
+                Item(LogResetMixed, enabled),
+                Separator,
+                Item(LogResetHard, enabled),
+            ],
+        ),
+        Item(LogRevert, enabled),
+        Item(LogUndoCommit, enabled && actions.undo),
+        Separator,
+        Item(LogReword, enabled && history),
+        Item(LogDropCommit, enabled && history),
+        Item(LogInteractiveRebase, enabled && history),
+        Item(LogPushUpTo, enabled && history && actions.push),
+        Separator,
     ];
     // 提交上的分支、标签：每个一个子菜单，多了收进一个子菜单。
     let branch_title = |name: &str| t!("menu-log-branch", name = name);
@@ -287,26 +327,8 @@ pub fn log_commit_menu(
         t!("menu-log-tags"),
     ));
     menu.extend([
-        Separator,
-        Item(LogCherryPick, enabled),
-        Item(LogRevert, enabled),
-        Item(LogInteractiveRebase, enabled),
-        Submenu(
-            t!("menu-log-reset-branch", branch = branch),
-            vec![
-                Item(LogResetSoft, enabled),
-                Item(LogResetMixed, enabled),
-                Separator,
-                Item(LogResetHard, enabled),
-            ],
-        ),
-        Separator,
-        Item(LogCopyOid, true),
-        Item(LogCopyShortOid, true),
-        Item(LogCopyMessage, true),
-        Item(LogCopyPatch, true),
-        Separator,
-        Item(LogCompareRevision, true),
+        Item(LogNewBranch, enabled),
+        Item(LogNewTag, enabled),
         Separator,
         Item(LogGoTo, true),
     ]);

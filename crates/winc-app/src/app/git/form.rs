@@ -83,6 +83,8 @@ pub(crate) struct TransferForm {
     pub read_for: (String, String),
     /// 提交列表占的行数：打开以来最多的一次，改目标时对话框不忽高忽低。
     pub rows: usize,
+    /// 推送到这个提交为止（完整的提交号）；`None` 时推送 `HEAD`。
+    pub upto: Option<String>,
 }
 
 impl TransferForm {
@@ -265,6 +267,7 @@ impl App {
             total,
             read_for,
             rows: 0,
+            upto: None,
         };
         let form = TransferForm {
             rows: form.lines(),
@@ -364,6 +367,7 @@ impl App {
         match self.overlays.form_dialog.as_ref().map(|d| &d.kind) {
             Some(FormKind::Clone) => DialogLayout::clone_form(window),
             Some(FormKind::Connect) => DialogLayout::connect_form(window),
+            Some(FormKind::Rebase(form)) if form.reword => DialogLayout::reword(window),
             Some(FormKind::Rebase(form)) => {
                 DialogLayout::rebase(window, form.rows.len(), form.pushed > 0)
             }
@@ -378,11 +382,13 @@ impl App {
                 DialogLayout::compute(window, false, &[DialogPart::Checkout])
             }
             // 勾选项借用已有的部件：推送时 `Copy` 是「推送标签」，`NewWindow` 是「不再询问」；
-            // 拉取时 `Copy` 是「变基」。
+            // 拉取时 `Copy` 是「变基」。推送到某个提交为止总要确认，没有「不再询问」。
             Some(FormKind::Transfer(form)) => {
                 let options: &[DialogPart] = match form.direction {
-                    Direction::Push(_) => &[DialogPart::Copy, DialogPart::NewWindow],
-                    Direction::Pull => &[DialogPart::Copy],
+                    Direction::Push(_) if form.upto.is_none() => {
+                        &[DialogPart::Copy, DialogPart::NewWindow]
+                    }
+                    Direction::Push(_) | Direction::Pull => &[DialogPart::Copy],
                 };
                 DialogLayout::push(window, form.rows, options)
             }
@@ -465,7 +471,7 @@ impl App {
     }
 
     /// 推送或拉取：分支不能为空，不含空白，也不以 `-` 开头；拉取的分支要是本地记下的远程分支；
-    /// 有多个远程时可以换远程。
+    /// 推送到某个提交为止时要有会送出的提交；有多个远程时可以换远程。
     fn transfer_plan(&self, dialog: &FormDialog, form: &TransferForm) -> FormPlan {
         let name = dialog.name.text().trim();
         let invalid = name.starts_with('-') || name.contains(char::is_whitespace);
@@ -476,6 +482,8 @@ impl App {
             && !invalid
             && !name.is_empty()
             && !(self.git.branches.iter()).any(|b| b.remote && b.name == tracking);
+        let read = form.read_for.0 == remote && form.read_for.1 == name;
+        let nothing = form.upto.is_some() && read && form.total == 0;
         let problem = match (invalid, missing) {
             (true, _) => Some(t!("git-push-form-branch-invalid").to_owned()),
             (false, true) => Some(t!("git-pull-form-branch-missing").to_owned()),
@@ -487,7 +495,7 @@ impl App {
                 Direction::Push(_) => t!("git-push-confirm-push-button"),
                 Direction::Pull => t!("git-pull-form-button"),
             },
-            enabled: !name.is_empty() && problem.is_none() && !remote.is_empty(),
+            enabled: !name.is_empty() && problem.is_none() && !remote.is_empty() && !nothing,
             problem,
             base: remote,
             base_enabled: self.git.remotes.len() > 1,
@@ -683,7 +691,8 @@ impl App {
                     Direction::Push(intent) => {
                         let defaults = (form.remote, form.target);
                         let (tags, never) = (dialog.copy, dialog.new_window);
-                        self.submit_push(intent, defaults, (remote, target), tags, never);
+                        let to = (form.upto, remote, target);
+                        self.submit_push(intent, defaults, to, tags, never);
                     }
                     Direction::Pull => self.submit_pull((remote, target), dialog.copy),
                 }
@@ -735,7 +744,10 @@ impl App {
         };
         let plan = self.form_plan(dialog);
         if let FormKind::Rebase(form) = &dialog.kind {
-            let mut order = vec![DialogPart::RebaseList];
+            let mut order = Vec::new();
+            if !form.reword {
+                order.push(DialogPart::RebaseList);
+            }
             if form.rewording() {
                 order.push(DialogPart::Branch);
             }
@@ -1012,6 +1024,7 @@ impl App {
         form.read_for = wanted.clone();
         let default = wanted.0 == form.remote && wanted.1 == form.target;
         let direction = form.direction.clone();
+        let head = form.upto.clone().unwrap_or_else(|| "HEAD".to_owned());
         let (Some(root), slot) = (
             self.git.root.clone(),
             Arc::clone(&self.git.transfer_commits),
@@ -1027,7 +1040,7 @@ impl App {
                 (Direction::Push(_), false) => Some(Outgoing::To { remote, branch }),
             };
             let read = tool.ok().map(|git| match target {
-                Some(target) => git.outgoing(&root, target, PUSH_PREVIEW),
+                Some(target) => git.outgoing(&root, target, &head, PUSH_PREVIEW),
                 None => git.incoming(&root, remote, branch, PUSH_PREVIEW),
             });
             let (subjects, total) = read.and_then(Result::ok).unwrap_or_default();

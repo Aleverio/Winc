@@ -17,6 +17,7 @@ pub(crate) mod merge;
 pub(crate) mod question;
 pub(crate) mod rebase;
 mod repository;
+pub(super) mod rewrite;
 mod stepping;
 pub(crate) mod worktree;
 

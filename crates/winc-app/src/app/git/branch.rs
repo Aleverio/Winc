@@ -96,7 +96,7 @@ impl TagOp {
     /// 子菜单里的文字。
     pub fn label(self) -> &'static str {
         match self {
-            TagOp::NewBranch => t!("git-branch-new-from"),
+            TagOp::NewBranch => t!("git-tag-new-branch"),
             TagOp::Merge => t!("git-branch-merge-into-current"),
             TagOp::Push => t!("git-tag-push"),
             TagOp::Delete => t!("git-tag-delete"),
@@ -161,6 +161,8 @@ pub(super) enum Then {
     Rescan,
     /// 读取好了交互式变基的范围：打开对话框，不说做完了。
     RebasePlan(Box<winc_editor::git::RebasePlan>),
+    /// 读取好了改写历史要用的内容：打开对话框或确认（[`App::history_loaded`]），不说做完了。
+    History(Box<super::rewrite::Loaded>),
     /// 检查完要移除的工作树：确认以后移除（[`App::confirm_remove_worktree`]），不说做完了。
     ConfirmRemove(RemoveCheck),
     /// 同步需要强制推送：确认以后推送（[`App::confirm_force_push`]），不说做完了；内容是上游将被
@@ -826,7 +828,8 @@ impl App {
                         Then::ConfirmRemove(_)
                         | Then::ConfirmForcePush(_)
                         | Then::ConfirmForceDelete(_)
-                        | Then::RebasePlan(_),
+                        | Then::RebasePlan(_)
+                        | Then::History(_),
                     )) => {}
                     Ok((_, Then::Warn(warning))) => self.notify(NoticeKind::Warning, warning),
                     Ok((_, then)) => {
@@ -845,7 +848,9 @@ impl App {
                 continue;
             }
             self.git.branch.running = None;
-            self.git.logs_outdated |= done.result.is_ok();
+            // 只读出范围、要推送的提交时仓库没有变化，日志不必重读。
+            let read = matches!(done.result, Ok((_, Then::RebasePlan(_) | Then::History(_))));
+            self.git.logs_outdated |= done.result.is_ok() && !read;
             // 操作由表单对话框发起时：成功则关闭对话框，失败则在对话框中显示原因。
             let error = done.result.as_ref().err().map(String::as_str);
             if self.form_operation_done(done.id, error) && error.is_some() {
@@ -856,6 +861,7 @@ impl App {
                 Ok((_, Then::ConfirmForcePush(count))) => self.confirm_force_push(count),
                 Ok((_, Then::Warn(warning))) => self.notify(NoticeKind::Warning, warning),
                 Ok((_, Then::RebasePlan(plan))) => self.open_rebase_dialog(*plan),
+                Ok((_, Then::History(loaded))) => self.history_loaded(*loaded),
                 Ok((_, Then::ConfirmForceDelete(name))) => self.confirm_force_delete_branch(name),
                 Ok((summary, then)) => {
                     if summary.is_empty() {

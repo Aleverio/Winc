@@ -387,6 +387,14 @@ pub enum MenuCommand {
     LogNewTag,
     /// 从这个提交开始交互式变基。
     LogInteractiveRebase,
+    /// 日志里的提交：编辑提交说明（`HEAD` 修改上一次提交，更早的提交变基）。
+    LogReword,
+    /// 日志里的提交：删除它，之后的提交重新应用（先确认）。
+    LogDropCommit,
+    /// 日志里 `HEAD` 指向的提交：撤销提交，更改留在暂存区（先确认）。
+    LogUndoCommit,
+    /// 日志里的提交：把它和之前的提交推送到远程（推送对话框）。
+    LogPushUpTo,
     /// 交互式变基列表一行的处理方式。
     RebaseAction(winc_editor::git::RebaseAction),
     /// 对提交上第几个标签做的事。
@@ -613,7 +621,7 @@ impl MenuCommand {
             MenuCommand::GitRevertHunk => t!("menu-git-roll-back-change"),
             MenuCommand::FileHistory => t!("menu-git-file-history"),
             MenuCommand::LogCheckout => t!("menu-log-checkout"),
-            MenuCommand::LogNewBranch => t!("git-branch-new-from"),
+            MenuCommand::LogNewBranch => t!("menu-log-new-branch"),
             MenuCommand::LogNewWorktree => t!("menu-log-new-worktree"),
             MenuCommand::LogCherryPick => t!("menu-log-cherry-pick"),
             MenuCommand::LogRevert => t!("menu-log-revert"),
@@ -623,6 +631,10 @@ impl MenuCommand {
             MenuCommand::LogNewTag => t!("menu-log-new-tag"),
             MenuCommand::LogTag(op, _) => op.label(),
             MenuCommand::LogInteractiveRebase => t!("menu-log-interactive-rebase"),
+            MenuCommand::LogReword => t!("menu-log-reword"),
+            MenuCommand::LogDropCommit => t!("menu-log-drop-commit"),
+            MenuCommand::LogUndoCommit => t!("menu-log-undo-commit"),
+            MenuCommand::LogPushUpTo => t!("menu-log-push-up-to"),
             MenuCommand::RebaseAction(action) => crate::app::git::rebase::action_label(action),
             MenuCommand::LogCopyOid => t!("menu-log-copy-oid"),
             MenuCommand::LogCopyShortOid => t!("menu-log-copy-short-oid"),
@@ -806,6 +818,10 @@ impl MenuCommand {
     pub fn action(self) -> Option<Action> {
         Some(match self {
             MenuCommand::GitAction(action) => action,
+            // 日志中 ⌘C 复制选中提交的提交号；右键时选中的就是这个提交。
+            MenuCommand::LogCopyOid => Action::Copy,
+            MenuCommand::LogGoTo => Action::GitGoToRevision,
+            MenuCommand::LogReword => Action::GitRewordCommit,
             MenuCommand::Reveal => Action::RevealInFinder,
             MenuCommand::OpenInTerminal => Action::OpenInTerminal,
             MenuCommand::FindInFolder => Action::FindInFolder,

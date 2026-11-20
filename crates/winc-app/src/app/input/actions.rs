@@ -451,6 +451,7 @@ impl App {
             }
             GitShowLog => self.git_show_log(),
             GitGoToRevision => self.open_go_to_revision(),
+            GitRewordCommit => self.reword_selected_commit(),
             GitShowOutput => self.show_git_output(),
             GitClone => self.open_clone_dialog(),
             GitInit => self.git_init(),
@@ -539,6 +540,8 @@ impl App {
     pub(in crate::app) fn action_available(&self, action: Action) -> bool {
         match action {
             Action::RunConfiguration if self.editor.root().is_none() => return false,
+            // 编辑提交说明只在日志里可用；其余位置同一个键执行其他命令。
+            Action::GitRewordCommit if !self.log_active() => return false,
             // 只有打开的目录还不是仓库时才能初始化。
             Action::GitInit if self.editor.root().is_none() || self.git.root.is_some() => {
                 return false;

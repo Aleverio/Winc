@@ -83,7 +83,7 @@ impl App {
     }
 
     /// 用提示框询问，确认后撤销上一次提交。更改还在，确认按钮不标记为危险操作。
-    pub(super) fn confirm_undo_commit(&mut self, last: &LastCommit) {
+    pub(in crate::app) fn confirm_undo_commit(&mut self, last: &LastCommit) {
         let message = t!("git-undo-commit-confirm");
         let detail = t!(
             "git-undo-commit-confirm-detail",

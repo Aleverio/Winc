@@ -66,13 +66,20 @@ fn draw_card(app: &mut App, frame: &mut Frame<'_>, layout: &DialogLayout) {
         FormKind::Transfer(form) => Some((form.branch.clone(), form.subjects.clone(), form.total)),
         _ => None,
     };
+    let upto = match &dialog.kind {
+        FormKind::Transfer(form) => form.upto.as_deref().map(crate::app::git::log::short),
+        _ => None,
+    };
     let pull = matches!(&dialog.kind, FormKind::Transfer(f) if f.direction == Direction::Pull);
     let branch = push.as_ref().map_or("", |(branch, ..)| branch.as_str());
     let (title, labels, placeholder) = match dialog.kind {
         FormKind::Transfer(_) => (
-            match pull {
-                true => t!("git-pull-form-title", branch = branch),
-                false => t!("git-push-form-title", branch = branch),
+            match (pull, upto) {
+                (true, _) => t!("git-pull-form-title", branch = branch),
+                (false, Some(commit)) => {
+                    t!("git-push-form-title-upto", branch = branch, commit = commit)
+                }
+                (false, None) => t!("git-push-form-title", branch = branch),
             },
             [
                 t!("git-push-form-remote"),
@@ -105,6 +112,7 @@ fn draw_card(app: &mut App, frame: &mut Frame<'_>, layout: &DialogLayout) {
             return draw_question(app, frame, layout);
         }
         FormKind::Clone => return draw_clone(app, frame, layout),
+        FormKind::Rebase(ref form) if form.reword => return draw_reword(app, frame, layout),
         FormKind::Rebase(_) => return draw_rebase(app, frame, layout),
     };
     let card = layout.card;
@@ -378,6 +386,133 @@ fn draw_question(app: &mut App, frame: &mut Frame<'_>, layout: &DialogLayout) {
         DialogPart::Confirm => Some(layout.confirm),
         DialogPart::Checkout => (layout.options.first())
             .map(|&(_, row)| Rect::new(row.x - 1.0, row.y + row.h / 2.0 - 7.0, 14.0, 14.0)),
+        _ => None,
+    };
+    if let Some(rect) = ring {
+        focus_outline(
+            frame,
+            rect.inset(-2.0, -2.0),
+            RADIUS_ROW + 2.0,
+            p.accent,
+            card,
+        );
+    }
+}
+
+/// 绘制编辑提交说明的对话框：标题行，名称列右边是提交和信息框；底部按钮左边是不能保存的原因，
+/// 或者已推送提交的提醒。
+fn draw_reword(app: &mut App, frame: &mut Frame<'_>, layout: &DialogLayout) {
+    let p = app.palette;
+    let Some(dialog) = app.overlays.form_dialog.as_ref() else {
+        return;
+    };
+    let FormKind::Rebase(form) = &dialog.kind else {
+        return;
+    };
+    let Some(row) = form.rows.first() else {
+        return;
+    };
+    let (oid, subject) = (row.commit.oid.clone(), row.commit.subject.clone());
+    let pushed = form.pushed > 0;
+    let (hover, focus, plan) = (dialog.hover, dialog.focus, app.form_plan(dialog));
+    let card = layout.card;
+    frame.rounded(card, p.editor_bg, RADIUS_CARD);
+    let header = layout.header;
+    let title = t!("git-reword-title");
+    ui_text(
+        frame,
+        app,
+        header.x + SETTINGS_PAD,
+        header,
+        title,
+        p.text,
+        card,
+    );
+    let close = layout.close;
+    draw_button(
+        frame,
+        p,
+        close,
+        card,
+        hover == Some(DialogPart::Close),
+        false,
+    );
+    icons::close(frame, center(close), 7.0, p.text_muted, close);
+
+    let labels = [t!("git-reword-commit"), t!("git-reword-message")];
+    for (rect, text) in layout.labels.iter().zip(labels) {
+        let w = frame.measure(FontKind::Ui, app.fonts.ui, text);
+        ui_text(
+            frame,
+            app,
+            rect.right() - w,
+            *rect,
+            text,
+            p.text_muted,
+            card,
+        );
+    }
+    // 提交：短提交号和说明的第一行，与日志里的写法相同。
+    if let Some(&rect) = layout.values.first() {
+        let area = rect.inset(DIALOG_FIELD_INSET, 0.0);
+        let short = crate::app::git::log::short(&oid);
+        let end = super::git::log::mono(app, frame, (area.x, area), short, p.text_muted, area);
+        let room = (area.right() - end - 10.0).max(0.0);
+        let subject = ellipsize(frame, &subject, app.fonts.ui, room);
+        ui_text(frame, app, end + 10.0, area, &subject, p.text, area);
+    }
+
+    let field_focused = app.focus == crate::app::Focus::Dialog && focus == DialogPart::Branch;
+    let rect = layout.branch;
+    field_box(app, frame, rect, p.editor_bg, field_focused, false);
+    let area = rect.inset(DIALOG_FIELD_INSET, 6.0);
+    if let Some(mut dialog) = app.overlays.form_dialog.take() {
+        let wrap =
+            super::fields::wrap_area_field(app, frame, area.w, &mut dialog.name, field_focused);
+        let caret = super::fields::draw_area_field(
+            app,
+            frame,
+            area,
+            &mut dialog.name,
+            wrap,
+            "",
+            field_focused,
+        );
+        app.overlays.form_dialog = Some(dialog);
+        if caret.is_some() {
+            app.ime.cursor = caret;
+        }
+    }
+
+    let note = match &plan.problem {
+        Some(problem) => Some((problem.as_str(), p.error)),
+        None => pushed.then(|| (t!("git-reword-pushed-warning"), p.warning)),
+    };
+    if let Some((note, color)) = note {
+        let left = card.x + SETTINGS_PAD;
+        let row = Rect::new(
+            left,
+            layout.cancel.y,
+            (layout.cancel.x - 16.0 - left).max(0.0),
+            layout.cancel.h,
+        );
+        let note = ellipsize(frame, note, app.fonts.ui_small, row.w);
+        ui_text_small(frame, app, left, row, &note, color, card);
+    }
+    let cancel = t!("common-cancel");
+    draw_action(app, frame, layout.cancel, cancel, false, true, hover);
+    draw_action(
+        app,
+        frame,
+        layout.confirm,
+        plan.confirm,
+        true,
+        plan.enabled,
+        hover,
+    );
+    let ring = match focus {
+        DialogPart::Cancel => Some(layout.cancel),
+        DialogPart::Confirm => Some(layout.confirm),
         _ => None,
     };
     if let Some(rect) = ring {

@@ -156,7 +156,13 @@ fn tags_can_be_pushed_and_deleted_locally_and_remotely() {
 /// 「分支」「标签」一个子菜单。
 #[test]
 fn a_commit_menu_lists_its_branches_and_tags() {
-    use crate::app::input::context_menu::{MenuEntry, log_commit_menu};
+    use crate::app::input::context_menu::{CommitActions, MenuEntry, log_commit_menu};
+    let all = CommitActions {
+        enabled: true,
+        undo: true,
+        push: true,
+        on_head: None,
+    };
     let titles = |menu: &[MenuEntry]| -> Vec<String> {
         (menu.iter())
             .filter_map(|entry| match entry {
@@ -172,9 +178,9 @@ fn a_commit_menu_lists_its_branches_and_tags() {
             .map(|n| ((*n).to_owned(), Vec::new()))
             .collect()
     };
-    let menu = log_commit_menu(true, "main", refs(&["main", "dev"]), &["v1"]);
+    let menu = log_commit_menu(all, "main", refs(&["main", "dev"]), &["v1"]);
     assert_eq!(titles(&menu), ["分支「main」", "分支「dev」", "标签「v1」"]);
-    let menu = log_commit_menu(true, "main", refs(&["a", "b", "c"]), &["v1", "v2"]);
+    let menu = log_commit_menu(all, "main", refs(&["a", "b", "c"]), &["v1", "v2"]);
     assert_eq!(titles(&menu), ["分支", "标签"]);
     let grouped = menu.iter().find_map(|entry| match entry {
         MenuEntry::Submenu(title, items) if title == "分支" => Some(items),
@@ -182,6 +188,31 @@ fn a_commit_menu_lists_its_branches_and_tags() {
     });
     assert_eq!(titles(grouped.unwrap()).len(), 0);
     assert_eq!(grouped.unwrap().len(), 3);
+
+    // 分组顺序与 IDEA 相同：复制与拣选在最前，新建分支、标签在分支子菜单之后，转到在最后。
+    let items: Vec<MenuCommand> = (menu.iter())
+        .filter_map(|entry| match entry {
+            MenuEntry::Item(command, _) => Some(*command),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(items.first(), Some(&MenuCommand::LogCopyOid));
+    assert_eq!(items.last(), Some(&MenuCommand::LogGoTo));
+    let at = |c: MenuCommand| items.iter().position(|&i| i == c).unwrap();
+    assert!(at(MenuCommand::LogCherryPick) < at(MenuCommand::LogCheckout));
+    assert!(at(MenuCommand::LogRevert) < at(MenuCommand::LogUndoCommit));
+    assert!(at(MenuCommand::LogUndoCommit) < at(MenuCommand::LogReword));
+    assert!(at(MenuCommand::LogReword) < at(MenuCommand::LogDropCommit));
+    assert!(at(MenuCommand::LogDropCommit) < at(MenuCommand::LogInteractiveRebase));
+    assert!(at(MenuCommand::LogInteractiveRebase) < at(MenuCommand::LogPushUpTo));
+    assert!(at(MenuCommand::LogPushUpTo) < at(MenuCommand::LogNewBranch));
+    // 复制提交号旁写着日志中复制的快捷键。
+    let copy = MenuCommand::LogCopyOid.shortcut(crate::keymap::Context::Editor);
+    assert_eq!(
+        copy,
+        crate::keymap::single_stroke(Action::Copy, crate::keymap::Context::Editor)
+    );
+    assert!(copy.is_some());
 }
 
 /// 日志里右键一个提交：从指向它的分支的子菜单把这个分支合并到当前分支。

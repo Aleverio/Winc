@@ -199,6 +199,7 @@ impl Action {
             ChangesRollback => "Git: Roll Back Selected Changes",
             GitShowLog => "Git: Show Log",
             GitGoToRevision => "Git: Go to Hash, Branch or Tag",
+            GitRewordCommit => "Git: Edit Commit Message…",
             GitShowOutput => "Git: Show Output",
             GitClone => "Git: Clone Repository…",
             GitInit => "Git: Initialize Repository",
