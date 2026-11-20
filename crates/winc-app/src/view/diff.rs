@@ -6,6 +6,7 @@
 //! 一层。并排时「»」和改动勾选框位于带子上，「»」用左侧的一段替换右侧；行勾选框位于行号栏靠近
 //! 文字的一侧。折叠的一段同样用带子连接。
 
+mod blame;
 mod files;
 mod sticky;
 
@@ -181,6 +182,8 @@ pub(super) fn draw_diff(app: &mut App, frame: &mut Frame<'_>, index: usize) {
     // 文件栏展开、收起途中每帧更新露出的比例。
     app.sync_log_files_panel();
     // 绘制时需要推进两侧的着色状态，同时读取 `app` 的字体和配色：先从文档中取出差异，绘制后恢复。
+    // 逐行追溯要读差异两侧的文字和开关，在取出差异之前更新。
+    app.update_diff_blame(index);
     let Some(mut view) = app.editor.documents[index].diff.take() else {
         return;
     };
@@ -209,7 +212,9 @@ pub(super) fn draw_diff(app: &mut App, frame: &mut Frame<'_>, index: usize) {
         });
     let scroll = (scroll, shift.as_ref());
 
-    draw_body(app, frame, &mut view, &parts, scroll, pos, &edit, &mut hits);
+    let drawn = draw_body(app, frame, &mut view, &parts, scroll, pos, &edit, &mut hits);
+    let id = app.editor.documents[index].id;
+    blame::draw(app, frame, (id, &view), &parts, &drawn, &mut hits);
     let (scroll, _) = scroll;
     sticky::draw(app, frame, &mut view, &parts, scroll, pos, &mut hits);
     draw_header(app, frame, &view, &parts, pos, &mut hits);
@@ -418,15 +423,15 @@ fn draw_header(
     for (side, pane) in parts.panes.iter().enumerate() {
         let title = if side == LEFT { &view.old } else { &view.new };
         let end = pane.text.right().min(stats_left);
-        let clip = Rect::new(
-            pane.text.x,
-            header.y,
-            (end - pane.text.x).max(0.0),
-            header.h,
-        );
+        // 开着逐行追溯时右侧的文字区往右移了：标题从右半边（追溯一栏）的左边开始。
+        let start = match (view.is_unified(), side) {
+            (false, RIGHT) if pane.blame.w > 0.0 => pane.blame.x,
+            _ => pane.text.x,
+        };
+        let clip = Rect::new(start, header.y, (end - start).max(0.0), header.h);
         let mut x = match after {
             Some(end) => ui_text(frame, app, end + 8.0, header, "→", p.text_dim, clip) + 8.0,
-            None => pane.text.x + DIFF_TEXT_PAD,
+            None => start + DIFF_TEXT_PAD,
         };
         // 差异很窄、标题挤在统计前面写不下几个字时不写，不画出被截掉一半的字。
         if clip.right() - x < TITLE_MIN {
@@ -714,7 +719,8 @@ fn draw_line_number(
     );
 }
 
-/// 绘制两侧的代码与行号、改动的底色和带子、查找结果与选区、光标，以及勾选框和「»」按钮。
+/// 绘制两侧的代码与行号、改动的底色和带子、查找结果与选区、光标，以及勾选框和「»」按钮；返回
+/// 画出的显示行。
 #[allow(clippy::too_many_arguments)]
 fn draw_body(
     app: &mut App,
@@ -725,7 +731,7 @@ fn draw_body(
     pos: f64,
     edit: &EditState,
     hits: &mut Vec<(Rect, DiffTarget)>,
-) {
+) -> Vec<DrawnRow> {
     let p = app.palette;
     let lh = app.fonts.line_height;
     let body = parts.body;
@@ -1299,6 +1305,7 @@ fn draw_body(
             hits.push((rect.intersect(body), DiffTarget::Revert(h)));
         }
     }
+    drawn
 }
 
 /// 在 `area` 内绘制一条带子：左端为 `left` 的上下沿，右端为 `right` 的上下沿，中间按 S 形曲线
