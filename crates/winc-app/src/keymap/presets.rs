@@ -129,7 +129,13 @@ pub(super) const COMMON: &[PresetRow] = &[
         &["cmd+end"],
         &["ctrl+shift+end"],
     ),
-    row(Copy, Terminal, &["cmd+c"], &["ctrl+shift+c"]),
+    // 单按 Ctrl 的 `ctrl+c` 只在有选区时复制（见 `App::lookup_shortcut`）。
+    row(
+        TerminalCopy,
+        Terminal,
+        &["cmd+c"],
+        &["ctrl+c", "ctrl+shift+c", "ctrl+insert"],
+    ),
     row(SelectAll, Terminal, &["cmd+a"], &["ctrl+shift+a"]),
     row(NextTerminal, Terminal, &["shift+cmd+]"], &["ctrl+shift+]"]),
     row(
@@ -176,7 +182,12 @@ pub(super) const COMMON: &[PresetRow] = &[
         &["alt+enter"],
     ),
     row(ClearTerminal, Terminal, &["cmd+k"], &["ctrl+shift+k"]),
-    row(Paste, Terminal, &[], &["ctrl+shift+v"]),
+    row(
+        TerminalPaste,
+        Terminal,
+        &["cmd+v"],
+        &["ctrl+v", "ctrl+shift+v", "shift+insert"],
+    ),
     // Markdown 的写作命令：两套方案都按专门的 Markdown 编辑器的默认键。
     row(MarkdownHeading1, Markdown, &["cmd+1"], &["ctrl+1"]),
     row(MarkdownHeading2, Markdown, &["cmd+2"], &["ctrl+2"]),
@@ -223,7 +234,21 @@ pub(super) const COMMON: &[PresetRow] = &[
 ];
 
 /// 共用的键在 Linux 上与 Windows 不同的部分。
-pub(super) const COMMON_LINUX: &[PresetRow] = &[];
+pub(super) const COMMON_LINUX: &[PresetRow] = &[
+    // 单按 Ctrl 的 `ctrl+c`、`ctrl+v` 留给终端里的程序。
+    row(
+        TerminalCopy,
+        Terminal,
+        &[],
+        &["ctrl+shift+c", "ctrl+insert"],
+    ),
+    row(
+        TerminalPaste,
+        Terminal,
+        &[],
+        &["ctrl+shift+v", "shift+insert"],
+    ),
+];
 
 /// IDEA 方案。
 pub(super) const IDEA: &[PresetRow] = &[

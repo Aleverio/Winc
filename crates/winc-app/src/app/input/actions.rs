@@ -58,7 +58,7 @@ impl App {
         if self.focus == Focus::Terminal {
             match action {
                 Copy => {
-                    self.terminal_copy();
+                    self.terminal_copy(false);
                     return true;
                 }
                 SelectAll => {
@@ -497,6 +497,8 @@ impl App {
             StopConfiguration => self.stop_current_config(),
             EditRunConfigurations => self.edit_run_configs(),
             ClearTerminal => self.clear_terminal(),
+            TerminalCopy => self.terminal_copy(false),
+            TerminalPaste => self.terminal_paste(),
             NewTerminal => self.new_terminal_tab(),
             CloseTerminal => self.close_terminal_pane(),
             NextTerminal => self.cycle_terminal_tab(true),

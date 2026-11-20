@@ -257,6 +257,12 @@ impl App {
         }
 
         match self.lookup_shortcut(stroke, None) {
+            Lookup::Run(actions)
+                if self.focus == Focus::Terminal
+                    && self.run_terminal_shortcut(stroke, &actions) =>
+            {
+                true
+            }
             Lookup::Run(actions) => actions
                 .into_iter()
                 .any(|a| self.run_action(self.keyboard_action(a))),
