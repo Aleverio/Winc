@@ -228,6 +228,8 @@ impl Action {
             StopConfiguration => "Stop Configuration",
             EditRunConfigurations => "Edit Run Configurations",
             ClearTerminal => "Terminal: Clear",
+            TerminalCopy => "Terminal: Copy",
+            TerminalPaste => "Terminal: Paste",
             NewTerminal => "New Terminal",
             CloseTerminal => "Terminal: Close Tab",
             NextTerminal => "Terminal: Next Tab",
