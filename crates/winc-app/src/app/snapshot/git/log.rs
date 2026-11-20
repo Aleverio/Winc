@@ -535,6 +535,19 @@ fn log_spills_long_subjects_on_hover_and_drags_the_divider() {
             .any(|(_, t)| *t == LogTarget::Avatar(long))
     );
     assert!(Hover::Log(LogTarget::Row(long)).has_tooltip());
+    // 提示从开始悬停时鼠标的位置开始，在这一行下方；之后鼠标在同一行里移动，提示不跟着动。
+    {
+        use crate::app::animation::TipPlace;
+        let since = std::time::Instant::now() - std::time::Duration::from_secs(1);
+        app.overlays.tooltip.since = Some(since);
+        let (x, y) = app.mouse();
+        app.on_mouse_move(x + 30.0, y);
+        app.overlays.tooltip.since = Some(since);
+        paint(&mut app);
+        let last = app.overlays.tooltip.last.borrow().clone();
+        let (anchor, _, place) = last.unwrap();
+        assert_eq!((place, anchor.x), (TipPlace::Pointer, x));
+    }
     // 能完整显示的行不提示。
     hover_log_row(&mut app, long + 1);
     assert_eq!(app.git.log.clipped, None);

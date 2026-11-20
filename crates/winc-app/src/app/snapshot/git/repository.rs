@@ -64,6 +64,10 @@ fn a_branch_can_be_renamed_including_the_current_one() {
         .unwrap();
     app.run_branch_op(BranchOp::Rename, branch.clone());
     assert_eq!(app.focus, Focus::Prompt);
+    // 输入文字的输入条比跳转到行的宽，长分支名写得下。
+    let editor = app.layout.editor;
+    assert_eq!(app.prompt_bar().w, 480.0_f32.min(editor.w - 40.0));
+    shoot(&mut app, "git-rename-branch");
     assert_eq!(
         app.bars.goto_input.as_ref().unwrap().selected_text(),
         branch.name

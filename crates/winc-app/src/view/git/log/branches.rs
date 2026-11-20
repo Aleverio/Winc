@@ -1,7 +1,7 @@
 //! 日志左侧的分支面板：「全部分支」，其余各行与分支选择器相同，正在看的那一个铺选中的底色。
 
 use super::*;
-use crate::app::git::log::{BRANCH_ROW, BRANCHES_W, BranchRow};
+use crate::app::git::log::{BRANCH_ROW, BranchRow};
 use crate::view::git::commit::draw_count_pill_in;
 
 /// 绘制标题栏最左边显示、隐藏分支面板的按钮：面板显示着时按下的样子。
@@ -40,18 +40,21 @@ pub(super) fn draw_branches(
         return 0.0;
     }
     let p = app.palette;
-    frame.rect(
-        Rect::new(area.right() - 1.0, area.y, 1.0, area.h),
-        p.separator,
-    );
+    // 右边缘可以左右拖动，悬停或拖动时改为较粗的强调色线条（与列表、详情之间的分隔线相同）。
+    let resizing = app.log_branches_resizing();
+    let edge_hovered = app.pointer.hover == Hover::Log(LogTarget::BranchesEdge);
+    if resizing || edge_hovered {
+        frame.rect(Rect::new(area.right() - 1.5, area.y, 2.0, area.h), p.accent);
+    } else {
+        frame.rect(
+            Rect::new(area.right() - 1.0, area.y, 1.0, area.h),
+            p.separator,
+        );
+    }
     let area = Rect::new(area.x, area.y, area.w - 1.0, area.h);
     // 打开、关闭途中面板只露出右边一段：各行按完整的宽度排，跟着右边缘从左边滑进、滑出。
-    let slid = Rect::new(
-        area.right() - (BRANCHES_W - 1.0),
-        area.y,
-        BRANCHES_W - 1.0,
-        area.h,
-    );
+    let full = parts.branches_w - 1.0;
+    let slid = Rect::new(area.right() - full, area.y, full, area.h);
     // 展开、收起途中按行数较多的那一版画（见 `PanelFold`）。
     let fold = app.git.log.branch_fold.as_ref();
     let rows = fold.map_or_else(|| app.log_branch_rows(), |f| f.rows.clone());
@@ -193,6 +196,12 @@ pub(super) fn draw_branches(
         if fold.is_none() {
             hits.push((band.intersect(area), target));
         }
+    }
+    // 右边缘的命中范围向两侧各扩展 3 逻辑像素，放在命中表最前面，先于各行判定；打开、关闭
+    // 途中不能拖动。
+    if parts.branches.w >= parts.branches_w {
+        let edge = Rect::new(area.right() - 3.0, area.y, 6.0, area.h);
+        hits.insert(0, (edge, LogTarget::BranchesEdge));
     }
     let content = LOG_LIST_PAD + rows.len() as f32 * BRANCH_ROW + LOG_LIST_PAD;
     (content - area.h).max(0.0)

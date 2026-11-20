@@ -282,6 +282,18 @@ impl App {
                     };
                 }
             }
+            Target::Log(crate::app::git::log::LogTarget::BranchesEdge) => {
+                // 双击回到默认宽度。
+                if self.click_count(x, y) == 2 {
+                    self.git.log.branches_w = None;
+                    self.request_redraw();
+                } else {
+                    self.pointer.drag = Drag::LogBranches {
+                        start_x: x,
+                        start_width: self.log_parts().branches_w,
+                    };
+                }
+            }
             // 分支面板里的分支：单击筛选，双击签出（第一下已经按它筛选了），再连着点不做别的。
             Target::Log(target @ crate::app::git::log::LogTarget::BranchRow(i)) => {
                 match self.click_count(x, y) {

@@ -175,6 +175,7 @@ impl App {
                 | Target::SplitDivider
                 | Target::PaneDivider(_)
                 | Target::Log(crate::app::git::log::LogTarget::Divider)
+                | Target::Log(crate::app::git::log::LogTarget::BranchesEdge)
                 | Target::Log(crate::app::git::log::LogTarget::AuthorEdge)
         )
     }
@@ -901,6 +902,7 @@ impl App {
             self.pointer.drag,
             Drag::Splitter { .. }
                 | Drag::LogDivider { .. }
+                | Drag::LogBranches { .. }
                 | Drag::LogColumn { .. }
                 | Drag::SplitDivider { .. }
         ) || matches!(
@@ -908,6 +910,7 @@ impl App {
             Hover::Splitter
                 | Hover::SplitDivider
                 | Hover::Log(crate::app::git::log::LogTarget::Divider)
+                | Hover::Log(crate::app::git::log::LogTarget::BranchesEdge)
                 | Hover::Log(crate::app::git::log::LogTarget::AuthorEdge)
         ) {
             CursorIcon::ColResize

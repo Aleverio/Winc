@@ -562,6 +562,17 @@ impl App {
 mod presence;
 pub use presence::*;
 
+/// 悬停提示相对它对着的范围放在哪里。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TipPlace {
+    /// 按钮下方居中（下方放不下时在上方）。
+    Below,
+    /// 按钮左侧、与按钮同高：概览标尺紧靠窗口右边缘。
+    Beside,
+    /// 列表的一行：文字从鼠标的横坐标开始，放在这一行下方（放不下时在上方）。
+    Pointer,
+}
+
 /// 工具栏按钮悬停提示的计时状态。
 #[derive(Default)]
 pub struct Tooltip {
@@ -569,10 +580,12 @@ pub struct Tooltip {
     pub(crate) since: Option<Instant>,
     /// 提示是否已绘制出来；已绘制时无需再为提示唤醒事件循环。
     pub(crate) shown: bool,
-    /// 最近一次画出的提示：对着的按钮、文字、是否放在按钮旁边（见 `view::draw_tip`）。
-    pub(crate) last: std::cell::RefCell<Option<(Rect, String, bool)>>,
+    /// 开始悬停时鼠标的横坐标：对着列表一行的提示从这里开始（见 [`TipPlace::Pointer`]）。
+    pub(crate) pointer_x: f32,
+    /// 最近一次画出的提示：对着的范围、文字和位置（见 `view::draw_tip`）。
+    pub(crate) last: std::cell::RefCell<Option<(Rect, String, TipPlace)>>,
     /// 鼠标离开后正在淡出的提示和淡出的时钟。
-    pub(crate) leaving: Option<(Rect, String, bool, Clock)>,
+    pub(crate) leaving: Option<(Rect, String, TipPlace, Clock)>,
 }
 
 /// 悬停提示淡入、淡出的时长，取 [`DETAILS_FADE`]：只为缓和出现和消失，比卡片的动画短。
@@ -597,9 +610,9 @@ impl App {
     /// 悬停的目标变了：正显示着的提示开始淡出。
     pub(super) fn leave_tooltip(&mut self) {
         let last = self.overlays.tooltip.last.take();
-        if let (true, Some((rect, label, beside))) = (self.overlays.tooltip.shown, last) {
+        if let (true, Some((rect, label, place))) = (self.overlays.tooltip.shown, last) {
             let clock = self.clock(TOOLTIP_FADE);
-            self.overlays.tooltip.leaving = clock.map(|c| (rect, label, beside, c));
+            self.overlays.tooltip.leaving = clock.map(|c| (rect, label, place, c));
         }
     }
 }

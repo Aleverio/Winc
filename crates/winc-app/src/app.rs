@@ -383,6 +383,14 @@ impl PromptKind {
     pub fn is_vim(&self) -> bool {
         matches!(self, Self::VimSearch { .. } | Self::VimCommand)
     }
+
+    /// 是否输入一段文字（储藏说明、标签名、分支名）：输入条更宽。
+    pub fn takes_text(&self) -> bool {
+        matches!(
+            self,
+            Self::Stash | Self::StashFiles(_) | Self::NewTag { .. } | Self::RenameBranch { .. }
+        )
+    }
 }
 
 /// 键盘焦点所在的区域。
@@ -625,6 +633,7 @@ impl Hover {
                         | git::log::LogTarget::Row(_)
                         | git::log::LogTarget::File(_)
                         | git::log::LogTarget::Line(..)
+                        | git::log::LogTarget::BranchRow(_)
                 )
                 | Hover::Blame(_)
                 | Hover::PickerPart(PickerPart::Pull | PickerPart::Push | PickerPart::Fetch)
@@ -734,6 +743,11 @@ enum Drag {
     },
     /// 拖动日志标签中列表与详情之间的分隔线：按下时的横坐标、详情栏当时的宽度。
     LogDivider {
+        start_x: f32,
+        start_width: f32,
+    },
+    /// 拖动日志标签中分支面板的右边缘：按下时的横坐标、面板当时的宽度。
+    LogBranches {
         start_x: f32,
         start_width: f32,
     },
@@ -1151,6 +1165,7 @@ impl App {
         }
         self.pointer.hover = hover;
         self.overlays.tooltip.since = hover.has_tooltip().then(Instant::now);
+        self.overlays.tooltip.pointer_x = self.mouse().0;
         self.overlays.tooltip.shown = false;
         self.request_redraw();
     }

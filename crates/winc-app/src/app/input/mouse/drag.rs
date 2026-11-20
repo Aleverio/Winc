@@ -214,6 +214,16 @@ impl App {
                 self.git.log.details_w = Some(self.log_parts().details.w);
                 self.request_redraw();
             }
+            Drag::LogBranches {
+                start_x,
+                start_width,
+            } => {
+                // 按排版允许的范围限制后再保存，使保存的宽度等于绘制的宽度。
+                self.git.log.branches_w = Some(start_width + (x - start_x));
+                let drawn = self.log_parts().branches_w;
+                self.git.log.branches_w = (drawn > 0.0).then_some(drawn);
+                self.request_redraw();
+            }
             Drag::Scrollbar {
                 bar: bar @ (Scrollbar::Tree | Scrollbar::TreeHorizontal),
                 grab,

@@ -6,7 +6,7 @@
 
 mod arrive;
 mod branches;
-mod columns;
+pub(crate) mod columns;
 mod compare;
 mod details;
 mod filter;
@@ -17,7 +17,7 @@ mod time;
 mod tree;
 
 pub(crate) use branches::{BRANCH_ROW, BranchRow, PanelFold};
-pub(crate) use columns::{AUTHOR_DEFAULT, LogColumn, log_author_width};
+pub(crate) use columns::{AUTHOR_PAD, LogColumn, author_fit, log_author_width};
 pub(crate) use details::LogFileRow;
 pub(crate) use filter::{LogPill, since_label};
 pub(crate) use time::*;
@@ -95,9 +95,11 @@ const LOG_HISTORY: usize = 100;
 /// 取自调参：详情通常在数十毫秒内返回，等待该时长可避免提示出现后立即被结果替换而闪烁。
 const LOADING_DELAY: Duration = Duration::from_millis(300);
 
-/// 左侧分支面板的宽度（逻辑像素）：小号字约 24 个字符，常见的分支名（含远程名）写得下，
-/// 更长的截短。
+/// 左侧分支面板的默认宽度（逻辑像素）：小号字约 24 个字符，常见的分支名（含远程名）写得下，
+/// 更长的截短，可拖动右边缘加宽。
 pub(crate) const BRANCHES_W: f32 = 200.0;
+/// 拖动后分支面板的最小、最大宽度（逻辑像素）。
+const BRANCHES_RANGE: (f32, f32) = (140.0, 480.0);
 
 /// 日志标签的几何。
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -106,6 +108,8 @@ pub(crate) struct LogParts {
     pub header: Rect,
     /// 左侧的分支面板；不显示时宽度为 0。
     pub branches: Rect,
+    /// 分支面板完全打开时的宽度；放不下时为 0。
+    pub branches_w: f32,
     /// 左侧的提交列表。
     pub list: Rect,
     /// 右侧的详情一栏。
@@ -135,13 +139,21 @@ impl LogParts {
 /// 返回日志标签中各部分的位置。
 ///
 /// 标题栏下方左侧为列表，右侧为详情；详情默认约占 38% 的宽度，拖动分隔线后为 `details_w`。
-/// 最左边是分支面板，露出 `branches`（0 到 1，打开、关闭途中在两者之间）；放不下（列表和
-/// 详情不够最小宽度）时不显示。
-pub(crate) fn log_parts(editor: Rect, details_w: Option<f32>, branches: f32) -> LogParts {
+/// 最左边是分支面板，宽 `branches_w`（拖动右边缘后的宽度，`None` 是默认宽度），露出
+/// `branches`（0 到 1，打开、关闭途中在两者之间）；列表和详情不够最小宽度时面板变窄，窄到
+/// 最小宽度仍放不下时不显示。
+pub(crate) fn log_parts(
+    editor: Rect,
+    details_w: Option<f32>,
+    (branches_w, branches): (Option<f32>, f32),
+) -> LogParts {
     let header = Rect::new(editor.x, editor.y, editor.w, LOG_HEADER);
     let body_h = (editor.h - LOG_HEADER).max(0.0);
-    let room = editor.w - BRANCHES_W >= LIST_MIN + DETAILS_MIN;
-    let side = if room { BRANCHES_W * branches } else { 0.0 };
+    let (min, max) = BRANCHES_RANGE;
+    let width =
+        (branches_w.unwrap_or(BRANCHES_W).clamp(min, max)).min(editor.w - LIST_MIN - DETAILS_MIN);
+    let branches_w = if width >= min { width.round() } else { 0.0 };
+    let side = branches_w * branches;
     let branches = Rect::new(editor.x, header.bottom(), side, body_h);
     let editor = Rect::new(editor.x + side, editor.y, editor.w - side, editor.h);
     // 窗口较窄时详情最多占一半宽度；较宽时至少为列表保留 `LIST_MIN`。
@@ -156,6 +168,7 @@ pub(crate) fn log_parts(editor: Rect, details_w: Option<f32>, branches: f32) -> 
     LogParts {
         header,
         branches,
+        branches_w,
         list,
         details,
     }
@@ -203,6 +216,8 @@ pub enum LogTarget {
     ClearFilters,
     /// 列表与详情之间的分隔线：左右拖动改变详情一栏的宽度，双击恢复默认宽度。
     Divider,
+    /// 分支面板的右边缘：左右拖动改变面板的宽度，双击恢复默认宽度。
+    BranchesEdge,
     /// 提交图中第 `.0` 行的一段线，属于编号为 `.1` 的线（`GraphRow::line`）。
     ///
     /// 悬停时高亮该线并提示其连接的提交，点击时沿该线跳转到该提交（`App::log_line_target`）。
@@ -421,8 +436,13 @@ pub(crate) struct LogState {
     pub long_files: Vec<usize>,
     /// 拖动分隔线后详情一栏的宽度（逻辑像素）；`None` 表示默认宽度，随窗口宽度变化。
     pub details_w: Option<f32>,
-    /// 拖动左边缘后作者一列的宽度（逻辑像素）；`None` 是默认宽度 [`AUTHOR_DEFAULT`]。
+    /// 拖动右边缘后分支面板的宽度（逻辑像素）；`None` 是默认宽度 [`BRANCHES_W`]。
+    pub branches_w: Option<f32>,
+    /// 拖动左边缘后作者一列的宽度（逻辑像素）；`None` 是按作者名字算出的宽度（`author_fit`）。
     pub author_w: Option<f32>,
+    /// 按已读取的提交中最宽的作者名字算出的作者一列宽度，和算它时的依据（日志标签、提交数、
+    /// 字号）；绘制时更新。
+    pub author_fit: Option<((DocumentId, usize, u32), f32)>,
     /// 分支面板里名字截短了的行（[`App::log_branch_rows`] 的下标）；悬停时提示全名。
     ///
     /// 绘制时更新。
@@ -550,7 +570,9 @@ impl Default for LogState {
             clipped: None,
             long_files: Vec::new(),
             details_w: None,
+            branches_w: None,
             author_w: None,
+            author_fit: None,
             long_branches: Vec::new(),
             branches_scroll: 0.0,
             branches_max: 0.0,
@@ -956,7 +978,7 @@ impl App {
             }
             LogTarget::File(i) => self.open_log_file(i),
             // 拖动由 `mouse.rs` 开始处理。
-            LogTarget::Divider => {}
+            LogTarget::Divider | LogTarget::BranchesEdge => {}
             LogTarget::Line(row, line) => {
                 self.focus = Focus::Editor;
                 match self.log_line_target(row, line) {
@@ -1189,7 +1211,7 @@ impl App {
         log_parts(
             self.layout.editor,
             self.git.log.details_w,
-            self.log_branches_shown(),
+            (self.git.log.branches_w, self.log_branches_shown()),
         )
     }
 
@@ -1239,6 +1261,11 @@ impl App {
     /// 是否正在拖动列表与详情之间的分隔线。
     pub(crate) fn log_dividing(&self) -> bool {
         matches!(self.pointer.drag, crate::app::Drag::LogDivider { .. })
+    }
+
+    /// 是否正在拖动分支面板的右边缘。
+    pub(crate) fn log_branches_resizing(&self) -> bool {
+        matches!(self.pointer.drag, crate::app::Drag::LogBranches { .. })
     }
 }
 

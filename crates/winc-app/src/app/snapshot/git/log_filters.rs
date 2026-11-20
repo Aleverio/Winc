@@ -152,6 +152,48 @@ fn the_branch_panel_lists_branches_like_the_picker_and_filters_by_one() {
     assert!(app.git.log.long_branches.contains(&cut));
     let dev = panel_row(&mut app, "dev");
     assert!(!app.git.log.long_branches.contains(&dev));
+    assert!(Hover::Log(LogTarget::BranchRow(cut)).has_tooltip());
+
+    // 拖动右边缘改变宽度；拖得再宽也给列表和详情留出最小宽度，再窄也留最小宽度；双击恢复
+    // 默认宽度。
+    {
+        use winit::event::MouseButton;
+        let edge = |app: &App| {
+            let (rect, _) = *(app.hits.log.iter())
+                .find(|(_, t)| *t == LogTarget::BranchesEdge)
+                .unwrap();
+            (rect.x + rect.w / 2.0, rect.y + 200.0)
+        };
+        let before = app.log_parts().branches_w;
+        let (x, y) = edge(&app);
+        app.on_mouse_move(x, y);
+        assert_eq!(app.pointer.hover, Hover::Log(LogTarget::BranchesEdge));
+        app.on_mouse_down(MouseButton::Left);
+        app.on_mouse_move(x + 60.0, y);
+        assert_eq!(app.git.log.branches_w, Some(before + 60.0));
+        shoot(&mut app, "git-log-branches-wide");
+        app.on_mouse_move(x + 5000.0, y);
+        app.on_mouse_up(MouseButton::Left);
+        let parts = app.log_parts();
+        assert!(parts.list.w + parts.details.w >= 660.0 - 0.5);
+        paint(&mut app);
+        let (x, y) = edge(&app);
+        app.on_mouse_move(x, y);
+        app.on_mouse_down(MouseButton::Left);
+        app.on_mouse_move(-5000.0, y);
+        app.on_mouse_up(MouseButton::Left);
+        assert_eq!(app.log_parts().branches_w, 140.0);
+        paint(&mut app);
+        let (x, y) = edge(&app);
+        app.on_mouse_move(x, y);
+        for _ in 0..2 {
+            app.on_mouse_down(MouseButton::Left);
+            app.on_mouse_up(MouseButton::Left);
+        }
+        assert_eq!(app.git.log.branches_w, None);
+        assert_eq!(app.log_parts().branches_w, before);
+        paint(&mut app);
+    }
 
     // 点一个分支只看它的提交，再点一次回到全部。
     let login = panel_row(&mut app, "feature/login");
@@ -380,7 +422,8 @@ fn a_path_filtered_log_keeps_its_graph_and_real_parents() {
 
 #[test]
 fn log_columns_can_be_hidden_shown_and_widened() {
-    use crate::app::git::log::{AUTHOR_DEFAULT, LogColumn};
+    use crate::app::git::log::LogColumn;
+    use crate::app::git::log::columns::AUTHOR_DEFAULT;
     let Some((mut app, root)) = git_app("git-log-columns", false) else {
         return;
     };
@@ -429,5 +472,15 @@ fn log_columns_can_be_hidden_shown_and_widened() {
     assert!(app.git.log.author_w.unwrap() < AUTHOR_DEFAULT * 3.0);
     app.press_log_author_edge(edge.x, true);
     assert_eq!(app.git.log.author_w, None);
+    // 没拖过时按最宽的作者名字定宽：名字都短时比上限窄，不留大段空白。
+    paint(&mut app);
+    let full = app.log_author_full();
+    assert!(full < AUTHOR_DEFAULT, "{full}");
+    assert_eq!(app.git.log.author_fit.map(|(_, w)| w), Some(full));
+    // 截图：列表放得下名字时作者、时间两列的间距（`log-columns`）。
+    app.state.log_branches = Some(false);
+    app.git.log.details_w = Some(300.0);
+    paint(&mut app);
+    shoot(&mut app, "log-columns");
     let _ = std::fs::remove_dir_all(&root);
 }
