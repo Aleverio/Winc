@@ -341,15 +341,18 @@ fn draw_header(
     );
 
     // 右端从右往左依次为：布局切换、折叠开关、下一个文件与上一个文件（可跨文件导航时）、下一处、
-    // 上一处。布局切换和折叠开关按状态更换图标，不绘制按下状态。
+    // 上一处、打开文件（有对应的文件时）。布局切换和折叠开关按状态更换图标，不绘制按下状态。
     let y = header.y + (header.h - BUTTON) / 2.0;
     let mut right = header.right() - 10.0;
     let files = [DiffTarget::NextFile, DiffTarget::PreviousFile];
     let files = files.iter().copied().filter(|_| app.diff_steps_files());
+    let open = view.file_path().map(|_| DiffTarget::OpenFile);
     let targets = [DiffTarget::Layout, DiffTarget::Collapse]
         .into_iter()
-        .chain(files);
-    for target in targets.chain([DiffTarget::Next, DiffTarget::Previous]) {
+        .chain(files)
+        .chain([DiffTarget::Next, DiffTarget::Previous])
+        .chain(open);
+    for target in targets {
         let rect = Rect::new(right - BUTTON, y, BUTTON, BUTTON);
         right = rect.x - 2.0;
         draw_button(
@@ -372,6 +375,8 @@ fn draw_header(
             DiffTarget::NextFile => {
                 icons::chevron(frame, c, 8.0, Direction::Right, p.text_muted, rect)
             }
+            // 同提交视图文件行上的「打开文件」。
+            DiffTarget::OpenFile => icons::open_file(frame, c, p.text_muted, rect),
             // 图标表示点击后切换到的布局。
             DiffTarget::Layout if view.is_unified() => {
                 icons::split(frame, c, p.text_muted, rect);

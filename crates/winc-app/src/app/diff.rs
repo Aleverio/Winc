@@ -13,6 +13,7 @@ mod edit;
 mod files;
 mod find;
 mod fold;
+mod open;
 mod pointer;
 
 use crate::app::scroll::set_scroll_line;
@@ -173,6 +174,8 @@ pub enum DiffTarget {
     PreviousFile,
     /// 下一个文件。
     NextFile,
+    /// 在编辑区打开差异对应的工作区文件。
+    OpenFile,
     /// 切换单栏显示和并排显示。
     Layout,
     /// 折叠或展开所有未改动的长段。
@@ -345,6 +348,7 @@ impl App {
             DiffTarget::Next => self.jump_difference(true),
             DiffTarget::PreviousFile => self.step_diff_file(false),
             DiffTarget::NextFile => self.step_diff_file(true),
+            DiffTarget::OpenFile => self.open_diff_file(),
             DiffTarget::FilesToggle => self.toggle_log_files_panel(),
             DiffTarget::FilesLayout => self.toggle_diff_files_layout(),
             DiffTarget::FilesDir(row) => {
