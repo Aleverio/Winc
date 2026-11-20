@@ -4,7 +4,8 @@ use super::*;
 
 /// 计算鼠标停着的改动行写全名所需的溢出区域（见 [`CommitOverflow`]）。
 ///
-/// 文件行的「打开文件」「回滚」两个按钮跟在全名之后。名字放得下、正在拖动时返回 `None`。
+/// 文件行的「打开文件」「回滚」两个按钮、暂存区视图中目录行的暂存按钮跟在全名之后。名字放得下、
+/// 正在拖动时返回 `None`。
 /// 展开收起的动画途中，被展开、收起的行及其上方各行位置不变，仍显示全名；下方正在移动的行
 /// 返回 `None`。
 pub(in crate::view) fn commit_overflow(app: &App, frame: &mut Frame<'_>) -> Option<CommitOverflow> {
@@ -17,7 +18,10 @@ pub(in crate::view) fn commit_overflow(app: &App, frame: &mut Frame<'_>) -> Opti
     let rows = app.commit_rows();
     let row = match app.pointer.hover {
         Hover::Commit(
-            CommitTarget::Dir(r) | CommitTarget::DirCheck(r) | CommitTarget::Sticky(r, _),
+            CommitTarget::Dir(r)
+            | CommitTarget::DirCheck(r)
+            | CommitTarget::DirStage(r, _)
+            | CommitTarget::Sticky(r, _),
         ) => r,
         // 鼠标移到跟在全名后面的按钮上时，仍保持全名显示。
         Hover::Commit(
@@ -46,7 +50,11 @@ pub(in crate::view) fn commit_overflow(app: &App, frame: &mut Frame<'_>) -> Opti
     let band = Rect::new(list.x + 8.0, y, list.w - 16.0, COMMIT_ROW);
     let end = name_end(app, frame, &text, band);
     let window = app.layout.window.right() - 8.0;
-    let (right, actions) = if text.folder {
+    let staged_dir = match rows.get(row) {
+        Some(CommitRow::Dir { group, .. }) => dir_action_target(app, *group, row).is_some(),
+        _ => false,
+    };
+    let (right, actions) = if text.folder && !staged_dir {
         if end <= band.right() - 6.0 {
             return None;
         }
@@ -58,13 +66,14 @@ pub(in crate::view) fn commit_overflow(app: &App, frame: &mut Frame<'_>) -> Opti
         }
         ((end + 8.0).min(window), None)
     } else {
-        // 文件行的按钮在名字之后：名字与按钮在原位放得下时不展开。按钮超出窗口时向左移回，
-        // 名字在按钮之前截断。
+        // 按钮在名字之后：名字与按钮在原位放得下时不展开。按钮超出窗口时向左移回，名字在按钮
+        // 之前截断。目录行只有第二个位置上的按钮。
         let (open, revert) = file_actions(band);
-        if end <= open.x - 4.0 {
+        let first = if staged_dir { revert } else { open };
+        if end <= first.x - 4.0 {
             return None;
         }
-        let shift = (end + 4.0 - open.x).min(window - revert.right());
+        let shift = (end + 4.0 - first.x).min(window - revert.right());
         let moved = |r: Rect| Rect::new(r.x + shift, r.y, r.w, r.h);
         let (open, revert) = (moved(open), moved(revert));
         (revert.right() + 4.0, Some((open, revert)))

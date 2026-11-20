@@ -254,8 +254,17 @@ fn draw_dir_row(
     let level = depth + 1;
     let hovered = matches!(
         app.pointer.hover,
-        Hover::Commit(CommitTarget::Dir(r) | CommitTarget::DirCheck(r)) if r == i
+        Hover::Commit(
+            CommitTarget::Dir(r) | CommitTarget::DirCheck(r) | CommitTarget::DirStage(r, _)
+        ) if r == i
     );
+    // 暂存区视图中悬停时行尾是暂存或取消暂存的按钮，位置和组标题的按钮相同；名字放不下而显示
+    // 全名时，按钮跟在全名之后（见 `commit_overflow`）。
+    let target = dir_action_target(app, group, i);
+    let actions = target.and_then(|_| match full {
+        Some(overflow) => overflow.actions,
+        None => hovered.then(|| file_actions(band)),
+    });
     // 多选时下面的文件都选中了：画成选中状态。
     let members = rows.dir(group, dir);
     // 选中的文件比目录下面的少时不可能都选中，不必逐个查。
@@ -267,7 +276,10 @@ fn draw_dir_row(
             .all(|&m| app.commit_is_selected(&status.entries[m].path));
     let icon_x = r.check_x(app, level) + ICON;
     let text_x = icon_x + icons::FOLDER_WIDTH + LABEL_GAP;
-    let room = (!wanted).then(|| (text_clip.right() - text_x).max(0.0));
+    let text_end = actions.map_or(text_clip.right(), |(_, stage)| {
+        (stage.x - 4.0).min(text_clip.right())
+    });
+    let room = (!wanted).then(|| (text_end - text_x).max(0.0));
     let parts = dir_parts(app, frame, name, room);
     let width = parts_width(app, frame, &parts, true);
     let key = CommitName::Dir(group, dir.to_path_buf());
@@ -276,7 +288,12 @@ fn draw_dir_row(
         .commit
         .names
         .sync(&key, cause, &parts, shown_width(width, room));
-    let retracting = !wanted && view.progress < 1.0 && text_x + view.width > text_clip.right();
+    let lag = match actions {
+        Some((open, _)) if wanted => actions_lag(app, i, band, open, width - view.width),
+        _ => 0.0,
+    };
+    let button = actions.map(|(_, stage)| Rect::new(stage.x - lag, stage.y, stage.w, stage.h));
+    let retracting = !wanted && view.progress < 1.0 && text_x + view.width > text_end;
     let color = if retracting {
         retracting_color(p, is_selected, focused, view.progress)
     } else {
@@ -305,12 +322,13 @@ fn draw_dir_row(
     icons::folder(frame, (icon_x, (cy - 6.0).round()), open, p.folder, list);
     // 写全名、收回途中名字画到过渡中的宽度为止，侧栏外的部分由 `draw_commit_overflow`
     // 接着画。
-    let name_clip = if wanted || retracting {
-        let w = (text_x + view.width - list.x).max(0.0);
-        Rect::new(list.x, y, w, COMMIT_ROW).intersect(list)
+    let name_end = if wanted || retracting {
+        text_x + view.width
     } else {
-        text_clip
+        text_end
     };
+    let name_end = button.map_or(name_end, |b| name_end.min(b.x - 4.0));
+    let name_clip = Rect::new(list.x, y, (name_end - list.x).max(0.0), COMMIT_ROW).intersect(list);
     draw_name(
         app,
         frame,
@@ -318,6 +336,19 @@ fn draw_dir_row(
         (&parts, &view),
         name_clip,
     );
+    if let (Some(rect), Some(target)) = (button, target) {
+        let on = app.pointer.hover == Hover::Commit(target);
+        draw_button(frame, p, rect, list, on, false);
+        let ink = if on { p.text } else { p.text_muted };
+        draw_action_icon(frame, target, center(rect), ink, list);
+        // 伸出侧栏的按钮同样可以点击，命中区域不裁到列表内。
+        let hit = if full.is_some() {
+            rect
+        } else {
+            rect.intersect(list)
+        };
+        hits.push((hit, target));
+    }
     if let Some(spill) = spill {
         // 显示全名的这一行覆盖列表右边的滚动条（见 `draw_commit_overflow`）：行底色右边到
         // 侧栏边缘的区域同样属于这一行，鼠标移入时全名保持显示。

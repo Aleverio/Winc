@@ -796,6 +796,14 @@ fn file_action_targets(app: &App, group: Option<CommitGroup>, index: usize) -> [
     }
 }
 
+/// 返回目录行行尾的按钮：暂存区视图中暂存（「已暂存的更改」一组是取消暂存）这个目录下的全部
+/// 文件；勾选式下、冲突的一组和浏览历史提交时没有。`row` 是目录行的下标。
+fn dir_action_target(app: &App, group: CommitGroup, row: usize) -> Option<CommitTarget> {
+    let shown = app.git.commit.staging() && !app.git.commit.browse;
+    (shown && group != CommitGroup::Conflicts)
+        .then(|| CommitTarget::DirStage(row, group != CommitGroup::Staged))
+}
+
 /// 绘制文件行行尾的两个按钮（位置为 `first`、`second`，目标见 [`file_action_targets`]），只绘制
 /// 在 `clip` 之内；悬停的按钮铺底色，图标用正文色。
 fn draw_file_actions(
@@ -828,8 +836,12 @@ fn draw_action_icon(
             let at = ((cx - w / 2.0).round(), (cy - h / 2.0).round());
             icons::document(frame, at, (w, h), color, clip);
         }
-        CommitTarget::StageFile(_, true) => icons::plus(frame, (cx, cy), 8.0, color, clip),
-        CommitTarget::StageFile(_, false) | CommitTarget::GroupStage(CommitGroup::Staged) => {
+        CommitTarget::StageFile(_, true) | CommitTarget::DirStage(_, true) => {
+            icons::plus(frame, (cx, cy), 8.0, color, clip);
+        }
+        CommitTarget::StageFile(_, false)
+        | CommitTarget::DirStage(_, false)
+        | CommitTarget::GroupStage(CommitGroup::Staged) => {
             icons::minus(frame, (cx, cy), 8.0, color, clip);
         }
         CommitTarget::GroupStage(_) => icons::plus(frame, (cx, cy), 8.0, color, clip),

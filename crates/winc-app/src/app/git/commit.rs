@@ -156,7 +156,8 @@ pub(crate) struct CommitOverflow {
     pub y: f32,
     /// 伸出侧栏的那一段；全名在侧栏里写得下（只是要让开状态字母）时为 `None`。
     pub spill: Option<Rect>,
-    /// 文件行跟在全名后面的「打开文件」「回滚」两个按钮；目录行为 `None`。
+    /// 跟在全名后面的两个按钮位置：文件行是「打开文件」「回滚」等，目录行只用第二个（暂存、
+    /// 取消暂存）；没有按钮时为 `None`。
     pub actions: Option<(Rect, Rect)>,
 }
 
@@ -474,6 +475,9 @@ pub enum CommitTarget {
     /// 暂存区视图中组标题行尾的「＋」或「−」：暂存这一组的全部文件，「已暂存的更改」一组是
     /// 全部取消暂存。
     GroupStage(CommitGroup),
+    /// 暂存区视图中目录行尾的「＋」（第二项为真）或「−」：暂存或取消暂存这个目录下的全部
+    /// 文件；第一项同 [`CommitTarget::Dir`]。
+    DirStage(usize, bool),
     /// 另一个仓库的标题行（它在仓库列表中的下标）：切换到该仓库。
     OtherRepository(usize),
     /// 另一个仓库中的文件（仓库的下标，文件在其状态各项中的下标）：切换过去并选中该文件。

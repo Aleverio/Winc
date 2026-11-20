@@ -15,6 +15,7 @@ impl App {
                 | CommitTarget::StageFile(..)
                 | CommitTarget::Dir(_)
                 | CommitTarget::DirCheck(_)
+                | CommitTarget::DirStage(..)
                 | CommitTarget::Stash(_)
                 | CommitTarget::StashFile(_)
                 | CommitTarget::StashApply(_)
@@ -59,7 +60,8 @@ impl App {
             | CommitTarget::OpenFile(_)
             | CommitTarget::RevertFile(_)
             | CommitTarget::StageFile(..)
-            | CommitTarget::GroupStage(_) => self.press_commit_row(target),
+            | CommitTarget::GroupStage(_)
+            | CommitTarget::DirStage(..) => self.press_commit_row(target),
             CommitTarget::OtherRepository(_)
             | CommitTarget::OtherFile(..)
             | CommitTarget::OtherStagedFile(..) => self.press_other(target),
@@ -261,6 +263,19 @@ impl App {
                 if let Some(path) = self.commit_entry(i).map(|e| e.path.clone()) {
                     self.stage_paths(&[path], on);
                 }
+            }
+            CommitTarget::DirStage(row, on) => {
+                let rows = self.commit_rows();
+                let (Some(CommitRow::Dir { group, dir, .. }), Some(status)) =
+                    (rows.get(row), self.git.status.as_ref())
+                else {
+                    return;
+                };
+                let members = rows.dir(*group, dir).iter();
+                let paths: Vec<PathBuf> = (members.filter_map(|&m| status.entries.get(m)))
+                    .map(|e| e.path.clone())
+                    .collect();
+                self.stage_paths(&paths, on);
             }
             CommitTarget::GroupStage(group) => {
                 let Some(status) = self.git.status.as_ref() else {
