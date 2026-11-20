@@ -415,6 +415,16 @@ impl App {
         remote.map(PushIntent::Publish)
     }
 
+    /// 拉取、同步时是否变基（设置 `git.pull`）；按 Git 的配置时为 `None`。
+    pub(in crate::app) fn pull_mode(&self) -> Option<bool> {
+        self.config.git_pull.unwrap_or_default().rebase()
+    }
+
+    /// 拉取当前分支时实际是否变基：设置指明了方式时按设置，否则按 Git 的配置。
+    pub(in crate::app) fn pulls_with_rebase(&self) -> bool {
+        self.pull_mode().unwrap_or(self.git.pull_rebase)
+    }
+
     pub(in crate::app) fn has_upstream(&self) -> bool {
         self.git
             .branches
@@ -429,14 +439,16 @@ impl App {
             GitFetch => self.git_operate(t!("git-op-fetch").into(), |git, root| {
                 git.operate(root, &["fetch", "--all", "--prune"])
             }),
-            GitPull => self.git_operate_then(t!("git-op-pull").into(), |git, root| {
-                keep_changes(git, root, t!("git-op-pull"), |git| git.pull(root))
-            }),
-            GitPullRebase => self.git_operate_then(t!("git-op-pull-rebase").into(), |git, root| {
-                keep_changes(git, root, t!("git-op-pull-rebase"), |git| {
-                    git.pull_rebase(root)
-                })
-            }),
+            GitPull | GitPullRebase | GitPullMerge => {
+                let (what, rebase) = match command {
+                    GitPullRebase => (t!("git-op-pull-rebase"), Some(true)),
+                    GitPullMerge => (t!("git-op-pull-merge"), Some(false)),
+                    _ => (t!("git-op-pull"), self.pull_mode()),
+                };
+                self.git_operate_then(what.into(), move |git, root| {
+                    keep_changes(git, root, what, |git| git.pull(root, rebase))
+                });
+            }
             GitAddRemote => self.open_remote_dialog(None),
             GitRemote(op, i) => {
                 let Some(remote) = self.git.remote_list.get(i).cloned() else {

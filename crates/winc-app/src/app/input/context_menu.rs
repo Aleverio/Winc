@@ -234,6 +234,9 @@ pub enum MenuCommand {
     /// 设置中「打开工作树」菜单的一项，参数为
     /// [`WorktreeOpen::ALL`](winc_config::WorktreeOpen::ALL) 中的序号（从 0 起）。
     OpenWorktree(usize),
+    /// 设置中「拉取方式」菜单的一项，参数为 [`PullMode::ALL`](winc_config::PullMode::ALL) 中的
+    /// 序号（从 0 起）。
+    PullMode(usize),
     /// 设置中「拖入目录」菜单的一项，参数为
     /// [`FolderDrop::ALL`](winc_config::FolderDrop::ALL) 中的序号（从 0 起）。
     DropFolder(usize),
@@ -314,6 +317,8 @@ pub enum MenuCommand {
     GitPull,
     /// 拉取并把本地提交变基到上游（`pull --rebase`）。
     GitPullRebase,
+    /// 拉取并合并（`git pull --no-rebase`）：拉取方式设为变基时按住 ⌥ 换出。
+    GitPullMerge,
     /// 添加远程仓库。
     GitAddRemote,
     /// 对第几个远程仓库做的事。
@@ -615,6 +620,7 @@ impl MenuCommand {
             MenuCommand::GitPull => t!("menu-git-pull"),
             MenuCommand::GitPush => t!("menu-git-push"),
             MenuCommand::GitPullRebase => t!("menu-git-pull-rebase"),
+            MenuCommand::GitPullMerge => t!("menu-git-pull-merge"),
             MenuCommand::GitAddRemote => t!("git-remote-add"),
             MenuCommand::GitRemote(op, _) => op.label(),
             MenuCommand::PickerTag(None, _) => t!("git-branch-checkout"),
@@ -743,6 +749,9 @@ impl MenuCommand {
             MenuCommand::OpenWorktree(i) => winc_config::WorktreeOpen::ALL
                 .get(i)
                 .map_or("", |&choice| crate::layout::open_worktree_label(choice)),
+            MenuCommand::PullMode(i) => winc_config::PullMode::ALL
+                .get(i)
+                .map_or("", |&choice| crate::layout::pull_mode_label(choice)),
             MenuCommand::DropFolder(i) => winc_config::FolderDrop::ALL
                 .get(i)
                 .map_or("", |&choice| crate::layout::drop_folder_label(choice)),
@@ -942,6 +951,8 @@ pub enum MenuTarget {
     VimClipboard,
     /// 设置的 Git 页中的「打开工作树」。
     OpenWorktree,
+    /// 设置的 Git 页中的「拉取方式」。
+    PullMode,
     /// 设置的编辑器页中的「拖入目录」。
     DropFolder,
     /// 设置的编辑器页中的「自动保存」。

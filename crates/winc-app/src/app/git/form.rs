@@ -221,9 +221,10 @@ impl App {
         };
         let target = tracked.unwrap_or_else(fallback);
         self.show_transfer_dialog(Direction::Pull, branch, target, None);
-        // 「变基」默认按仓库配置的拉取方式勾选。
+        // 「变基」默认按设置的拉取方式勾选，跟随 Git 配置时按仓库的配置。
+        let rebase = self.pulls_with_rebase();
         if let Some(dialog) = &mut self.overlays.form_dialog {
-            dialog.copy = self.git.pull_rebase;
+            dialog.copy = rebase;
         }
         self.refresh_transfer_list();
     }

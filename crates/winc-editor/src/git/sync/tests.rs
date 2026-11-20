@@ -55,10 +55,10 @@ fn an_amended_pushed_commit_is_pushed_over_its_old_version() {
 
     // 未确认时不推送：上游保持原样，并返回将被替换的提交数。
     let before = sh(&remote, &["rev-parse", "main"]);
-    assert_eq!(git.sync(&work, false).unwrap(), Synced::NeedsForce(1));
+    assert_eq!(git.sync(&work, false, None).unwrap(), Synced::NeedsForce(1));
     assert_eq!(sh(&remote, &["rev-parse", "main"]), before);
 
-    git.sync(&work, true).unwrap();
+    git.sync(&work, true, None).unwrap();
     let head = sh(&work, &["rev-parse", "HEAD"]);
     assert_eq!(sh(&remote, &["rev-parse", "main"]), head);
     assert_eq!(sh(&work, &["rev-list", "--count", "HEAD"]), "1");
@@ -81,7 +81,7 @@ fn commits_pushed_by_others_are_pulled_before_pushing() {
     sh(&work, &["add", "."]);
     sh(&work, &["commit", "-q", "-m", "ours"]);
 
-    git.sync(&work, false).unwrap();
+    git.sync(&work, false, None).unwrap();
     // 两边的提交都在远程上，没有提交被覆盖。
     let subjects = sh(&remote, &["log", "--format=%s", "main"]);
     assert!(
@@ -127,7 +127,7 @@ fn uncommitted_changes_are_carried_through_a_pull() {
         "ONE\ntwo\nthree\n",
     );
     let before = git.stash_tip(&work);
-    git.pull(&work).unwrap();
+    git.pull(&work, None).unwrap();
     assert_eq!(git.carried(&work, before.as_deref()), Carried::Restored);
     assert_eq!(git.stash_tip(&work), None);
 
@@ -141,7 +141,7 @@ fn uncommitted_changes_are_carried_through_a_pull() {
     );
     std::fs::write(work.join("a.txt"), "one\ntwo\nTHREE\n").unwrap();
     let before = git.stash_tip(&work);
-    git.pull(&work).unwrap();
+    git.pull(&work, None).unwrap();
     assert_eq!(git.carried(&work, before.as_deref()), Carried::Restored);
     let text = std::fs::read_to_string(work.join("a.txt")).unwrap();
     assert_eq!(text, "ONE\ntwo\nTHREE\n");
@@ -164,7 +164,7 @@ fn a_conflicting_restore_is_marked_and_keeps_the_stash() {
     );
     std::fs::write(work.join("a.txt"), "mine\ntwo\nthree\n").unwrap();
     let before = git.stash_tip(&work);
-    git.pull(&work).unwrap();
+    git.pull(&work, None).unwrap();
     // 拉取完成，冲突标记写在工作区里，原更改仍在储藏中。
     assert_eq!(git.carried(&work, before.as_deref()), Carried::Conflicted);
     let text = std::fs::read_to_string(work.join("a.txt")).unwrap();
@@ -189,7 +189,7 @@ fn rebase_pulls_and_syncs_carry_uncommitted_changes() {
     sh(&work, &["commit", "-q", "-m", "ours"]);
     std::fs::write(work.join("a.txt"), "one\ntwo\nTHREE\n").unwrap();
     let before = git.stash_tip(&work);
-    git.pull_rebase(&work).unwrap();
+    git.pull(&work, Some(true)).unwrap();
     assert_eq!(git.carried(&work, before.as_deref()), Carried::Restored);
     // 变基而不是合并：历史是一条线，本地提交在上游之上。
     assert_eq!(sh(&work, &["rev-list", "--merges", "--count", "HEAD"]), "0");
@@ -201,7 +201,10 @@ fn rebase_pulls_and_syncs_carry_uncommitted_changes() {
     push_from_peer("sync-carry-peer", &remote, "a.txt", "ONE\ntwo\nthree\n");
     std::fs::write(work.join("a.txt"), "one\ntwo\nTHREE\n").unwrap();
     let before = git.stash_tip(&work);
-    assert!(matches!(git.sync(&work, false).unwrap(), Synced::Done(_)));
+    assert!(matches!(
+        git.sync(&work, false, None).unwrap(),
+        Synced::Done(_)
+    ));
     assert_eq!(git.carried(&work, before.as_deref()), Carried::Restored);
     let text = std::fs::read_to_string(work.join("a.txt")).unwrap();
     assert_eq!(text, "ONE\ntwo\nTHREE\n");
@@ -218,7 +221,7 @@ fn an_untracked_file_in_the_way_stops_the_pull_without_losing_changes() {
     push_from_peer("pull-carry-untracked-peer", &remote, "new.txt", "theirs\n");
     std::fs::write(work.join("new.txt"), "mine\n").unwrap();
     std::fs::write(work.join("a.txt"), "one\ntwo\nTHREE\n").unwrap();
-    let error = git.pull(&work).unwrap_err();
+    let error = git.pull(&work, None).unwrap_err();
     assert!(error.contains("new.txt"), "{error}");
     assert_eq!(
         std::fs::read_to_string(work.join("new.txt")).unwrap(),
@@ -227,4 +230,39 @@ fn an_untracked_file_in_the_way_stops_the_pull_without_losing_changes() {
     let text = std::fs::read_to_string(work.join("a.txt")).unwrap();
     assert_eq!(text, "one\ntwo\nTHREE\n");
     assert_eq!(git.stash_tip(&work), None);
+}
+
+/// 拉取方式：指明合并或变基时不看 Git 的配置，`None` 时按 `pull.rebase`；同步的拉取相同。
+#[test]
+fn an_explicit_pull_mode_overrides_the_git_config() {
+    let Some(git) = real_git() else {
+        return;
+    };
+    let diverge = |name: &str| {
+        let (work, remote) = three_lines(name);
+        push_from_peer(&format!("{name}-peer"), &remote, "b.txt", "theirs\n");
+        std::fs::write(work.join("c.txt"), "ours\n").unwrap();
+        sh(&work, &["add", "c.txt"]);
+        sh(&work, &["commit", "-q", "-m", "ours"]);
+        sh(&work, &["config", "pull.rebase", "true"]);
+        work
+    };
+    let merges = |work: &Path| sh(work, &["rev-list", "--merges", "--count", "HEAD"]);
+
+    let work = diverge("pull-mode-config");
+    git.pull(&work, None).unwrap();
+    assert_eq!(merges(&work), "0");
+
+    let work = diverge("pull-mode-merge");
+    git.pull(&work, Some(false)).unwrap();
+    assert_eq!(merges(&work), "1");
+
+    let work = diverge("pull-mode-sync");
+    sh(&work, &["config", "pull.rebase", "false"]);
+    assert!(matches!(
+        git.sync(&work, false, Some(true)).unwrap(),
+        Synced::Done(_)
+    ));
+    assert_eq!(merges(&work), "0");
+    assert_eq!(sh(&work, &["log", "-1", "--format=%s"]), "ours");
 }

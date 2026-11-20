@@ -949,3 +949,76 @@ fn a_missing_git_program_is_named_and_clearing_it_recovers() {
     assert!(app.git.status.is_some() && app.git.problem.is_none() && !app.git.missing);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 拉取方式设为变基：平时的拉取变基，按住 ⌥ 换成拉取并合并；拉取的说明写明方式，拉取对话框
+/// 默认勾选变基。
+#[test]
+fn the_pull_mode_setting_decides_how_pull_brings_in_commits() {
+    use crate::app::input::context_menu::MenuEntry;
+    use winit::keyboard::ModifiersState;
+    let dir = sample_folder("git-pull-mode");
+    let Some(work) = repo_with_remote(&dir) else {
+        return;
+    };
+    let git = |at: &Path, args: &[&str]| {
+        let ok = Command::new("git")
+            .arg("-C")
+            .arg(at)
+            .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+            .args(["-c", "commit.gpgsign=false"])
+            .args(args)
+            .output()
+            .is_ok_and(|o| o.status.success());
+        assert!(ok, "git {args:?}");
+    };
+    // 另一个克隆推上去一个提交，本地也有一个：两边分叉。
+    git(&dir, &["clone", "-q", "bare.git", "other"]);
+    let other = dir.join("other");
+    std::fs::write(other.join("theirs.txt"), "theirs\n").unwrap();
+    git(&other, &["add", "theirs.txt"]);
+    git(&other, &["commit", "-q", "-m", "theirs"]);
+    git(&other, &["push", "-q", "origin", "main"]);
+    std::fs::write(work.join("ours.txt"), "ours\n").unwrap();
+    git(&work, &["add", "ours.txt"]);
+    git(&work, &["commit", "-q", "-m", "ours"]);
+    git(&work, &["fetch", "-q"]);
+    // 变基要写提交：仓库自己配好身份，不依赖本机的全局配置。
+    git(&work, &["config", "user.name", "t"]);
+    git(&work, &["config", "user.email", "t@t"]);
+    let Some(mut app) = git_app(&work) else {
+        return;
+    };
+    app.set_pull_mode(winc_config::PullMode::Rebase);
+    app.git_refresh();
+
+    let label = app.menu_label(MenuCommand::GitPull);
+    assert!(label.subtitle.is_some_and(|s| s.ends_with("变基")));
+    app.pointer.modifiers = ModifiersState::ALT;
+    let alternate = app.picker_action_command(crate::app::PickerPart::Pull);
+    assert_eq!(alternate, MenuCommand::GitPullMerge);
+    // 「⋯」菜单里拉取的 ⌥ 备选项相同。
+    let more = app.commit_more_menu();
+    let at = more
+        .iter()
+        .position(|e| *e == MenuEntry::Item(MenuCommand::GitPull, true));
+    assert_eq!(
+        at.and_then(|i| more.get(i + 1)),
+        Some(&MenuEntry::Alternate(MenuCommand::GitPullMerge, true))
+    );
+    app.pointer.modifiers = ModifiersState::empty();
+    app.run_action(Action::GitPullFrom);
+    assert!(app.overlays.form_dialog.as_ref().unwrap().copy);
+    app.close_form_dialog();
+
+    app.run_branch_command(MenuCommand::GitPull);
+    app.poll_branch_ops();
+    assert_eq!(
+        output_of(&work, &["rev-list", "--merges", "--count", "HEAD"]).trim(),
+        "0"
+    );
+    assert_eq!(
+        output_of(&work, &["log", "-1", "--format=%s"]).trim(),
+        "ours"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -87,6 +87,7 @@ git-op-delete-branch = deleting branch “{ $name }”
 git-op-new-branch = creating branch “{ $name }”
 git-op-new-tag = creating tag “{ $name }”
 git-op-pull-rebase = pulling with rebase
+git-op-pull-merge = pulling with merge
 git-op-rename-branch = renaming branch “{ $name }”
 git-op-init = initializing the repository
 git-op-clone = cloning “{ $name }”

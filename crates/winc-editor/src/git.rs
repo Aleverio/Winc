@@ -1120,6 +1120,9 @@ impl Git {
             .env("GIT_TERMINAL_PROMPT", "0")
             // 不打开编辑器：`rebase --continue` 等操作会打开它修改提交信息，这里沿用原来的信息。
             .env("GIT_EDITOR", ":")
+            // 待办列表也不打开编辑器（`sequence.editor` 优先于 `GIT_EDITOR`）：`pull.rebase` 设为
+            // `interactive` 时按 `git` 生成的待办执行；交互式变基另行指定。
+            .env("GIT_SEQUENCE_EDITOR", ":")
             // 不验证签名：验证需要运行 `gpg.program`，仓库配置不可信时它可以是任意命令；验证结果
             // 还会混入 `log`、`show`、`stash list` 的输出，破坏解析。
             .args(["-c", "log.showSignature=false"]);

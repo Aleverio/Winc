@@ -81,6 +81,7 @@ git-op-delete-branch = 删除分支「{ $name }」
 git-op-new-branch = 新建分支「{ $name }」
 git-op-new-tag = 新建标签「{ $name }」
 git-op-pull-rebase = 拉取并变基
+git-op-pull-merge = 拉取并合并
 git-op-rename-branch = 重命名分支「{ $name }」
 git-op-init = 初始化仓库
 git-op-clone = 克隆「{ $name }」

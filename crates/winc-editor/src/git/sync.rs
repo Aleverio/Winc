@@ -76,13 +76,13 @@ impl Git {
     /// 若都可由本分支引用日志中的某条记录到达，`force` 时用 `--force-with-lease`（`git` 够新时再加
     /// `--force-if-includes`）推送本地版本，
     /// 否则返回 [`Synced::NeedsForce`]，不改动本地和上游。上游有本地从未有过的提交时先拉取再
-    /// 推送，未配置 `pull.rebase` 时按合并拉取。
+    /// 推送，拉取的方式 `rebase` 同 [`Git::pull`]。
     ///
     /// # Errors
     ///
     /// 没有上游、拉取出现冲突、推送被拒绝（包括上游在本地最后一次获取之后又有了新提交）时返回
     /// `git` 给出的原因。
-    pub fn sync(&self, root: &Path, force: bool) -> Result<Synced, String> {
+    pub fn sync(&self, root: &Path, force: bool, rebase: Option<bool>) -> Result<Synced, String> {
         self.require_trust(root)?;
         let cancel = Cancel::default();
         // 先获取：上游在上次获取之后的新提交也计入，判断分叉时依据的是上游当前的状态。
@@ -103,7 +103,7 @@ impl Git {
         }
         let mut summary = String::new();
         if behind > 0 {
-            summary = self.pull(root)?;
+            summary = self.pull(root, rebase)?;
         }
         // 拉取时合并产生的提交同样需要推送。
         if self.count(root, "@{upstream}..HEAD", &cancel)? > 0 {
@@ -112,33 +112,24 @@ impl Git {
         Ok(Synced::Done(summary))
     }
 
-    /// 从上游拉取，返回 `git` 的结论。
+    /// 从上游拉取，返回 `git` 的结论：`rebase` 为真时变基，为假时合并，为 `None` 时按 Git 的
+    /// 配置（[`Git::pull_rebases`]）。
     ///
-    /// 未配置 `pull.rebase` 时 `git` 拒绝拉取分叉的分支，因此显式按合并方式拉取。未提交的更改
+    /// 未配置 `pull.rebase` 时 `git` 拒绝拉取分叉的分支，因此这时显式按合并方式拉取。未提交的更改
     /// 由 `git` 先储藏、拉取完成后恢复（`--autostash`）：工作区有改动时拉取不会因此被拒绝；拉取
     /// 产生冲突时，更改在合并或变基结束（继续或放弃）后恢复。恢复的结果见 [`Git::carried`]。
     ///
     /// # Errors
     ///
     /// 没有上游、出现冲突、未跟踪的文件会被拉取到的文件覆盖时返回 `git` 给出的原因。
-    pub fn pull(&self, root: &Path) -> Result<String, String> {
-        let configured = self.pull_rebases(root).is_some();
-        let pull: &[&str] = if configured {
-            &["pull", "--autostash"]
-        } else {
-            &["pull", "--no-rebase", "--autostash"]
+    pub fn pull(&self, root: &Path, rebase: Option<bool>) -> Result<String, String> {
+        let pull: &[&str] = match rebase {
+            Some(true) => &["pull", "--rebase", "--autostash"],
+            Some(false) => &["pull", "--no-rebase", "--autostash"],
+            None if self.pull_rebases(root).is_some() => &["pull", "--autostash"],
+            None => &["pull", "--no-rebase", "--autostash"],
         };
         self.operate(root, pull)
-    }
-
-    /// 从上游拉取并把本地提交变基到上游之上，返回 `git` 的结论；未提交的更改的处理同
-    /// [`Git::pull`]。
-    ///
-    /// # Errors
-    ///
-    /// 没有上游、变基出现冲突时返回 `git` 给出的原因。
-    pub fn pull_rebase(&self, root: &Path) -> Result<String, String> {
-        self.operate(root, &["pull", "--rebase", "--autostash"])
     }
 
     /// 从远程 `remote` 的分支 `branch` 拉取到当前分支，`rebase` 为真时变基、否则合并，返回

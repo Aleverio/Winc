@@ -54,7 +54,15 @@ impl App {
             MenuCommand::GitPush => self.picker_action_enabled(PickerPart::Push),
             _ => self.picker_action_enabled(PickerPart::Fetch),
         };
-        let quick = sync.map(|command| MenuEntry::Item(command, enabled(command)));
+        let mut quick: Vec<MenuEntry> = (sync.into_iter())
+            .map(|command| MenuEntry::Item(command, enabled(command)))
+            .collect();
+        // 按住 ⌥ 时拉取换成另一种方式，与分支选择器相同。
+        let other = self.picker_action_command_with_alt(PickerPart::Pull);
+        quick.insert(
+            1,
+            MenuEntry::Alternate(other, enabled(MenuCommand::GitPull)),
+        );
         entries.splice(at..at, quick.into_iter().chain([MenuEntry::Separator]));
         // 分支、工作树、仓库各一个子菜单，里面是命令面板中已有的命令。
         let item = |action: Action| MenuEntry::Item(MenuCommand::GitAction(action), true);

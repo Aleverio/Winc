@@ -140,6 +140,7 @@ impl App {
             | MenuCommand::GitPush
             | MenuCommand::GitPull
             | MenuCommand::GitPullRebase
+            | MenuCommand::GitPullMerge
             | MenuCommand::GitContinue
             | MenuCommand::GitAbort => self.git_label(command),
             _ => MenuLabel::plain(command.label()),
@@ -246,13 +247,22 @@ impl App {
             }
             (MenuCommand::GitPush, Some(up)) => Some(t!("menu-git-push-up-to-date", upstream = up)),
             (MenuCommand::GitPush, None) => Some(t!("menu-git-push-set-upstream", branch = here)),
-            (MenuCommand::GitPull, Some(up)) if behind > 0 => {
-                Some(t!("menu-git-pull-behind", count = behind, upstream = up))
+            // 平时的拉取写明这次是合并还是变基（设置 `git.pull`）。
+            (MenuCommand::GitPull, Some(up)) => {
+                let detail = match behind {
+                    0 => t!("menu-git-pull-from", upstream = up),
+                    _ => t!("menu-git-pull-behind", count = behind, upstream = up),
+                };
+                let mode = match self.pulls_with_rebase() {
+                    true => t!("menu-git-pull-mode-rebase"),
+                    false => t!("menu-git-pull-mode-merge"),
+                };
+                Some(t!("menu-git-pull-mode", detail = detail, mode = mode))
             }
-            (MenuCommand::GitPull, Some(up)) => Some(t!("menu-git-pull-from", upstream = up)),
-            (MenuCommand::GitPull | MenuCommand::GitPullRebase, None) => {
-                Some(t!("menu-git-pull-no-upstream").to_owned())
-            }
+            (
+                MenuCommand::GitPull | MenuCommand::GitPullRebase | MenuCommand::GitPullMerge,
+                None,
+            ) => Some(t!("menu-git-pull-no-upstream").to_owned()),
             _ => None,
         };
         // 新工作树建在哪儿写在悬停提示里，与日志菜单相同。

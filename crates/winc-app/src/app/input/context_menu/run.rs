@@ -233,6 +233,13 @@ impl App {
                     self.set_open_worktree(choice);
                 }
             }
+            MenuTarget::PullMode => {
+                if let MenuCommand::PullMode(i) = command
+                    && let Some(&choice) = winc_config::PullMode::ALL.get(i)
+                {
+                    self.set_pull_mode(choice);
+                }
+            }
             MenuTarget::VimClipboard => {
                 if let MenuCommand::VimClipboard(i) = command
                     && let Some(&choice) = winc_config::VimClipboard::ALL.get(i)

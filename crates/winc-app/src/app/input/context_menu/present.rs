@@ -358,6 +358,9 @@ impl App {
             MenuTarget::Whitespace => whitespace_menu(),
             MenuTarget::VimClipboard => vim_clipboard_menu(),
             MenuTarget::OpenWorktree => open_worktree_menu(),
+            MenuTarget::PullMode => (0..winc_config::PullMode::ALL.len())
+                .map(|i| MenuEntry::Item(MenuCommand::PullMode(i), true))
+                .collect(),
             MenuTarget::DropFolder => (0..winc_config::FolderDrop::ALL.len())
                 .map(|i| MenuEntry::Item(MenuCommand::DropFolder(i), true))
                 .collect(),
@@ -806,6 +809,7 @@ impl App {
                 | MenuTarget::Whitespace
                 | MenuTarget::VimClipboard
                 | MenuTarget::OpenWorktree
+                | MenuTarget::PullMode
                 | MenuTarget::DropFolder
                 | MenuTarget::AutoSave
                 | MenuTarget::Zoom
@@ -823,6 +827,7 @@ impl App {
             MenuTarget::Whitespace => Some(Setting::RenderWhitespace),
             MenuTarget::VimClipboard => Some(Setting::VimClipboard),
             MenuTarget::OpenWorktree => Some(Setting::GitOpenWorktree),
+            MenuTarget::PullMode => Some(Setting::GitPullMode),
             MenuTarget::DropFolder => Some(Setting::DropFolder),
             MenuTarget::AutoSave => Some(Setting::AutoSave),
             MenuTarget::Zoom => Some(Setting::Zoom),
@@ -1100,6 +1105,9 @@ impl App {
             MenuCommand::OpenWorktree(i) => {
                 winc_config::WorktreeOpen::ALL.get(i)
                     == Some(&self.config.git_open_worktree.unwrap_or_default())
+            }
+            MenuCommand::PullMode(i) => {
+                winc_config::PullMode::ALL.get(i) == Some(&self.config.git_pull.unwrap_or_default())
             }
             MenuCommand::DropFolder(i) => {
                 winc_config::FolderDrop::ALL.get(i)

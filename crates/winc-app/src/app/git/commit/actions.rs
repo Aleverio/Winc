@@ -110,9 +110,11 @@ impl App {
     /// 需要先确认强制推送时记下 `others`，确认以后再推（见 [`App::run_git_sync`]）。
     fn run_git_sync_with(&mut self, others: Vec<PathBuf>, force: bool) {
         self.git.commit.force_others = others.clone();
+        let rebase = self.pull_mode();
         self.git_operate_then(t!("git-op-sync").into(), move |git, root| {
-            let (synced, then) =
-                keep_changes(git, root, t!("git-op-sync"), |git| git.sync(root, force))?;
+            let (synced, then) = keep_changes(git, root, t!("git-op-sync"), |git| {
+                git.sync(root, force, rebase)
+            })?;
             Ok(match synced {
                 Synced::Done(summary) => {
                     push_others(git, &others)?;
@@ -241,6 +243,7 @@ impl App {
         // 同步改了目标或要一并推送标签：仍然先拉取（与同步相同），再按对话框推送，本地落后上游
         // 时推送才不会被拒绝。
         let sync = matches!(intent, PushIntent::Sync);
+        let rebase = self.pull_mode();
         let what = if sync {
             t!("git-op-sync")
         } else {
@@ -248,7 +251,7 @@ impl App {
         };
         self.git_operate_then(what.into(), move |git, root| {
             let then = match sync {
-                true => keep_changes(git, root, t!("git-op-pull"), |git| git.pull(root))?.1,
+                true => keep_changes(git, root, t!("git-op-pull"), |git| git.pull(root, rebase))?.1,
                 false => Then::Nothing,
             };
             let head = upto.as_deref().unwrap_or("HEAD");
