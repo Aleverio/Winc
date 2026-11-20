@@ -452,6 +452,8 @@ impl App {
             GitShowLog => self.git_show_log(),
             GitGoToRevision => self.open_go_to_revision(),
             GitRewordCommit => self.reword_selected_commit(),
+            GitGoToChildCommit => self.go_to_log_relative(false),
+            GitGoToParentCommit => self.go_to_log_relative(true),
             GitShowOutput => self.show_git_output(),
             GitClone => self.open_clone_dialog(),
             GitInit => self.git_init(),
@@ -542,6 +544,12 @@ impl App {
             Action::RunConfiguration if self.editor.root().is_none() => return false,
             // 编辑提交说明只在日志里可用；其余位置同一个键执行其他命令。
             Action::GitRewordCommit if !self.log_active() => return false,
+            // 转到子提交、父提交只在日志的提交列表上可用：文件列表里 `←` 是返回。
+            Action::GitGoToChildCommit | Action::GitGoToParentCommit
+                if !self.log_list_focused() =>
+            {
+                return false;
+            }
             // 只有打开的目录还不是仓库时才能初始化。
             Action::GitInit if self.editor.root().is_none() || self.git.root.is_some() => {
                 return false;

@@ -250,6 +250,10 @@ pub enum Action {
     GitGoToRevision,
     /// 日志：编辑选中提交的说明。
     GitRewordCommit,
+    /// 日志：转到选中提交的子提交。
+    GitGoToChildCommit,
+    /// 日志：转到选中提交的父提交（合并提交是第一个父提交）。
+    GitGoToParentCommit,
     /// 在只读标签中打开 Git 操作的输出。
     GitShowOutput,
     /// 克隆仓库。
@@ -580,6 +584,8 @@ impl Action {
             GitShowLog => t!("cmd-git-show-log"),
             GitGoToRevision => t!("cmd-git-go-to-revision"),
             GitRewordCommit => t!("cmd-git-reword-commit"),
+            GitGoToChildCommit => t!("cmd-git-go-to-child-commit"),
+            GitGoToParentCommit => t!("cmd-git-go-to-parent-commit"),
             GitShowOutput => t!("cmd-git-show-output"),
             GitClone => t!("cmd-git-clone"),
             GitInit => t!("cmd-git-init"),
@@ -823,6 +829,8 @@ impl Action {
             | GitShowLog
             | GitGoToRevision
             | GitRewordCommit
+            | GitGoToChildCommit
+            | GitGoToParentCommit
             | GitShowOutput
             | GitClone
             | GitInit
@@ -1017,6 +1025,8 @@ impl Action {
             | Action::GitShowLog
             | Action::GitGoToRevision
             | Action::GitRewordCommit
+            | Action::GitGoToChildCommit
+            | Action::GitGoToParentCommit
             | Action::GitShowOutput
             | Action::GitClone
             | Action::GitInit
@@ -1323,6 +1333,8 @@ pub const ACTIONS: &[Action] = {
         GitShowLog,
         GitGoToRevision,
         GitRewordCommit,
+        GitGoToChildCommit,
+        GitGoToParentCommit,
         GitShowOutput,
         GitClone,
         GitInit,

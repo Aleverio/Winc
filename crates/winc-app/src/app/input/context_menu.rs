@@ -395,6 +395,10 @@ pub enum MenuCommand {
     LogUndoCommit,
     /// 日志里的提交：把它和之前的提交推送到远程（推送对话框）。
     LogPushUpTo,
+    /// 日志里的提交：转到它的子提交。
+    LogGoToChild,
+    /// 日志里的提交：转到它的父提交。
+    LogGoToParent,
     /// 交互式变基列表一行的处理方式。
     RebaseAction(winc_editor::git::RebaseAction),
     /// 对提交上第几个标签做的事。
@@ -635,6 +639,8 @@ impl MenuCommand {
             MenuCommand::LogDropCommit => t!("menu-log-drop-commit"),
             MenuCommand::LogUndoCommit => t!("menu-log-undo-commit"),
             MenuCommand::LogPushUpTo => t!("menu-log-push-up-to"),
+            MenuCommand::LogGoToChild => t!("menu-log-go-to-child"),
+            MenuCommand::LogGoToParent => t!("menu-log-go-to-parent"),
             MenuCommand::RebaseAction(action) => crate::app::git::rebase::action_label(action),
             MenuCommand::LogCopyOid => t!("menu-log-copy-oid"),
             MenuCommand::LogCopyShortOid => t!("menu-log-copy-short-oid"),
@@ -822,6 +828,8 @@ impl MenuCommand {
             MenuCommand::LogCopyOid => Action::Copy,
             MenuCommand::LogGoTo => Action::GitGoToRevision,
             MenuCommand::LogReword => Action::GitRewordCommit,
+            MenuCommand::LogGoToChild => Action::GitGoToChildCommit,
+            MenuCommand::LogGoToParent => Action::GitGoToParentCommit,
             MenuCommand::Reveal => Action::RevealInFinder,
             MenuCommand::OpenInTerminal => Action::OpenInTerminal,
             MenuCommand::FindInFolder => Action::FindInFolder,

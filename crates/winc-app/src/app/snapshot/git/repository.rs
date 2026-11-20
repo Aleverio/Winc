@@ -162,6 +162,8 @@ fn a_commit_menu_lists_its_branches_and_tags() {
         undo: true,
         push: true,
         on_head: None,
+        child: false,
+        parent: true,
     };
     let titles = |menu: &[MenuEntry]| -> Vec<String> {
         (menu.iter())
@@ -197,7 +199,7 @@ fn a_commit_menu_lists_its_branches_and_tags() {
         })
         .collect();
     assert_eq!(items.first(), Some(&MenuCommand::LogCopyOid));
-    assert_eq!(items.last(), Some(&MenuCommand::LogGoTo));
+    assert_eq!(items.last(), Some(&MenuCommand::LogGoToParent));
     let at = |c: MenuCommand| items.iter().position(|&i| i == c).unwrap();
     assert!(at(MenuCommand::LogCherryPick) < at(MenuCommand::LogCheckout));
     assert!(at(MenuCommand::LogRevert) < at(MenuCommand::LogUndoCommit));

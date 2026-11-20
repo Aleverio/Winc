@@ -933,6 +933,8 @@ fn a_tag_can_be_created_on_a_commit_from_the_log() {
         undo: false,
         push: false,
         on_head: None,
+        child: false,
+        parent: true,
     };
     let menu = log_commit_menu(actions, "main", Vec::new(), &[]);
     for command in [MenuCommand::LogNewTag, MenuCommand::LogCopyShortOid] {

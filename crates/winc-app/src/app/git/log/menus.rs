@@ -108,11 +108,16 @@ impl App {
         let same = self.active_log_root() == self.git.root.as_deref();
         let on_branch = self.git.branches.iter().any(|b| b.current && !b.remote);
         let view = self.editor.active().and_then(|d| d.log.as_deref());
+        let commits = view.map_or(&[][..], |v| v.commits.as_slice());
         CommitActions {
             enabled: !busy,
             undo: same && self.commit_undoable().is_some_and(|l| l.oid == oid),
             push: same && on_branch && !self.git.remotes.is_empty(),
             on_head: view.and_then(|view| view.on_head(oid)),
+            child: commits.iter().any(|c| c.parents.iter().any(|p| p == oid)),
+            parent: commits
+                .iter()
+                .any(|c| c.oid == oid && !c.parents.is_empty()),
         }
     }
 
@@ -145,6 +150,8 @@ impl App {
                 | MenuCommand::LogCopyMessage
                 | MenuCommand::LogCopyPatch
                 | MenuCommand::LogGoTo
+                | MenuCommand::LogGoToChild
+                | MenuCommand::LogGoToParent
                 | MenuCommand::LogCompareRevision
         );
         if !reads {
@@ -227,6 +234,14 @@ impl App {
                 self.set_clipboard(tag, false);
             }
             MenuCommand::LogGoTo => self.open_go_to_revision(),
+            MenuCommand::LogGoToChild | MenuCommand::LogGoToParent => {
+                let row = (self.editor.active().and_then(|d| d.log.as_deref()))
+                    .and_then(|v| v.commits.iter().position(|c| c.oid == oid));
+                if let Some(row) = row {
+                    self.select_log_row(row);
+                    self.go_to_log_relative(command == MenuCommand::LogGoToParent);
+                }
+            }
             MenuCommand::LogCompareRevision => self.open_compare_revision(oid),
             MenuCommand::LogCopyPatch => self.copy_log_patch(oid),
             MenuCommand::LogCopyMessage => {

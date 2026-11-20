@@ -160,8 +160,8 @@ fn the_log_files_can_be_walked_with_the_keyboard_and_commits_opened_by_double_cl
     let files = app.log_file_order().len();
     assert!(files >= 2, "{files}");
 
-    // → 进到文件列表，↓ 选下一个，End 到最后，← 回到提交列表。
-    key(&mut app, NamedKey::ArrowRight);
+    // Tab 进到文件列表，↓ 选下一个，End 到最后，← 回到提交列表。
+    key(&mut app, NamedKey::Tab);
     assert_eq!(app.git.log.file, Some(0));
     key(&mut app, NamedKey::ArrowDown);
     assert_eq!(app.git.log.file, Some(1));
@@ -171,7 +171,7 @@ fn the_log_files_can_be_walked_with_the_keyboard_and_commits_opened_by_double_cl
     assert_eq!(app.git.log.file, None);
 
     // 再进去，回车打开选中文件的差异。
-    key(&mut app, NamedKey::ArrowRight);
+    key(&mut app, NamedKey::Tab);
     key(&mut app, NamedKey::ArrowDown);
     let before = tabs(&app);
     key(&mut app, NamedKey::Enter);
@@ -224,7 +224,7 @@ fn shoot_git_log_file_keys() {
     app.press_log(LogTarget::Row(last));
     app.pointer.modifiers = ModifiersState::empty();
     paint(&mut app);
-    app.log_key(&Key::Named(NamedKey::ArrowRight));
+    app.log_key(&Key::Named(NamedKey::Tab));
     app.log_key(&Key::Named(NamedKey::ArrowDown));
     shoot(&mut app, "log-file-keys");
     let _ = std::fs::remove_dir_all(&root);

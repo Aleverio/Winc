@@ -461,6 +461,8 @@ const IDS: &[(Action, &[&str], &[&str])] = &[
     (GitShowLog, &["ActivateVersionControlToolWindow"], &[]),
     (GitGoToRevision, &["Vcs.Log.GoToRef"], &[]),
     (GitRewordCommit, &["Git.Reword.Commit"], &[]),
+    (GitGoToChildCommit, &["Vcs.Log.GoToChild"], &[]),
+    (GitGoToParentCommit, &["Vcs.Log.GoToParent"], &[]),
     (GitSwitchBranch, &["Git.Branches"], &[]),
     (GitFetch, &["Git.Fetch"], &[]),
     (GitPull, &["Vcs.UpdateProject"], &[]),

@@ -200,6 +200,8 @@ impl Action {
             GitShowLog => "Git: Show Log",
             GitGoToRevision => "Git: Go to Hash, Branch or Tag",
             GitRewordCommit => "Git: Edit Commit Message…",
+            GitGoToChildCommit => "Git: Go to Child Commit",
+            GitGoToParentCommit => "Git: Go to Parent Commit",
             GitShowOutput => "Git: Show Output",
             GitClone => "Git: Clone Repository…",
             GitInit => "Git: Initialize Repository",

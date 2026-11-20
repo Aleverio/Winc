@@ -255,6 +255,10 @@ pub struct CommitActions {
     pub push: bool,
     /// 提交是否在当前分支上；日志里判断不出时为 `None`，操作时再检查。
     pub on_head: Option<bool>,
+    /// 列表里有它的子提交。
+    pub child: bool,
+    /// 它有父提交（不是第一个提交）。
+    pub parent: bool,
 }
 
 /// 日志里一个提交的右键菜单，分组和顺序与 IDEA 的日志菜单相同：复制与拣选；签出与比较；重置、
@@ -331,6 +335,8 @@ pub fn log_commit_menu(
         Item(LogNewTag, enabled),
         Separator,
         Item(LogGoTo, true),
+        Item(LogGoToChild, actions.child),
+        Item(LogGoToParent, actions.parent),
     ]);
     menu
 }
