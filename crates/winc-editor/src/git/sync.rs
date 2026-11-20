@@ -97,10 +97,11 @@ impl Git {
             }
             // 上面已经按引用日志确认过上游多出的提交本地都见过；`--force-if-includes` 让 `git` 在
             // 推送的那一刻再查一遍，两次检查之间上游又变了也会被拒绝。该选项 2.30 才有。
-            let mut args = vec!["push", "--force-with-lease"];
+            let mut args = vec!["push".to_owned(), "--force-with-lease".to_owned()];
             if self.version(root, &cancel) >= Some(FORCE_IF_INCLUDES) {
-                args.push("--force-if-includes");
+                args.push("--force-if-includes".to_owned());
             }
+            args.extend(self.push_target(root, &cancel));
             return self.operate(root, &args).map(Synced::Done);
         }
         let mut summary = String::new();
@@ -109,7 +110,9 @@ impl Git {
         }
         // 拉取时合并产生的提交同样需要推送。
         if self.count(root, "@{upstream}..HEAD", &cancel)? > 0 {
-            summary = self.operate(root, &["push"])?;
+            let mut args = vec!["push".to_owned()];
+            args.extend(self.push_target(root, &cancel));
+            summary = self.operate(root, &args)?;
         }
         Ok(Synced::Done(summary))
     }
@@ -295,16 +298,50 @@ impl Git {
     /// 配置时为 `None`。
     pub fn pull_rebases(&self, root: &Path) -> Option<bool> {
         let cancel = Cancel::default();
-        let mut command = self.command(root);
-        command.args(["symbolic-ref", "--quiet", "--short", "HEAD"]);
-        let branch = self.run(&mut command, STATUS_TIMEOUT, &cancel).ok();
-        let branch = branch.map(|b| String::from_utf8_lossy(&b).trim().to_owned());
+        let branch = self.current_branch(root, &cancel);
         let keys = (branch.map(|b| format!("branch.{b}.rebase")).into_iter())
             .chain(["pull.rebase".to_owned()]);
         let value = keys
             .into_iter()
             .find_map(|key| self.config(root, &key, &cancel))?;
         rebase_value(&value)
+    }
+
+    /// 返回当前分支的名字；分离头指针时为 `None`。
+    pub(super) fn current_branch(&self, root: &Path, cancel: &Cancel) -> Option<String> {
+        let mut command = self.command(root);
+        command.args(["symbolic-ref", "--quiet", "--short", "HEAD"]);
+        let branch = self.run(&mut command, STATUS_TIMEOUT, cancel).ok()?;
+        Some(String::from_utf8_lossy(&branch).trim().to_owned())
+    }
+
+    /// 推送当前分支时写在 `git push` 后面的目标：上游与当前分支不同名时是上游所在的远程和
+    /// `HEAD:` 上游分支，其余情况为空，由 `git` 按配置决定。
+    ///
+    /// `push.default` 默认的 `simple` 拒绝推到不同名的上游，从别人的合并请求签出的分支常常这样；
+    /// 这时同其他 Git 客户端一样推到上游。用户设置了 `push.default`，或推送去另一个远程时按其
+    /// 设置（见 [`upstream_target`]）。
+    pub(super) fn push_target(&self, root: &Path, cancel: &Cancel) -> Vec<String> {
+        let Some(branch) = self.current_branch(root, cancel) else {
+            return Vec::new();
+        };
+        let pattern =
+            r"^(push\.default|remote\.pushdefault|branch\..*\.(remote|merge|pushremote))$";
+        let mut command = self.command(root);
+        command.args(["config", "-z", "--get-regexp", pattern]);
+        // 一项都没有配置时 `git` 以 1 退出。
+        let Ok(stdout) = self.run(&mut command, STATUS_TIMEOUT, cancel) else {
+            return Vec::new();
+        };
+        let Some((remote, merge)) = upstream_target(&String::from_utf8_lossy(&stdout), &branch)
+        else {
+            return Vec::new();
+        };
+        vec![
+            "--end-of-options".to_owned(),
+            remote,
+            format!("HEAD:{merge}"),
+        ]
     }
 
     /// 返回配置项 `key` 的值；未配置时为 `None`。
@@ -352,3 +389,30 @@ impl Git {
 
 #[cfg(test)]
 mod tests;
+
+/// 从 `git config -z --get-regexp` 的输出 `config` 中找出当前分支 `branch` 推送时要写明的
+/// （远程，上游的引用）：上游与当前分支同名、设置了 `push.default`，或推送去的远程
+/// （`branch.<名字>.pushRemote`、`remote.pushDefault`）不是上游所在的远程时为 `None`，交给
+/// `git` 按配置推送：后一种是从一个仓库拉取、推到另一个仓库，`git` 推到同名的分支。
+///
+/// 上游在本仓库（远程为 `.`）、不是分支，或远程名以 `-` 开头时同样为 `None`。
+pub(super) fn upstream_target(config: &str, branch: &str) -> Option<(String, String)> {
+    let key = |name: &str| format!("branch.{branch}.{name}");
+    let (mut remote, mut merge, mut push_remote, mut push_default) = (None, None, None, None);
+    // 同一项写了几次时以最后一次为准，与 `git` 相同。
+    for (name, value) in config.split('\0').filter_map(|e| e.split_once('\n')) {
+        match name {
+            "push.default" => return None,
+            "remote.pushdefault" => push_default = Some(value),
+            _ if name == key("pushremote") => push_remote = Some(value),
+            _ if name == key("remote") => remote = Some(value),
+            _ if name == key("merge") => merge = Some(value),
+            _ => {}
+        }
+    }
+    let (remote, merge) = (remote?, merge?);
+    let upstream = merge.strip_prefix("refs/heads/")?;
+    let pushes_to = push_remote.or(push_default).unwrap_or(remote);
+    (upstream != branch && pushes_to == remote && remote != "." && !remote.starts_with('-'))
+        .then(|| (remote.to_owned(), merge.to_owned()))
+}

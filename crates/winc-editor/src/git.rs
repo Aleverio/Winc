@@ -1013,7 +1013,8 @@ impl Git {
         }
     }
 
-    /// 推送当前分支。
+    /// 推送当前分支：有上游时推到上游，上游与当前分支不同名时写明推到上游的分支（`git` 默认
+    /// 拒绝推到不同名的上游）；推送去另一个远程或设置了 `push.default` 时按其设置。
     ///
     /// 没有上游时发布到 [`Git::publish_target`] 选出的远程（见 [`Git::publish`]）。
     ///
@@ -1023,7 +1024,9 @@ impl Git {
     pub fn push(&self, root: &Path, has_upstream: bool) -> Result<String, String> {
         self.require_trust(root)?;
         if has_upstream {
-            return self.operate(root, &["push"]);
+            let mut args = vec!["push".to_owned()];
+            args.extend(self.push_target(root, &Cancel::default()));
+            return self.operate(root, &args);
         }
         let remote = self.publish_target(root)?;
         self.publish(root, &remote)
@@ -1095,11 +1098,7 @@ impl Git {
     /// 仍然留着 `branch.<名字>.remote`。
     fn preferred_remote(&self, root: &Path) -> Vec<String> {
         let cancel = Cancel::default();
-        let mut command = self.command(root);
-        command.args(["symbolic-ref", "--quiet", "--short", "HEAD"]);
-        let branch = self.run(&mut command, STATUS_TIMEOUT, &cancel);
-        let branch = branch.map(|out| String::from_utf8_lossy(&out).trim().to_owned());
-        let branch = branch.unwrap_or_default();
+        let branch = self.current_branch(root, &cancel).unwrap_or_default();
         [
             format!("branch.{branch}.pushRemote"),
             "remote.pushDefault".to_owned(),

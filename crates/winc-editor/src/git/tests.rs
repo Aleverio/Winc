@@ -308,6 +308,21 @@ pub(super) fn real_git_with(program: Option<&str>) -> Option<Git> {
     Git::find_with(&Shell::with_vars(vars), program).ok()
 }
 
+/// 同 [`real_git`]，也不读系统和用户的 Git 配置：Git for Windows 在系统配置里写了
+/// `pull.rebase` 等设置，按「没有配置」判断的测试要用它。
+///
+/// 找不到 `git` 时返回 `None`。
+fn unconfigured_git() -> Option<Git> {
+    let ours = ["GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_GLOBAL"];
+    let mut vars: Vec<_> = std::env::vars_os()
+        .filter(|(key, _)| !ours.iter().any(|ours| key == ours))
+        .collect();
+    let missing = crate::test_util::scratch("no-global-config").join("gitconfig");
+    vars.push(("GIT_CONFIG_NOSYSTEM".into(), "1".into()));
+    vars.push(("GIT_CONFIG_GLOBAL".into(), missing.into_os_string()));
+    Git::find(&Shell::with_vars(vars)).ok()
+}
+
 /// 在临时目录里建立一个真实的仓库并运行 `git`。
 ///
 /// 找不到 `git` 时跳过。
@@ -1437,7 +1452,7 @@ fn only_online_commands_follow_the_proxy() {
 /// 拉取的方式按 `branch.<分支>.rebase` 优先、`pull.rebase` 其次读出；都没有配置时为 `None`。
 #[test]
 fn the_pull_mode_reads_the_branch_setting_first() {
-    let Some(git) = real_git() else {
+    let Some(git) = unconfigured_git() else {
         return;
     };
     let dir = crate::test_util::scratch("git-pull-mode");
