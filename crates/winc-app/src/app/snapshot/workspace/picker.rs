@@ -48,7 +48,55 @@ fn quick_open_finds_visited_ignored_files_without_listing_unvisited_ones() {
     app.history.files.push(root.join(".env"));
     std::fs::remove_file(root.join(".env")).unwrap();
     assert!(results(&mut app, ".env").is_empty());
+    // 只是暂时不在（重新生成、切换分支）：最近打开的记录还在，文件回来后照样列出。
+    app.close_picker();
+    std::fs::write(root.join(".env"), "one\n").unwrap();
+    assert_eq!(results(&mut app, ".env"), [".env"]);
     std::fs::remove_dir_all(dir).unwrap();
+}
+
+/// 选中的是只在最近打开中的文件（被忽略）时后台换了文件表：换表以后仍选中它，回车打开的
+/// 还是它。
+#[test]
+fn rewalking_keeps_a_selected_history_only_file() {
+    let dir = sample_folder("picker-rewalk-history");
+    let project = dir.join("workspace");
+    std::fs::create_dir(&project).unwrap();
+    std::fs::write(project.join(".gitignore"), ".env*\n").unwrap();
+    std::fs::write(project.join(".env"), "").unwrap();
+    for name in ["env.txt", "envoy.txt", "venv.txt"] {
+        std::fs::write(project.join(name), "").unwrap();
+    }
+    let mut app = app_with(&project, false);
+    let root = app.editor.root().unwrap().to_path_buf();
+    app.open_path(&root.join(".env"));
+    app.close_tab(app.editor.active.unwrap());
+    app.open_picker();
+    app.overlays.picker.input.set_text("env");
+    app.picker_refresh();
+    let picker = &app.overlays.picker;
+    let selected = (picker.hits.iter())
+        .position(|&i| picker.index.absolute(i).as_deref() == Some(root.join(".env").as_path()))
+        .unwrap();
+    app.overlays.picker.selected = selected;
+
+    app.overlays.picker.index.refresh();
+    for _ in 0..500 {
+        app.picker_indexed();
+        if app.overlays.picker.index.is_ready() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(app.overlays.picker.index.is_ready());
+    let picker = &app.overlays.picker;
+    let chosen = picker.hits.get(picker.selected).copied();
+    let path = chosen.and_then(|i| picker.index.absolute(i));
+    assert_eq!(path.as_deref(), Some(root.join(".env").as_path()));
+    app.picker_accept();
+    let doc = app.editor.active().unwrap();
+    assert_eq!(doc.path.as_deref(), Some(root.join(".env").as_path()));
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

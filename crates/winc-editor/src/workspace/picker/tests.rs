@@ -888,8 +888,14 @@ fn opened_paths_share_the_picker_ranking_but_not_the_workspace_scan() {
     assert_eq!(idx.file(hits[0]).unwrap().path, "api/.env");
     assert_eq!(idx.absolute(hits[0]).as_deref(), Some(env.as_path()));
     assert_eq!(idx.position_of(&env), Some(hits[0]));
+    assert_eq!(idx.indexed(&tracked), Some(true));
+    assert_eq!(idx.indexed(&env), Some(false));
+    assert_eq!(idx.indexed(&outside), None);
+    // 普通的查找不列入访问过的文件，下标、文件数也不再算上它们。
     assert!(idx.search("api/.env").is_empty());
     assert_eq!(idx.matches(), Some(0));
+    assert_eq!(idx.quick_open_len(), idx.len());
+    assert!(idx.position_of(&env).is_none());
     assert_eq!(idx.search_with_opened("api/.env", opened.into_iter()), hits);
     std::fs::remove_dir_all(base).unwrap();
 }

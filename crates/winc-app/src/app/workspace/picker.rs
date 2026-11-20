@@ -127,11 +127,6 @@ impl App {
             return;
         }
 
-        // 已关闭且从磁盘删除的文件不再列入最近打开。远端沿用重新打开标签的非阻塞检查。
-        let mut recent = std::mem::take(&mut self.history.files);
-        recent.retain(|path| self.may_be_file(path));
-        self.history.files = recent;
-
         self.finish_name_input();
         self.overlays.picker.places = None;
         self.overlays.picker.branch_rows = None;
@@ -385,12 +380,19 @@ impl App {
             return;
         }
 
-        let opened = self.history.files.iter().map(PathBuf::as_path).chain(
-            self.editor
-                .documents
-                .iter()
-                .filter_map(|doc| doc.path.as_deref()),
-        );
+        // 最近打开过、文件表中没有的文件（被忽略或已删除）要看磁盘上是否还在，只看这几个；打开的
+        // 标签照常列出。远端的路径按 `may_be_file` 的规则，不阻塞界面。
+        let index = &self.overlays.picker.index;
+        let visited: Vec<&Path> = (self.history.files.iter())
+            .map(PathBuf::as_path)
+            .filter(|path| match index.indexed(path) {
+                Some(true) => true,
+                Some(false) => self.may_be_file(path),
+                None => false,
+            })
+            .collect();
+        let tabs = (self.editor.documents.iter()).filter_map(|doc| doc.path.as_deref());
+        let opened = visited.into_iter().chain(tabs);
         self.overlays.picker.hits = self.overlays.picker.index.search_with_opened(query, opened);
 
         // 没有输入时，最近打开的文件排在最前面；第一条是上一个文件，因此 `⌘P` 加回车即可切回。

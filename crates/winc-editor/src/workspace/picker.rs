@@ -503,6 +503,8 @@ impl FileIndex {
     ///
     /// 查询为空时按路径顺序返回前 [`MAX_RESULTS`] 条：刚打开面板、还没输入时显示整齐的文件列表。
     pub fn search(&mut self, query: &str) -> Vec<usize> {
+        // 结果里没有访问过的文件，下标、文件数也不再算上一次快速打开列入的那些。
+        self.opened.clear();
         self.search_files(query, self.len())
     }
 
@@ -598,6 +600,13 @@ impl FileIndex {
             .iter()
             .find_map(inside)
             .or_else(|| relative_path(path.strip_prefix(self.root.as_ref()?).ok()?))
+    }
+
+    /// 绝对路径 `path` 是否在后台文件表中：不在工作区里时为 `None`，在工作区里而未收录（被忽略、
+    /// 刚删除）时为 `Some(false)`。
+    pub fn indexed(&self, path: &Path) -> Option<bool> {
+        let relative = self.relative(path)?;
+        Some(self.files.position(&relative).is_some())
     }
 
     /// 返回工作区文件在快速打开结果中使用的下标。
