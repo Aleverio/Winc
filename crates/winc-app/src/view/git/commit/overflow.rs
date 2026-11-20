@@ -59,12 +59,6 @@ pub(in crate::view) fn commit_overflow(app: &App, frame: &mut Frame<'_>) -> Opti
             return None;
         }
         ((end + 8.0).min(window), None)
-    } else if app.git.commit.browse {
-        // 浏览历史提交的文件时没有按钮：名字放不下（状态字母之前）时才写全名。
-        if end <= band.right() - END_CENTER * 2.0 {
-            return None;
-        }
-        ((end + 8.0).min(window), None)
     } else {
         // 按钮在名字之后：名字与按钮在原位放得下时不展开。按钮超出窗口时向左移回，名字在按钮
         // 之前截断。目录行只有第二个位置上的按钮。
@@ -113,7 +107,7 @@ pub(super) fn actions_lag(app: &App, row: usize, band: Rect, open: Rect, name_la
 /// 截短后仍然放不下的名字（不能再缩短的文件名、目录名）在 `room` 处淡出，显示出的宽度为
 /// `room`。名字的过渡按显示出的宽度进行：写全名时从截断处滑出，按钮随之移动；内容不变时
 /// 同样有过渡。
-pub(super) fn shown_width(width: f32, room: Option<f32>) -> f32 {
+pub(in crate::view::git) fn shown_width(width: f32, room: Option<f32>) -> f32 {
     room.map_or(width, |room| width.min(room))
 }
 

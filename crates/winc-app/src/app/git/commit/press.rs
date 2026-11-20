@@ -25,18 +25,6 @@ impl App {
             self.request_redraw();
             return;
         }
-        // 浏览历史提交的文件时只能展开、收起和查看文件，其余目标（勾选、回滚、储藏、提交等）
-        // 都会修改工作区，不处理。
-        if self.git.commit.browse {
-            match target {
-                CommitTarget::File(i) => self.browse_commit_file(i),
-                CommitTarget::Group(_) | CommitTarget::Dir(_) | CommitTarget::Sticky(..) => {}
-                _ => return,
-            }
-            if matches!(target, CommitTarget::File(_)) {
-                return;
-            }
-        }
         match target {
             CommitTarget::Stashes
             | CommitTarget::Stash(_)

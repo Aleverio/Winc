@@ -48,7 +48,7 @@ impl App {
             }
             Key::Named(NamedKey::End) => count - 1,
             Key::Named(NamedKey::Enter) => {
-                if let Some(&first) = self.log_file_order().first() {
+                if let Some(first) = self.log_first_file() {
                     self.open_log_file(first);
                 }
                 return;
@@ -62,7 +62,7 @@ impl App {
     ///
     /// `↑` `↓` `Home` `End` 选择文件，回车打开该文件的差异，`←`、`Shift+Tab`、`Esc` 返回提交列表。
     fn log_file_key(&mut self, key: &Key) {
-        // 按详情里从上到下的顺序移动（按目录分组时与文件列表的下标不同）。
+        // 按详情里从上到下的顺序移动（排成树时与文件列表的下标不同）。
         let order = self.log_file_order();
         let Some(at) = self.git.log.file.filter(|_| !order.is_empty()) else {
             self.git.log.file = None;

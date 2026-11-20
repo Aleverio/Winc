@@ -146,13 +146,20 @@ fn the_branch_panel_lists_branches_like_the_picker_and_filters_by_one() {
         assert!(rows.iter().any(folder));
     }
 
-    // 放不下的分支名截短，悬停时提示全名。
+    // 放不下的分支名在截断处淡出，悬停时写全名，伸到提交列表上面的一段先于列表判定；放得下
+    // 全名就不再提示。
     let cut = panel_row(&mut app, long);
     paint(&mut app);
-    assert!(app.git.log.long_branches.contains(&cut));
-    let dev = panel_row(&mut app, "dev");
-    assert!(!app.git.log.long_branches.contains(&dev));
-    assert!(Hover::Log(LogTarget::BranchRow(cut)).has_tooltip());
+    let target = LogTarget::BranchRow(cut);
+    let rect = app.hits.log.iter().find(|(_, t)| *t == target).unwrap().0;
+    app.on_mouse_move(rect.x + 40.0, rect.y + rect.h / 2.0);
+    paint(&mut app);
+    let (spill, first) = app.hits.log[0];
+    assert_eq!(first, target);
+    assert!(spill.right() > app.log_parts().list.x + 40.0, "{spill:?}");
+    assert!(!app.git.log.long_branches.contains(&cut));
+    app.on_mouse_move(rect.x + 40.0, rect.y + 400.0);
+    paint(&mut app);
 
     // 拖动右边缘改变宽度；拖得再宽也给列表和详情留出最小宽度，再窄也留最小宽度；双击恢复
     // 默认宽度。

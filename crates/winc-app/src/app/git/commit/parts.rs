@@ -20,29 +20,6 @@ impl App {
             (tool(1), CommitTarget::Refresh),
             (tool(2), CommitTarget::More),
         ];
-        // 浏览历史提交的文件时只有标题行和列表：列表从标题行下面一直到视图底部。
-        if self.shown_commit_list().browse {
-            let list_y = header.bottom() + SIDEBAR_LIST_GAP;
-            let list = Rect::new(panel.x, list_y, panel.w, (panel.bottom() - list_y).max(0.0));
-            return CommitParts {
-                header,
-                tools,
-                location: None,
-                branch: Rect::new(panel.x, header.bottom(), panel.w, 0.0),
-                banner: None,
-                card: None,
-                message: Rect::default(),
-                message_settled: Rect::default(),
-                amend: None,
-                commit: Rect::default(),
-                commit_menu: Rect::default(),
-                push: None,
-                undo: None,
-                stashes: None,
-                worktrees: None,
-                list,
-            };
-        }
         let inner_x = panel.x + MARGIN;
         let inner_w = (panel.w - 2.0 * MARGIN).max(0.0);
 

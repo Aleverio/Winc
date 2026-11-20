@@ -356,7 +356,6 @@ impl App {
 
         settle(&mut self.panels.sidebar.motion, |m| m.clock);
         settle(&mut self.panels.tree.motion, |m| m.clock);
-        self.settle_log_tree();
         self.panels.tree.labels.settle();
         self.git.commit.names.settle();
         self.panels.global.names.settle();
@@ -366,6 +365,12 @@ impl App {
         settle(&mut self.git.commit.motion, |m| m.clock);
         settle(&mut self.git.log.branches_motion, |m| m.1);
         settle(&mut self.git.log.branch_fold, |m| m.clock);
+        settle(&mut self.git.log.details_fold, |m| m.clock);
+        settle(&mut self.git.log.panel_fold, |m| m.clock);
+        settle(&mut self.git.log.files_motion, |m| m.1);
+        self.git.log.details_names.settle();
+        self.git.log.panel_names.settle();
+        self.git.log.branch_names.settle();
         self.git.log.pills.settle();
         settle(&mut self.git.commit.fold_motion, |m| m.clock);
         settle(&mut self.git.commit.message_motion, |m| m.1);
@@ -474,7 +479,6 @@ impl App {
     pub(super) fn animating(&self) -> bool {
         self.panels.sidebar.motion.is_some()
             || self.panels.tree.motion.is_some()
-            || self.log_tree_animating()
             || self.panels.tree.labels.moving()
             || self.git.commit.names.moving()
             || self.panels.global.names.moving()
@@ -483,6 +487,12 @@ impl App {
             || self.git.commit.motion.is_some()
             || self.git.log.branches_motion.is_some()
             || self.git.log.branch_fold.is_some()
+            || self.git.log.details_fold.is_some()
+            || self.git.log.panel_fold.is_some()
+            || self.git.log.files_motion.is_some()
+            || self.git.log.details_names.moving()
+            || self.git.log.panel_names.moving()
+            || self.git.log.branch_names.moving()
             || self.git.log.pills.moving()
             || self.git.commit.fold_motion.is_some()
             || self.git.commit.message_motion.is_some()

@@ -7,7 +7,7 @@
 mod badges;
 mod branches;
 mod details;
-mod files;
+pub(in crate::view) mod files;
 mod graph;
 
 use badges::*;
@@ -123,6 +123,9 @@ pub(in crate::view) fn draw_log(app: &mut App, frame: &mut Frame<'_>, index: usi
     let pills = app.git.log.pills.sync(&LogPill::ALL, pills, animate);
     fit_log_author(app, frame, index);
     fit_log_date(app, frame);
+    let names = app.animate_log_names();
+    app.git.log.details_names.begin_frame(names);
+    app.git.log.branch_names.begin_frame(names);
     {
         let app = &*app;
         let Some(view) = app.editor.documents[index].log.as_deref() else {
@@ -130,8 +133,9 @@ pub(in crate::view) fn draw_log(app: &mut App, frame: &mut Frame<'_>, index: usi
         };
         draw_header(app, frame, view, &parts, (search, &pills), &mut hits);
         draw_branches_button(app, frame, &parts, &mut hits);
-        branches_max = draw_branches(app, frame, view, &parts, (&mut hits, &mut long_branches));
         draw_list(app, frame, view, &parts, scroll, &mut hits, &mut clipped);
+        // 分支面板放不下的名字可以伸到提交列表上面，后画。
+        branches_max = draw_branches(app, frame, view, &parts, (&mut hits, &mut long_branches));
         // 切换到另一个提交时内容淡入（`App::note_log_details_shown`）。
         draw_details_footer(app, frame, view, &parts);
         let opacity = app.git.log.fade.map_or(1.0, |c| 0.4 + 0.6 * c.progress());
@@ -145,6 +149,8 @@ pub(in crate::view) fn draw_log(app: &mut App, frame: &mut Frame<'_>, index: usi
             )
         });
     }
+    app.git.log.details_names.end_frame();
+    app.git.log.branch_names.end_frame();
     // 详情一栏的最大滚动位置：内容下方留 16 逻辑像素，使底部的提示行（高 30 逻辑像素）不遮挡
     // 最后一行内容。
     let details = parts.details;

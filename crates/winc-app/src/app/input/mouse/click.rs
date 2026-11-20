@@ -265,6 +265,17 @@ impl App {
             Target::Placeholder(action) => self.run_placeholder_action(action),
             Target::Suggest(row) => self.accept_suggest(row),
             Target::SelectionTool(tool) => self.run_selection_tool(tool),
+            // 文件栏的右边缘：双击恢复默认宽度，否则开始拖动。
+            Target::Diff(crate::app::DiffTarget::FilesEdge) => {
+                if self.click_count(x, y) == 2 {
+                    self.reset_log_files_width();
+                } else {
+                    self.pointer.drag = Drag::DiffFiles {
+                        start_x: x,
+                        start_width: self.log_files_width(),
+                    };
+                }
+            }
             Target::Diff(target) => self.press_diff(target),
             Target::Log(crate::app::git::log::LogTarget::AuthorEdge) => {
                 let double = self.click_count(x, y) == 2;

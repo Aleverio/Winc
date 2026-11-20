@@ -255,7 +255,6 @@ impl App {
         self.update_state(|state| state.commit_tree = !flat);
         self.git.commit.scroll = self.git.commit.scroll.min(self.commit_max_scroll());
         self.reveal_commit_selection();
-        self.sync_log_diff_layout();
         self.request_redraw();
     }
 

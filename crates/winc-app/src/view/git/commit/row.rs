@@ -27,8 +27,6 @@ struct RowBox<'a> {
     cause: LabelCause,
     /// 键盘焦点是否在改动列表上。
     focused: bool,
-    /// 是否在浏览历史提交的文件：此时没有勾选框，也没有回滚、打开文件等按钮。
-    browse: bool,
     /// 是否在暂存区视图中：此时没有勾选框，行尾是暂存、取消暂存的按钮。
     staging: bool,
     /// 整个改动列表多缩进的层数（见 [`App::commit_base_level`]）。
@@ -47,9 +45,9 @@ impl RowBox<'_> {
         self.arrow_x(level) + check_gap(app)
     }
 
-    /// 在 `(x, cy)` 画勾选框；浏览历史提交时不画。
+    /// 在 `(x, cy)` 画勾选框；暂存区视图中不画。
     fn checkbox(&self, app: &App, frame: &mut Frame<'_>, x: f32, cy: f32, state: Option<bool>) {
-        if self.browse || self.staging {
+        if self.staging {
             return;
         }
         let p = app.palette;
@@ -66,9 +64,9 @@ impl RowBox<'_> {
         );
     }
 
-    /// 记下勾选框的命中区域；浏览历史提交时没有勾选框，不记录。
+    /// 记下勾选框的命中区域；暂存区视图中没有勾选框，不记录。
     fn check_hit(&self, hits: &mut Vec<(Rect, CommitTarget)>, rect: Rect, target: CommitTarget) {
-        if !self.browse && !self.staging {
+        if !self.staging {
             hits.push((rect.intersect(self.cx.list), target));
         }
     }
@@ -117,7 +115,6 @@ pub(super) fn draw_row(
             current: 0,
         },
         focused: app.focus == Focus::CommitList,
-        browse: app.git.commit.browse,
         staging: app.git.commit.staging(),
         base: app.commit_base_level(),
     };
@@ -156,12 +153,7 @@ fn draw_group_row(
         list, status, rows, ..
     } = *r.cx;
     let RowBox {
-        i,
-        y,
-        band,
-        shade,
-        browse,
-        ..
+        i, y, band, shade, ..
     } = *r;
     let cy = y + COMMIT_ROW / 2.0;
     let hovered = matches!(
@@ -199,7 +191,7 @@ fn draw_group_row(
     // 相同。冲突组没有：回滚冲突的文件会丢掉解决到一半的内容。
     // 暂存区视图中这个位置是「暂存全部」，「已暂存的更改」一组是「全部取消暂存」。
     let staging = r.staging;
-    let acts = hovered && !browse && group != CommitGroup::Conflicts;
+    let acts = hovered && group != CommitGroup::Conflicts;
     let revert = (acts && (staging || state.is_some())).then(|| file_actions(band).1);
     match revert {
         Some(rect) => {
@@ -383,7 +375,6 @@ fn draw_file_row(
         wanted,
         cause,
         focused,
-        browse,
         ..
     } = *r;
     let cy = y + COMMIT_ROW / 2.0;
@@ -404,7 +395,7 @@ fn draw_file_row(
     // 按钮跟在全名之后（见 `commit_overflow`）。
     let actions = match full {
         Some(overflow) => overflow.actions,
-        None => (hovered && !browse).then(|| file_actions(band)),
+        None => hovered.then(|| file_actions(band)),
     };
     // 文件没有箭头：勾选框和同一层目录的勾选框对齐；平铺时没有层级，和组标题的勾选框
     // 对齐。

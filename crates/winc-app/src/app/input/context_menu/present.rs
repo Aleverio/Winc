@@ -215,11 +215,9 @@ impl App {
     ///
     /// 点击目录或组标题时选中其下的各个文件，返回第一个文件的路径。
     fn commit_context_target(&mut self, x: f32, y: f32) -> Option<PathBuf> {
-        // 历史提交的文件列表只能查看：其中的文件不在工作区的状态里，不提供修改工作区的菜单。
         if !self.panels.sidebar.visible
             || self.panels.sidebar.view != SidebarView::Commit
             || self.git.commit.hits_generation != self.git.generation
-            || self.log_diff_tree().is_some()
         {
             return None;
         }

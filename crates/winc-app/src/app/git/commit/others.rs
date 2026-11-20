@@ -93,12 +93,9 @@ impl App {
         chosen.unwrap_or(!self.git.commit.staging())
     }
 
-    /// 是否在当前仓库的更改之后列出其他仓库：开着「显示全部仓库」，打开的目录中有多个仓库，
-    /// 并且不在浏览历史提交的文件。
+    /// 是否在当前仓库的更改之后列出其他仓库：开着「显示全部仓库」，打开的目录中有多个仓库。
     pub(crate) fn commit_shows_others(&self) -> bool {
-        self.commit_all_repositories()
-            && !self.git.commit.browse
-            && self.git.repositories.len() >= 2
+        self.commit_all_repositories() && self.git.repositories.len() >= 2
     }
 
     /// 返回多仓库时当前仓库那一节以外的各行，按仓库列表的顺序；当前仓库的位置是一行

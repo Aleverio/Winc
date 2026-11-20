@@ -520,8 +520,6 @@ pub enum Hover {
     PdfTool(crate::app::preview::pdf::PdfTool),
     Search(SearchButton),
     TreeRow(usize),
-    /// 历史差异侧栏标题行中切换树形与列表的按钮。
-    LogDiffLayout,
     /// 标签序号，以及是否悬停在该标签的关闭按钮上。
     Tab(usize, bool),
     Splitter,
@@ -603,7 +601,6 @@ impl Hover {
                 | Hover::Status(StatusItem::Terminal | StatusItem::Remote | StatusItem::Settings)
                 | Hover::TreeMore
                 | Hover::SidebarButton
-                | Hover::LogDiffLayout
                 | Hover::Tab(..)
                 | Hover::TabList
                 | Hover::Preview(_)
@@ -662,6 +659,9 @@ impl Hover {
                         | DiffTarget::NextFile
                         | DiffTarget::Layout
                         | DiffTarget::Collapse
+                        | DiffTarget::FilesToggle
+                        | DiffTarget::FilesLayout
+                        | DiffTarget::File(_)
                         | DiffTarget::Revert(_)
                         | DiffTarget::Include(_)
                         | DiffTarget::IncludeLine(..)
@@ -748,6 +748,11 @@ enum Drag {
     },
     /// 拖动日志标签中分支面板的右边缘：按下时的横坐标、面板当时的宽度。
     LogBranches {
+        start_x: f32,
+        start_width: f32,
+    },
+    /// 拖动差异左侧文件栏的右边缘：按下时的横坐标、文件栏当时的宽度。
+    DiffFiles {
         start_x: f32,
         start_width: f32,
     },
