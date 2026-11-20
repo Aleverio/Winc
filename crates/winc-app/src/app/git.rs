@@ -288,8 +288,8 @@ pub(crate) struct GitState {
     /// 后台读到的、等着确认的推送：要做的推送、会送出的提交的标题和总数（见
     /// [`App::ask_push`]）。
     pub push_preview: Arc<Mutex<Option<PushPreview>>>,
-    /// 推送对话框改了目标后在后台读到的提交（见 [`App::refresh_push_list`]）。
-    pub(super) push_outgoing: Arc<Mutex<Option<form::PushOutgoing>>>,
+    /// 推送或拉取对话框改了目标后在后台读到的提交（见 [`App::refresh_transfer_list`]）。
+    pub(super) transfer_commits: Arc<Mutex<Option<form::TransferCommits>>>,
     /// 已提示过 `git` 版本过低：每次运行只提示一次。
     pub(super) old_git_warned: bool,
     /// 定时获取的状态（见 [`fetch`]）。
@@ -365,7 +365,7 @@ impl Default for GitState {
             location_all: false,
             output_shown: 0,
             push_preview: Arc::default(),
-            push_outgoing: Arc::default(),
+            transfer_commits: Arc::default(),
             old_git_warned: false,
             version_read: HashSet::new(),
             authors: Vec::new(),
@@ -998,7 +998,7 @@ impl App {
     pub(super) fn poll_git(&mut self) {
         self.git_take_scan();
         self.take_push_preview();
-        self.take_push_outgoing();
+        self.take_transfer_commits();
         self.take_auto_fetch();
         // 其他仓库的状态由后台直接写入，读完时同样到达这里：列着其他仓库时重新绘制。
         if self.commit_shows_others() && self.commit_shown() {

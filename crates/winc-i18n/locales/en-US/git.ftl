@@ -380,6 +380,12 @@ git-push-form-tags-hint = All local tags
 git-push-form-pushing = Pushing…
 git-push-form-nothing = No new commits
 git-push-form-branch-invalid = Invalid branch name
+git-pull-form-title = Pull into { $branch }
+git-pull-form-button = Pull
+git-pull-form-rebase = Rebase
+git-pull-form-rebase-hint = Put local commits after the pulled ones
+git-pull-form-pulling = Pulling…
+git-pull-form-branch-missing = No such branch on the remote
 git-commit-push-confirm = Commit and push?
 git-commit-push-confirm-scope = { $count ->
     [one] 1 file will be committed to “{ $branch }” and pushed to upstream.

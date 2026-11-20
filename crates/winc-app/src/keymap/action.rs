@@ -268,8 +268,12 @@ pub enum Action {
     GitPull,
     /// 拉取当前分支的上游并变基。
     GitPullRebase,
+    /// 打开拉取对话框：选远程和分支拉取到当前分支。
+    GitPullFrom,
     /// 推送当前分支（没有上游时推上去并设为上游）。
     GitPush,
+    /// 打开推送对话框：选远程和目标分支推送。
+    GitPushTo,
     /// 和上游同步：先拉取再推送。
     GitSync,
     /// 储藏工作区里的更改（输入说明）。
@@ -584,7 +588,9 @@ impl Action {
             GitFetch => t!("cmd-git-fetch"),
             GitPull => t!("cmd-git-pull"),
             GitPullRebase => t!("cmd-git-pull-rebase"),
+            GitPullFrom => t!("cmd-git-pull-from"),
             GitPush => t!("cmd-git-push"),
+            GitPushTo => t!("cmd-git-push-to"),
             GitSync => t!("cmd-git-sync"),
             GitStash => t!("cmd-git-stash"),
             GitStageAll => t!("cmd-git-stage-all"),
@@ -824,7 +830,9 @@ impl Action {
             | GitFetch
             | GitPull
             | GitPullRebase
+            | GitPullFrom
             | GitPush
+            | GitPushTo
             | GitSync
             | GitStash
             | GitStageAll
@@ -1015,7 +1023,9 @@ impl Action {
             | Action::GitFetch
             | Action::GitPull
             | Action::GitPullRebase
+            | Action::GitPullFrom
             | Action::GitPush
+            | Action::GitPushTo
             | Action::GitSync
             | Action::GitStash
             | Action::GitStageAll
@@ -1318,7 +1328,9 @@ pub const ACTIONS: &[Action] = {
         GitFetch,
         GitPull,
         GitPullRebase,
+        GitPullFrom,
         GitPush,
+        GitPushTo,
         GitSync,
         GitStash,
         GitStageAll,

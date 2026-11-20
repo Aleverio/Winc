@@ -131,6 +131,34 @@ impl Git {
         self.operate(root, &["pull", "--rebase", "--autostash"])
     }
 
+    /// 从远程 `remote` 的分支 `branch` 拉取到当前分支，`rebase` 为真时变基、否则合并，返回
+    /// `git` 的结论；未提交的更改的处理同 [`Git::pull`]。
+    ///
+    /// # Errors
+    ///
+    /// `remote`、`branch` 以 `-` 开头，或出现冲突、远程没有该分支时返回原因。
+    pub fn pull_from(
+        &self,
+        root: &Path,
+        remote: &str,
+        branch: &str,
+        rebase: bool,
+    ) -> Result<String, String> {
+        if remote.starts_with('-') || branch.starts_with('-') {
+            return Err(winc_i18n::t!("git-push-no-remote").to_owned());
+        }
+        let mode = if rebase { "--rebase" } else { "--no-rebase" };
+        let args = [
+            "pull",
+            mode,
+            "--autostash",
+            "--end-of-options",
+            remote,
+            branch,
+        ];
+        self.operate(root, &args)
+    }
+
     /// 返回最新一条储藏的提交号；没有储藏时为 `None`。
     ///
     /// 拉取前记下，拉取后交给 [`Git::carried`]，判断未提交的更改是否留在了新的储藏里。
@@ -183,15 +211,49 @@ impl Git {
                 }
             }
         };
+        self.subjects(root, &range, limit)
+    }
+
+    /// 返回拉取远程 `remote` 的分支 `branch` 时会带来的提交：最新的至多 `limit` 个提交的标题
+    /// （最新的在前）和提交总数，按本地记下的远程分支计算。
+    ///
+    /// # Errors
+    ///
+    /// `remote`、`branch` 以 `-` 开头，本地没有该远程分支，或 `git` 运行失败时返回原因。
+    pub fn incoming(
+        &self,
+        root: &Path,
+        remote: &str,
+        branch: &str,
+        limit: usize,
+    ) -> Result<(Vec<String>, usize), String> {
+        if remote.starts_with('-') || branch.starts_with('-') {
+            return Err(winc_i18n::t!("git-push-no-remote").to_owned());
+        }
+        let tracking = format!("refs/remotes/{remote}/{branch}");
         let mut command = self.command(root);
-        command.args(["rev-list", "--count"]).args(&range);
+        command.args(["rev-parse", "--verify", "--quiet", &tracking]);
+        self.run(&mut command, STATUS_TIMEOUT, &Cancel::default())?;
+        self.subjects(root, &[format!("HEAD..{tracking}")], limit)
+    }
+
+    /// 返回 `range` 中最新的至多 `limit` 个提交的标题（最新的在前）和提交总数。
+    fn subjects(
+        &self,
+        root: &Path,
+        range: &[String],
+        limit: usize,
+    ) -> Result<(Vec<String>, usize), String> {
+        let cancel = Cancel::default();
+        let mut command = self.command(root);
+        command.args(["rev-list", "--count"]).args(range);
         let stdout = self.run(&mut command, STATUS_TIMEOUT, &cancel)?;
         let total = String::from_utf8_lossy(&stdout).trim().parse().unwrap_or(0);
         let mut command = self.command(root);
         let count = format!("--max-count={limit}");
         // `log.showSignature` 等配置会在标题之间插入签名校验的输出，这里关掉。
         let args = ["log", "--no-show-signature", "--format=%s", &count];
-        command.args(args).args(&range);
+        command.args(args).args(range);
         let stdout = self.run(&mut command, STATUS_TIMEOUT, &cancel)?;
         let subjects = String::from_utf8_lossy(&stdout);
         Ok((subjects.lines().map(str::to_owned).collect(), total))

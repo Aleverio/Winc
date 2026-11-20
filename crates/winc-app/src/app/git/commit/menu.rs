@@ -32,10 +32,13 @@ impl App {
         let all_expanded = shown().all(|group| !self.git.commit.group_collapsed(group))
             && self.git.commit.collapsed_dirs.iter().all(HashSet::is_empty);
         let busy = self.git.branch.running.is_some();
+        // 拉取自…、推送到…在远程仓库子菜单里，在分支上、有远程时可用。
+        let transfer = self.picker_action_enabled(PickerPart::Push);
         let mut entries = branch_menu(
             &self.git.remote_list,
             self.git.status.as_ref().and_then(|s| s.operation),
             busy,
+            transfer,
         );
         // 与远程交换提交的三项排在最前（进行中的操作之后）：不用先展开分支选择面板。
         let sync = [

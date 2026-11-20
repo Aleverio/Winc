@@ -469,7 +469,7 @@ fn the_push_confirmation_lists_the_commits_it_will_send() {
     app.git_refresh();
     app.ask_push(PushIntent::Push);
     let form = |app: &App| match &app.overlays.form_dialog.as_ref().unwrap().kind {
-        FormKind::Push(form) => form.clone(),
+        FormKind::Transfer(form) => form.clone(),
         kind => panic!("{kind:?}"),
     };
     let shown = form(&app);
@@ -532,7 +532,7 @@ fn the_push_dialog_pushes_to_another_branch_with_tags() {
     app.git_refresh();
     app.ask_push(PushIntent::Push);
     let subjects = |app: &App| match &app.overlays.form_dialog.as_ref().unwrap().kind {
-        FormKind::Push(form) => (form.subjects.clone(), form.total),
+        FormKind::Transfer(form) => (form.subjects.clone(), form.total),
         kind => panic!("{kind:?}"),
     };
     assert_eq!(subjects(&app), (vec!["待评审".to_owned()], 1));
@@ -546,7 +546,7 @@ fn the_push_dialog_pushes_to_another_branch_with_tags() {
             .unwrap()
             .name
             .set_text(name);
-        app.refresh_push_list();
+        app.refresh_transfer_list();
     };
     retarget(&mut app, "old");
     let both = vec!["待评审".to_owned(), "已推送".to_owned()];
@@ -575,6 +575,118 @@ fn the_push_dialog_pushes_to_another_branch_with_tags() {
     );
     // 原来的上游没有收到这个提交，跟踪关系也没有变。
     assert_ne!(git(&bare, &["rev-parse", "refs/heads/main"]), Some(head));
+    let upstream = git(&work, &["rev-parse", "--abbrev-ref", "@{upstream}"]);
+    assert_eq!(upstream.as_deref(), Some("origin/main"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 有两个远程时，「拉取自…」从选的远程分支拉取，可以合并或变基；「推送到…」在关了推送确认
+/// 时仍打开推送对话框，推到选的远程。
+#[test]
+fn pull_from_and_push_to_choose_another_remote() {
+    use crate::app::git::form::Direction;
+    let dir = sample_folder("git-two-remotes");
+    let Some(work) = repo_with_remote(&dir) else {
+        return;
+    };
+    let git = |at: &Path, args: &[&str]| {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(at)
+            .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+            .args(["-c", "commit.gpgsign=false"])
+            .args(args)
+            .output()
+            .unwrap();
+        (out.status.success()).then(|| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+    };
+    // 第二个远程 `mirror` 上另有提交，由另一个克隆推上去。
+    let mirror = dir.join("mirror.git");
+    let mirror_url = mirror.to_str().unwrap();
+    git(&dir, &["init", "-q", "--bare", "-b", "main", "mirror.git"]).unwrap();
+    git(&work, &["remote", "add", "mirror", mirror_url]).unwrap();
+    git(&work, &["push", "-q", "mirror", "main"]).unwrap();
+    let other = dir.join("other");
+    git(&dir, &["clone", "-q", mirror_url, "other"]).unwrap();
+    let push_mirror = |subject: &str| {
+        git(&other, &["commit", "-q", "--allow-empty", "-m", subject]).unwrap();
+        git(&other, &["push", "-q", "origin", "main"]).unwrap();
+        git(&work, &["fetch", "-q", "mirror"]).unwrap();
+    };
+    push_mirror("镜像上的提交");
+    // 变基时由 Winc 运行的 `git` 写提交，需要仓库里配置的身份。
+    git(&work, &["config", "user.name", "t"]).unwrap();
+    git(&work, &["config", "user.email", "t@t"]).unwrap();
+    let Some(mut app) = git_app(&work) else {
+        return;
+    };
+    app.git_refresh();
+    let form = |app: &App| match &app.overlays.form_dialog.as_ref().unwrap().kind {
+        FormKind::Transfer(form) => form.as_ref().clone(),
+        kind => panic!("{kind:?}"),
+    };
+
+    // 两项在「⋯」菜单的远程仓库子菜单最上面。
+    use crate::app::input::context_menu::MenuEntry;
+    let remotes = (app.commit_more_menu().into_iter())
+        .find_map(|entry| match entry {
+            MenuEntry::Submenu(title, items) if title == "远程仓库" => Some(items),
+            _ => None,
+        })
+        .unwrap();
+    let transfer = [Action::GitPullFrom, Action::GitPushTo]
+        .map(|action| MenuEntry::Item(MenuCommand::GitAction(action), true));
+    assert_eq!(remotes[..2], transfer);
+
+    // 默认是上游 `origin/main`，没有新提交；换到 `mirror` 后列出那边的提交。
+    app.run_action(Action::GitPullFrom);
+    let shown = form(&app);
+    assert_eq!(shown.direction, Direction::Pull);
+    assert_eq!((shown.remote.as_str(), shown.total), ("origin", 0));
+    app.choose_form_base(Some("mirror".into()));
+    assert_eq!(form(&app).subjects, ["镜像上的提交"]);
+    // 远程上没有的分支不能拉取。
+    let dialog = app.overlays.form_dialog.as_mut().unwrap();
+    dialog.name.set_text("nope");
+    let dialog = app.overlays.form_dialog.as_ref().unwrap();
+    assert!(!app.form_plan(dialog).enabled);
+    app.overlays
+        .form_dialog
+        .as_mut()
+        .unwrap()
+        .name
+        .set_text("main");
+    app.submit_form_dialog();
+    app.poll_branch_ops();
+    assert!(app.overlays.form_dialog.is_none());
+    let subject = |at: &Path, rev: &str| git(at, &["log", "-1", "--format=%s", rev]);
+    assert_eq!(subject(&work, "HEAD").as_deref(), Some("镜像上的提交"));
+
+    // 两边各有新提交时勾选「变基」：本地提交放到拉取的提交之后。
+    // 本地提交改了文件：空提交在变基时可能被丢掉。
+    push_mirror("镜像第二个");
+    std::fs::write(work.join("local.txt"), "本地\n").unwrap();
+    git(&work, &["add", "local.txt"]).unwrap();
+    git(&work, &["commit", "-q", "-m", "本地提交"]).unwrap();
+    app.git_refresh();
+    app.run_action(Action::GitPullFrom);
+    app.choose_form_base(Some("mirror".into()));
+    app.overlays.form_dialog.as_mut().unwrap().copy = true;
+    app.submit_form_dialog();
+    app.poll_branch_ops();
+    assert_eq!(subject(&work, "HEAD").as_deref(), Some("本地提交"));
+    assert_eq!(subject(&work, "HEAD~1").as_deref(), Some("镜像第二个"));
+
+    // 关了推送确认，「推送到…」仍打开对话框；推到 `mirror`，上游不变。
+    app.config.git_confirm_push = Some(false);
+    app.git_refresh();
+    app.run_action(Action::GitPushTo);
+    assert!(matches!(form(&app).direction, Direction::Push(_)));
+    app.choose_form_base(Some("mirror".into()));
+    app.submit_form_dialog();
+    app.poll_branch_ops();
+    let head = git(&work, &["rev-parse", "HEAD"]);
+    assert_eq!(git(&mirror, &["rev-parse", "refs/heads/main"]), head);
     let upstream = git(&work, &["rev-parse", "--abbrev-ref", "@{upstream}"]);
     assert_eq!(upstream.as_deref(), Some("origin/main"));
     let _ = std::fs::remove_dir_all(&dir);

@@ -267,7 +267,7 @@ fn the_log_opens_from_the_commit_view_button_and_the_branch_menu_starts_with_fet
     assert!(app.log_active());
 
     // 「⋯」不重复列出日志入口和同步，最上方是储藏；获取在分支选择器里，悬停提示写明作用。
-    let menu = branch_menu(&[], None, false);
+    let menu = branch_menu(&[], None, false, false);
     assert_eq!(
         menu.first(),
         Some(&MenuEntry::Item(MenuCommand::GitStash, true))

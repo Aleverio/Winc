@@ -126,8 +126,8 @@ fn choose_in_branch_menu(app: &mut App, command: crate::app::MenuCommand) {
 /// 是「取消」。
 fn press_alert(app: &mut App, button: usize) {
     paint(app);
-    let pushing =
-        (app.overlays.form_dialog.as_ref()).is_some_and(|d| matches!(d.kind, FormKind::Push(_)));
+    let pushing = (app.overlays.form_dialog.as_ref())
+        .is_some_and(|d| matches!(d.kind, FormKind::Transfer(_)));
     if app.overlays.alert.is_none() && pushing {
         let layout = app.dialog_layout();
         let rect = if button == 0 {

@@ -224,7 +224,8 @@ impl Default for BranchState {
     }
 }
 
-/// 提交视图「⋯」里的 Git 操作：进行中的合并、变基的继续、跳过和中止，储藏更改，远程仓库。
+/// 提交视图「⋯」里的 Git 操作：进行中的合并、变基的继续、跳过和中止，储藏更改，远程仓库
+/// （`transfer` 为真时其中的拉取自…、推送到…可用）。
 ///
 /// 拉取、推送、获取和新建分支、工作树都在分支选择器里，各条储藏在改动列表下面的储藏一组里，回滚
 /// 勾选的文件在组标题上，这里不再列出。
@@ -232,6 +233,7 @@ pub(crate) fn branch_menu(
     remotes: &[Remote],
     operation: Option<Operation>,
     busy: bool,
+    transfer: bool,
 ) -> Vec<MenuEntry> {
     use MenuCommand::*;
     let mut entries = Vec::new();
@@ -247,17 +249,25 @@ pub(crate) fn branch_menu(
     }
     entries.push(MenuEntry::Item(GitStash, !busy));
     entries.push(MenuEntry::Separator);
-    // 远程仓库：每个一个子菜单（修改地址、移除），最后是添加。
-    let mut items: Vec<MenuEntry> = (remotes.iter().enumerate())
-        .map(|(i, remote)| {
-            let ops = [RemoteOp::Edit, RemoteOp::Remove]
-                .into_iter()
-                .map(|op| MenuEntry::Item(GitRemote(op, i), !busy))
-                .collect();
-            MenuEntry::Submenu(remote.name.clone(), ops)
-        })
-        .collect();
-    if !items.is_empty() {
+    // 远程仓库：有远程时先是拉取自…、推送到…，然后每个远程一个子菜单（修改地址、移除），最后
+    // 是添加。
+    let mut items = Vec::new();
+    if !remotes.is_empty() {
+        let item = |action| MenuEntry::Item(GitAction(action), transfer);
+        items.extend([
+            item(crate::keymap::Action::GitPullFrom),
+            item(crate::keymap::Action::GitPushTo),
+            MenuEntry::Separator,
+        ]);
+    }
+    items.extend((remotes.iter().enumerate()).map(|(i, remote)| {
+        let ops = [RemoteOp::Edit, RemoteOp::Remove]
+            .into_iter()
+            .map(|op| MenuEntry::Item(GitRemote(op, i), !busy))
+            .collect();
+        MenuEntry::Submenu(remote.name.clone(), ops)
+    }));
+    if !remotes.is_empty() {
         items.push(MenuEntry::Separator);
     }
     items.push(MenuEntry::Item(GitAddRemote, !busy));
