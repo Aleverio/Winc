@@ -186,6 +186,18 @@ fn step(value: f32, up: bool, range: RangeInclusive<f32>) -> f32 {
     next.clamp(*range.start(), *range.end())
 }
 
+/// 把字重 `current` 按 [`FONT_WEIGHT_STEP`] 调粗（`up` 为 `true`）或调细一档，限制在 `range` 内。
+///
+/// 不在档位上的值移到该方向上最近的一档。
+fn step_weight(current: u16, up: bool, range: RangeInclusive<f32>) -> u16 {
+    let next = if up {
+        (current / FONT_WEIGHT_STEP + 1) * FONT_WEIGHT_STEP
+    } else {
+        current.saturating_sub(1) / FONT_WEIGHT_STEP * FONT_WEIGHT_STEP
+    };
+    next.clamp(*range.start() as u16, *range.end() as u16)
+}
+
 impl App {
     /// 打开设置浮层；已经打开时不处理。
     ///
@@ -1231,6 +1243,10 @@ impl App {
                 ViewFonts::of(&self.config).terminal,
                 Config::EDITOR_SIZE_RANGE,
             ),
+            Setting::TerminalFontWeight => (
+                f32::from(self.terminal_font_weight()),
+                Config::FONT_WEIGHT_RANGE,
+            ),
             Setting::TabWidth => (
                 self.config.tab_width.unwrap_or(self.editor.tab_width) as f32,
                 Config::TAB_WIDTH_RANGE,
@@ -1260,14 +1276,16 @@ impl App {
             }
             // 配置中的值不在档位上时，移到该方向上最近的一档。
             Setting::FontWeight => {
-                let (current, range) = (self.font_weight(), Config::FONT_WEIGHT_RANGE);
-                let next = if up {
-                    (current / FONT_WEIGHT_STEP + 1) * FONT_WEIGHT_STEP
-                } else {
-                    current.saturating_sub(1) / FONT_WEIGHT_STEP * FONT_WEIGHT_STEP
-                };
-                let next = next.clamp(*range.start() as u16, *range.end() as u16);
+                let current = self.font_weight();
+                let next = step_weight(current, up, Config::FONT_WEIGHT_RANGE);
                 self.config.ui_font_weight = (next != Config::FONT_WEIGHT).then_some(next);
+                self.apply_fonts().ok();
+            }
+            // 与全局字重相同时从配置中去掉，重新跟随全局字重。
+            Setting::TerminalFontWeight => {
+                let current = self.terminal_font_weight();
+                let next = step_weight(current, up, Config::FONT_WEIGHT_RANGE);
+                self.config.terminal_font_weight = (next != self.font_weight()).then_some(next);
                 self.apply_fonts().ok();
             }
             Setting::BackgroundOpacity => {

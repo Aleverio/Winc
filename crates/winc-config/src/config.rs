@@ -34,7 +34,8 @@ pub struct Config {
     ///
     /// 可用范围见 [`Config::ZOOM_RANGE`]。
     pub ui_zoom: Option<u16>,
-    /// 全部文字的字重，默认为 400（各字体自身的字重）；范围见 [`Config::FONT_WEIGHT_RANGE`]。
+    /// 界面和编辑区文字的字重，默认为 400（各字体自身的字重）；范围见
+    /// [`Config::FONT_WEIGHT_RANGE`]。终端没有设置 `terminal.fontWeight` 时也用它。
     pub ui_font_weight: Option<u16>,
     /// 窗口背景图片的路径；没写时没有背景图。
     pub ui_background_image: Option<String>,
@@ -179,6 +180,10 @@ pub struct Config {
     ///
     /// 可用范围同 [`Config::EDITOR_SIZE_RANGE`]。
     pub terminal_size: Option<f32>,
+    /// 终端文字的字重；未设置时跟随全局字重（[`Config::ui_font_weight`]）。
+    ///
+    /// 可用范围见 [`Config::FONT_WEIGHT_RANGE`]。
+    pub terminal_font_weight: Option<u16>,
     /// 终端回滚缓冲的行数。
     ///
     /// 可用范围见 [`Config::SCROLLBACK_RANGE`]，默认 10000 行。

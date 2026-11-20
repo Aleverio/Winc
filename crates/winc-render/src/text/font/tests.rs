@@ -193,6 +193,27 @@ fn the_terminal_uses_its_own_font_or_the_editor_font() {
 }
 
 #[test]
+fn a_separate_terminal_weight_uses_its_own_fallback_faces() {
+    // 终端字重与全局不同：终端有自己的槽位，后备字体也另加载一份；汉字缺字时用终端的那一份。
+    let mut fonts = Fonts::load_with(&[], &[], &[], 400, 300).expect("系统里有等宽字体");
+    assert_eq!(fonts.resolve(FontKind::Terminal, 'a').0, TERMINAL);
+    assert_ne!(fonts.resolve(FontKind::Mono, 'a').0, TERMINAL);
+    assert_ne!(fonts.terminal_fallbacks, fonts.fallbacks);
+    let (slot, _) = fonts.resolve(FontKind::Terminal, '中');
+    assert!(
+        slot == TERMINAL
+            || fonts.listed[2].contains(&slot)
+            || fonts.terminal_fallbacks.contains(&slot),
+        "{slot}"
+    );
+
+    // 与全局字重相同：和编辑区共用字体，不重复加载后备字体。
+    let mut fonts = Fonts::load_with(&[], &[], &[], 400, 400).expect("系统里有等宽字体");
+    assert_eq!(fonts.resolve(FontKind::Terminal, 'a').0, MONO);
+    assert_eq!(fonts.terminal_fallbacks, fonts.fallbacks);
+}
+
+#[test]
 fn italic_comments_fall_back_to_the_regular_face() {
     let mut fonts = Fonts::load(&[], &[], &[], 400).expect("系统里有等宽字体");
     // 有斜体时用斜体槽位，没有时用正体；两种情况下注释里的字符都画得出来。

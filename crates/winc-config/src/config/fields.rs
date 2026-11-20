@@ -556,6 +556,20 @@ const TERMINAL: &[Field] = &[
         },
         write: |config| config.terminal_size.map(number),
     },
+    Field {
+        key: "fontWeight",
+        read: |config, value, name, problems| {
+            let label = t!("config-label-font-weight");
+            let range = Config::FONT_WEIGHT_RANGE;
+            config.terminal_font_weight =
+                read_number(value, name, range, label, problems).map(|w| w.round() as u16);
+        },
+        write: |config| {
+            config
+                .terminal_font_weight
+                .map(|weight| number(f32::from(weight)))
+        },
+    },
     string_field!("shell", terminal_shell),
     bool_field!("shellIntegration", terminal_shell_integration),
     bool_field!("confirmClose", terminal_confirm_close),

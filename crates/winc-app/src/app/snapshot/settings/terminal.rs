@@ -105,6 +105,16 @@ fn the_terminal_font_size_and_switches_write_the_config() {
     assert_eq!((app.fonts.terminal, app.fonts.code), (code + 1.0, code));
     assert_eq!(app.config.editor_size, None);
 
+    // 字重：未设置时跟随全局字重；调整后只改终端，回到全局字重时从配置中去掉。
+    app.config.ui_font_weight = Some(500);
+    assert_eq!(app.setting_value(Setting::TerminalFontWeight).0, "500");
+    app.settings_adjust(Setting::TerminalFontWeight, false);
+    assert_eq!(app.config.terminal_font_weight, Some(400));
+    assert_eq!(app.config.ui_font_weight, Some(500));
+    app.settings_adjust(Setting::TerminalFontWeight, true);
+    assert_eq!(app.config.terminal_font_weight, None);
+    app.config.ui_font_weight = None;
+
     // 字体：菜单的第一项是「跟随编辑器」，和编辑器字体一样先列出等宽字体。
     app.settings_open_menu(Setting::TerminalFont);
     assert_eq!(

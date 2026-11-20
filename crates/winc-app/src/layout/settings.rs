@@ -26,7 +26,7 @@ pub enum SettingsPage {
     Format,
     /// Git：Git 模块的选项；模块关闭时不列出。
     Git,
-    /// 终端：默认 shell、面板位置、字体、字号和终端行为。
+    /// 终端：默认 shell、面板位置、字体、字号、字重和终端行为。
     Terminal,
     /// 模块：可选模块的开关。
     Modules,
@@ -173,6 +173,7 @@ impl SettingsPage {
                         Setting::TerminalTabPosition,
                         Setting::TerminalFont,
                         Setting::TerminalSize,
+                        Setting::TerminalFontWeight,
                     ]),
                     plain(behavior),
                 ]
@@ -401,6 +402,8 @@ pub enum Setting {
     TerminalFont,
     /// 终端字号。
     TerminalSize,
+    /// 终端字重（`terminal.fontWeight`）。
+    TerminalFontWeight,
     /// 终端中选中文字时自动复制。
     TerminalCopyOnSelect,
     /// 关闭仍有程序运行的终端标签前确认。
@@ -544,6 +547,7 @@ impl Setting {
             | Setting::TerminalTabPosition
             | Setting::TerminalFont
             | Setting::TerminalSize
+            | Setting::TerminalFontWeight
             | Setting::TerminalCopyOnSelect
             | Setting::TerminalConfirmClose
             | Setting::TerminalPrompt
@@ -634,6 +638,7 @@ impl Setting {
             Setting::TerminalTabPosition => t!("settings-terminal-tab-position"),
             Setting::TerminalFont => t!("settings-terminal-font"),
             Setting::TerminalSize => t!("settings-terminal-size"),
+            Setting::TerminalFontWeight => t!("settings-terminal-font-weight"),
             Setting::TerminalCopyOnSelect => t!("settings-terminal-copy-on-select"),
             Setting::TerminalConfirmClose => t!("settings-terminal-confirm-close"),
             Setting::TerminalPrompt => t!("settings-terminal-prompt"),
@@ -723,6 +728,7 @@ impl Setting {
             Setting::GitOpenWorktree => Some(t!("settings-git-open-worktree-desc")),
             Setting::GitPath => Some(t!("settings-git-path-desc")),
             Setting::TerminalShell => Some(t!("settings-terminal-shell-desc")),
+            Setting::TerminalFontWeight => Some(t!("settings-terminal-font-weight-desc")),
             Setting::TerminalCopyOnSelect => Some(t!("settings-terminal-copy-on-select-desc")),
             Setting::TerminalConfirmClose => Some(t!("settings-terminal-confirm-close-desc")),
             Setting::TerminalPrompt => Some(t!("settings-terminal-prompt-desc")),
@@ -747,6 +753,7 @@ impl Setting {
             | Setting::FontWeight
             | Setting::BackgroundOpacity
             | Setting::TerminalSize
+            | Setting::TerminalFontWeight
             | Setting::TabWidth => SettingControl::Stepper,
             Setting::Theme => SettingControl::Themes,
             Setting::LightTheme | Setting::DarkTheme => SettingControl::ThemeList,
