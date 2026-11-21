@@ -521,52 +521,40 @@ pub fn expand_selection(text: &impl Lines, selection: Selection) -> Option<Selec
         .map(|(a, b)| Selection::new(a, b))
 }
 
-/// 返回交换光标前后的两个字素（`⌃T`，macOS）的事务。
+/// 返回交换光标两侧两个字素（`⌃T`）的事务。
 ///
-/// 光标在行中间时交换光标前后的两个字素，光标移到交换后的两个字素之后；在行尾时交换行末的
-/// 两个字素，光标留在行尾，与 Emacs、系统文本框相同。行首（包括空行）没有可交换的字素，
-/// 选区非空时也不处理，都返回 `None`。
+/// 光标在行尾时交换它前面的两个字素，光标不动；否则交换光标前后的两个字素，光标移到两者之后。
+/// 在行首时前一个字素是换行符，交换后本行的第一个字素接到上一行的末尾。两个字素相同时不改动
+/// 文字，光标照样前移，连按可以把一个字素一路往后挪。选区非空、光标前不足两个字素时返回 `None`。
 pub fn transpose(text: &impl Lines, selection: Selection) -> Option<Transaction> {
     if !selection.is_empty() {
         return None;
     }
     let pos = selection.head;
-    let start = text.line_start(text.line_of(pos));
-    let end = text.line_end(text.line_of(pos));
-
-    // 行首（包括空行）时本行没有可交换的字素，不处理；否则行首的 `prev_grapheme` 会跨到上一行。
-    if pos == start {
-        return None;
-    }
-
-    let (from, middle, to, after) = if pos >= end {
-        // 行尾：交换行末的两个字素；行内不足两个字素时不处理。
-        let back = movement::prev_grapheme(text, end);
-        if back == start {
-            return None;
-        }
-        let front = movement::prev_grapheme(text, back);
-        (front, back, end, end)
+    let end = if pos == text.line_end(text.line_of(pos)) {
+        pos
     } else {
-        // 行中：光标前的字素与光标后的字素交换；行首没有前一个字素，上面已排除。
-        let back = movement::next_grapheme(text, pos);
-        let front = movement::prev_grapheme(text, pos);
-        (front, pos, back, back)
+        movement::next_grapheme(text, pos)
     };
-
-    let head = text.substring(from, middle);
-    let tail = text.substring(middle, to);
-    if head == tail {
+    let middle = movement::prev_grapheme(text, end);
+    let start = movement::prev_grapheme(text, middle);
+    if start == middle {
         return None;
     }
-    Some(Transaction::new(
+    let (head, tail) = (text.substring(start, middle), text.substring(middle, end));
+    let changes = if head == tail {
+        Vec::new()
+    } else {
         vec![Change {
-            start: from,
-            removed: text.substring(from, to),
+            start,
+            removed: text.substring(start, end),
             inserted: format!("{tail}{head}"),
-        }],
+        }]
+    };
+    Some(Transaction::new(
+        changes,
         selection,
-        Selection::point(after),
+        Selection::point(end),
         EditKind::Other,
     ))
 }

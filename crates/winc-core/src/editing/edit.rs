@@ -242,7 +242,7 @@ pub fn delete_to_line_start(text: &impl Lines, selection: Selection) -> Option<T
     delete_range(text, selection, from, pos)
 }
 
-/// 返回删除到行尾（`⌃K`，macOS）的事务。
+/// 返回删除到行尾的事务。
 ///
 /// 有选区时删除选区；光标已在行尾时删除换行符，与下一行相接。
 pub fn delete_to_line_end(text: &impl Lines, selection: Selection) -> Option<Transaction> {
