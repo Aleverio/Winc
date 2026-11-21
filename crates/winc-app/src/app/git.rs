@@ -26,6 +26,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex, PoisonError};
+use std::time::{Duration, Instant};
 
 use ropey::Rope;
 use winc_editor::diff_view::{BlameSource, DiffSide, DiffView};
@@ -40,6 +41,9 @@ use super::diff::worktree_title;
 use super::{App, Focus, UserEvent};
 use crate::app::NoticeKind;
 use crate::layout::SidebarView;
+
+/// Git 视图可见时补查本地状态的间隔；系统漏发通知时定期重新读取（经验值）。
+const STATUS_RECHECK: Duration = Duration::from_secs(5);
 
 /// 界面线程与各后台任务共用的 [`Git`]。
 ///
@@ -254,6 +258,8 @@ pub(crate) struct GitState {
     ignored_paths: HashSet<PathBuf>,
     /// 正在运行的刷新；`None` 表示没有在运行。
     running: Option<Cancel>,
+    /// 下一次补查本地状态的时刻；Git 视图不可见时不安排。
+    recheck_due: Option<Instant>,
     /// 运行期间是否又收到刷新请求；为真时完成后再刷新一次。
     again: bool,
     /// 下一次刷新是否同时读取分支与储藏（由 [`App::git_refresh`] 设置，读取时清除）。
@@ -353,6 +359,7 @@ impl Default for GitState {
             decorations: HashMap::new(),
             ignored_paths: HashSet::new(),
             running: None,
+            recheck_due: None,
             again: false,
             refs_wanted: false,
             logs_outdated: false,
@@ -437,6 +444,7 @@ impl GitState {
             cancel.cancel();
         }
         self.again = false;
+        self.recheck_due = None;
         self.refs_wanted = false;
         self.root = None;
         self.tool.forget();
@@ -876,6 +884,37 @@ impl App {
         self.git_refresh_status();
     }
 
+    /// Git 视图可见且窗口有焦点时低频补查本地状态，兜底系统未报告的文件变化。
+    ///
+    /// 通知仍负责即时刷新；补查只读取状态，不读取分支、储藏或访问远程仓库。
+    pub(in crate::app) fn git_status_tick(&mut self, now: Instant) -> Option<Instant> {
+        let visible = self.commit_shown()
+            || self
+                .editor
+                .active()
+                .is_some_and(|d| d.log.is_some() || d.diff.is_some());
+        let local = self
+            .git
+            .root
+            .as_deref()
+            .is_some_and(|root| !winc_backend::is_remote(root));
+        if !self.git_enabled() || !local || !visible || !self.window.focused || self.unseen() {
+            self.git.recheck_due = None;
+            return None;
+        }
+        let due = *self.git.recheck_due.get_or_insert(now + STATUS_RECHECK);
+        if now >= due {
+            self.git.recheck_due = Some(now + STATUS_RECHECK);
+            if self.git.running.is_none()
+                && self.git.branch.running.is_none()
+                && !self.git.commit.staging_active()
+            {
+                self.git_refresh_status();
+            }
+        }
+        self.git.recheck_due
+    }
+
     /// 只刷新状态，分支与储藏列表保持不变。
     ///
     /// 分支与储藏只随 `.git` 中的内容变化（目录监视报告 `git`，或 winc 自身执行的 Git 操作），
@@ -889,6 +928,7 @@ impl App {
             self.git.again = true;
             return;
         }
+        self.git.recheck_due = Some(Instant::now() + STATUS_RECHECK);
         // 尚未读取到状态时（刚打开、上次出错）同样没有分支列表，因此一并读取。
         let refs = std::mem::take(&mut self.git.refs_wanted) || self.git.status.is_none();
         let cancel = Cancel::default();
