@@ -270,7 +270,7 @@ fn expanding_through_deep_nesting_shares_one_budget() {
 
 #[test]
 fn transpose_swaps_graphemes_around_the_caret() {
-    // 行中：光标前后的两个字素交换，光标移到交换后的两个字素之后。
+    // 行中：光标前后的两个字素交换，光标移到两者之后。
     assert_eq!(
         run("abcd", Selection::point(2), transpose),
         Some(("acbd".into(), Selection::point(3)))
@@ -280,15 +280,27 @@ fn transpose_swaps_graphemes_around_the_caret() {
         run("abc", Selection::point(3), transpose),
         Some(("acb".into(), Selection::point(3)))
     );
-    // 行首、空行、单字行的行尾、有选区、前后相同：都不处理。
+    // 行首：与前面的换行符交换，本行的第一个字素接到上一行末尾。
+    assert_eq!(
+        run("a\nbc", Selection::point(2), transpose),
+        Some(("ab\nc".into(), Selection::point(3)))
+    );
+    // 两个字素相同：文字不变，光标照样前移。
+    assert_eq!(
+        run("aab", Selection::point(1), transpose),
+        Some(("aab".into(), Selection::point(2)))
+    );
+    // 文档开头、只有一个字素、有选区：不处理。
     assert_eq!(run("abcd", Selection::point(0), transpose), None);
-    assert_eq!(run("a\n\nb", Selection::point(2), transpose), None);
     assert_eq!(run("x", Selection::point(1), transpose), None);
     assert_eq!(run("abcd", Selection::new(1, 3), transpose), None);
-    assert_eq!(run("aa", Selection::point(1), transpose), None);
-    // 一个字素可以是多个码点：emoji 整体交换。
+    // 一个字素可以是多个码点：emoji 整体交换；CRLF 换行也作为一个整体。
     assert_eq!(
         run("a👍b", Selection::point(2), transpose),
         Some(("ab👍".into(), Selection::point(3)))
+    );
+    assert_eq!(
+        run("a\r\nb", Selection::point(3), transpose),
+        Some(("ab\r\n".into(), Selection::point(4)))
     );
 }
