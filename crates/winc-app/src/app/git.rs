@@ -394,6 +394,13 @@ impl Default for GitState {
 }
 
 impl GitState {
+    /// 测试用：提供后台读到的仓库状态，不启动 Git 进程。
+    #[cfg(test)]
+    pub(in crate::app) fn summary_for_test(&self, root: PathBuf, status: Status) {
+        self.summaries.lock().unwrap().insert(root, status);
+        self.summaries_changed();
+    }
+
     /// 记下各仓库的状态（`summaries`）改过了。
     pub(crate) fn summaries_changed(&self) {
         (self.summaries_version).fetch_add(1, std::sync::atomic::Ordering::Release);

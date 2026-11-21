@@ -368,10 +368,9 @@ impl App {
         if l.search.contains(x, y) {
             return Target::Search;
         }
-        // 名称显示不全而展开的行（文件树、改动列表）覆盖在分隔条上，该行优先；
-        // 其余各行仍可拖动分隔条。
+        // 文件树、搜索结果的展开行覆盖分隔条；Git 改动列表始终保留分隔条的命中区域。
         let over_row = self.over_tree_overflow_row(y);
-        let over_any = over_row || over_commit_row || over_result_row;
+        let over_any = over_row || over_result_row;
         if self.panels.sidebar.visible && !over_any && l.splitter.contains(x, y) {
             return Target::Splitter;
         }
