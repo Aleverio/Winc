@@ -44,7 +44,6 @@ mod terminal;
 mod tooltip;
 mod workspace;
 
-use editor::draw_editor;
 pub(crate) use editor::{LineTokens, MinimapRows, RulerCache};
 use fields::*;
 use overlays::{
@@ -69,6 +68,17 @@ pub(crate) fn base(app: &App) -> [(Rect, Color); 3] {
         // 拆分后编辑区只是前台窗格的那一块：底色铺满整个卡片。
         (app.panes.card.unwrap_or(l.editor), p.editor_bg),
     ]
+}
+
+/// 编辑区的内容和交互区域都留在窗格内，包括终端最大化后的零宽、零高区域。
+fn draw_editor(app: &mut App, frame: &mut Frame<'_>) {
+    frame.within(app.layout.editor, |frame| editor::draw_editor(app, frame));
+    for (rect, _) in &mut app.hits.diff {
+        *rect = rect.intersect(app.layout.editor);
+    }
+    for (rect, _) in &mut app.hits.log {
+        *rect = rect.intersect(app.layout.editor);
+    }
 }
 
 /// 绘制一个窗格：标签栏和编辑区，以及分栏预览、合并的两侧等随标签变化的部分。`front` 为假

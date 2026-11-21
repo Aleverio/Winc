@@ -60,17 +60,6 @@ const BRACE_SCAN_LIMIT: usize = 20_000;
 /// 当前标签是图片、SVG、Markdown 的预览或无法显示的文件时，改为绘制相应的预览或说明；
 /// 没有标签时绘制开始页或欢迎页。
 pub(super) fn draw_editor(app: &mut App, frame: &mut Frame<'_>) {
-    // 固定宽度的工具栏和提示也必须留在编辑区，包含终端最大化后的零宽、零高区域。
-    frame.within(app.layout.editor, |frame| draw_content(app, frame));
-    for (rect, _) in &mut app.hits.diff {
-        *rect = rect.intersect(app.layout.editor);
-    }
-    for (rect, _) in &mut app.hits.log {
-        *rect = rect.intersect(app.layout.editor);
-    }
-}
-
-fn draw_content(app: &mut App, frame: &mut Frame<'_>) {
     // Markdown、PDF 预览绘制时重新填充；预览不显示时若仍保留，滚轮和点击事件会被预览接收。
     app.preview.markdown.area = Rect::default();
     app.preview.pdf.area = Rect::default();
