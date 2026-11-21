@@ -559,9 +559,27 @@ fn draw_other_file(
     }
     let text_end = button.map_or(letter_x - 8.0, |x| x - 4.0);
     let clip = Rect::new(list.x, band.y, text_end - list.x, COMMIT_ROW).intersect(list);
-    let end = ui_text(frame, app, text_x, band, &name, file_color(change, p), clip);
-    if !dir.is_empty() {
-        ui_text_small(frame, app, end + 8.0, band, &dir, p.text_dim, clip);
+    let room = (text_end - text_x).max(0.0);
+    let dir = (!dir.is_empty()).then_some(dir.as_str());
+    let parts = file_parts(app, frame, (&name, dir), Some(room));
+    let end = draw_file_parts(
+        app,
+        frame,
+        (text_x, band),
+        &parts,
+        (file_color(change, p), |_| 1.0),
+        clip,
+    );
+    // 和当前仓库使用相同的名称排版与截断渐隐，底色随这一行的悬停状态变化。
+    if end > text_end + 0.5 {
+        let solid = if hover == Hover::Commit(target) || button.is_some() {
+            crate::view::workspace::panel::over(p.sidebar_bg, p.hover)
+        } else {
+            p.sidebar_bg
+        };
+        let reach = NAME_FADE.min(room);
+        let edge = Rect::new(text_end - reach, band.y, reach, COMMIT_ROW);
+        frame.within(clip, |frame| fade(frame, edge, solid, false));
     }
     hits.push((band.intersect(list), target));
 }
