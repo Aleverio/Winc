@@ -105,9 +105,15 @@ fn git_overflow_retraction_leaves_no_filename_over_the_editor_during_resize() {
             // 在另一行开始拖动，让原来那一行进入收回动画，复现偶发的残留。
             let x = app.layout.splitter.x + app.layout.splitter.w / 2.0;
             let away = y + 3.0 * row.h;
+            // 切换视图后文件树可能保留全名区域；隐藏的区域不应抢占分隔条。
+            app.panels.tree.overflow =
+                Some((Rect::new(x - 10.0, away - row.h / 2.0, 80.0, row.h), 0));
+            app.on_mouse_move(x + 40.0, away);
+            assert!(!matches!(app.pointer.hover, Hover::TreeRow(_)));
             app.on_mouse_move(x, away);
             paint(&mut app);
             assert!(app.git.commit.names.moving());
+            assert_eq!(app.pointer.hover, Hover::Splitter);
             app.on_mouse_down(MouseButton::Left);
             assert!(matches!(app.pointer.drag, Drag::Splitter { .. }));
             paint(&mut app);
