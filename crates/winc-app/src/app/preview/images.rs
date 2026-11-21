@@ -147,9 +147,12 @@ impl App {
     pub(crate) fn advance_previews(&mut self) {
         self.poll_markdown();
         self.poll_pdf();
+        self.poll_latex();
         self.advance_split();
+        self.advance_latex();
         self.advance_markdown();
         self.advance_pdf();
+        self.sync_latex_pdf();
         self.advance_picture_view();
         self.advance_tables();
         let Some(doc) = self.editor.active() else {
@@ -523,6 +526,7 @@ fn preview_key(kind: PreviewKind) -> &'static str {
         PreviewKind::Svg => "svg",
         PreviewKind::Markdown => "markdown",
         PreviewKind::Table => "table",
+        PreviewKind::Latex => "latex",
     }
 }
 
