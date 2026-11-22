@@ -527,6 +527,12 @@ pub fn newer(version: &str, current: &str) -> bool {
     winc_config::compare_versions(version, current).is_gt()
 }
 
+/// 是否由安装程序装在当前用户之下（NSIS 安装包）；MSI 装在全机之下，便携版没有安装。
+#[cfg(windows)]
+pub(crate) fn installed_per_user() -> bool {
+    matches!(installer::current_kind(), Some(installer::Kind::Nsis))
+}
+
 #[cfg(unix)]
 mod appimage;
 #[cfg(windows)]

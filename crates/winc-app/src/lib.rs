@@ -31,6 +31,7 @@ mod portal;
 mod recents;
 mod release_notes;
 mod shell_command;
+mod shell_integration;
 mod system;
 mod theme;
 #[cfg(all(unix, not(target_os = "macos")))]
