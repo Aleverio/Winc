@@ -65,6 +65,8 @@ pub struct SettingsState {
     ///
     /// 渲染失败时像素为空，不再重试，图标不显示。
     pub logo: Option<(u32, Vec<u8>)>,
+    /// 这次显示「关于」页是否已经播放过图标的动画；离开该页或重新打开设置后再播放一次。
+    pub logo_played: bool,
     /// 快捷键页的搜索框：按命令名或按键搜索。
     pub keys_query: TextField,
     /// 是否正在录制按键：按下的键写入搜索框，不执行。
@@ -201,6 +203,7 @@ impl App {
         self.settings.cache = None;
         self.settings.scroll = 0.0;
         self.settings.selected = Setting::default();
+        self.settings.logo_played = false;
         self.settings.search.set_text("");
         self.settings.error = self.broken_font(self.settings.selected.page());
         self.settings.keyboard = false;
@@ -333,6 +336,35 @@ impl App {
             self.settings.logo = Some((size, rgba));
         }
         self.settings.logo.as_ref().map_or(&[], |(_, rgba)| rgba)
+    }
+
+    /// 每帧绘制前调用：「关于」页刚显示出来时播放一次图标逐层出现的动画。
+    ///
+    /// 设置浮层出现期间画的是开头的快照，动画等浮层出现之后再开始；动态效果关闭时不播放。
+    pub(in crate::app) fn track_about_logo(&mut self) {
+        if !self.settings.open {
+            return;
+        }
+        let about = self.settings.selected.page() == crate::layout::SettingsPage::About
+            && !self.settings_searching();
+        if !about {
+            self.settings.logo_played = false;
+            self.motion.about_logo = None;
+        } else if !std::mem::replace(&mut self.settings.logo_played, true) {
+            let wait = match &self.settings.motion {
+                Some((true, clock)) => super::animation::DIALOG_IN.mul_f32(1.0 - clock.linear()),
+                _ => std::time::Duration::ZERO,
+            };
+            let total = wait + crate::app::setup::LOGO_BUILD;
+            let delay = wait.as_secs_f32() / total.as_secs_f32();
+            self.motion.about_logo = self.clock(total).map(|clock| (clock, delay));
+        }
+    }
+
+    /// 返回「关于」页图标逐层出现的进度，0 到 1；没有在播放时为 `None`。
+    pub(crate) fn about_logo_build(&self) -> Option<f32> {
+        let (clock, delay) = self.motion.about_logo?;
+        Some(((clock.linear() - delay) / (1.0 - delay)).clamp(0.0, 1.0))
     }
 
     /// 是否支持应用内更新：不支持时「关于」页只写明原因，不显示「检查更新」按钮。

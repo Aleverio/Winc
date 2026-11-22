@@ -924,6 +924,60 @@ fn the_about_page_shows_the_version_and_the_update_state() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// 「关于」页每次显示出来时图标逐层出现一次：离开该页或重新打开设置后再播放，搜索时不播放。
+#[test]
+fn the_about_logo_builds_up_each_time_the_page_is_shown() {
+    use crate::app::animation::Clock;
+    use crate::app::setup::LOGO_BUILD;
+    use std::time::Duration;
+
+    let mut app = blank_app(false);
+    app.open_settings();
+    app.track_about_logo();
+    assert!(!app.settings.logo_played);
+    app.settings_show_page(SettingsPage::About);
+    app.track_about_logo();
+    // 测试里没有窗口，也就没有时钟：图标直接是完整的。
+    assert!(app.settings.logo_played);
+    assert_eq!(app.about_logo_build(), None);
+
+    // 进度按时钟走，开头等待的那一段里保持在 0。
+    let half = Clock::stopped(LOGO_BUILD, Duration::from_millis(550));
+    app.motion.about_logo = Some((half, 0.0));
+    assert_eq!(app.about_logo_build(), Some(0.5));
+    app.motion.about_logo = Some((half, 0.5));
+    assert_eq!(app.about_logo_build(), Some(0.0));
+    app.motion.about_logo = Some((half, 0.25));
+    paint(&mut app);
+    // 播完就停，不再重新开始。
+    app.motion.about_logo = Some((Clock::stopped(LOGO_BUILD, LOGO_BUILD), 0.0));
+    app.settle_animations();
+    app.track_about_logo();
+    assert!(app.motion.about_logo.is_none());
+
+    // 换到别的页：动画停下，回来时再播放一次。
+    app.motion.about_logo = Some((half, 0.0));
+    app.settings_show_page(SettingsPage::General);
+    app.track_about_logo();
+    assert!(!app.settings.logo_played);
+    assert!(app.motion.about_logo.is_none());
+    app.settings_show_page(SettingsPage::About);
+    app.track_about_logo();
+    assert!(app.settings.logo_played);
+    // 搜索时正文是搜索结果，不算显示着「关于」页。
+    app.settings.search.set_text("font");
+    app.track_about_logo();
+    assert!(!app.settings.logo_played);
+    // 关闭期间保持原样，重新打开后再播放。
+    app.settings.search.set_text("");
+    app.track_about_logo();
+    app.close_settings();
+    app.track_about_logo();
+    assert!(app.settings.logo_played);
+    app.open_settings();
+    assert!(!app.settings.logo_played);
+}
+
 #[test]
 fn the_about_page_links_out_and_hides_unavailable_updates() {
     use crate::layout::{about_link, about_value};

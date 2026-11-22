@@ -442,6 +442,7 @@ impl App {
         settle(&mut self.motion.setup_intro, |c| *c);
         settle(&mut self.motion.setup_outro, |c| *c);
         settle(&mut self.motion.setup_page, |c| *c);
+        settle(&mut self.motion.about_logo, |l| l.0);
         self.show_update_notice();
         settle(&mut self.git.log.fade, |c| *c);
         self.settle_hint();
@@ -559,6 +560,7 @@ impl App {
             || self.motion.setup_intro.is_some()
             || self.motion.setup_outro.is_some()
             || self.motion.setup_page.is_some()
+            || self.motion.about_logo.is_some()
             || self.git.log.fade.is_some()
             || self.hint_animating()
             || !self.tabs.slides.is_empty()
@@ -682,6 +684,9 @@ pub(crate) struct Motions {
     pub(crate) setup_outro: Option<animation::Clock>,
     /// 「首次设置」两页之间切换的过渡动画的时钟；没有在播放时为 `None`。
     pub(crate) setup_page: Option<animation::Clock>,
+    /// 「关于」页的图标逐层出现的动画：时钟，以及动画开始前等待的那一段占时长的比例（设置
+    /// 浮层出现期间）；没有在播放时为 `None`。
+    pub(crate) about_logo: Option<(animation::Clock, f32)>,
     /// 工具栏按钮收入「⋯」或从「⋯」中移出的动画。
     pub(crate) tool_fold: ToolFold,
     /// 编辑区顶部输入条出现、消失的动画。

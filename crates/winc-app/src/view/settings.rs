@@ -536,14 +536,24 @@ fn draw_link(app: &App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) {
 
 /// 绘制「关于」页顶部的产品信息：应用图标、名称和版本号，水平居中（[`ProductParts`]）。
 ///
-/// 图标按当前缩放从应用图标的 SVG 渲染，与屏幕像素一一对应。版本号点击复制，悬停时只在文字处
+/// 图标按当前缩放从应用图标的 SVG 渲染，与屏幕像素一一对应；该页刚显示时逐层出现
+/// （[`App::track_about_logo`]）。版本号点击复制，悬停时只在文字处
 /// 铺悬停底色。
 fn draw_product(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) {
     let p = app.palette;
     let parts = ProductParts::new(row.row);
     let size = (SETTINGS_LOGO * frame.scale()).round() as u32;
     let logo = parts.logo;
-    frame.pixels((logo.x, logo.y), size, size, app.product_logo(size), clip);
+    // 逐层出现期间每帧渲染一张；完整之后用留存的应用图标。
+    let built;
+    let pixels: &[u8] = match app.about_logo_build() {
+        Some(build) if build < 1.0 => {
+            built = crate::app::setup::logo_frame(size, build);
+            &built
+        }
+        _ => app.product_logo(size),
+    };
+    frame.pixels((logo.x, logo.y), size, size, pixels, clip);
 
     // 名称比界面文字大 7 点，随界面字号一同缩放。
     let name_size = app.fonts.ui + 7.0;

@@ -123,6 +123,7 @@ impl App {
                 setup_intro: None,
                 setup_outro: None,
                 setup_page: None,
+                about_logo: None,
                 tool_fold: ToolFold::default(),
                 bar_card: Default::default(),
                 dialog_card: Default::default(),
