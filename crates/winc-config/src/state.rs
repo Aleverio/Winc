@@ -135,6 +135,12 @@ pub struct State {
     /// 每项为（工具所在目录，是否运行该目录中的程序）；`false` 表示改用系统安装的程序。
     /// 最多 [`MAX_TOOL_CHOICES`] 项。
     tool_choices: Vec<(PathBuf, bool)>,
+    /// 用户同意运行的项目设置（`.winc/config.json`）中的命令，最近的在前，最多
+    /// [`MAX_TOOL_CHOICES`] 项。
+    ///
+    /// 每项为（项目的 `.winc` 目录，命令的原文）：同意只对这条命令有效，项目设置改写命令后
+    /// 重新询问。
+    approved_commands: Vec<(PathBuf, String)>,
     /// 用户信任了配置的 Git 仓库（根目录）和当时配置的指纹，最近的在前，最多
     /// [`MAX_TOOL_CHOICES`] 项。
     ///
@@ -485,6 +491,20 @@ impl State {
             .take(MAX_TOOL_CHOICES)
             .collect();
 
+        let approved_commands = root
+            .get("approvedCommands")
+            .and_then(Json::as_array)
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|item| {
+                let item = item.as_object()?;
+                let folder = item.get("folder")?.as_str().filter(|f| !f.is_empty())?;
+                let command = item.get("command")?.as_str()?;
+                Some((PathBuf::from(folder), command.to_owned()))
+            })
+            .take(MAX_TOOL_CHOICES)
+            .collect();
+
         // 指纹是 64 位，存成十六进制字符串：JSON 的数字按 f64 读，精度不够，装不下。
         let trusted_repos = root
             .get("trustedRepos")
@@ -521,6 +541,7 @@ impl State {
             recent_files,
             badges,
             tool_choices,
+            approved_commands,
             trusted_repos,
             remote_keys,
             vim_marks,
@@ -677,7 +698,7 @@ impl State {
     /// 序列化为 `state.json` 的内容，末尾带一个换行符。
     ///
     /// `last` 没有值，`previewMode` 为空，`recentFiles`、`otherWindows`、`signOffRepos`、`toolChoices`、
-    /// `trustedRepos`、`vimMarks`、`vimCommands`、`vimSearches` 为空，`commitTree`、
+    /// `approvedCommands`、`trustedRepos`、`vimMarks`、`vimCommands`、`vimSearches` 为空，`commitTree`、
     /// `commitAllRepositories`、`pdfThumbnailsHidden`、`stayOutsideApplications` 为假时省略
     /// 对应的键。
     pub fn to_json(&self) -> String {
@@ -882,6 +903,15 @@ impl State {
             });
             fields.push(("toolChoices", Json::Array(choices.collect())));
         }
+        if !self.approved_commands.is_empty() {
+            let commands = self.approved_commands.iter().map(|(folder, command)| {
+                Json::object(vec![
+                    ("folder", path(folder)),
+                    ("command", Json::String(command.clone())),
+                ])
+            });
+            fields.push(("approvedCommands", Json::Array(commands.collect())));
+        }
         if !self.trusted_repos.is_empty() {
             let repos = self.trusted_repos.iter().map(|(folder, fingerprint)| {
                 Json::object(vec![
@@ -1003,6 +1033,23 @@ impl State {
         self.tool_choices.retain(|(p, _)| p != folder);
         self.tool_choices.insert(0, (folder.to_path_buf(), run));
         self.tool_choices.truncate(MAX_TOOL_CHOICES);
+    }
+
+    /// 是否用户同意过运行 `folder`（项目的 `.winc` 目录）的项目设置中的命令 `command`。
+    ///
+    /// 按命令的原文比较：项目设置改写命令后不再算同意过。
+    pub fn command_approved(&self, folder: &Path, command: &str) -> bool {
+        (self.approved_commands.iter()).any(|(p, c)| p == folder && c == command)
+    }
+
+    /// 记录用户同意运行 `folder` 的项目设置中的命令 `command`，移到最前面，超出
+    /// `MAX_TOOL_CHOICES` 的从末尾移除。
+    pub fn approve_command(&mut self, folder: &Path, command: &str) {
+        self.approved_commands
+            .retain(|(p, c)| !(p == folder && c == command));
+        self.approved_commands
+            .insert(0, (folder.to_path_buf(), command.to_owned()));
+        self.approved_commands.truncate(MAX_TOOL_CHOICES);
     }
 
     /// 返回用户信任 Git 仓库 `root` 的配置时记下的指纹；没有信任过时返回 `None`。

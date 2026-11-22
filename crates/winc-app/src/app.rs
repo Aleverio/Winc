@@ -195,7 +195,7 @@ pub enum UserEvent {
     /// 后台格式化已有结果。
     Formatted,
     /// 提示框中回答了是否允许运行项目自带的格式化工具。
-    ToolChoice(ToolAnswer),
+    ToolChoice(Box<ToolAnswer>),
     /// 确认框中同意运行参数所指的运行配置。
     RunApproved(Box<winc_config::RunConfig>),
     /// 提示框中回答了是否信任 Git 仓库（第一个参数）指纹为第二个参数的配置。

@@ -94,7 +94,7 @@ fn bundle_of(exe: &std::path::Path) -> Option<&std::path::Path> {
 ///
 /// 只有程序位于 `APPDIR`（AppImage 运行时挂载的目录）内才算：这两个变量会被子进程继承，在 AppImage
 /// 版的内置终端里运行其他安装方式的 `winc` 时同样存在。
-#[cfg(any(target_os = "linux", all(test, unix)))]
+#[cfg(any(all(unix, not(target_os = "macos")), all(test, unix)))]
 fn appimage_of(
     exe: &std::path::Path,
     appdir: Option<&std::ffi::OsStr>,
@@ -103,8 +103,8 @@ fn appimage_of(
     exe.starts_with(appdir?).then(|| appimage.map(Into::into))?
 }
 
-#[cfg(target_os = "linux")]
-fn current_appimage() -> Option<std::path::PathBuf> {
+#[cfg(all(unix, not(target_os = "macos")))]
+pub(crate) fn current_appimage() -> Option<std::path::PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let appdir = std::env::var_os("APPDIR");
     let appimage = std::env::var_os("APPIMAGE");

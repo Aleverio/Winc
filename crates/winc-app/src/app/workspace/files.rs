@@ -846,6 +846,10 @@ impl App {
         {
             return;
         }
+        // 窗口内绘制的提示框，以及尚未答复的关闭询问，与系统的提示框同样处理。
+        if self.overlays.alert.is_some() || self.closing_pending() {
+            return;
+        }
         for &id in ids {
             let Some(doc) = self.editor.document(id) else {
                 continue;

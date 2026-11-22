@@ -458,14 +458,11 @@ impl App {
             return;
         };
         // 打开的目录在远端主机上或位于 WSL 发行版中时，命令报告的绝对路径属于那里。
-        let local = |path| match &root {
-            Some(root) => super::helper::terminal_path(root, path),
-            None => path,
-        };
+        let local = |path| super::helper::reported_path(root.as_deref(), path);
         let cwd = if block.cwd.is_empty() {
             root.clone()
         } else {
-            Some(local(path_from_bytes(&block.cwd)))
+            local(path_from_bytes(&block.cwd))
         };
         let (output, end) = (
             block.output.unwrap_or_default(),
@@ -487,7 +484,9 @@ impl App {
             }
             for found in locations(line, false) {
                 let Some(line_no) = found.line else { continue };
-                let path = local(PathBuf::from(&found.path));
+                let Some(path) = local(PathBuf::from(&found.path)) else {
+                    continue;
+                };
                 let path = match (&cwd, path.is_absolute()) {
                     (Some(cwd), false) => cwd.join(path),
                     _ => path,

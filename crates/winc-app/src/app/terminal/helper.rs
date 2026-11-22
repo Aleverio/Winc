@@ -821,8 +821,9 @@ impl App {
                     }
                 }
                 Event::Cwd(path) => {
-                    let path = local_cwd(self.editor.root(), path);
-                    if let Some(tab) = t.by_id(id) {
+                    if let Some(path) = local_cwd(self.editor.root(), path)
+                        && let Some(tab) = t.by_id(id)
+                    {
                         tab.cwd = path;
                     }
                 }
@@ -930,20 +931,42 @@ pub(super) fn default_shell_applies(dir: &[u8], windows: bool) -> bool {
     !winc_backend::is_remote(&dir) && !in_distro
 }
 
-/// 把 shell 报告的工作目录 `path` 转换为编辑器使用的路径（见 [`terminal_path`]）。重启标签和
-/// 恢复现场都使用该目录。
-fn local_cwd(root: Option<&std::path::Path>, path: Vec<u8>) -> Vec<u8> {
-    match root {
-        Some(root) => os_bytes(terminal_path(root, bytes_path(&path)).as_os_str()),
-        None => path,
+/// 把 shell 报告的工作目录 `path` 转换为编辑器使用的路径（见 [`reported_path`]）；不采用时返回
+/// `None`。重启标签和恢复现场都使用该目录。
+fn local_cwd(root: Option<&std::path::Path>, path: Vec<u8>) -> Option<Vec<u8>> {
+    let reported = bytes_path(&path);
+    if winc_backend::is_remote(&reported) {
+        return None;
     }
+    Some(match root {
+        Some(root) => os_bytes(terminal_path(root, reported).as_os_str()),
+        None => path,
+    })
+}
+
+/// 把终端输出给出的路径 `path`（工作目录、输出中的文件位置）转换为编辑器使用的路径，见
+/// [`terminal_path`]。
+///
+/// 写成虚拟路径的不采用，返回 `None`：虚拟路径指定连接的主机，只由编辑器自己生成，终端的输出
+/// 不能借此让标签、链接指向任意主机。
+pub(in crate::app) fn reported_path(
+    root: Option<&std::path::Path>,
+    path: PathBuf,
+) -> Option<PathBuf> {
+    if winc_backend::is_remote(&path) {
+        return None;
+    }
+    Some(match root {
+        Some(root) => terminal_path(root, path),
+        None => path,
+    })
 }
 
 /// 把终端中的路径 `path` 转换为编辑器使用的路径：打开的目录 `root` 在远端主机上时，`/` 开头的
 /// 路径是那台主机上的路径；位于 WSL 发行版中时属于同一发行版。其余路径原样返回。
 ///
 /// 已经是远端主机上的路径时原样返回：标签记下的目录、恢复的现场都是换算过的，Unix 上这种路径
-/// 同样以 `/` 开头，再换算一次会指向错误的位置。
+/// 同样以 `/` 开头，再换算一次会指向错误的位置。来自终端输出的路径经 [`reported_path`] 换算。
 pub(in crate::app) fn terminal_path(root: &std::path::Path, path: PathBuf) -> PathBuf {
     if winc_backend::is_remote(&path) {
         return path;

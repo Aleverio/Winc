@@ -570,9 +570,14 @@ impl App {
         self.git_operate(
             t!("git-op-checkout", name = local.as_str()),
             move |git, root| {
-                git.operate(root, &stash_args(&message))?;
-                run_switch(git, root, &branch.name, &local, track)
-                    .map_err(|error| restored_error(git, root, &error))
+                let stashed = stash_changes(git, root, &message)?;
+                run_switch(git, root, &branch.name, &local, track).map_err(|error| {
+                    if stashed {
+                        restored_error(git, root, &error)
+                    } else {
+                        error
+                    }
+                })
             },
         );
     }
@@ -588,11 +593,8 @@ impl App {
             let Err(refused) = run_switch(git, root, &branch.name, &local, track) else {
                 return Ok((String::new(), Then::Nothing));
             };
-            // 没有可储藏的内容时 `stash push` 同样成功：比较储藏的顶端，避免恢复无关的旧储藏。
-            let tip = |git: &Git| git.operate(root, &["rev-parse", "-q", "--verify", "refs/stash"]);
-            let before = tip(git).ok();
-            // 储藏失败时（例如合并未完成）报告的仍是切换失败的原因。
-            if git.operate(root, &stash_args(&message)).is_err() || tip(git).ok() == before {
+            // 储藏失败（例如合并未完成）或没有可储藏的内容时，报告的仍是切换失败的原因。
+            if !stash_changes(git, root, &message).unwrap_or(false) {
                 return Err(refused);
             }
             run_switch(git, root, &branch.name, &local, track)
@@ -903,6 +905,20 @@ impl App {
 /// 返回储藏工作区和暂存区改动（含未跟踪的文件）的 git 参数。
 fn stash_args(message: &str) -> [&str; 5] {
     ["stash", "push", "--include-untracked", "--message", message]
+}
+
+/// 储藏工作区和暂存区里的改动（含未跟踪的文件），返回是否新建了储藏。
+///
+/// 没有可储藏的内容时 `stash push` 同样成功，因此比较储藏的顶端：没有新建储藏时，调用方不能
+/// 执行 `stash pop`，否则恢复的是无关的旧储藏。
+fn stash_changes(git: &Git, root: &Path, message: &str) -> Result<bool, String> {
+    let tip = || {
+        let args = ["rev-parse", "-q", "--verify", "refs/stash"];
+        git.operate(root, &args).ok()
+    };
+    let before = tip();
+    git.operate(root, &stash_args(message))?;
+    Ok(tip() != before)
 }
 
 /// 切换到本地分支 `local`；`track` 时新建跟踪远程分支 `name` 的本地分支。

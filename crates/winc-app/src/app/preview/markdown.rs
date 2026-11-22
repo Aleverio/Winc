@@ -1300,6 +1300,12 @@ const REMOTE_TIMEOUT: &str = "20";
 /// 单张图片的最大下载大小（字节，20 MB），传给 `curl` 的 `--max-filesize`。
 const REMOTE_MAX: &str = "20000000";
 
+/// 下载一张图片时最多跟随的重定向次数，传给 `curl` 的 `--max-redirs`。
+///
+/// 图片托管服务通常经一到两次重定向到达内容分发的地址；取 5 次留出余量，并限制一个地址能
+/// 引出的请求数。
+const REMOTE_REDIRECTS: &str = "5";
+
 /// `url` 是否为需要联网的地址。
 fn is_remote(url: &str) -> bool {
     let lower = url.get(..8).unwrap_or(url).to_ascii_lowercase();
@@ -1353,14 +1359,10 @@ fn download(url: &str, path: &Path) -> Result<(), String> {
     let part = path.with_extension(format!("part{}", std::process::id()));
     let mut command = crate::web::curl();
     command
-        .args([
-            "-fsSL",
-            "--max-time",
-            REMOTE_TIMEOUT,
-            "--max-filesize",
-            REMOTE_MAX,
-            "-o",
-        ])
+        .args(["-fsSL", "--proto", "=http,https"])
+        .args(["--max-redirs", REMOTE_REDIRECTS])
+        .args(["--max-time", REMOTE_TIMEOUT])
+        .args(["--max-filesize", REMOTE_MAX, "-o"])
         .arg(&part)
         .arg(url)
         .stdin(std::process::Stdio::null())

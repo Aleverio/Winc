@@ -731,6 +731,29 @@ fn a_failed_switch_restores_the_stashed_changes() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// 储藏并签出时没有可储藏的内容、签出又失败：原有的储藏不动。
+#[test]
+fn a_failed_switch_with_nothing_to_stash_keeps_old_stashes() {
+    let Some((mut app, root)) = picker_repo("git-stash-clean", false) else {
+        return;
+    };
+    let file = root.join("a.txt");
+    let committed = std::fs::read_to_string(&file).unwrap();
+    std::fs::write(&file, "kept\n").unwrap();
+    git_in(&root, &["stash", "push", "-q", "--include-untracked"]);
+    app.git_refresh();
+    let mut missing = (app.git.branches.iter())
+        .find(|b| b.name == "fix/one")
+        .unwrap()
+        .clone();
+    missing.name = "no-such-branch".to_owned();
+    app.stash_then_checkout(missing);
+    app.git_refresh();
+    assert_eq!(app.git.stashes.len(), 1);
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), committed);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// 拉取能处理分叉的分支，和同步一样；不在分支上时分支选择器里的推送灰显。
 #[test]
 fn the_status_menu_pulls_diverged_branches_and_needs_a_branch_to_push() {

@@ -27,10 +27,11 @@ pub const FEED_FILE: &str = if cfg!(all(target_os = "linux", target_arch = "aarc
 };
 
 /// 正在运行的 AppImage 文件；不是以 AppImage 运行时返回 `None`。
+///
+/// 环境变量 `APPIMAGE` 会被子进程继承，只在本程序位于其挂载目录内时采用，见
+/// `shell_command::current_appimage`。
 pub fn locate() -> Option<PathBuf> {
-    std::env::var_os("APPIMAGE")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute() && p.is_file())
+    crate::shell_command::current_appimage().filter(|p| p.is_absolute() && p.is_file())
 }
 
 /// 下载 `item` 到 `appimage` 旁边，核对长度和签名后替换 `appimage`，返回重新启动时运行的

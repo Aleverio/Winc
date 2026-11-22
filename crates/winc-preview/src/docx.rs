@@ -1093,11 +1093,8 @@ impl<'a, 'i> Converter<'a, 'i> {
             let mut row = Vec::new();
             for tc in tr.children().filter(|n| n.tag_name().name() == "tc") {
                 let tcpr = child(tc, "tcPr");
-                let span = tcpr
-                    .and_then(|p| child(p, "gridSpan"))
-                    .and_then(|n| attr(n, "val")?.parse::<usize>().ok())
-                    .unwrap_or(1)
-                    .max(1);
+                let span = tcpr.and_then(|p| child(p, "gridSpan"));
+                let span = crate::convert::span(span.and_then(|n| attr(n, "val")));
                 // 纵向合并的后续单元格：内容在第一格中，这里留空。
                 let continued = tcpr
                     .and_then(|p| child(p, "vMerge"))

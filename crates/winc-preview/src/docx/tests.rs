@@ -136,6 +136,19 @@ fn deleted_text_and_field_codes_are_left_out() {
 }
 
 #[test]
+fn a_merged_cell_spans_a_bounded_number_of_columns() {
+    let table = format!(
+        "<w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val=\"4000000000\"/></w:tcPr>{}</w:tc>\
+         <w:tc>{}</w:tc></w:tr></w:tbl>",
+        p("", None, &r("a")),
+        p("", None, &r("b"))
+    );
+    let text = markdown(&table);
+    let first = text.lines().next().unwrap();
+    assert_eq!(first.matches('|').count(), crate::convert::MAX_SPAN + 2);
+}
+
+#[test]
 fn tables_keep_merged_cells_empty_and_boxes_become_quotes() {
     let cell = |attrs: &str, text: &str| {
         format!(

