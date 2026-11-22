@@ -69,6 +69,7 @@ editor-symbol-variable = Variable
 editor-symbol-heading = Heading
 editor-symbol-section = Section
 editor-definition-no-name = No name to look up at the cursor
+editor-no-link = No link at the cursor
 editor-usages-not-found = No other usages of “{ $name }” found
 editor-definition-at-caret = The cursor is already at the definition of “{ $name }”
 editor-definition-not-found = No definition of “{ $name }” found

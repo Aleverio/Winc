@@ -63,6 +63,7 @@ editor-symbol-variable = 变量
 editor-symbol-heading = 标题
 editor-symbol-section = 小节
 editor-definition-no-name = 光标处无可查找的名称
+editor-no-link = 光标处无链接
 editor-usages-not-found = 未找到「{ $name }」的其他用法
 editor-definition-at-caret = 光标处即为「{ $name }」的定义
 editor-definition-not-found = 未找到「{ $name }」的定义
