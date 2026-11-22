@@ -923,6 +923,12 @@ pub fn create_at(
 
     // 名字是用户输入的：经 `join` 换成路径，远端的名字按需转义。
     let path = winc_backend::join(dir, name);
+    if below(dir, &path).is_none() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            t!("workspace-tree-invalid-name"),
+        ));
+    }
 
     if winc_backend::fs::exists(&path) {
         return Err(io::Error::new(
@@ -941,6 +947,22 @@ pub fn create_at(
         }
     }
     Ok(path)
+}
+
+/// `path` 位于目录 `base` 之下时返回它比 `base` 多出的层数（至少 1 层），否则返回 `None`。
+///
+/// 多出的各段必须都是普通的名字。名字来自用户输入，各系统认的分隔符不同：Windows 上名字里的
+/// `\`、`..\` 和盘符在 `join` 之后会指到 `base` 之外，按 `/` 检查名字发现不了。
+fn below(base: &Path, path: &Path) -> Option<usize> {
+    let rest = path.strip_prefix(base).ok()?;
+    let mut depth = 0;
+    for part in rest.components() {
+        if !matches!(part, std::path::Component::Normal(_)) {
+            return None;
+        }
+        depth += 1;
+    }
+    (depth > 0).then_some(depth)
 }
 
 /// 把工作区 `root` 中的 `path` 改名为同一目录下的 `name`，返回新路径；规则见
@@ -969,7 +991,15 @@ pub fn rename_at(root: &Path, path: &Path, name: &str) -> io::Result<PathBuf> {
         ));
     }
 
-    let target = winc_backend::join(path.parent().unwrap_or(root), name);
+    let parent = path.parent().unwrap_or(root);
+    let target = winc_backend::join(parent, name);
+    // 改名不换目录：新路径必须是同一目录下的一项。
+    if below(parent, &target) != Some(1) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            t!("workspace-tree-invalid-name"),
+        ));
+    }
     if target == path {
         return Ok(target);
     }

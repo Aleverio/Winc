@@ -727,7 +727,16 @@ impl App {
         let Some(index) = self.editor.active else {
             return;
         };
+        // 点击时看到的是重算之前的各段：重算后同一序号换成了另一段时不替换。
+        let drawn = |app: &Self| {
+            let view = app.editor.documents[index].diff.as_deref()?;
+            view.hunks.get(hunk).cloned()
+        };
+        let clicked = drawn(self);
         self.sync_diff(index, true);
+        if clicked.is_none() || drawn(self) != clicked {
+            return;
+        }
         let Some(view) = self.editor.documents[index].diff.as_deref() else {
             return;
         };
@@ -735,6 +744,8 @@ impl App {
             return;
         };
         let inserted = view.old_lines(hunk);
+        // 差异右侧显示的那份内容：行号是按它算的。
+        let shown = view.new.text.clone();
         // 记录该段改动首行与视图顶部的距离，替换后使该行停留在原位置。
         let offset = view.hunk_rows[RIGHT][hunk].start as f64
             - view.row_at(RIGHT, self.editor.documents[index].scroll_line);
@@ -757,9 +768,14 @@ impl App {
                 self.sync_diff(index, true);
             }
             None => {
+                // 磁盘上的文件在差异算出之后又变了时不写：否则替换的是别的行，而且没有打开的
+                // 文档可以撤销。
                 let written = Document::open(DocumentId(u64::MAX), path.clone())
                     .map_err(|e| e.to_string())
                     .and_then(|mut doc| {
+                        if doc.text().rope() != Some(&shown) {
+                            return Err(t!("editor-original-changed").to_owned());
+                        }
                         replace_lines(&mut doc, h.new, inserted).map_err(str::to_owned)?;
                         doc.save().map_err(|e| e.to_string())?;
                         Ok(doc.text().rope().cloned())

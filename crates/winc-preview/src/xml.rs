@@ -170,7 +170,8 @@ fn unescape(text: &str) -> Cow<'_, str> {
     while let Some(at) = rest.find('&') {
         out.push_str(&rest[..at]);
         rest = &rest[at..];
-        // 只在实体的最大长度以内找分号：逐个 `&` 都找到文字末尾时，一串没有分号的 `&` 耗时为平方级。
+        // 只在实体的最大长度以内找分号：每个 `&` 都找到文字末尾时，一串没有分号的 `&` 耗时为
+        // 平方级。
         let end = (rest.bytes().take(MAX_ENTITY + 2)).position(|b| b == b';');
         let entity = end.map(|end| &rest[1..end]);
         let decoded = entity.and_then(|entity| match entity {

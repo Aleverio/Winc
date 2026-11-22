@@ -721,9 +721,9 @@ impl State {
     /// 序列化为 `state.json` 的内容，末尾带一个换行符。
     ///
     /// `last` 没有值，`previewMode` 为空，`recentFiles`、`otherWindows`、`signOffRepos`、`toolChoices`、
-    /// `approvedCommands`、`trustedRepos`、`vimMarks`、`vimCommands`、`vimSearches` 为空，`commitTree`、
-    /// `commitAllRepositories`、`pdfThumbnailsHidden`、`stayOutsideApplications` 为假时省略
-    /// 对应的键。
+    /// `approvedCommands`、`trustedRepos`、`vimMarks`、`vimCommands`、`vimSearches` 为空，
+    /// `commitTree`、`commitAllRepositories`、`pdfThumbnailsHidden`、`stayOutsideApplications`
+    /// 为假时省略对应的键。
     pub fn to_json(&self) -> String {
         let path = |p: &PathBuf| Json::String(p.to_string_lossy().into_owned());
         let mut fields = vec![(

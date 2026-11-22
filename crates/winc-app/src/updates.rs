@@ -167,8 +167,8 @@ pub fn start(
         std::thread::sleep(FIRST_CHECK);
         loop {
             tick();
-            // 按系统时间计：线程的休眠不计入电脑睡眠的时间，每天合盖的电脑上一次休眠 24 小时
-            // 实际要过好几天。
+            // 按系统时间计：线程的休眠不计入电脑睡眠的时间，每天合盖的电脑上休眠 24 小时实际
+            // 历时数天。
             let checked = std::time::SystemTime::now();
             while checked
                 .elapsed()

@@ -193,8 +193,7 @@ pub fn link(url: &str) -> Option<Target> {
     };
     // 链接可以来自网页：不接受以两个分隔符开头的网络路径和设备路径（`//主机/共享`、
     // `\\?\…`），在 Windows 上查看它们是否存在就会向那台主机发起连接和身份验证。
-    let separator = |c: char| c == '/' || c == '\\';
-    if path.chars().take(2).filter(|c| separator(*c)).count() == 2 {
+    if winc_backend::names_host(&path) {
         return None;
     }
     let target = target(OsString::from(path));

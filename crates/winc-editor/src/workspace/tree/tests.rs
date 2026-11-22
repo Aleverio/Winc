@@ -837,3 +837,15 @@ fn folders_with_the_same_name_show_their_parents() {
     ws.remove_folder(&first);
     assert_eq!(names(&ws), ["main", "api"]);
 }
+
+/// 新建和改名的目标必须留在所在的目录之下：名字经 `join` 之后多出的各段都是普通的名字。
+#[test]
+fn created_and_renamed_entries_stay_below_their_folder() {
+    let base = Path::new("/work/src");
+    assert_eq!(below(base, &base.join("a.rs")), Some(1));
+    assert_eq!(below(base, &base.join("ui/a.rs")), Some(2));
+    assert_eq!(below(base, base), None);
+    assert_eq!(below(base, &base.join("../../etc/a")), None);
+    assert_eq!(below(base, &base.join("ui/../../a")), None);
+    assert_eq!(below(base, Path::new("/elsewhere/a.rs")), None);
+}
