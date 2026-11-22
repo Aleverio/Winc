@@ -371,11 +371,9 @@ impl App {
         if l.search.contains(x, y) {
             return Target::Search;
         }
-        // 名称显示不全而展开的行（文件树、改动列表）覆盖在分隔条上，该行优先；
-        // 其余各行仍可拖动分隔条。
+        // 展开的全名可以画在分隔条上，分隔条仍然可以拖动；鼠标停在分隔条上时全名保持展开。
         let over_row = self.over_tree_overflow_row(y);
-        let over_any = over_row || over_commit_row || over_result_row;
-        if self.panels.sidebar.visible && !over_any && l.splitter.contains(x, y) {
+        if self.panels.sidebar.visible && l.splitter.contains(x, y) {
             return Target::Splitter;
         }
         if let Some(tool) = hit(&self.hits.tree_tools, x, y) {
@@ -756,19 +754,23 @@ impl App {
     ///
     /// 只有已展开的行优先。沿边缘上下移动到其他行时，该行尚未展开，滚动条正常响应。
     pub(in crate::app) fn over_tree_overflow_row(&self, y: f32) -> bool {
-        self.panels
-            .tree
-            .overflow
-            .is_some_and(|(rect, _)| (rect.y..rect.bottom()).contains(&y))
+        self.panels.sidebar.view == SidebarView::Files
+            && self
+                .panels
+                .tree
+                .overflow
+                .is_some_and(|(rect, _)| (rect.y..rect.bottom()).contains(&y))
     }
 
     /// 窗口坐标 (`x`, `y`)（逻辑像素）是否位于文件树中显示不全的文件名
     /// 向右展开、覆盖到编辑区上方的区域内。
     pub(in crate::app) fn in_tree_overflow(&self, x: f32, y: f32) -> bool {
-        self.panels
-            .tree
-            .overflow
-            .is_some_and(|(rect, _)| rect.contains(x, y))
+        self.panels.sidebar.view == SidebarView::Files
+            && self
+                .panels
+                .tree
+                .overflow
+                .is_some_and(|(rect, _)| rect.contains(x, y))
     }
 
     /// 按鼠标当前位置重新判断悬停目标和指针样式；每绘制完一帧调用一次。
