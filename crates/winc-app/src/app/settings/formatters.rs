@@ -311,6 +311,7 @@ impl App {
             | Setting::DropFolder
             | Setting::FindInFiles
             | Setting::AutoSave
+            | Setting::SmoothCaret
             | Setting::Zoom
             | Setting::BackgroundImage
             | Setting::BackgroundFit
@@ -330,6 +331,7 @@ impl App {
                     Setting::DropFolder => MenuTarget::DropFolder,
                     Setting::FindInFiles => MenuTarget::SearchStyle,
                     Setting::AutoSave => MenuTarget::AutoSave,
+                    Setting::SmoothCaret => MenuTarget::SmoothCaret,
                     Setting::Zoom => MenuTarget::Zoom,
                     Setting::BackgroundImage => MenuTarget::BackgroundImage,
                     Setting::BackgroundFit => MenuTarget::BackgroundFit,

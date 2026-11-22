@@ -394,6 +394,9 @@ impl App {
         settle(&mut self.panels.global.field_motion, |m| m.2);
         settle(&mut self.panels.global.motion, |m| m.clock);
         settle(&mut self.motion.fold_motion, |m| m.clock);
+        if let Some(motion) = &mut self.motion.caret_motion {
+            motion.settle();
+        }
         self.finish_diff_fold(false);
         settle(&mut self.scroll.glide, |g| g.clock);
         self.scroll.pane_glides.retain(|g| !g.clock.done());
@@ -523,6 +526,7 @@ impl App {
             || self.panels.global.rows_moving()
             || self.motion.fold_motion.is_some()
             || self.motion.diff_fold.is_some()
+            || self.motion.caret_motion.is_some_and(|m| m.moving())
             || self.scroll.glide.is_some()
             || self.scroll.wheel.glide.is_some()
             || !self.scroll.pane_glides.is_empty()
@@ -577,6 +581,9 @@ impl App {
                 && self.commit_shown())
     }
 }
+
+mod caret;
+pub(crate) use caret::CaretTarget;
 
 mod presence;
 pub use presence::*;
@@ -690,6 +697,8 @@ pub(crate) struct Motions {
     pub fold_motion: Option<FoldMotion>,
     /// 差异标签中未改动内容折叠、展开的过渡。
     pub(crate) diff_fold: Option<diff::DiffFoldMotion>,
+    /// 主光标从上一位置滑到新位置的动画。
+    pub(crate) caret_motion: Option<caret::CaretMotion>,
 }
 
 #[cfg(test)]

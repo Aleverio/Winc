@@ -130,6 +130,7 @@ impl App {
                 module_fx: Default::default(),
                 fold_motion: None,
                 diff_fold: None,
+                caret_motion: None,
             },
             release_notes: Default::default(),
             wallpaper: Default::default(),

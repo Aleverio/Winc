@@ -17,6 +17,7 @@ use winc_syntax::{Language, Token};
 
 use super::*;
 use crate::app::FoldMotion;
+use crate::app::animation::CaretTarget;
 use crate::app::git::merge::MergeTarget;
 
 /// 绘制当前文档的文本区，`index` 是它在 `documents` 中的位置。
@@ -261,6 +262,18 @@ pub(super) fn draw_text_area(app: &mut App, frame: &mut Frame<'_>, index: usize)
     }
     app.hits.merge = merge_hits;
 
+    // 主光标的移动动画在行都画完之后绘制：滑动途中经过其他行时不会被后面绘制的行盖住。
+    // 前台以外的窗格没有光标，动画状态属于前台的文档。
+    if !app.panes.drawing_background {
+        match scratch.caret_motion {
+            Some(target) => {
+                let rect = app.caret_position(target);
+                caret_bar(app, frame, rect.x, rect.y, layout.text);
+            }
+            None => app.caret_hidden(),
+        }
+    }
+
     app.hits.folded = scratch.folded_hits;
     app.hits.long_lines = scratch.long_hits;
     draw_sticky(app, frame, index);
@@ -369,6 +382,8 @@ struct Scratch {
     long_hits: LineHits,
     /// 主光标的位置；输入法候选框跟随该位置。
     ime_cursor: Option<Rect>,
+    /// 主光标本帧的目标位置；播放移动动画时在行都画完之后按动画位置绘制。
+    caret_motion: Option<CaretTarget>,
 }
 
 impl Scratch {
@@ -383,6 +398,7 @@ impl Scratch {
             folded_hits: Vec::new(),
             long_hits: Vec::new(),
             ime_cursor: None,
+            caret_motion: None,
         }
     }
 }

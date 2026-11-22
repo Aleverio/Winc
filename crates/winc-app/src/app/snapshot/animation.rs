@@ -2,6 +2,8 @@
 
 use std::time::Duration;
 
+use winc_config::SmoothCaret;
+
 use super::*;
 
 #[test]
@@ -162,4 +164,79 @@ fn an_unfocused_window_hides_the_caret_and_shows_it_again_on_focus() {
     assert!(app.blink.visible);
 
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// 平滑光标移动：移动后的第一帧画在旧位置，途中按曲线前进，到时停在新位置。
+#[test]
+fn smooth_caret_movement_glides_between_positions() {
+    let dir = sample_folder("caret-glide");
+    std::fs::write(dir.join("blank.txt"), "a\n\n\n\n\n").unwrap();
+    let mut app = app_with(&dir.join("blank.txt"), false);
+    app.config.smooth_caret_movement = Some(SmoothCaret::Gliding);
+    app.focus = Focus::Editor;
+    app.window.focused = true;
+    app.blink.visible = true;
+    paint(&mut app);
+
+    // 光标在第 0 行行首；移到第 4 行的空行（字符偏移 5），两处之间隔着三行。
+    let start = app.ime.cursor.expect("光标在第 0 行");
+    app.select(5, 5);
+    paint(&mut app);
+    let target = app.ime.cursor.expect("光标在第 4 行");
+    assert!(target.y > start.y + app.fonts.line_height * 3.0);
+
+    let caret = app.palette.caret;
+    // 像素是否接近颜色 `c`（每个通道相差不超过 2，容许舍入）。
+    let near = |px: u32, c: Color| {
+        let ch = |shift: u32, v: f32| ((px >> shift) & 0xff).abs_diff((v * 255.0).round() as u32);
+        ch(16, c.r) <= 2 && ch(8, c.g) <= 2 && ch(0, c.b) <= 2
+    };
+    let pixel = |app: &App, (x, y): (f32, f32)| {
+        let image = app.frame.renderer.as_ref().unwrap().image().unwrap();
+        let (x, y) = ((x * SCALE) as usize, (y * SCALE) as usize);
+        image.pixels[y * image.width as usize + x]
+    };
+    // 光标竖线中心处的点：竖线从 `rect.x` 起宽 2，顶边从行顶下移 1。
+    let lh = app.fonts.line_height;
+    let point = |rect: Rect| (rect.x.round() + 1.0, rect.y + lh / 2.0);
+
+    // 第一帧仍在旧位置，新位置还没有光标。
+    assert!(near(pixel(&app, point(start)), caret), "起点应画着光标");
+    assert!(
+        !near(pixel(&app, point(target)), caret),
+        "目标处还不应有光标"
+    );
+
+    // 时间过半：Gliding 曲线走过约八成距离，光标画在两者之间。
+    let move_duration = Duration::from_millis(120);
+    app.motion
+        .caret_motion
+        .as_mut()
+        .unwrap()
+        .freeze(move_duration / 2);
+    paint(&mut app);
+    let eased = 0.80625;
+    let middle = Rect::new(
+        start.x,
+        start.y + (target.y - start.y) * eased,
+        start.w,
+        start.h,
+    );
+    assert!(
+        near(pixel(&app, point(middle)), caret),
+        "中途应画在曲线位置"
+    );
+    assert!(!near(pixel(&app, point(start)), caret), "起点应已没有光标");
+
+    // 动画结束：停在新位置，中途不再有光标。
+    app.motion
+        .caret_motion
+        .as_mut()
+        .unwrap()
+        .freeze(move_duration);
+    paint(&mut app);
+    assert!(near(pixel(&app, point(target)), caret), "终点应画着光标");
+    assert!(!near(pixel(&app, point(middle)), caret), "中途应已没有光标");
+
+    let _ = std::fs::remove_dir_all(&dir);
 }

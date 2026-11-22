@@ -22,6 +22,26 @@ fn auto_save_reads_its_values_and_the_old_switch() {
     assert!(!problems.is_empty());
 }
 
+/// `editor.smoothCaretMovement` 读三个取值，其他值报告问题并忽略。
+#[test]
+fn smooth_caret_movement_reads_its_values() {
+    assert_eq!(Config::default().smooth_caret_movement, None);
+    for (value, expected) in [
+        ("off", SmoothCaret::Off),
+        ("snappy", SmoothCaret::Snappy),
+        ("gliding", SmoothCaret::Gliding),
+    ] {
+        let text = format!(r#"{{"editor":{{"smoothCaretMovement":"{value}"}}}}"#);
+        let (config, problems) = Config::parse(&text);
+        assert!(problems.is_empty(), "{value}");
+        assert_eq!(config.smooth_caret_movement, Some(expected));
+        assert_eq!(Config::parse(&config.to_json()).0, config);
+    }
+    let (config, problems) = Config::parse(r#"{"editor":{"smoothCaretMovement":"smooth"}}"#);
+    assert_eq!(config.smooth_caret_movement, None);
+    assert!(!problems.is_empty());
+}
+
 /// `editor.findInFiles` 读 `sidebar` 和 `dialog`，其他值报告问题并忽略。
 #[test]
 fn find_in_files_reads_its_values() {
@@ -307,6 +327,7 @@ fn round_trips_through_json() {
         ui_native_title_bar: Some(true),
         ui_animations: Some(false),
         smooth_scrolling: Some(false),
+        smooth_caret_movement: Some(SmoothCaret::Gliding),
         ui_font_weight: Some(500),
         ui_background_image: Some("/图片/壁纸.jpg".to_string()),
         ui_background_opacity: Some(20.0),

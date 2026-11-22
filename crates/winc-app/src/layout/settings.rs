@@ -127,6 +127,7 @@ impl SettingsPage {
                     Setting::WholeLines,
                     Setting::Minimap,
                     Setting::StickyScroll,
+                    Setting::SmoothCaret,
                     Setting::RenderWhitespace,
                 ]),
                 plain(vec![
@@ -299,6 +300,8 @@ pub enum Setting {
     RestoreFolder,
     /// 粘滞滚动：滚动时在编辑区顶部钉住当前所在的函数、类和标题。
     StickyScroll,
+    /// 光标移动时滑到新位置的方式。
+    SmoothCaret,
     /// Vim 模式。
     VimMode,
     /// Vim 模式下无名寄存器与系统剪贴板的同步方式。
@@ -519,6 +522,7 @@ impl Setting {
             | Setting::CompactFolders
             | Setting::PreviewOnClick
             | Setting::StickyScroll
+            | Setting::SmoothCaret
             | Setting::VimMode
             | Setting::VimClipboard
             | Setting::VimRelativeNumber
@@ -604,6 +608,7 @@ impl Setting {
             Setting::DropFolder => t!("settings-drop-folder"),
             Setting::FindInFiles => t!("settings-find-in-files"),
             Setting::StickyScroll => t!("settings-sticky-scroll"),
+            Setting::SmoothCaret => t!("settings-smooth-caret"),
             Setting::VimMode => t!("settings-vim-mode"),
             Setting::VimClipboard => t!("settings-vim-clipboard"),
             Setting::VimRelativeNumber => t!("settings-vim-relative-number"),
@@ -718,6 +723,7 @@ impl Setting {
             Setting::BackgroundFit => Some(t!("settings-background-fit-desc")),
             Setting::BackgroundOpacity => Some(t!("settings-background-opacity-desc")),
             Setting::RemoteImages => Some(t!("settings-remote-images-desc")),
+            Setting::SmoothCaret => Some(t!("settings-smooth-caret-desc")),
             Setting::TextWidth => Some(t!("settings-text-width-desc")),
             Setting::MarkdownLineNumbers => Some(t!("settings-markdown-line-numbers-desc")),
             Setting::MarkdownShortcuts => Some(t!("settings-markdown-shortcuts-desc")),
@@ -837,6 +843,7 @@ impl Setting {
             | Setting::DropFolder
             | Setting::FindInFiles
             | Setting::AutoSave
+            | Setting::SmoothCaret
             | Setting::GitOpenWorktree
             | Setting::GitPullMode => SettingControl::Choice,
             Setting::AddLanguage | Setting::AddFixLanguage => SettingControl::Action,
@@ -850,37 +857,6 @@ impl Setting {
             Setting::Updates => SettingControl::Button,
         }
     }
-}
-
-/// 设置项右边的控件种类。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SettingControl {
-    /// 字体名输入框。
-    Font,
-    /// 加减数值。
-    Stepper,
-    /// 外观（跟随系统、浅色、深色）的缩略图，在名称右边。
-    Themes,
-    /// 一排主题缩略图，在名称下面。
-    ThemeList,
-    /// 开关。
-    Switch,
-    /// 格式化工具、默认 shell：点击后弹出菜单的值；选择「自定义命令…」时换成比字体名输入框
-    /// 更宽的输入框。
-    Command,
-    /// 组下方的文字按钮（「添加语言…」）。
-    Action,
-    /// 点击后弹出菜单的值，显示当前选择（如「语言」「排除的语言」）。
-    Choice,
-    /// 「快捷键」页的搜索框；不按设置行排列，整页单独布局（[`KeysLayout`]）。
-    Search,
-    /// 「关于」页顶部的产品信息：图标、名称和版本号，水平居中，没有左侧的名称；点击版本号复制
-    /// （见 [`ProductParts`]）。
-    Product,
-    /// 右侧一段链接文字，后跟外链箭头；点击后在浏览器中打开。
-    Link,
-    /// 右侧的按钮（「检查更新」）。
-    Button,
 }
 
 /// 返回「语言」中选项 `choice` 的名称。
@@ -903,6 +879,16 @@ pub fn text_width_label(choice: winc_config::TextWidth) -> &'static str {
         Standard => t!("settings-text-width-standard"),
         Wide => t!("settings-text-width-wide"),
         Full => t!("settings-text-width-full"),
+    }
+}
+
+/// 返回「光标移动」设置中选项 `choice` 的名字。
+pub fn smooth_caret_label(choice: winc_config::SmoothCaret) -> &'static str {
+    use winc_config::SmoothCaret::{Gliding, Off, Snappy};
+    match choice {
+        Off => t!("settings-smooth-caret-off"),
+        Snappy => t!("settings-smooth-caret-snappy"),
+        Gliding => t!("settings-smooth-caret-gliding"),
     }
 }
 
