@@ -19,6 +19,7 @@ pub enum Action {
     GoToSymbol,
     GoToLine,
     GoToDefinition,
+    OpenLink,
     FindReferences,
     GoBack,
     GoForward,
@@ -418,6 +419,7 @@ impl Action {
             GoToSymbol => t!("cmd-go-to-symbol"),
             GoToLine => t!("cmd-go-to-line"),
             GoToDefinition => t!("cmd-go-to-definition"),
+            OpenLink => t!("cmd-open-link"),
             FindReferences => t!("cmd-find-references"),
             GoBack => t!("cmd-go-back"),
             GoForward => t!("cmd-go-forward"),
@@ -725,6 +727,7 @@ impl Action {
             | GoToSymbol
             | GoToLine
             | GoToDefinition
+            | OpenLink
             | FindReferences
             | GoBack
             | GoForward

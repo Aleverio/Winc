@@ -460,6 +460,10 @@ impl App {
                     !doc.selection.is_empty(),
                     bookmarked,
                 );
+                // 光标在链接上时第一项是「打开链接」。
+                if self.link_at_caret().is_some() {
+                    menu.insert(0, MenuEntry::Item(MenuCommand::OpenLink, true));
+                }
                 // Git 模块开着、文件在仓库里：最后是所选代码的历史和「逐行追溯」开关。
                 if doc.path.as_deref().is_some_and(|p| self.in_repo(p)) {
                     let history = Action::GitSelectionHistory;

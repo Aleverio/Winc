@@ -12,6 +12,7 @@ impl Action {
             GoToSymbol => "Go to Symbol in Editor",
             GoToLine => "Go to Line",
             GoToDefinition => "Go to Definition",
+            OpenLink => "Open Link",
             FindReferences => "Find All References",
             GoBack => "Go Back",
             GoForward => "Go Forward",

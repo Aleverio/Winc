@@ -12,6 +12,7 @@ pub const ACTIONS: &[Action] = {
         GoToSymbol,
         GoToLine,
         GoToDefinition,
+        OpenLink,
         FindReferences,
         GoBack,
         GoForward,
