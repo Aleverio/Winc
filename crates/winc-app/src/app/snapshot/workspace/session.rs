@@ -217,6 +217,63 @@ fn session_is_saved_on_exit_and_restored_next_time() {
 }
 
 #[test]
+fn restoring_a_session_whose_active_tab_is_outside_the_front_pane() {
+    let dir = sample_folder("session-panes-missing");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    let mut tabs = Vec::new();
+    for i in 0..8 {
+        let path = dir.join(format!("f{i}.rs"));
+        std::fs::write(&path, "x\n").unwrap();
+        tabs.push(Tab::File(path));
+    }
+    // 最后一个标签的文件已经没了：恢复时只开成 7 个文档，当前标签落在剩下的最后一个上。
+    tabs[7] = Tab::File(dir.join("gone.rs"));
+    // 前台窗格只有前 3 个标签，其余 4 个在另一个窗格里，恢复后文档 7 不属于任何窗格，
+    // 被排到 `documents` 的最后；它就是当时的当前标签。
+    let session = Session {
+        folder: winc_config::files::canonicalize(&dir).unwrap(),
+        tabs,
+        active: Some(6),
+        panes: Some(winc_config::SessionPanes {
+            tree: winc_config::PaneNode::Split {
+                column: true,
+                share: 0.5,
+                first: Box::new(winc_config::PaneNode::Pane(0)),
+                second: Box::new(winc_config::PaneNode::Pane(1)),
+            },
+            panes: vec![
+                winc_config::SessionPane {
+                    tabs: vec![0, 1, 2],
+                    active: Some(1),
+                },
+                winc_config::SessionPane {
+                    tabs: vec![3, 4, 5],
+                    active: Some(0),
+                },
+            ],
+            focused: 0,
+        }),
+        ..Session::default()
+    };
+
+    let mut editor = Editor::default();
+    assert!(crate::open_session_folder(&mut editor, &session));
+    crate::app::restore_at_launch(&mut editor, Some(&session), None);
+    // 当前标签必须在前台窗格的标签之内：标签栏按它取偏移，越界会 panic。
+    let active = editor.active.expect("recovered a tab");
+    assert!(
+        active < editor.tab_count(),
+        "{active} of {}",
+        editor.tab_count()
+    );
+    // 文档 6 不属于任何窗格，被收进前台窗格成为最后一个标签，保持为当前标签。
+    assert_eq!(editor.tabs().len(), 4);
+    assert_eq!(editor.active().unwrap().name(), "f6.rs");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn switching_folders_keeps_each_folders_tabs() {
     let a = search_folder("switch-a");
     let b = sample_folder("switch-b");
