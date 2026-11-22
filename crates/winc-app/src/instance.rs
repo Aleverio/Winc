@@ -105,7 +105,7 @@ pub fn app_socket_path() -> Option<PathBuf> {
 
 /// 返回当前用户私有目录中名为 `winc-{name}.{extension}` 的文件路径。
 ///
-/// 路径长度超出系统对套接字路径的限制时返回 `None`。
+/// 套接字（`extension` 为 `sock`）的路径长度超出系统的限制时返回 `None`。
 pub(crate) fn private_file(name: &str, extension: &str) -> Option<PathBuf> {
     // 限制取下限：macOS 的套接字路径最多 104 字节（含结尾的 NUL），Linux 为 108 字节，
     // 这里按 104 字节减去结尾 NUL 占用的 1 字节，路径本身不得超过 103 字节。
@@ -128,7 +128,9 @@ pub(crate) fn private_file(name: &str, extension: &str) -> Option<PathBuf> {
     // 测试使用另一套名字，避免把目标交给本机正在运行的 winc 并使其切换到前台。
     let prefix = if cfg!(test) { "winc-test" } else { "winc" };
     let path = dir.join(format!("{prefix}-{name}.{extension}"));
-    (path.as_os_str().len() <= LIMIT).then_some(path)
+    // 只有套接字的路径受这个限制；锁文件等其他文件不受限，Windows 上的数据目录常常更长。
+    let fits = extension != "sock" || path.as_os_str().len() <= LIMIT;
+    fits.then_some(path)
 }
 
 /// 是否只有当前用户能访问目录 `dir`：属主与主目录相同，且其他用户没有任何权限。

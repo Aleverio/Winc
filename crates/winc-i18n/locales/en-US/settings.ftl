@@ -250,6 +250,11 @@ settings-updates-ready = { $platform ->
    *[other] { $version } is installed. Restart Winc to use it.
 }
 settings-updates-install-failed = Couldn’t install the update: { $error }
+settings-updates-error-location = Couldn’t tell where Winc is installed
+settings-updates-error-write = Couldn’t write to “{ $path }”: { $error }
+settings-updates-error-tool = Couldn’t run curl or wget: { $error }
+settings-updates-error-size = The download has the wrong size ({ $expected } bytes expected, { $actual } received)
+settings-updates-error-signature = The signature of the download does not match
 settings-format-on-save-desc = Format files with the chosen formatter before saving
 settings-fix-on-save-desc = Fix problems that lint tools can fix before saving
 settings-skip-on-save-desc = Skip fixing and formatting files in these languages on save

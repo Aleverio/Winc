@@ -140,6 +140,10 @@ fn winc_links_open_files_at_a_line() {
         format!("{url}/%e4"),
         format!("{url}/%zz"),
         "vscode://file/no/such/a.rs".to_owned(),
+        // 网络路径和设备路径：链接可以来自网页，不能让本机去连接别的主机。
+        "winc://file//host/share/a.rs".to_owned(),
+        "winc://file/%5C%5Chost%5Cshare%5Ca.rs".to_owned(),
+        "winc://file/%2F%2Fhost/share/a.rs".to_owned(),
     ] {
         assert_eq!(link(&bad), None, "{bad}");
     }

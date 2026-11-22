@@ -176,7 +176,8 @@ pub const LINK_SCHEME: &str = "winc";
 /// 把 `winc://file/<绝对路径>[:行[:列]]` 链接解析为要打开的 [`Target`]，行号和列号从 1 起。
 ///
 /// 路径按百分号编码解码；查询和片段（`?`、`#` 之后）忽略。Windows 路径写作
-/// `winc://file/C:/目录/文件`。不是这种链接、路径不是绝对路径或解码后不是 UTF-8 时返回 `None`。
+/// `winc://file/C:/目录/文件`。不是这种链接、路径不是绝对路径、是网络路径或解码后不是 UTF-8 时
+/// 返回 `None`。
 pub fn link(url: &str) -> Option<Target> {
     let (scheme, rest) = url.split_once("://")?;
     let rest = rest.strip_prefix("file")?;
@@ -190,6 +191,12 @@ pub fn link(url: &str) -> Option<Target> {
         [b'/', drive, b':', ..] if drive.is_ascii_alphabetic() => path[1..].to_owned(),
         _ => path,
     };
+    // 链接可以来自网页：不接受以两个分隔符开头的网络路径和设备路径（`//主机/共享`、
+    // `\\?\…`），在 Windows 上查看它们是否存在就会向那台主机发起连接和身份验证。
+    let separator = |c: char| c == '/' || c == '\\';
+    if path.chars().take(2).filter(|c| separator(*c)).count() == 2 {
+        return None;
+    }
     let target = target(OsString::from(path));
     target.path.is_absolute().then_some(target)
 }

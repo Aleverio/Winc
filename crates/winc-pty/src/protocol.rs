@@ -19,7 +19,7 @@ pub const MAGIC: [u8; 8] = *b"winc-pty";
 /// 协议版本号。
 ///
 /// 消息的格式每变化一次加一。
-pub const VERSION: u32 = 7;
+pub const VERSION: u32 = 8;
 /// 一条消息的长度上限（字节，64 MiB）。
 ///
 /// 超过上限的消息视为对方出错并断开连接，避免一个错误的长度使对端分配数 GB 内存。
@@ -615,9 +615,22 @@ pub enum FromHelper {
     Failed {
         /// 标签号。
         tab: u16,
-        /// 原因，给用户看。
-        message: String,
+        /// 失败的原因；给用户看的文字由主程序按界面语言写出。
+        reason: StartFailure,
+        /// 要启动的程序。
+        program: String,
+        /// 系统给出的错误说明；[`StartFailure::NotFound`] 时为空。
+        error: String,
     },
+}
+
+/// 新建终端失败的原因。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartFailure {
+    /// 找不到要启动的程序。
+    NotFound,
+    /// 程序没有启动起来：无法打开伪终端、系统拒绝等。
+    Refused,
 }
 
 /// 解码失败：对方发来的数据不合法，只能断开连接。

@@ -886,7 +886,20 @@ impl App {
                 let message = (!seen).then(|| winc_i18n::t!("terminal-disconnected").to_string());
                 self.terminal_alert(id, message);
             }
-            FromHelper::Failed { tab: id, message } => {
+            FromHelper::Failed {
+                tab: id,
+                reason,
+                program,
+                error,
+            } => {
+                let message = match reason {
+                    winc_pty::protocol::StartFailure::NotFound => {
+                        winc_i18n::t!("terminal-start-not-found", program = program)
+                    }
+                    winc_pty::protocol::StartFailure::Refused => {
+                        winc_i18n::t!("terminal-start-failed", program = program, error = error)
+                    }
+                };
                 // 只是这个终端起不来（shell 不存在等）：说一声，其他标签和新开的终端不受影响。
                 if let Some((index, gone)) = t.remove_terminal(id) {
                     self.forget_terminal_tab(id);

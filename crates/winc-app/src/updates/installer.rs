@@ -13,8 +13,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use ed25519_dalek::VerifyingKey;
+use winc_i18n::t;
 
-use super::{Item, download, verify};
+use super::{Item, cannot_write, download, verify};
 
 /// appcast 中本平台更新包的系统名称。
 pub const OS: &str = "windows";
@@ -80,7 +81,7 @@ pub fn prepare(
     key: &VerifyingKey,
     progress: &dyn Fn(u8),
 ) -> Result<PathBuf, String> {
-    let kind = kind_at(exe).ok_or("无法识别安装类型")?;
+    let kind = kind_at(exe).ok_or_else(|| t!("settings-updates-error-location").to_owned())?;
     let dir = std::env::temp_dir().join("winc-update");
     prepare_in(&dir, item, key, kind, progress)
 }
@@ -94,7 +95,7 @@ fn prepare_in(
     progress: &dyn Fn(u8),
 ) -> Result<PathBuf, String> {
     let _ = std::fs::remove_dir_all(dir);
-    std::fs::create_dir_all(dir).map_err(|e| format!("无法写入「{}」：{e}", dir.display()))?;
+    std::fs::create_dir_all(dir).map_err(|e| cannot_write(dir, &e))?;
     let setup = dir.join(format!("winc-setup.{}", kind.extension()));
     let result = download(&item.url, &setup, item.length, progress).and_then(|()| {
         let bytes = std::fs::read(&setup).map_err(|e| e.to_string())?;
@@ -117,7 +118,7 @@ fn prepare_in(
 pub fn after_exit(setup: &Path, relaunch: bool) {
     let result = (|| -> Result<(), String> {
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-        let kind = kind_at(&exe).ok_or("无法识别安装类型")?;
+        let kind = kind_at(&exe).ok_or_else(|| t!("settings-updates-error-location").to_owned())?;
         Command::new("powershell.exe")
             .args(["-NoProfile", "-NonInteractive", "-Command"])
             .arg(include_str!("installer/update.ps1"))

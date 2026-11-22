@@ -173,9 +173,10 @@ fn a_missing_program_fails_to_start() {
     let mut c = Client::start();
     c.spawn(1, "/no/such/program", &[]);
     match c.recv() {
-        FromHelper::Failed { tab, message } => {
+        // 写了完整路径的程序不经查找，由系统在启动时报告不存在。
+        FromHelper::Failed { tab, program, .. } => {
             assert_eq!(tab, 1);
-            assert!(message.contains("/no/such/program"), "{message}");
+            assert_eq!(program, "/no/such/program");
         }
         other => panic!("应该报启动失败：{other:?}"),
     }

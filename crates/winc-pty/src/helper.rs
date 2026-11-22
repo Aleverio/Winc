@@ -24,7 +24,7 @@ use std::time::{Duration, Instant};
 use pty::{Command, Pty};
 use winc_pty::Terminal;
 use winc_pty::protocol::{
-    Decoder, Event, FromHelper, Line, MAGIC, Message, Size, Theme, ToHelper, VERSION,
+    Decoder, Event, FromHelper, Line, MAGIC, Message, Size, StartFailure, Theme, ToHelper, VERSION,
 };
 
 /// 单次读取伪终端输出的缓冲大小（字节）。
@@ -484,7 +484,9 @@ impl Helper {
         if self.tabs.contains_key(&id) {
             self.send(&FromHelper::Failed {
                 tab: id,
-                message: format!("终端 {id} 已存在"),
+                reason: StartFailure::Refused,
+                program: String::new(),
+                error: format!("terminal {id} already exists"),
             });
             return;
         }
@@ -501,7 +503,9 @@ impl Helper {
         let Some(path) = resolve(&program, &env) else {
             self.send(&FromHelper::Failed {
                 tab: id,
-                message: format!("未找到程序「{}」", String::from_utf8_lossy(&program)),
+                reason: StartFailure::NotFound,
+                program: String::from_utf8_lossy(&program).into_owned(),
+                error: String::new(),
             });
             return;
         };
@@ -583,7 +587,9 @@ impl Helper {
             }
             Err(error) => self.send(&FromHelper::Failed {
                 tab: id,
-                message: format!("无法启动「{}」：{error}", String::from_utf8_lossy(&program)),
+                reason: StartFailure::Refused,
+                program: String::from_utf8_lossy(&program).into_owned(),
+                error: error.to_string(),
             }),
         }
     }
