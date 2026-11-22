@@ -8,6 +8,7 @@
 pub mod log;
 pub mod merge;
 
+mod branch;
 mod commit;
 mod output;
 mod parse;
@@ -15,6 +16,7 @@ mod rebase;
 mod remote;
 mod sync;
 
+pub use branch::BranchDeleted;
 pub use commit::RecentHistory;
 pub use output::{on_output, output_since, output_snapshot, output_text};
 pub use rebase::{RebaseAction, RebaseCommit, RebasePlan, RebaseStep, rebase_todo};
@@ -605,15 +607,6 @@ impl std::fmt::Display for Unavailable {
     }
 }
 
-/// [`Git::delete_branch`] 的结果。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BranchDeleted {
-    /// 已删除，内容是 `git` 的结论。
-    Done(String),
-    /// 分支未完全合并，需要强制删除，尚未删除。
-    NeedsForce,
-}
-
 /// 系统里可用的 `git`。
 #[derive(Debug, Clone)]
 pub struct Git {
@@ -986,33 +979,6 @@ impl Git {
         }
     }
 
-    /// 删除本地分支 `name`。
-    ///
-    /// `force` 时用 `--force` 连同未合并的提交一起删除；否则分支未完全合并时返回
-    /// [`BranchDeleted::NeedsForce`]，不改动仓库。
-    ///
-    /// # Errors
-    ///
-    /// 分支不存在、被某个工作树签出等其他失败时返回 `git` 给出的原因。
-    pub fn delete_branch(
-        &self,
-        root: &Path,
-        name: &str,
-        force: bool,
-    ) -> Result<BranchDeleted, String> {
-        let mut args = vec!["branch", "--delete"];
-        if force {
-            args.push("--force");
-        }
-        args.extend(["--end-of-options", name]);
-        match self.operate(root, &args) {
-            Ok(summary) => Ok(BranchDeleted::Done(summary)),
-            // 报错固定为英文（`LC_ALL=C`），分支名不含空格，不会和这句话混淆。
-            Err(e) if !force && e.contains("is not fully merged") => Ok(BranchDeleted::NeedsForce),
-            Err(e) => Err(e),
-        }
-    }
-
     /// 推送当前分支：有上游时推到上游，上游与当前分支不同名时写明推到上游的分支（`git` 默认
     /// 拒绝推到不同名的上游）；推送去另一个远程或设置了 `push.default` 时按其设置。
     ///
@@ -1127,7 +1093,7 @@ impl Git {
             .args(["-c", "log.showSignature=false"]);
         // 配置不可信：fsmonitor 和仓库里定义的过滤器都不运行；必需的过滤器被清空命令后 `git` 会
         // 报错，不会把没经过过滤的内容当成结果。会改仓库的操作在此之前已经被拒绝，剩下的只读命令
-        // 中只有 `diff.*.textconv` 会运行仓库配置的命令，`blame` 总是带 `--no-textconv`。
+        // 中只有 `diff.*.textconv` 会运行仓库配置的命令，`blame`、`diff` 总是带 `--no-textconv`。
         if let Some(risks) = self.untrusted(root) {
             command.args(["-c", "core.fsmonitor=false"]);
             for name in &risks.filters {

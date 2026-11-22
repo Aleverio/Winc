@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod commit;
 mod history;
 mod locate;
 

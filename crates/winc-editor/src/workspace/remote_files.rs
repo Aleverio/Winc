@@ -14,6 +14,18 @@ use super::tree::HIDDEN;
 /// 命令输出的字节数上限（64 MiB）：二十万个文件、每个路径数百字节以内。
 const MAX_LISTING: usize = 64 << 20;
 
+/// 列出文件最长的运行时间（60 秒）：`git status` 上限的两倍，清单还要经连接传回本机。
+///
+/// 超过该时间视为远端的命令失去响应，按没有文件处理。
+const LIST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// 返回在远端运行 `git` 的命令，调用方继续追加参数。
+///
+/// 不运行仓库配置的 fsmonitor：列出文件发生在打开目录时，仓库的配置尚未经用户确认。
+fn git() -> Exec {
+    Exec::new("git").arg("-c").arg("core.fsmonitor=false")
+}
+
 /// 只列出含有某段文字的文件。
 pub(crate) struct Containing<'a> {
     /// 要含有的文字：单行，按字面比较。
@@ -33,7 +45,9 @@ pub(crate) fn list(
     containing: Option<&Containing<'_>>,
     stop: &dyn Fn() -> bool,
 ) -> Vec<String> {
-    let run = |command: Exec| exec(root, &command.limit(MAX_LISTING), stop).ok();
+    let deadline = std::time::Instant::now() + LIST_TIMEOUT;
+    let stop = || stop() || std::time::Instant::now() >= deadline;
+    let run = |command: Exec| exec(root, &command.limit(MAX_LISTING), &stop).ok();
     // `git grep` 没有匹配时以 1 退出，输出为空；其余非零的退出码是没能运行（不是仓库等）。
     let from_git = |command: Exec| {
         let output = run(command)?;
@@ -42,7 +56,7 @@ pub(crate) fn list(
     };
     let git = match containing {
         None => {
-            let command = Exec::new("git").arg("ls-files").arg("-z");
+            let command = git().arg("ls-files").arg("-z");
             let command = command.arg("--cached").arg("--others");
             if ignored {
                 command
@@ -51,7 +65,7 @@ pub(crate) fn list(
             }
         }
         Some(wanted) => {
-            let mut command = Exec::new("git").arg("grep").arg("-lzF").arg("--untracked");
+            let mut command = git().arg("grep").arg("-lzF").arg("--untracked");
             if !wanted.case_sensitive {
                 command = command.arg("-i");
             }

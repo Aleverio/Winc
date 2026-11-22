@@ -284,7 +284,8 @@ impl Git {
         self.require_trust(root)?;
         let mut command = self.command(&worktree.path);
         command.args(["status", "--porcelain", "-z", "--no-renames"]);
-        command.arg("--untracked-files=all");
+        // 不进入子模块：其配置不在信任检查的范围内。
+        command.args(["--untracked-files=all", "--ignore-submodules=dirty"]);
         let stdout = self.run(&mut command, STATUS_TIMEOUT, cancel)?;
         let mut check = WorktreeCheck::default();
         for entry in stdout.split(|&b| b == 0).filter(|e| !e.is_empty()) {

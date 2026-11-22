@@ -177,16 +177,31 @@ impl Git {
     ///
     /// 拉取前记下，拉取后交给 [`Git::carried`]，判断未提交的更改是否留在了新的储藏里。
     pub fn stash_tip(&self, root: &Path) -> Option<String> {
-        self.operate(root, &["rev-parse", "-q", "--verify", "refs/stash"])
-            .ok()
+        let mut command = self.command(root);
+        command.args(["rev-parse", "-q", "--verify", "refs/stash"]);
+        let stdout = self
+            .run(&mut command, STATUS_TIMEOUT, &Cancel::default())
+            .ok()?;
+        Some(String::from_utf8_lossy(&stdout).trim().to_owned())
+    }
+
+    /// 是否工作区中有未合并（冲突）的文件；`git` 运行失败时按没有处理。
+    ///
+    /// 只看标准输出：`git` 在标准错误上的提示（例如换行符将被转换）不是文件名。不进入子模块：
+    /// 其配置不在信任检查的范围内。
+    pub fn has_unmerged(&self, root: &Path) -> bool {
+        let mut command = self.command(root);
+        command.args(["diff", "--name-only", "--diff-filter=U", "--no-ext-diff"]);
+        command.arg("--ignore-submodules=dirty");
+        self.run(&mut command, STATUS_TIMEOUT, &Cancel::default())
+            .is_ok_and(|names| !names.trim_ascii().is_empty())
     }
 
     /// 返回拉取完成后未提交的更改的去向；`before` 是拉取前的 [`Git::stash_tip`]。
     ///
     /// `git` 恢复更改失败时把更改存为一条新的储藏：有未合并的文件时是冲突，否则是未能恢复。
     pub fn carried(&self, root: &Path, before: Option<&str>) -> Carried {
-        let unmerged = ["diff", "--name-only", "--diff-filter=U"];
-        if self.operate(root, &unmerged).is_ok_and(|f| !f.is_empty()) {
+        if self.has_unmerged(root) {
             return Carried::Conflicted;
         }
         if self.stash_tip(root).as_deref() != before {
