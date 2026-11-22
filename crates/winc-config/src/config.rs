@@ -499,6 +499,25 @@ pub enum SmoothCaret {
 impl SmoothCaret {
     /// 全部选项，顺序与设置中菜单的顺序一致。
     pub const ALL: [SmoothCaret; 3] = [SmoothCaret::Off, SmoothCaret::Snappy, SmoothCaret::Gliding];
+
+    /// 返回配置文件中的写法。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SmoothCaret::Off => "off",
+            SmoothCaret::Snappy => "snappy",
+            SmoothCaret::Gliding => "gliding",
+        }
+    }
+
+    /// 读配置文件中的写法；不认识时返回 `None`。
+    pub fn from_value(value: &str) -> Option<Self> {
+        match value {
+            "off" => Some(SmoothCaret::Off),
+            "snappy" => Some(SmoothCaret::Snappy),
+            "gliding" => Some(SmoothCaret::Gliding),
+            _ => None,
+        }
+    }
 }
 
 /// Markdown 预览正文的最大宽度：更宽的预览中正文居中、两侧留白。

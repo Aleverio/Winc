@@ -584,6 +584,8 @@ impl App {
 
 mod caret;
 pub(crate) use caret::CaretTarget;
+#[cfg(test)]
+pub(in crate::app) use caret::{CARET_MOVE, ease};
 
 mod presence;
 pub use presence::*;

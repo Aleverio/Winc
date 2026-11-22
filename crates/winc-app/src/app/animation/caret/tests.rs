@@ -22,19 +22,12 @@ fn app(style: SmoothCaret) -> App {
 
 /// 文档 `doc` 中字符偏移 `pos` 处的光标矩形。
 fn target(doc: u64, pos: usize, x: f32, y: f32) -> CaretTarget {
-    CaretTarget {
-        key: (DocumentId(doc), pos),
-        rect: Rect::new(x, y, 2.0, 18.0),
-    }
+    CaretTarget::new(DocumentId(doc), pos, Rect::new(x, y, 2.0, 18.0))
 }
 
-/// 把动画时钟固定在 `at` 毫秒处：测试不依赖实际经过的时间。
-fn freeze(app: &mut App, at: u64) {
-    app.motion
-        .caret_motion
-        .as_mut()
-        .expect("有动画")
-        .freeze(Duration::from_millis(at));
+/// 把动画时钟固定在已过 `at` 处：测试不依赖实际经过的时间。
+fn freeze(app: &mut App, at: Duration) {
+    app.motion.caret_motion.as_mut().expect("有动画").freeze(at);
 }
 
 #[test]
@@ -63,24 +56,24 @@ fn a_move_glides_over_the_configured_duration() {
     let mut app = app(SmoothCaret::Snappy);
     let start = target(1, 0, 100.0, 20.0);
     let end = target(1, 5, 200.0, 120.0);
-    assert!(same_spot(app.caret_position(start), start.rect));
+    assert!(same_spot(app.advance_caret(start), start.rect));
     assert!(!app.animating());
 
     // 移动的第一帧仍在起点，之后由绘制安排下一帧。
-    assert!(same_spot(app.caret_position(end), start.rect));
+    assert!(same_spot(app.advance_caret(end), start.rect));
     assert!(app.animating());
 
     // 时间过半：按曲线走了大部分距离，但还没有到目标。
-    freeze(&mut app, 60);
-    let half = app.caret_position(end);
+    freeze(&mut app, CARET_MOVE / 2);
+    let half = app.advance_caret(end);
     let expected = ease(SmoothCaret::Snappy, 0.5);
     assert!((half.x - (start.rect.x + 100.0 * expected)).abs() < 0.01);
     assert!((half.y - (start.rect.y + 100.0 * expected)).abs() < 0.01);
     assert!(app.animating());
 
     // 到达时长后停在目标处，不再安排帧。
-    freeze(&mut app, CARET_MOVE.as_millis() as u64);
-    assert!(same_spot(app.caret_position(end), end.rect));
+    freeze(&mut app, CARET_MOVE);
+    assert!(same_spot(app.advance_caret(end), end.rect));
     assert!(!app.animating());
 }
 
@@ -88,11 +81,11 @@ fn a_move_glides_over_the_configured_duration() {
 fn scrolling_the_view_moves_the_caret_with_the_text() {
     let mut app = app(SmoothCaret::Gliding);
     let start = target(1, 0, 100.0, 20.0);
-    app.caret_position(start);
+    app.advance_caret(start);
 
     // 光标没动、视口滚动：直接画在新的位置，不播放动画。
     let scrolled = target(1, 0, 100.0, 8.0);
-    assert!(same_spot(app.caret_position(scrolled), scrolled.rect));
+    assert!(same_spot(app.advance_caret(scrolled), scrolled.rect));
     assert!(!app.animating());
 }
 
@@ -100,19 +93,19 @@ fn scrolling_the_view_moves_the_caret_with_the_text() {
 fn a_move_that_scrolls_the_view_still_animates() {
     let mut app = app(SmoothCaret::Gliding);
     let start = target(1, 0, 100.0, 300.0);
-    app.caret_position(start);
+    app.advance_caret(start);
 
     // 光标换到了另一行，视口同时滚动（例如跳到视野之外的行）：仍从旧位置滑过去。
     let moved = target(1, 5, 200.0, 20.0);
-    assert!(same_spot(app.caret_position(moved), start.rect));
+    assert!(same_spot(app.advance_caret(moved), start.rect));
     assert!(app.animating());
 
-    freeze(&mut app, 60);
-    let half = app.caret_position(moved);
+    freeze(&mut app, CARET_MOVE / 2);
+    let half = app.advance_caret(moved);
     assert!(half.y < start.rect.y && half.y > moved.rect.y);
 
-    freeze(&mut app, 120);
-    assert!(same_spot(app.caret_position(moved), moved.rect));
+    freeze(&mut app, CARET_MOVE);
+    assert!(same_spot(app.advance_caret(moved), moved.rect));
 }
 
 #[test]
@@ -121,29 +114,29 @@ fn a_moving_target_is_followed_without_restarting() {
     let start = target(1, 0, 0.0, 0.0);
     let first = target(1, 1, 100.0, 0.0);
     let scrolled = target(1, 1, 100.0, 50.0);
-    app.caret_position(start);
-    app.caret_position(first);
-    freeze(&mut app, 60);
-    app.caret_position(first);
+    app.advance_caret(start);
+    app.advance_caret(first);
+    freeze(&mut app, CARET_MOVE / 2);
+    app.advance_caret(first);
 
     // 目标随视口滚动移动到新位置：保持进度和时钟，不重新开始一次移动。
-    app.caret_position(scrolled);
+    app.advance_caret(scrolled);
     let motion = app.motion.caret_motion.unwrap();
     assert!(motion.moving);
     assert!(same_spot(motion.to, scrolled.rect));
     assert_eq!(motion.clock.duration(), CARET_MOVE);
 
-    freeze(&mut app, 120);
-    assert!(same_spot(app.caret_position(scrolled), scrolled.rect));
+    freeze(&mut app, CARET_MOVE);
+    assert!(same_spot(app.advance_caret(scrolled), scrolled.rect));
     assert!(!app.animating());
 }
 
 #[test]
 fn a_new_document_snaps_to_its_caret() {
     let mut app = app(SmoothCaret::Snappy);
-    app.caret_position(target(1, 0, 100.0, 20.0));
+    app.advance_caret(target(1, 0, 100.0, 20.0));
     let other = target(2, 0, 300.0, 60.0);
-    assert!(same_spot(app.caret_position(other), other.rect));
+    assert!(same_spot(app.advance_caret(other), other.rect));
     assert!(!app.animating());
 }
 
@@ -153,13 +146,13 @@ fn an_interrupted_move_continues_from_where_it_is_and_gets_shorter() {
     let start = target(1, 0, 0.0, 0.0);
     let first = target(1, 1, 100.0, 0.0);
     let second = target(1, 2, 100.0, 100.0);
-    app.caret_position(start);
-    app.caret_position(first);
+    app.advance_caret(start);
+    app.advance_caret(first);
 
     // 移动途中改到别处：这一帧仍在当前画面位置，不跳。
-    freeze(&mut app, 60);
-    let painted = app.caret_position(first);
-    assert!(same_spot(app.caret_position(second), painted));
+    freeze(&mut app, CARET_MOVE / 2);
+    let painted = app.advance_caret(first);
+    assert!(same_spot(app.advance_caret(second), painted));
 
     // 被打断的移动缩短为完整时长的八成。
     let motion = app.motion.caret_motion.unwrap();
@@ -168,8 +161,8 @@ fn an_interrupted_move_continues_from_where_it_is_and_gets_shorter() {
     assert!((motion.urgency - 0.8).abs() < 1e-6);
 
     // 新的时长走完后到达新目标。
-    freeze(&mut app, 100);
-    assert!(same_spot(app.caret_position(second), second.rect));
+    freeze(&mut app, Duration::from_millis(100));
+    assert!(same_spot(app.advance_caret(second), second.rect));
     assert!(!app.animating());
 }
 
@@ -178,8 +171,8 @@ fn without_animation_the_caret_jumps() {
     let mut app = app(SmoothCaret::Off);
     let start = target(1, 0, 100.0, 20.0);
     let end = target(1, 5, 200.0, 120.0);
-    assert!(same_spot(app.caret_position(start), start.rect));
-    assert!(same_spot(app.caret_position(end), end.rect));
+    assert!(same_spot(app.advance_caret(start), start.rect));
+    assert!(same_spot(app.advance_caret(end), end.rect));
     assert!(!app.animating());
     assert!(app.motion.caret_motion.is_none());
 }
@@ -187,12 +180,12 @@ fn without_animation_the_caret_jumps() {
 #[test]
 fn hiding_the_caret_forgets_where_it_was() {
     let mut app = app(SmoothCaret::Snappy);
-    app.caret_position(target(1, 0, 100.0, 20.0));
+    app.advance_caret(target(1, 0, 100.0, 20.0));
     app.caret_hidden();
     assert!(app.motion.caret_motion.is_none());
 
     // 重新出现时停在原处，不从上一次的位置滑过来。
     let other = target(1, 8, 300.0, 60.0);
-    assert!(same_spot(app.caret_position(other), other.rect));
+    assert!(same_spot(app.advance_caret(other), other.rect));
     assert!(!app.animating());
 }

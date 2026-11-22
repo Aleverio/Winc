@@ -1399,6 +1399,14 @@ impl App {
             ),
         }
     }
+
+    /// 设置光标移动的动画方式，并写回配置。
+    pub(in crate::app) fn set_smooth_caret(&mut self, style: winc_config::SmoothCaret) {
+        self.config.smooth_caret_movement = Some(style);
+        self.motion.caret_motion = None;
+        self.save_config();
+        self.request_redraw();
+    }
 }
 
 /// 配置与状态文件的写回：文件的路径、配置文件当前的内容和配置的版本号。

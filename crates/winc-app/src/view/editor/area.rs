@@ -265,15 +265,16 @@ pub(super) fn draw_text_area(app: &mut App, frame: &mut Frame<'_>, index: usize)
     // 主光标的移动动画在行都画完之后绘制：滑动途中经过其他行时不会被后面绘制的行盖住。
     // 前台以外的窗格没有光标，动画状态属于前台的文档。
     if !app.panes.drawing_background {
-        match scratch.caret_motion {
-            Some(target) => {
-                let rect = app.caret_position(target);
+        match scratch.caret {
+            CaretDraw::Sliding(target) => {
+                let rect = app.advance_caret(target);
                 caret_bar(app, frame, rect.x, rect.y, layout.text);
             }
+            CaretDraw::Static => app.caret_hidden(),
             // 编辑区有焦点，但光标这一帧不在屏幕上（随跳转滚出了视野）：保留动画状态，
             // 等视口滚到目标时从原来的位置滑过去。
-            None if !scratch.caret_drawn && app.focus == Focus::Editor => {}
-            None => app.caret_hidden(),
+            CaretDraw::Offscreen if app.focus == Focus::Editor => {}
+            CaretDraw::Offscreen => app.caret_hidden(),
         }
     }
 
@@ -385,10 +386,20 @@ struct Scratch {
     long_hits: LineHits,
     /// 主光标的位置；输入法候选框跟随该位置。
     ime_cursor: Option<Rect>,
-    /// 主光标本帧的目标位置；播放移动动画时在行都画完之后按动画位置绘制。
-    caret_motion: Option<CaretTarget>,
-    /// 本帧是否处理了主光标：没有时它可能在屏幕之外（随跳转滚出视野），动画状态保留。
-    caret_drawn: bool,
+    /// 主光标这一帧的绘制方式。
+    caret: CaretDraw,
+}
+
+/// 主光标这一帧的绘制方式。
+#[derive(Debug, Clone, Copy, Default)]
+enum CaretDraw {
+    /// 光标这一帧没有画出来：它可能在屏幕之外（随跳转滚出视野），动画状态保留。
+    #[default]
+    Offscreen,
+    /// 光标画在目标处，不播放动画。
+    Static,
+    /// 光标播放移动动画，按记录的目标位置推进。
+    Sliding(CaretTarget),
 }
 
 impl Scratch {
@@ -403,8 +414,7 @@ impl Scratch {
             folded_hits: Vec::new(),
             long_hits: Vec::new(),
             ime_cursor: None,
-            caret_motion: None,
-            caret_drawn: false,
+            caret: CaretDraw::default(),
         }
     }
 }

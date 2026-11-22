@@ -20,7 +20,7 @@ use super::*;
 ///
 /// 取 IntelliJ IDEA 的 `editor.smooth.caret.duration` 默认值 120 ms：短于侧栏等过渡，
 /// 连续按键时不会明显滞后。
-const CARET_MOVE: Duration = Duration::from_millis(120);
+pub(in crate::app) const CARET_MOVE: Duration = Duration::from_millis(120);
 
 /// 连续被打断的移动依次缩短时长，最少缩到完整时长的这一比例。
 const MIN_URGENCY: f32 = 0.2;
@@ -33,20 +33,35 @@ const URGENCY_DECAY: f32 = 0.8;
 /// 小于一个像素的差别看不出来；目标每帧重新计算，不能因此把动画当成被滚动打断。
 const SAME_SPOT: f32 = 0.1;
 
+/// 主光标所在的文档和字符偏移；它改变时开始一次新的移动。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CaretKey {
+    doc: DocumentId,
+    pos: usize,
+}
+
 /// 光标在屏幕上的位置，以及它所在的文档和字符偏移。
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CaretTarget {
-    /// 光标所在的文档和字符偏移；位置改变时开始新的移动。
-    pub key: (DocumentId, usize),
-    /// 光标矩形（逻辑像素）；宽、高在移动中不变。
-    pub rect: Rect,
+    key: CaretKey,
+    rect: Rect,
+}
+
+impl CaretTarget {
+    /// 返回文档 `doc` 中字符偏移 `pos` 处的光标矩形 `rect`。
+    pub(crate) fn new(doc: DocumentId, pos: usize, rect: Rect) -> Self {
+        Self {
+            key: CaretKey { doc, pos },
+            rect,
+        }
+    }
 }
 
 /// 主光标的移动动画。
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CaretMotion {
     /// 光标所在的文档和字符偏移。
-    key: (DocumentId, usize),
+    key: CaretKey,
     /// 动画起点和当前目标（逻辑像素）。
     from: Rect,
     to: Rect,
@@ -74,6 +89,49 @@ impl CaretMotion {
     /// 是否正在移动。
     pub(super) fn moving(&self) -> bool {
         self.moving && !self.clock.done()
+    }
+
+    /// 按本帧的光标目标推进，返回本帧要绘制的矩形。
+    ///
+    /// 位置改变时从当前画面上的位置开始新的移动；同一位置的目标随视口滚动时，移动中的光标
+    /// 保持进度跟过去，停下的光标直接画在新位置；换了文档时直接跳到目标。
+    fn advance(&mut self, target: CaretTarget, style: SmoothCaret) -> Rect {
+        self.settle();
+        if self.key == target.key {
+            if same_spot(self.to, target.rect) {
+                return self.painted(style);
+            }
+            if self.moving {
+                // 视口滚动或布局变化把目标挪走了：保持进度，跟着新目标，不重新计时。
+                self.to = target.rect;
+                return self.painted(style);
+            }
+            // 光标没动，只是视口滚动或换行、布局变化：直接画在新位置。
+            *self = CaretMotion::at(target);
+            return target.rect;
+        }
+        if self.key.doc != target.key.doc {
+            // 换了文档：直接到新位置。
+            *self = CaretMotion::at(target);
+            return target.rect;
+        }
+
+        // 光标移动到了新的位置：从当前画面上的位置接着滑过去。即使视口同时滚动（跳到视野之外
+        // 的行），也从原来的位置滑向新位置；被打断的移动一次比一次短，连续按键时不会一直
+        // 追不上输入。
+        let from = self.painted(style);
+        let urgency = if self.moving {
+            (self.urgency * URGENCY_DECAY).max(MIN_URGENCY)
+        } else {
+            1.0
+        };
+        self.key = target.key;
+        self.from = from;
+        self.to = target.rect;
+        self.clock = Clock::new(CARET_MOVE.mul_f32(urgency));
+        self.urgency = urgency;
+        self.moving = true;
+        from
     }
 
     /// 返回当前画面上的光标矩形。
@@ -106,7 +164,7 @@ impl CaretMotion {
 ///
 /// 曲线取自 IntelliJ IDEA（`CaretEasing`）：Snappy 是先快后慢的解析曲线，Gliding 是
 /// `cubic-bezier(0.25, 0.1, 0.25, 1.0)` 的近似。`Off` 不播放动画，因此直接到终点。
-fn ease(style: SmoothCaret, progress: f32) -> f32 {
+pub(in crate::app) fn ease(style: SmoothCaret, progress: f32) -> f32 {
     let t = progress.clamp(0.0, 1.0);
     let eased = match style {
         SmoothCaret::Off => 1.0,
@@ -131,76 +189,27 @@ impl App {
         self.config.smooth_caret_movement.unwrap_or_default()
     }
 
-    /// 根据本帧的光标位置推进移动动画，返回本帧要绘制的光标矩形。
+    /// 按本帧的光标目标推进移动动画，返回本帧要绘制的光标矩形。
     ///
     /// `target` 是绘制时算出的光标位置。位置改变时从当前画面上的位置开始新的移动；同一位置
     /// 的目标随视口滚动时，移动中的光标保持进度跟过去，停下的光标直接画在新位置；换了文档或
     /// 光标不在屏幕上（状态已被清除）时直接跳到目标。
-    pub(crate) fn caret_position(&mut self, target: CaretTarget) -> Rect {
+    pub(crate) fn advance_caret(&mut self, target: CaretTarget) -> Rect {
         let style = self.smooth_caret();
         if style == SmoothCaret::Off {
             self.motion.caret_motion = None;
             return target.rect;
         }
-        let Some(mut motion) = self.motion.caret_motion else {
+        let Some(motion) = &mut self.motion.caret_motion else {
             self.motion.caret_motion = Some(CaretMotion::at(target));
             return target.rect;
         };
-
-        motion.settle();
-        if motion.key == target.key {
-            if same_spot(motion.to, target.rect) {
-                let rect = motion.painted(style);
-                self.motion.caret_motion = Some(motion);
-                return rect;
-            }
-            if motion.moving {
-                // 视口滚动或布局变化把目标挪走了：保持进度，跟着新目标，不重新计时。
-                motion.to = target.rect;
-                let rect = motion.painted(style);
-                self.motion.caret_motion = Some(motion);
-                return rect;
-            }
-            // 光标没动，只是视口滚动或换行、布局变化：直接画在新位置。
-            self.motion.caret_motion = Some(CaretMotion::at(target));
-            return target.rect;
-        }
-        if motion.key.0 != target.key.0 {
-            // 换了文档：直接到新位置。
-            self.motion.caret_motion = Some(CaretMotion::at(target));
-            return target.rect;
-        }
-
-        // 光标移动到了新的位置：从当前画面上的位置接着滑过去。即使视口同时滚动（跳到视野之外
-        // 的行），也从原来的位置滑向新位置；被打断的移动一次比一次短，连续按键时不会一直
-        // 追不上输入。
-        let from = motion.painted(style);
-        let urgency = if motion.moving {
-            (motion.urgency * URGENCY_DECAY).max(MIN_URGENCY)
-        } else {
-            1.0
-        };
-        motion.key = target.key;
-        motion.from = from;
-        motion.to = target.rect;
-        motion.clock = Clock::new(CARET_MOVE.mul_f32(urgency));
-        motion.urgency = urgency;
-        motion.moving = true;
-        self.motion.caret_motion = Some(motion);
-        from
+        motion.advance(target, style)
     }
 
     /// 本帧没有画出主光标：清除移动动画，下一次移动直接出现在新位置。
     pub(crate) fn caret_hidden(&mut self) {
         self.motion.caret_motion = None;
-    }
-
-    /// 设置光标移动的动画方式，并写回配置。
-    pub(in crate::app) fn set_smooth_caret(&mut self, style: SmoothCaret) {
-        self.config.smooth_caret_movement = Some(style);
-        self.motion.caret_motion = None;
-        self.save_config();
-        self.request_redraw();
     }
 }
 

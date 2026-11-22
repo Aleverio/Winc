@@ -221,23 +221,15 @@ const EDITOR: &[Field] = &[
     Field {
         key: "smoothCaretMovement",
         read: |config, value, name, problems| {
-            config.smooth_caret_movement = match value.as_str() {
-                Some("off") => Some(SmoothCaret::Off),
-                Some("snappy") => Some(SmoothCaret::Snappy),
-                Some("gliding") => Some(SmoothCaret::Gliding),
-                _ => {
-                    problems.push(t!("config-smooth-caret-invalid", name = name));
-                    None
-                }
+            config.smooth_caret_movement = value.as_str().and_then(SmoothCaret::from_value);
+            if config.smooth_caret_movement.is_none() {
+                problems.push(t!("config-smooth-caret-invalid", name = name));
             }
         },
         write: |config| {
-            let value = match config.smooth_caret_movement? {
-                SmoothCaret::Off => "off",
-                SmoothCaret::Snappy => "snappy",
-                SmoothCaret::Gliding => "gliding",
-            };
-            Some(Json::String(value.into()))
+            config
+                .smooth_caret_movement
+                .map(|choice| Json::String(choice.as_str().into()))
         },
     },
     bool_field!("outline", outline),
