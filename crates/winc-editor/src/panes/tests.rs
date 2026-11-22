@@ -166,33 +166,6 @@ fn restoring_drops_closed_documents_and_empty_panes() {
 }
 
 #[test]
-fn restoring_keeps_the_active_tab_inside_the_front_panes_tabs() {
-    let mut editor = editor();
-    // 当时的当前标签是不属于任何窗格的备份（现场之外恢复的）：前台窗格的标签里没有它。
-    let first = editor.panes.focused;
-    let tree = Node::Split {
-        axis: Axis::Row,
-        share: 0.5,
-        first: Box::new(Node::Pane(first)),
-        second: Box::new(Node::Pane(PaneId(1))),
-    };
-    let tabs = |id: u32, tabs: &[u64], active: u64| PaneTabs {
-        id: PaneId(id),
-        tabs: tabs.iter().map(|&t| crate::DocumentId(t)).collect(),
-        active: Some(crate::DocumentId(active)),
-    };
-    // 窗格 1 只剩已关闭的文档 9，不恢复；窗格 0 有标签 1、2；文档 3 不属于任何窗格。
-    let panes = vec![tabs(first.0, &[1, 2], 1), tabs(1, &[9], 9)];
-    // 调用方在重排前的下标上定下了当前标签：文档 3 排在全部文档的最后。
-    editor.active = Some(2);
-    editor.restore_panes(tree, panes);
-    // 文档 3 被挪进前台窗格的标签里，原下标 2 已落到前台窗格的标签之外；当前标签要跟着它走。
-    assert_eq!(ids(&editor), [1, 2, 3]);
-    assert_eq!(editor.active().unwrap().id.0, 3);
-    assert!(editor.active.unwrap() < editor.tab_count());
-}
-
-#[test]
 fn a_tab_from_another_pane_splits_off_before_the_focused_one_with_its_view() {
     let mut editor = editor();
     editor.active = Some(0);

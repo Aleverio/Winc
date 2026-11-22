@@ -217,11 +217,6 @@ impl Editor {
             return;
         };
         let entering = panes.remove(at);
-        // 调用前定下的当前标签：`enter` 之后 `documents` 已重排，`bring` 还会把它插到别处。
-        let active = self
-            .active
-            .and_then(|at| self.documents.get(at))
-            .map(|d| d.id);
         self.panes.next = ids.iter().map(|p| p.0 + 1).max().unwrap_or(1);
         self.panes.tree = tree;
         self.panes.others = panes;
@@ -236,13 +231,6 @@ impl Editor {
             if let Some(index) = self.index_of(id) {
                 self.bring(index);
             }
-        }
-        // `bring` 把文档挪进前台窗格的标签，原序号不再对应；调用前就有效的序号保持不变。
-        if let Some(id) = active {
-            self.active = self
-                .index_of(id)
-                .filter(|&at| at < self.panes.shown)
-                .or(self.active.filter(|&at| at < self.panes.shown));
         }
     }
 }

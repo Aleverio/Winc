@@ -220,17 +220,17 @@ pub(crate) fn restore_tabs(
         }
     }
 
-    // 当时的当前标签已不存在时，改为最后一个标签（它可能还没读）。先只记住文档：
-    // `restore_panes` 会重排 `documents`，下标要等它之后再定。
-    let wanted = active.or_else(|| editor.documents.last().map(|d| d.id));
     if let Some(panes) = session.and_then(|s| s.panes.as_ref()) {
         restore_panes(editor, panes, &opened);
     }
-    // 当前标签不在前台窗格的标签里时，退回最后一个标签：`documents` 的后缀只在别的窗格里。
-    editor.active = wanted
+    // 当时的当前标签不在前台窗格里时沿用已有的当前标签，都没有时改为最后一个标签。
+    let tabs = editor.tab_count();
+    let shown = |at: &usize| *at < tabs;
+    editor.active = active
         .and_then(|id| editor.index_of(id))
-        .filter(|&at| at < editor.tab_count())
-        .or(editor.tab_count().checked_sub(1));
+        .filter(shown)
+        .or(editor.active.filter(shown))
+        .or(tabs.checked_sub(1));
     let current = editor.active().and_then(|d| d.path.clone());
     if let (Some(file), Some(workspace)) = (current, &mut editor.workspace) {
         workspace.reveal(&file);

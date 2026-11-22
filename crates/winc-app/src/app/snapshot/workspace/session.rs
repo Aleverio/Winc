@@ -273,6 +273,81 @@ fn restoring_a_session_whose_active_tab_is_outside_the_front_pane() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// 回归：没打开目录的窗口拆分以后再打开目录，当前标签落到前台窗格的标签之外，画标签栏时越界。
+#[test]
+fn opening_a_folder_from_a_split_window_keeps_the_active_tab_in_the_front_pane() {
+    let dir = sample_folder("session-split-then-folder");
+    let mut app = blank_app(false);
+    app.editor.new_untitled();
+    app.editor.new_untitled();
+    app.editor.split(winc_editor::panes::Axis::Row);
+    // 前台窗格只有一个标签，另一个文档只开在别的窗格里。
+    assert_eq!(app.editor.tab_count(), 1);
+    assert_eq!(app.editor.documents.len(), 2);
+
+    app.open_folder_now(&dir);
+    assert_eq!(app.editor.active, Some(0));
+    paint(&mut app);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 回归：没有现场可恢复时，当前标签从命令行给的第一个文件换成了最后一个。
+#[test]
+fn restoring_without_a_session_keeps_the_active_tab() {
+    let dir = sample_folder("session-no-session");
+    let mut editor = Editor::default();
+    for name in ["a.rs", "b.rs", "c.rs"] {
+        std::fs::write(dir.join(name), "x\n").unwrap();
+        editor.open(&dir.join(name));
+    }
+    editor.active = Some(0);
+    crate::app::restore_at_launch(&mut editor, None, None);
+    assert_eq!(editor.active().unwrap().name(), "a.rs");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_pane_that_takes_over_the_front_keeps_its_own_active_tab() {
+    let dir = sample_folder("session-pane-gone");
+    let mut tabs = Vec::new();
+    for name in ["a.rs", "b.rs", "c.rs"] {
+        std::fs::write(dir.join(name), "x\n").unwrap();
+        tabs.push(Tab::File(dir.join(name)));
+    }
+    // 当时在前台的窗格只有一个标签，它的文件已经没了：这个窗格不恢复。
+    tabs.push(Tab::File(dir.join("gone.rs")));
+    let pane = |tabs: Vec<usize>, active| winc_config::SessionPane {
+        tabs,
+        active: Some(active),
+    };
+    let session = Session {
+        folder: winc_config::files::canonicalize(&dir).unwrap(),
+        tabs,
+        active: Some(3),
+        panes: Some(winc_config::SessionPanes {
+            tree: winc_config::PaneNode::Split {
+                column: true,
+                share: 0.5,
+                first: Box::new(winc_config::PaneNode::Pane(0)),
+                second: Box::new(winc_config::PaneNode::Pane(1)),
+            },
+            panes: vec![pane(vec![0, 1, 2], 1), pane(vec![3], 3)],
+            focused: 1,
+        }),
+        ..Session::default()
+    };
+
+    let mut editor = Editor::default();
+    assert!(crate::open_session_folder(&mut editor, &session));
+    crate::app::restore_at_launch(&mut editor, Some(&session), None);
+    assert_eq!(editor.tabs().len(), 3);
+    assert_eq!(editor.active().unwrap().name(), "b.rs");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn switching_folders_keeps_each_folders_tabs() {
     let a = search_folder("switch-a");
