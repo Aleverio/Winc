@@ -241,6 +241,7 @@ settings-updates-latest = Winc 已是最新版本
 settings-updates-found = 有可用的新版本：{ $version }
 settings-updates-found-download = 有可用的新版本：{ $version }，点击状态栏的「更新」打开下载页
 settings-updates-found-pacman = 有可用的新版本：{ $version }，运行 sudo pacman -Syu 更新
+settings-updates-found-scoop = 有可用的新版本：{ $version }，运行 scoop update winc 更新
 settings-updates-failed = 无法检查更新，请稍后重试
 settings-updates-failed-because = 无法检查更新：{ $reason }
 settings-updates-downloading = 正在下载 { $version }：{ $percent }%

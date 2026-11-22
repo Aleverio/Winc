@@ -219,6 +219,25 @@ fn release_appcast_matches_packages() {
     }
 }
 
+#[test]
+fn scoop_installs_are_told_apart_by_the_record_scoop_leaves() {
+    let dir = std::env::temp_dir().join(format!("winc-scoop-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let exe = dir.join("winc.exe");
+    // 解压出来的便携版：没有安装记录。
+    assert!(!from_scoop(&exe));
+    // 旧版 Scoop 的两个文件都在才算，单独一个 `manifest.json` 可能是别的东西。
+    std::fs::write(dir.join("manifest.json"), "{}").unwrap();
+    assert!(!from_scoop(&exe));
+    std::fs::write(dir.join("install.json"), "{}").unwrap();
+    assert!(from_scoop(&exe));
+    std::fs::remove_file(dir.join("install.json")).unwrap();
+    std::fs::write(dir.join("scoop-install.json"), "{}").unwrap();
+    assert!(from_scoop(&exe));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// 下载签名正确的文件替换原来的 AppImage，保留可执行；签名或大小不对时原文件不动，也不留下
 /// 下载到一半的文件。
 #[cfg(unix)]

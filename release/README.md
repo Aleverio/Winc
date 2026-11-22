@@ -16,6 +16,7 @@ of releasing it again. To retry a failed build, rerun the Release workflow on th
 | `.github/workflows/release-tag.yml` | Tags each merge into `main` and starts the Release workflow |
 | `.github/workflows/release.yml` | Entry point: prepare, the four platform builds, and the draft |
 | `.github/workflows/release-arch-repo.yml` | Stages the signed Arch repository after a stable release is published |
+| `.github/workflows/release-winget.yml` | Opens the winget-pkgs pull request after a stable release is published |
 | `.github/workflows/release-{prepare,macos,linux,windows}.yml` | Reusable jobs called by `release.yml` |
 | `.github/actions/build-setup/` | Shared source check and toolchain setup; pins the release Rust version |
 | `release/macos/` | `package.sh` (app, dmg, appcast), `verify.sh`, and Apple signing setup |
@@ -94,6 +95,23 @@ AppImage, and the NSIS and MSI installers, each with its EdDSA signature; the de
 portable zip are downloads only. Installs that cannot update themselves (deb, rpm, the Arch
 package, the portable zip) still read their platform's appcast and only notify: the update button
 opens the downloads page, or suggests `pacman -Syu` for the Arch package. `SHA256SUMS` covers the assets assembled before publication.
+
+### Windows package managers
+
+Both read the published GitHub Release; neither is built here.
+
+- **winget** (`DEEIX-AI.Winc`): `release-winget.yml` runs `release/windows/winget.sh` when a stable
+  release is published. It hands the `-setup.exe` and `.msi` URLs to a pinned Komac, which opens the
+  pull request in microsoft/winget-pkgs. It needs the `WINGET_TOKEN` Secret: a classic token with
+  the `public_repo` scope. That scope can write to every public repository the account can, so use
+  an account that has nothing but a fork of winget-pkgs. Without the Secret the job does nothing.
+  The installers update themselves, so winget only sees the newer version.
+- **Scoop** (`winc`, in the Extras bucket): the manifest lives in ScoopInstaller/Extras and its bot
+  follows new releases. It depends on these names staying as they are: the tag `v<version>`, the
+  asset `Winc-<version>-windows-x64-portable.zip`, `SHA256SUMS`, and `winc.exe`, `bin\winc.cmd` and
+  the `data` folder inside the zip. Scoop keeps `data` across versions. A Scoop install does not
+  update itself: it finds Scoop's record beside `winc.exe` and tells the user to run
+  `scoop update winc`.
 
 ### Update channel (winc.si)
 

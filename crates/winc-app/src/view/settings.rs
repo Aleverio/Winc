@@ -584,6 +584,9 @@ fn found_text(version: &str) -> String {
             Some(Delivery::Pacman) => {
                 return t!("settings-updates-found-pacman", version = version);
             }
+            Some(Delivery::Scoop) => {
+                return t!("settings-updates-found-scoop", version = version);
+            }
             _ => {}
         }
     }
