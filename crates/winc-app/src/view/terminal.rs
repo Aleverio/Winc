@@ -95,6 +95,14 @@ fn draw_content(app: &mut App, frame: &mut Frame<'_>, focused: bool) {
         ui_text(frame, app, grid.x, row, error, p.error, grid);
         return;
     }
+    if app.terminal.tabs.is_empty()
+        && let Some(host) = app.terminal_awaited_host()
+    {
+        let row = Rect::new(grid.x, grid.y, grid.w, app.fonts.terminal_line_height);
+        let note = t!("terminal-preparing", host = host.as_str());
+        ui_text(frame, app, grid.x, row, &note, p.text_dim, grid);
+        return;
+    }
     // 滚动条：先取显示状态（同时记下滚动位置），滑块最后绘制，压在吸顶的命令行上面。
     let bar = app.terminal_scrollbar().map(|(track, scroll, content)| {
         let thumb = scrollbar_thumb(track, scroll, content);

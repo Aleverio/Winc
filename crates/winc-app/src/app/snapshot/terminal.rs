@@ -1020,6 +1020,80 @@ fn contrast_protection_keeps_shape_characters_seamless() {
     assert_eq!(pixel(1), pixel(0));
 }
 
+/// 回归：远端主机的集成脚本和 shell 列表尚未准备完时恢复终端标签。
+#[cfg(unix)]
+#[test]
+fn restored_remote_tabs_wait_for_the_shell_setup() {
+    use crate::app::remote;
+    use crate::app::terminal::shells::ShellChoice;
+    use std::os::unix::ffi::OsStrExt;
+    use winc_pty::protocol::ToHelper;
+    let dir = sample_folder("terminal-remote-setup");
+    let mut app = app_with(&dir.join("short.rs"), true);
+    app.config.terminal_enabled = Some(true);
+    app.terminal.open = true;
+    app.terminal.height = terminal::DEFAULT_HEIGHT;
+    let log = app.attach_recording_helper(&dir);
+    let started = |app: &App| -> Vec<String> {
+        let sent = app.sent_to_helper(&log);
+        let commands = sent.iter().filter_map(|m| match m {
+            ToHelper::Spawn { args, .. } => args.last(),
+            _ => None,
+        });
+        commands
+            .map(|command| String::from_utf8_lossy(command).into_owned())
+            .collect()
+    };
+    let restore = |app: &mut App, host: &str| {
+        let target = winc_backend::Target::new(host).unwrap();
+        let folder = winc_backend::virtual_path(&target, b"/srv");
+        app.terminal
+            .want
+            .push(folder.as_os_str().as_bytes().to_vec());
+        app.terminal.want_shells = vec![Some("/usr/bin/fish".to_owned())];
+        let setup = remote::Setup::begin(&target, None);
+        app.relayout();
+        (target, setup)
+    };
+
+    let (host, setup) = restore(&mut app, "me@setup-host");
+    assert_eq!(started(&app), [""; 0]);
+    assert_eq!(app.terminal.want.len(), 1);
+    // 等待期间面板中有一行说明。
+    let shot = |app: &mut App| {
+        paint(app);
+        let renderer = app.frame.renderer.as_ref().unwrap();
+        renderer.image().unwrap().pixels.clone()
+    };
+    let waiting = shot(&mut app);
+    let want = std::mem::take(&mut app.terminal.want);
+    assert_ne!(shot(&mut app), waiting);
+    app.terminal.want = want;
+    remote::set_shell_ready(&host, true);
+    let fish = ShellChoice {
+        name: "fish".into(),
+        command: "/usr/bin/fish".into(),
+    };
+    remote::set_shells(&host, vec![fish]);
+    drop(setup);
+    app.relayout();
+    let commands = started(&app);
+    assert_eq!(commands.len(), 1);
+    assert!(
+        commands[0].contains(winc_pty::scripts::REMOTE_DIR),
+        "{commands:?}"
+    );
+    assert!(commands[0].contains("/usr/bin/fish"), "{commands:?}");
+    let shell = app.terminal.tab().unwrap().shell.as_deref();
+    assert_eq!(shell, Some("/usr/bin/fish"));
+
+    let (_, setup) = restore(&mut app, "me@setup-failed");
+    assert_eq!(started(&app).len(), 1);
+    drop(setup);
+    app.relayout();
+    assert_eq!(started(&app)[1], "cd '/srv' && exec $SHELL -l");
+}
+
 /// 能选的 shell 不止一个时才有下拉箭头；选中的 shell 用来启动，重新启动和现场都带着它。
 #[test]
 fn the_shell_menu_starts_the_chosen_shell_and_remembers_it() {

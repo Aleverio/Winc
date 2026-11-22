@@ -451,6 +451,10 @@ impl App {
             UserEvent::RemoteStage => self.remote_stage_changed(),
             UserEvent::RemoteHealth => self.request_redraw(),
             UserEvent::RemoteClosed(target) => self.remote_closed(&target),
+            UserEvent::RemoteShells => {
+                self.relayout();
+                self.request_redraw();
+            }
             UserEvent::ReleaseNotes(notes) => self.show_release_notes(notes),
             done @ (UserEvent::GitStatus
             | UserEvent::GitContent

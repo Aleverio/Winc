@@ -289,6 +289,8 @@ pub enum UserEvent {
     RemoteWatching,
     /// 到远端主机的连接意外中断。
     RemoteClosed(winc_backend::Target),
+    /// 一台远端主机的集成脚本和 shell 列表已经准备完；各窗口都收到。
+    RemoteShells,
     /// 后台的文件操作（新建、改名、移动、删除）已完成。
     FileWorked,
     /// 后台为远端文件的格式化选好了工具。
