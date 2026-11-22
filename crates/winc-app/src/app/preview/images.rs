@@ -171,13 +171,14 @@ impl App {
             let Some(rope) = doc.text().rope() else {
                 return;
             };
-            let text = rope.to_string();
+            // 文本在后台线程上取出：rope 的克隆共享内容，取出全文的耗时与文档大小成正比。
+            let rope = rope.clone();
             let base = doc
                 .path
                 .as_deref()
                 .and_then(|p| p.parent())
                 .map(|p| p.to_path_buf());
-            Box::new(move || svg::load(&text, base.as_deref(), Some(system_glyphs())))
+            Box::new(move || svg::load(&rope.to_string(), base.as_deref(), Some(system_glyphs())))
         } else {
             let Some(path) = doc.path.clone() else {
                 return;
@@ -219,7 +220,7 @@ impl App {
         let Some(rope) = doc.text().rope() else {
             return;
         };
-        let text = rope.to_string();
+        let rope = rope.clone();
         let base = doc.path.as_deref().and_then(|p| p.parent()).map(Into::into);
         self.preview.split.pending = Some(revision);
         let (sender, proxy) = (
@@ -228,7 +229,7 @@ impl App {
         );
         winc_editor::background::spawn(move || {
             let base: Option<std::path::PathBuf> = base;
-            let result = svg::load(&text, base.as_deref(), Some(system_glyphs()));
+            let result = svg::load(&rope.to_string(), base.as_deref(), Some(system_glyphs()));
             if sender.send((id, revision, result)).is_ok()
                 && let Some(proxy) = proxy
             {

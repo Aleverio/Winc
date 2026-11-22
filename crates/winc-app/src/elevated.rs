@@ -519,8 +519,9 @@ mod tests {
         let identity = Identity::of(&target).unwrap();
         assert_eq!(Identity::parse(&identity.argument()), Some(identity));
 
-        // 换成指向别处的符号链接。
-        std::fs::remove_file(&target).unwrap();
+        // 换成指向别处的符号链接。原来的文件改名留着：删掉后它的 inode 号可以立刻分给新建的
+        // 文件，下面换上的普通文件就无从区分。
+        std::fs::rename(&target, dir.join("moved")).unwrap();
         std::os::unix::fs::symlink(&other, &target).unwrap();
         assert!(write_in_place(&copy, &target, identity).is_err());
         assert_eq!(std::fs::read_to_string(&other).unwrap(), "elsewhere\n");

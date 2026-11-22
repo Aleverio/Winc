@@ -137,7 +137,9 @@ pub(crate) struct Frame {
 pub(crate) const SELF: &[u8] = b"winc:self";
 
 /// 载荷超过 [`MAX_FRAME`] 时返回 [`io::ErrorKind::InvalidInput`]，不写出任何字节；其余与写入相同。
-/// 是否载荷 `payload` 能装进一帧（连同类型和请求号不超过 [`MAX_FRAME`]）。
+/// 是否载荷 `payload` 能装进一帧（连同类型和请求号不超过 [`MAX_FRAME`]）；服务进程应答前
+/// 检查，它只在 Unix 上运行。
+#[cfg(unix)]
 pub(crate) fn fits_frame(payload: &[u8]) -> bool {
     HEADER + payload.len() <= MAX_FRAME
 }

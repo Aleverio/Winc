@@ -471,7 +471,12 @@ fn kill_group(pid: u32) {
         .stderr(Stdio::null());
     #[cfg(windows)]
     std::os::windows::process::CommandExt::creation_flags(&mut command, 0x0800_0000);
-    let _ = command.status();
+    // 不等它结束：取消可以在界面线程上发起。另起线程收回进程，不留下已结束而未收回的子进程。
+    if let Ok(mut child) = command.spawn() {
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+    }
 }
 
 mod stream;

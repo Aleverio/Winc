@@ -190,8 +190,15 @@ impl App {
         if self.format.then_close.is_some() {
             return;
         }
-        // 后台在存的大文件先存完：要不要问、备份哪些，都按存完以后的样子算。
-        self.wait_for_saves();
+        // 后台在存的文档先存完：要不要问、备份哪些，都按存完以后的样子算。只关几个标签时只等
+        // 这几个文档：别的文档的保存（经远端连接的、在等系统授权的）不应拦住无关的标签。
+        match &request {
+            CloseRequest::Tabs(ids) => ids
+                .clone()
+                .into_iter()
+                .for_each(|id| self.wait_for_save(id)),
+            _ => self.wait_for_saves(),
+        }
         // 已经在询问时（例如提示框打开期间再次按 `⌘Q`）不再询问第二次。
         if self.closing.prompt.is_some() {
             return;

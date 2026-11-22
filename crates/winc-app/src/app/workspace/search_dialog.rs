@@ -884,7 +884,8 @@ impl App {
         // 按要取的行数（而不是取到的行数）判断缓存是否够用。
         let cached = (d.context.as_ref()).filter(|c| c.at == key && c.taken >= count);
         if let Some(c) = cached {
-            return Some((c.at.1, c.first, c.lines.clone()));
+            // 上次没有读到内容的也记着（各行为空）：不在每一帧重新读取。
+            return (!c.lines.is_empty()).then(|| (c.at.1, c.first, c.lines.clone()));
         }
         let first = key.1.saturating_sub(count / 2);
         let open = (self.editor.documents.iter()).find(|doc| doc.path.as_ref() == Some(&key.0));
@@ -895,12 +896,17 @@ impl App {
                     .map(|l| text.line_content(l).slice().to_string())
                     .collect()
             }
-            None => String::from_utf8_lossy(&winc_backend::fs::read(&key.0).ok()?)
-                .lines()
-                .skip(first)
-                .take(count)
-                .map(str::to_owned)
-                .collect(),
+            // 过大的文件不为几行预览读进内存；读不到的与之相同，记为没有内容。
+            None => {
+                let small = |m: winc_backend::fs::Metadata| m.len <= winc_editor::LARGE_FILE;
+                let bytes = (winc_backend::fs::metadata(&key.0).is_ok_and(small))
+                    .then(|| winc_backend::fs::read(&key.0).ok())
+                    .flatten()
+                    .unwrap_or_default();
+                let text = String::from_utf8_lossy(&bytes);
+                let lines = text.lines().skip(first).take(count);
+                lines.map(str::to_owned).collect()
+            }
         };
         let line = key.1;
         self.search_dialog.context = Some(Context {
@@ -909,7 +915,7 @@ impl App {
             first,
             lines: lines.clone(),
         });
-        Some((line, first, lines))
+        (!lines.is_empty()).then_some((line, first, lines))
     }
 }
 

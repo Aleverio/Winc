@@ -1099,22 +1099,48 @@ fn fontconfig(pattern: &str) -> Option<FontFile> {
 /// 汉字的字体强制绑定到 `sans-serif` 时，它在 `lang=zh-cn` 的查询中同样排第一。没有 `fc-match`
 /// 或查询失败时返回空列表。
 fn fontconfig_sorted(pattern: &str) -> Vec<FontFile> {
-    let output = std::process::Command::new("fc-match")
-        .args([
-            "--sort",
-            "--format",
-            "%{file}\n%{postscriptname}\n",
-            pattern,
-        ])
-        .stderr(std::process::Stdio::null())
-        .output();
-    match output {
-        Ok(output) if output.status.success() => {
-            parse_sorted_fonts(&String::from_utf8_lossy(&output.stdout))
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    let mut command = Command::new("fc-match");
+    let format = "%{file}\n%{postscriptname}\n";
+    command.args(["--sort", "--format", format, pattern]);
+    command.stdin(Stdio::null()).stdout(Stdio::piped());
+    let Ok(mut child) = command.stderr(Stdio::null()).spawn() else {
+        return Vec::new();
+    };
+    // 另起线程读输出：字体多时输出超过管道的容量，没有人读进程就不会结束。
+    let reader = child.stdout.take().map(|mut stdout| {
+        std::thread::spawn(move || {
+            let mut text = String::new();
+            stdout.read_to_string(&mut text).map(|_| text)
+        })
+    });
+    let deadline = Instant::now() + FONTCONFIG_TIMEOUT;
+    let finished = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status.success(),
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(5)),
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break false;
+            }
         }
+    };
+    let text = reader.and_then(|reader| reader.join().ok()?.ok());
+    match text {
+        Some(text) if finished => parse_sorted_fonts(&text),
         _ => Vec::new(),
     }
 }
+
+/// 等待 `fc-match` 的最长时间（2 秒）。
+///
+/// 查询在第一次绘制某种文字时进行，其间界面不响应。字体缓存已建好时查询在几十毫秒内结束；
+/// 超过该时间（缓存正在重建）按没有结果处理，改用内置的后备顺序。
+const FONTCONFIG_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// 解析 [`fontconfig_sorted`] 的输出：每个字体两行，依次是文件路径和 PostScript 名；只保留存在的
 /// 文件。

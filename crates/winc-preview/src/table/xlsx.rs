@@ -215,6 +215,12 @@ fn builtin(id: u32) -> NumberFormat {
     }
 }
 
+/// 一张工作表最多读取的合并区域数（个）。
+///
+/// 预览在绘制每一帧、测量每一列时都要在合并区域中查找，耗时与个数成正比。取自调参：1 万个
+/// 远超实际的工作表，查找仍在一帧的时间以内。
+const MAX_MERGES: usize = 10_000;
+
 /// 百分比格式最多保留的小数位数（位）。
 ///
 /// 位数取自文件中的格式代码；`f64` 只有约 17 位有效数字，更多的位数全是 0，位数极大时格式化
@@ -376,6 +382,10 @@ fn worksheet(xml: &str, name: String, context: &Context) -> Option<Sheet> {
                 empty: false,
                 ..
             } => in_text = in_inline && phonetic == 0,
+            // 合并区域的个数取自文件，绘制和量列宽时逐个比较：超过上限的不再记。
+            Token::Open {
+                name: "mergeCell", ..
+            } if merges.len() >= MAX_MERGES => truncated = true,
             Token::Open {
                 name: "mergeCell",
                 attributes,

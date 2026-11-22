@@ -5,6 +5,7 @@
 //! 见 `winc_pty::protocol::Block`。没有 shell 集成时没有块，这些都不出现：跳转和折叠什么也
 //! 不做，F8 仍然发给程序。
 
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use winc_i18n::t;
@@ -478,6 +479,8 @@ impl App {
             .enumerate()
             .map(|(r, line)| (tab.history.1 + r as u64, line));
         let mut spots: Vec<Spot> = Vec::new();
+        // 已经记下的（文件，行号）：输出可以有上万处位置，逐个与已有的比较耗时为平方级。
+        let mut seen: HashSet<(PathBuf, usize)> = HashSet::new();
         for (number, line) in history.chain(screen) {
             if number < output || number >= end {
                 continue;
@@ -492,10 +495,7 @@ impl App {
                     _ => path,
                 };
                 // 同一个位置报多次（rustc 的 `-->` 加上下面的注释）只算一处。
-                if spots
-                    .iter()
-                    .any(|s| s.path == path && s.line + 1 == line_no)
-                {
+                if !seen.insert((path.clone(), line_no)) {
                     continue;
                 }
                 let point = |col| Point { line: number, col };
@@ -509,7 +509,12 @@ impl App {
             }
         }
         // 不是文件的位置不算（见 [`App::terminal_target`]）。
-        spots.retain(|spot| self.terminal_target(&spot.path, true) && !self.is_folder(&spot.path));
+        // 同一个文件通常报很多处：每个文件只查一次磁盘。
+        let mut files: HashMap<PathBuf, bool> = HashMap::new();
+        spots.retain(|spot| {
+            let is_file = || self.terminal_target(&spot.path, true) && !self.is_folder(&spot.path);
+            *files.entry(spot.path.clone()).or_insert_with(is_file)
+        });
         let t = &mut self.terminal;
         if spots.is_empty() {
             t.errors = None;

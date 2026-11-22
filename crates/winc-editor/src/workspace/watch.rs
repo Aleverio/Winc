@@ -152,8 +152,11 @@ impl Watcher {
         let shared = Arc::clone(&pending);
         let base = root.to_path_buf();
 
-        let mut inner =
-            notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+        // 不跟随符号链接：文件树不展开链接到的目录，监视它们只会多占监视名额；链接指向上级
+        // 目录时还会把整个上级目录树都监视上。
+        let config = notify::Config::default().with_follow_symlinks(false);
+        let mut inner = RecommendedWatcher::new(
+            move |event: notify::Result<notify::Event>| {
                 let mut pending = shared.lock().unwrap_or_else(PoisonError::into_inner);
                 match event {
                     Ok(event) if event.need_rescan() => pending.rescan = true,
@@ -166,7 +169,9 @@ impl Watcher {
                     drop(pending);
                     wake();
                 }
-            })?;
+            },
+            config,
+        )?;
         inner.watch(root, RecursiveMode::Recursive)?;
         Ok(Watcher {
             root: root.to_path_buf(),
