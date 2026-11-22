@@ -73,10 +73,12 @@ pub(super) fn draw_powerline(
     if filled_span(c, 0.5).is_none() {
         return false;
     }
-    // 逐行物理像素填充：整像素不透明，两端不足一个像素的部分按覆盖的比例。
+    // 逐行物理像素填充：整像素不透明，两端不足一个像素的部分按覆盖的比例。格子的四条边与
+    // 色块一样各自取整到物理像素，平边与相邻的色块之间没有缝。
     let scale = frame.scale().max(1.0);
-    let px = 1.0 / scale;
-    let rows = (at.h * scale).round().max(1.0) as usize;
+    let edge = |v: f32| (v * scale).round();
+    let (x0, y0) = (edge(at.x), edge(at.y));
+    let (width, rows) = (edge(at.right()) - x0, (edge(at.bottom()) - y0) as usize);
     for row in 0..rows {
         let (mut left, mut right) = (0.0, 0.0);
         for sample in 0..SAMPLES {
@@ -85,12 +87,14 @@ pub(super) fn draw_powerline(
             left += l;
             right += r;
         }
-        let width = at.w * scale / SAMPLES as f32;
-        let (left, right) = (left * width, right * width);
-        let y = at.y + row as f32 * px;
+        let (left, right) = (
+            left * width / SAMPLES as f32,
+            right * width / SAMPLES as f32,
+        );
+        let y = (y0 + row as f32) / scale;
         let mut fill = |from: f32, to: f32, opacity: f32| {
             if to > from && opacity > 0.0 {
-                let rect = Rect::new(at.x + from * px, y, (to - from) * px, px);
+                let rect = Rect::new((x0 + from) / scale, y, (to - from) / scale, 1.0 / scale);
                 frame.rect_clipped(rect, color.alpha(opacity), 0.0, clip);
             }
         };
