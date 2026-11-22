@@ -1000,7 +1000,7 @@ pub struct App {
     /// 本窗口最近关闭的标签、最近切换到的文件和最近使用的命令。
     pub(crate) history: workspace::History,
     /// 两段组合键（如 `⌘K ⌘S`）的第一段，正在等待第二段。
-    pub(crate) pending_chord: Option<crate::keymap::Stroke>,
+    pub(crate) pending_chord: Option<input::keyboard::PendingChord>,
     /// 单按修饰键的状态，用于连按两下修饰键的快捷键。
     pub(crate) taps: input::tap::Taps,
     /// 「首次设置」中快捷键一页的状态。

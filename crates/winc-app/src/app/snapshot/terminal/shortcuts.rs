@@ -185,7 +185,8 @@ fn application_priority_keeps_management_and_does_not_change_winc_fields() {
 fn terminal_priority_does_not_leave_a_pending_editor_chord() {
     let mut app = blank_app(false);
     show_terminal(&mut app, "output");
-    app.pending_chord = Some(key(cmd(), KeyCode::Char('k')));
+    let chord = crate::app::input::keyboard::PendingChord::new(key(cmd(), KeyCode::Char('k')));
+    app.pending_chord = Some(chord);
     assert!(!app.on_shortcut(key(Mods::NONE, KeyCode::Char('x'))));
     assert_eq!(app.pending_chord, None);
 }

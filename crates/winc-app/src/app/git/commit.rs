@@ -889,6 +889,8 @@ pub(crate) struct CommitState {
     pub(crate) stash_files_folded: bool,
     /// 储藏的预览标签：和改动列表的预览标签分开，那个标签跟着工作区里的文件刷新。
     pub(crate) stash_preview: Option<DocumentId>,
+    /// 正在询问新增的 TODO 要不要仍然提交：这次提交在等回答。
+    todo_asked: bool,
     /// 提交成功以后继续推送（「提交并推送」）。
     push_after: bool,
     /// 与 `push_after` 一起：推送改为同步，先拉取上游的新提交再推送（「提交并同步」）。
@@ -904,6 +906,25 @@ pub(crate) struct CommitState {
 }
 
 impl CommitState {
+    /// 放弃「提交以后推送」：这次提交没有开始，或没有成功。
+    ///
+    /// 推送的意图只属于发起它的那一次提交；留到之后，下一次普通的提交会不经确认就推送。
+    pub(super) fn drop_push_intent(&mut self) {
+        self.push_after = false;
+        self.sync_after = false;
+    }
+
+    /// 是否有一次提交在进行或在等待：后台正在提交或检查、在等暂存写完，或在等用户回答。
+    pub(super) fn pending(&self) -> bool {
+        self.busy || self.commit_queued || self.todo_asked
+    }
+
+    /// 是否这次提交成功以后继续推送。
+    #[cfg(test)]
+    pub(crate) fn pushes_after(&self) -> bool {
+        self.push_after
+    }
+
     /// 是否显示暂存区（见 [`CommitState::staging`] 字段）。
     pub(crate) fn staging(&self) -> bool {
         self.staging
@@ -1007,6 +1028,7 @@ impl Default for CommitState {
             stash_view: None,
             stash_files_folded: false,
             stash_preview: None,
+            todo_asked: false,
             push_after: false,
             sync_after: false,
             last: None,

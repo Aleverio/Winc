@@ -344,10 +344,14 @@ impl ApplicationHandler<UserEvent> for App {
                     self.reset_blink();
                     self.terminal_window_focused();
                     // 其他 winc 窗口可能修改了最近列表，重新读取后开始页和项目菜单显示最新内容。
-                    if let Some(path) = &self.store.state_path {
-                        self.state = State::load_from(path);
+                    // 读不出来时保留内存中的状态，不换成空的。
+                    if let Some(path) = &self.store.state_path
+                        && let Ok(Some(state)) = State::read(path)
+                    {
+                        self.state = state;
                     }
                 } else {
+                    self.cancel_chord();
                     let ids: Vec<DocumentId> = self.editor.documents.iter().map(|d| d.id).collect();
                     self.auto_save(&ids);
                     self.drop_drags();
@@ -867,7 +871,17 @@ impl App {
     pub(crate) fn asks_before_quit(&self) -> bool {
         self.config.confirm_close == Some(true)
             || self.terminal_busy()
-            || (self.editor.documents.iter()).any(|d| d.is_dirty() && !self.kept_on_quit(d))
+            || !self.unsaved_on_quit().is_empty()
+    }
+
+    /// 返回退出后会丢失的修改：有未保存的修改、退出时又不写入备份的各个文档，及其内容的
+    /// 版本号。
+    ///
+    /// 应用层在窗口同意退出时记下，退出前再比较：其间又修改过的文档需要重新询问。
+    pub(crate) fn unsaved_on_quit(&self) -> Vec<(DocumentId, u64)> {
+        let lost = |d: &&winc_editor::Document| d.is_dirty() && !self.kept_on_quit(d);
+        let documents = self.editor.documents.iter().filter(lost);
+        documents.map(|d| (d.id, d.revision)).collect()
     }
 }
 

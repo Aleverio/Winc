@@ -239,12 +239,7 @@ impl App {
         let push = self.git.commit.into.is_none();
         self.git.commit.push_after = push;
         self.git.commit.sync_after = sync && push;
-        self.git_commit();
-        // 没有真的开始提交（没写信息、没勾文件），就不留着「之后推送」。
-        if !self.git.commit.busy {
-            self.git.commit.push_after = false;
-            self.git.commit.sync_after = false;
-        }
+        self.git_commit_resumed();
     }
 
     /// 在按目录排成树和平铺之间切换更改列表。

@@ -202,7 +202,10 @@ impl App {
         let backed_up = match request {
             CloseRequest::Quit => self.back_up_for_quit(),
             CloseRequest::CloseWindow if self.editor.workspace.is_some() => self.back_up_for_quit(),
-            _ => Default::default(),
+            _ => {
+                self.keep_no_backups();
+                Default::default()
+            }
         };
         let dirty: Vec<DocumentId> = self
             .editor

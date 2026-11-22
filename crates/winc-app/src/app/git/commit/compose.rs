@@ -144,12 +144,12 @@ impl App {
     pub(super) fn todo_checked(&mut self, count: usize, root: &Path) {
         self.git.commit.busy = false;
         if self.git.root.as_deref() != Some(root) {
-            self.git.commit.push_after = false;
+            self.git.commit.drop_push_intent();
             return;
         }
         if count == 0 {
             self.git.commit.todo_passed = true;
-            self.git_commit();
+            self.git_commit_resumed();
             return;
         }
         let message = t!("git-commit-todo-confirm", count = count);
@@ -158,18 +158,20 @@ impl App {
         let shown = self.show_confirm(&message, detail, button, |ok| {
             Some(UserEvent::GitCommitTodo(ok))
         });
+        self.git.commit.todo_asked = shown;
         if !shown {
-            self.git.commit.push_after = false;
+            self.git.commit.drop_push_intent();
         }
     }
 
     /// 新增 TODO 的确认框选了 `ok`（仍然提交）或取消。
     pub(in crate::app) fn todo_confirmed(&mut self, ok: bool) {
+        self.git.commit.todo_asked = false;
         if ok {
             self.git.commit.todo_passed = true;
-            self.git_commit();
+            self.git_commit_resumed();
         } else {
-            self.git.commit.push_after = false;
+            self.git.commit.drop_push_intent();
         }
     }
 

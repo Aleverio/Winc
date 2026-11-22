@@ -113,14 +113,14 @@ impl App {
     pub(super) fn reformatted(&mut self, count: usize, root: &Path) {
         self.git.commit.busy = false;
         if self.git.root.as_deref() != Some(root) {
-            self.git.commit.push_after = false;
+            self.git.commit.drop_push_intent();
             return;
         }
         if count > 0 {
             self.flash(t!("git-commit-reformatted", count = count));
         }
         self.git.commit.reformat_passed = true;
-        self.git_commit();
+        self.git_commit_resumed();
     }
 
     /// 打开或关闭提交前格式化（提交按钮的菜单）。

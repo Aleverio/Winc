@@ -245,6 +245,11 @@ struct Slot {
 struct Quitting {
     asking: Option<Asking>,
     rest: Vec<WindowKey>,
+    /// 已同意退出的各窗口同意时会丢失的修改（[`App::unsaved_on_quit`]）。
+    ///
+    /// 别的窗口还在询问时，已同意退出的窗口仍可编辑；全部同意后与当时比较，又有修改的窗口
+    /// 重新询问。
+    agreed: Vec<(WindowKey, Vec<(winc_editor::DocumentId, u64)>)>,
 }
 
 /// 正在请其退出的窗口。
@@ -483,12 +488,23 @@ impl Winc {
                 .map(|slot| slot.key)
                 .collect();
             rest.sort_by_key(|key| Some(*key) != active);
-            self.quitting = Some(Quitting { asking: None, rest });
+            let (asking, agreed) = (None, Vec::new());
+            self.quitting = Some(Quitting {
+                asking,
+                rest,
+                agreed,
+            });
         }
         loop {
             let Some(quitting) = &mut self.quitting else {
                 return false;
             };
+            for slot in &self.windows {
+                let known = quitting.agreed.iter().any(|(key, _)| *key == slot.key);
+                if slot.app.closing.quit_requested && !known {
+                    (quitting.agreed).push((slot.key, slot.app.unsaved_on_quit()));
+                }
+            }
             if let Some(asking) = quitting.asking {
                 let Some(app) = self.windows.iter().find(|s| s.key == asking.key) else {
                     quitting.asking = None;
@@ -511,7 +527,20 @@ impl Winc {
                 continue;
             }
             let Some(key) = quitting.rest.pop() else {
-                return true;
+                // 同意之后又有修改的窗口：撤回它的同意，重新询问。
+                let edited = quitting.agreed.iter().position(|(key, unsaved)| {
+                    let slot = self.windows.iter().find(|slot| slot.key == *key);
+                    slot.is_some_and(|slot| slot.app.unsaved_on_quit() != *unsaved)
+                });
+                let Some(edited) = edited else {
+                    return true;
+                };
+                let (key, _) = quitting.agreed.remove(edited);
+                if let Some(slot) = self.windows.iter_mut().find(|slot| slot.key == key) {
+                    slot.app.closing.quit_requested = false;
+                }
+                self.ask_to_quit(key);
+                continue;
             };
             self.ask_to_quit(key);
         }
@@ -854,7 +883,7 @@ impl Winc {
             .filter(|slot| reopen && Some(slot.key) != active)
             .filter_map(|slot| slot.app.editor.root().map(Path::to_path_buf))
             .collect();
-        let (_, result) = State::update(&path, |state| state.others = others);
+        let (_, result) = State::update(&path, &State::default(), |state| state.others = others);
         if let Err(e) = result {
             eprintln!("winc: 无法记下开着的窗口：{e}");
         }

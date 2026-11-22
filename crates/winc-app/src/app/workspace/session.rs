@@ -430,7 +430,7 @@ impl App {
             change(&mut self.state);
             return;
         };
-        let (state, result) = State::update(&path, change);
+        let (state, result) = State::update(&path, &self.state, change);
         self.state = state;
         if let Err(e) = result {
             eprintln!("winc: 无法记下最近打开的目录：{e}");

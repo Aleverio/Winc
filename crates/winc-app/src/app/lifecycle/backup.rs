@@ -608,6 +608,12 @@ impl App {
         done
     }
 
+    /// 这次关闭不为任何文档留备份：清除上一次退出（已被取消）记下的 `kept`，否则放弃了的
+    /// 修改仍留在备份里，下次被恢复出来。
+    pub(super) fn keep_no_backups(&mut self) {
+        self.backup.kept = None;
+    }
+
     /// 确认退出时调用（询问过的文档都已保存或放弃）：删除除 `kept` 之外的所有备份。
     ///
     /// `kept` 中的备份留到下次启动时恢复。

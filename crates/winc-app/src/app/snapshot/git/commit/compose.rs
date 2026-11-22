@@ -115,6 +115,29 @@ fn the_subject_line_gets_a_hint_when_it_breaks_the_convention() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// 「提交并推送」确认之后没有提交成（信息已被清空）：推送的意图不留给下一次提交。
+#[test]
+fn a_commit_and_push_that_never_starts_leaves_no_push_behind() {
+    let Some((mut app, root)) = git_app("git-push-intent", false) else {
+        return;
+    };
+    app.run_action(Action::ShowCommit);
+    app.open_context_menu(MenuTarget::CommitButton, (0.0, 0.0));
+    app.run_menu_command(MenuCommand::CommitCheckTodo);
+    std::fs::write(root.join("src/main.rs"), "fn main() {} // TODO: 加日志\n").unwrap();
+    app.git_refresh();
+    ready_to_commit(&mut app, "带 TODO");
+    app.git_commit_and_push();
+    assert!(app.overlays.alert.is_some());
+    assert!(app.git.commit.pushes_after());
+    app.git.commit.message.set_text("");
+    press_alert(&mut app, 0);
+    app.poll_commit();
+    assert_eq!(last_message(&root), "first");
+    assert!(!app.git.commit.pushes_after());
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// 开着提交前检查时，新增的内容里有 TODO 先确认：取消不提交，仍然提交才提交；没有 TODO 时
 /// 直接提交。
 #[test]

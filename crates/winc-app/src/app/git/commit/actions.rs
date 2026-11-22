@@ -455,6 +455,24 @@ impl App {
     /// 没写提交信息、没有可以提交的内容时在状态栏说明，不提交。冲突已解决（不再有冲突标记）的
     /// 文件随提交加入暂存区。
     pub(in crate::app) fn git_commit(&mut self) {
+        // 这是一次新的、不推送的提交；已有提交在进行或等待时不改它的意图。
+        if !self.git.commit.pending() {
+            self.git.commit.drop_push_intent();
+        }
+        self.git_commit_resumed();
+    }
+
+    /// 开始或接着进行提交（暂存写完、整理或检查做完之后），「提交以后推送」的意图保留；
+    /// 提交没有开始、也没有在等待时放弃该意图。
+    pub(super) fn git_commit_resumed(&mut self) {
+        self.commit_attempt();
+        if !self.git.commit.pending() {
+            self.git.commit.drop_push_intent();
+        }
+    }
+
+    /// [`App::git_commit`] 的一次尝试：返回时提交已在后台进行、在等暂存写完，或没有开始。
+    fn commit_attempt(&mut self) {
         if self.git.commit.busy {
             return;
         }
@@ -854,8 +872,7 @@ impl App {
                                 Some((short, Instant::now() + COMMITTED_SHOWN));
                         }
                         Err(e) => {
-                            self.git.commit.push_after = false;
-                            self.git.commit.sync_after = false;
+                            self.git.commit.drop_push_intent();
                             self.git.commit.committed_with.clear();
                             self.git.commit.others_left = 0;
                             self.notify_with(

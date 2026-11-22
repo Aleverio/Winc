@@ -256,22 +256,46 @@ pub enum Tab {
 impl State {
     /// 读取指定文件中的状态；文件不存在、无法读取或格式不对时返回空状态。
     pub fn load_from(path: &Path) -> State {
-        std::fs::read_to_string(path)
-            .ok()
-            .map(|text| State::parse(&text))
-            .unwrap_or_default()
+        State::read(path).ok().flatten().unwrap_or_default()
+    }
+
+    /// 读取指定文件中的状态；文件不存在或没有内容时返回 `Ok(None)`。
+    ///
+    /// 与 [`State::load_from`] 不同，读不出来与没有文件分开报告：调用方据此决定是否保留内存中的
+    /// 状态、是否可以写回。
+    ///
+    /// # Errors
+    ///
+    /// 读取失败时返回对应的 `std::io::Error`；内容不是 UTF-8 文本，或顶层不是 JSON 对象时返回
+    /// [`std::io::ErrorKind::InvalidData`]。
+    pub fn read(path: &Path) -> std::io::Result<Option<State>> {
+        use std::io::{Error, ErrorKind};
+        let bytes = match std::fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        let text =
+            std::str::from_utf8(&bytes).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
+        if text.trim().is_empty() {
+            return Ok(None);
+        }
+        State::try_parse(text)
+            .map(Some)
+            .ok_or_else(|| Error::from(ErrorKind::InvalidData))
     }
 
     /// 解析状态文件内容；格式错误或顶层不是对象时返回空状态。
     ///
     /// 类型不符或越界的项被丢弃，其余仍然读取。
     pub fn parse(text: &str) -> State {
-        let Some(root) = Json::parse(text) else {
-            return State::default();
-        };
-        let Some(root) = root.as_object() else {
-            return State::default();
-        };
+        State::try_parse(text).unwrap_or_default()
+    }
+
+    /// 解析状态文件内容；格式错误或顶层不是对象时返回 `None`。
+    fn try_parse(text: &str) -> Option<State> {
+        let root = Json::parse(text)?;
+        let root = root.as_object()?;
 
         let paths = |value: Option<&Json>| -> Vec<PathBuf> {
             value
@@ -657,7 +681,7 @@ impl State {
                 state.places.push((path, FilePlace { text: None, view }));
             }
         }
-        state
+        Some(state)
     }
 
     /// 返回上次退出时开着的目录的现场，启动时据此恢复；没有时返回 `None`。
@@ -946,10 +970,18 @@ impl State {
     /// 覆盖其他进程写入的最近列表、现场和书签；读改写期间锁住旁边的 `<文件>.lock`（建议锁），
     /// 两个进程不会交错。锁文件打不开时仍然读改写。
     ///
+    /// `current` 是调用方内存中的状态，文件读不出来时在它之上修改：读取失败（磁盘错误、
+    /// 没有权限）时不写回，文件中的记录不会被覆盖；内容损坏时把文件改名为 `<文件>.damaged`
+    /// 留存，再写入修改后的 `current`。
+    ///
     /// # Errors
     ///
-    /// 写回失败时返回对应的 `std::io::Error`。
-    pub fn update(path: &Path, change: impl FnOnce(&mut State)) -> (State, std::io::Result<()>) {
+    /// 读取或写回失败时返回对应的 `std::io::Error`。
+    pub fn update(
+        path: &Path,
+        current: &State,
+        change: impl FnOnce(&mut State),
+    ) -> (State, std::io::Result<()>) {
         let lock = path.parent().and_then(|dir| {
             std::fs::create_dir_all(dir).ok()?;
             let file = std::fs::OpenOptions::new()
@@ -961,7 +993,18 @@ impl State {
             file.lock().ok()?;
             Some(file)
         });
-        let mut state = State::load_from(path);
+        let mut state = match State::read(path) {
+            Ok(stored) => stored.unwrap_or_default(),
+            Err(error) if error.kind() == std::io::ErrorKind::InvalidData => {
+                let _ = std::fs::rename(path, path.with_extension("damaged"));
+                current.clone()
+            }
+            Err(error) => {
+                let mut state = current.clone();
+                change(&mut state);
+                return (state, Err(error));
+            }
+        };
         change(&mut state);
         let result = state.save_to(path);
         drop(lock);

@@ -814,7 +814,9 @@ impl App {
     /// 保存失败时只提示保存的错误。关闭标签或退出的流程正在等待本次保存时，保存成功后继续关闭，
     /// 保存失败则放弃整个关闭流程（处理方式同直接保存失败）。
     fn save_with_notes(&mut self, id: DocumentId) {
-        let closing = self.format.then_close.take();
+        // 等待的是哪个文档由提示记着：另一个文档的保存不能取走它。
+        let awaited = |prompt: &mut SavePrompt| prompt.dirty.first() == Some(&id);
+        let closing = self.format.then_close.take_if(awaited);
         let (notes, others) = std::mem::take(&mut self.format.notes)
             .into_iter()
             .partition::<Vec<_>, _>(|(d, _)| *d == id);
@@ -879,6 +881,8 @@ impl App {
             self.format.running.remove(index).cancel.cancel();
         }
         self.format.notes.retain(|(d, _)| *d != id);
+        // 等着这个文档保存的关闭流程一并放弃，否则之后的关闭请求都会被当作仍在进行。
+        (self.format.then_close).take_if(|prompt| prompt.dirty.first() == Some(&id));
     }
 
     /// 退出前停止所有格式化，避免工具进程残留。
