@@ -565,6 +565,12 @@ impl Palette {
         let (glyph, [dark, light]) = file_kind(name);
         (glyph, Color::hex(if self.dark { dark } else { light }))
     }
+
+    /// 返回语言 `language` 的图标：这种语言的文件的图标（见 [`language_kind`]）。
+    pub fn language_icon(&self, language: &winc_syntax::Language) -> (FileGlyph, Color) {
+        let (glyph, [dark, light]) = language_kind(language);
+        (glyph, Color::hex(if self.dark { dark } else { light }))
+    }
 }
 
 // 字号与行高（逻辑像素，下同）。上方的常量是默认值；运行时以 `ViewFonts` 为准，

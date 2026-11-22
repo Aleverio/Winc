@@ -50,6 +50,15 @@ impl LanguageRow {
         }
     }
 
+    /// 这一行选用的语言；「自动检测」没有。
+    pub(crate) fn language(self) -> Option<&'static winc_syntax::Language> {
+        match self {
+            LanguageRow::Language(i) => winc_syntax::languages().get(i).copied(),
+            LanguageRow::Plain => Some(winc_syntax::detect("")),
+            LanguageRow::Detect => None,
+        }
+    }
+
     /// 名字后面淡色写出的扩展名（如 `.rs`）；不是具体语言或没有扩展名时为空。
     pub(crate) fn extensions(self) -> String {
         let LanguageRow::Language(i) = self else {

@@ -628,7 +628,8 @@ fn the_language_picker_filters_by_name_and_extension() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// 截图：面板中的语言列表，键入「ru」筛选（`language-picker-light`）。
+/// 截图：面板中的语言列表，键入「ru」筛选（`language-picker-light`）；状态栏的语言菜单
+/// （`language-menu-light`）。
 #[test]
 #[ignore = "截图，手动运行"]
 fn shoot_language_picker() {
@@ -641,6 +642,10 @@ fn shoot_language_picker() {
     app.overlays.picker.input.set_text("ru");
     app.picker_refresh();
     shoot(&mut app, "language-picker-light");
+    app.close_picker();
+    app.open_status_menu(StatusItem::Language);
+    paint(&mut app);
+    shoot(&mut app, "language-menu-light");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

@@ -659,6 +659,20 @@ impl App {
         self.activate_tab(index);
     }
 
+    /// 返回另存文档 `id` 时默认的文件名：已有文件名的沿用；未命名的用标签上的名字加所用语言的
+    /// 扩展名（见 [`winc_syntax::Language::file_name`]），保存后仍是这种语言，纯文本加 `.txt`。
+    pub(in crate::app) fn save_name(&self, id: DocumentId) -> String {
+        let Some(doc) = self.editor.document(id) else {
+            return "untitled.txt".to_owned();
+        };
+        let name = doc.name();
+        if doc.path.is_some() || doc.title.is_some() {
+            return name.into_owned();
+        }
+        let language = doc.highlighter.language();
+        (language.file_name(&name)).unwrap_or_else(|| format!("{name}.txt"))
+    }
+
     /// 新建未命名文档并切换到该文档。
     pub(in crate::app) fn new_file(&mut self) {
         self.editor.new_untitled();
@@ -1025,11 +1039,12 @@ impl App {
         let Some(proxy) = self.link.proxy.clone() else {
             return;
         };
-        // 另存为：默认使用原来的名字，从原来所在的目录开始；新文件从已打开的目录开始。
+        // 另存为：默认使用原来的名字，从原来所在的目录开始；新文件的名字带上所用语言的扩展名，
+        // 从已打开的目录开始。
         let (name, dir) = match &kind {
             Pick::SaveAs(id) => {
                 let doc = self.editor.document(*id);
-                let name = doc.map_or_else(|| "untitled.txt".to_owned(), |d| d.name().into_owned());
+                let name = self.save_name(*id);
                 let dir = doc
                     .and_then(|d| d.path.as_ref()?.parent().map(Path::to_path_buf))
                     .or_else(|| self.editor.root().map(Path::to_path_buf));

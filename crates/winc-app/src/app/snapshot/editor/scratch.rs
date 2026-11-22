@@ -153,3 +153,61 @@ fn recently_chosen_languages_lead_the_language_menu() {
     let markdown = MenuCommand::UseLanguage(index("a.md"));
     assert_eq!(listed.iter().filter(|(c, _)| *c == markdown).count(), 1);
 }
+
+/// 未命名文件另存时默认的名字带所用语言的扩展名，保存后语言不变；已有名字的沿用。
+#[test]
+fn saving_an_untitled_file_suggests_the_extension_of_its_language() {
+    let dir = sample_folder("scratch-save-name");
+    let mut app = blank_app(false);
+    app.new_file();
+    let id = app.editor.active().unwrap().id;
+    assert_eq!(app.save_name(id), "untitled.txt");
+    app.use_language(winc_syntax::detect("a.md"));
+    assert_eq!(app.save_name(id), "untitled.md");
+    app.use_language(winc_syntax::detect("Makefile"));
+    assert_eq!(app.save_name(id), "untitled.mk");
+    assert_eq!(pasted(&mut app, "{\"a\":1}"), "json");
+    let id = app.editor.active().unwrap().id;
+    let name = app.save_name(id);
+    assert_eq!(name, "untitled.json");
+    app.on_picked(Pick::SaveAs(id), Some(dir.join(&name)));
+    assert_eq!(language(&app), "json");
+    // 已有名字的文件沿用原名，不随所选的语言改。
+    app.use_language(winc_syntax::detect("a.md"));
+    assert_eq!(app.save_name(id), "untitled.json");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 语言菜单和语言面板的每一行开头是这种语言的文件的图标。
+#[test]
+fn languages_are_listed_with_the_icon_of_their_files() {
+    use crate::app::input::context_menu::MenuIcon;
+    use crate::icons::FileGlyph;
+    let app = blank_app(false);
+    let glyph = |name: &str| {
+        let wanted = winc_syntax::detect(name).id;
+        let all = winc_syntax::languages();
+        let at = all.iter().position(|l| l.id == wanted).unwrap();
+        match app.menu_icon_kind(MenuCommand::UseLanguage(at)) {
+            Some(MenuIcon::File(glyph, _)) => glyph,
+            other => panic!("{name}: {other:?}"),
+        }
+    };
+    assert_eq!(glyph("a.json"), FileGlyph::Json);
+    assert_eq!(glyph("a.md"), FileGlyph::Markdown);
+    assert_eq!(glyph("a.sh"), FileGlyph::Shell);
+    assert_eq!(glyph("a.rs"), FileGlyph::Letters("RS"));
+    assert_eq!(glyph("Dockerfile"), FileGlyph::Docker);
+    assert!(app.menu_icon_kind(MenuCommand::UsePlainText).is_some());
+    assert!(app.menu_icon_kind(MenuCommand::DetectLanguage).is_none());
+    // 系统菜单按图标自己的尺寸显示，不按目录图标的。
+    assert_eq!(app.menu_icon_size(MenuCommand::UsePlainText), (16.0, 16.0));
+    assert_eq!(
+        app.menu_icon_size(MenuCommand::DetectLanguage),
+        (15.0, 12.0)
+    );
+    // 面板中的行按同一种语言取图标，「自动检测」没有。
+    use crate::app::LanguageRow;
+    assert_eq!(LanguageRow::Plain.language().map(|l| l.id), Some("text"));
+    assert!(LanguageRow::Detect.language().is_none());
+}
