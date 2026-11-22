@@ -727,6 +727,7 @@ impl App {
     pub(crate) fn tick(&mut self) -> Option<Instant> {
         let now = Instant::now();
         self.track_navigation();
+        self.wasm_observe_documents();
 
         if self.status.until.is_some_and(|t| now >= t) {
             self.status.message = None;
@@ -961,6 +962,8 @@ impl App {
         self.remember_window();
         self.vim_persist();
         self.save_session();
+        self.wasm_event(winc_plugin::api::EventKind::Shutdown);
+        self.wasm_shutdown();
     }
 
     /// 退出前是否需要询问用户：开了关闭前确认，存在退出时不会写入备份的未保存文档

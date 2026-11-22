@@ -272,6 +272,7 @@ impl App {
             Target::Minimap => self.press_minimap(y),
             Target::Crumb(index) => self.open_crumb_menu(index),
             Target::Status(item) => self.open_status_menu(item),
+            Target::PluginStatus(_) => {}
             Target::TitleBar => self.click_title_bar(x, y),
             Target::WindowControl(control) => self.pointer.control_pressed = Some(control),
             Target::ResizeEdge(direction) => self.start_resize(direction),

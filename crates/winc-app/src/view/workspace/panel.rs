@@ -931,6 +931,11 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
             };
             Some((rect, with_key(label, Some(Action::ToggleTerminalPanel))))
         }
+        Hover::PluginStatus(index) => {
+            let rect = app.hits.plugin_status.iter().find(|(_, i)| *i == index)?.0;
+            let tip = app.wasm.status_entries().get(index)?.tooltip.clone()?;
+            Some((rect, tip))
+        }
         Hover::Status(item @ crate::app::StatusItem::Remote) => {
             let rect = app.hits.status.iter().find(|(_, i)| *i == item)?.0;
             // 已打开远端目录时说明连着哪台主机。

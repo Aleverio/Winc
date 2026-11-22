@@ -1438,6 +1438,7 @@ impl App {
         self.vim_swap_options();
         self.write_config();
         self.vim_swap_options();
+        self.wasm_config_revision(self.store.config_rev);
     }
 
     /// 把配置写入配置文件。

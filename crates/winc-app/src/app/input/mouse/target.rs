@@ -90,6 +90,7 @@ impl App {
         client.extend(self.hits.terminal.iter().map(|(r, _)| *r));
         client.extend(self.hits.merge.iter().map(|(r, _)| *r));
         client.extend(self.hits.crumbs.iter().map(|(r, _)| *r));
+        client.extend(self.hits.plugin_status.iter().map(|(r, _)| *r));
         client.extend(self.hits.status.iter().map(|(r, _)| *r));
         client.extend(
             [
@@ -252,6 +253,7 @@ impl App {
             Target::RulerChange(hunk) => Hover::RulerChange(hunk),
             Target::Crumb(index) => Hover::Crumb(index),
             Target::Status(item) => Hover::Status(item),
+            Target::PluginStatus(index) => Hover::PluginStatus(index),
             Target::Tree(row) => row.map_or(Hover::None, Hover::TreeRow),
             Target::Placeholder(action) => Hover::Placeholder(action),
             Target::Diff(target) => Hover::Diff(target),
@@ -470,6 +472,9 @@ impl App {
         }
         if let Some(index) = hit(&self.hits.crumbs, x, y) {
             return Target::Crumb(index);
+        }
+        if let Some(index) = hit(&self.hits.plugin_status, x, y) {
+            return Target::PluginStatus(index);
         }
         if let Some(item) = hit(&self.hits.status, x, y) {
             return Target::Status(item);
@@ -1133,6 +1138,8 @@ pub(super) enum Target {
     Crumb(usize),
     /// 状态栏右侧的一项。
     Status(crate::app::StatusItem),
+    /// 插件状态项中带提示文字的一项。
+    PluginStatus(usize),
     /// 顶栏空白处，按下后拖动窗口。
     TitleBar,
     /// 应用绘制的标题栏上的窗口按钮。

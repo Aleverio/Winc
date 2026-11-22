@@ -78,6 +78,9 @@ config-label-contrast = contrast
 
 plugin-trust-title = Run plugin command from { $name }?
 plugin-trust-detail = Program: { $command }; arguments: { $args }. Only run plugins you trust
+plugin-trust-wasm-detail = WebAssembly plugin { $name } requests: { $capabilities }. Only run plugins you trust
+plugin-capability = Capability: { $name }
+plugin-unsupported-effect = This plugin effect is not available in this build
 plugin-trust-action = Run
 plugin-done = { $name }: { $command } finished
 plugin-failed = { $name } failed: { $error }

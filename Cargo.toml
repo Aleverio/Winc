@@ -14,6 +14,8 @@ homepage = "https://winc.si"
 [workspace.dependencies]
 winc-config = { path = "crates/winc-config" }
 winc-core = { path = "crates/winc-core" }
+winc-plugin = { path = "crates/winc-plugin" }
+winc-plugin-api = { path = "crates/winc-plugin-api" }
 winc-emoji = { path = "crates/winc-emoji" }
 winc-syntax = { path = "crates/winc-syntax" }
 winc-render = { path = "crates/winc-render" }

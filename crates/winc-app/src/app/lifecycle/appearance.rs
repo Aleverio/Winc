@@ -217,6 +217,9 @@ impl App {
         }
 
         self.place_traffic_lights();
+        self.wasm_event(winc_plugin::api::EventKind::ThemeChanged {
+            dark: theme == Theme::Dark,
+        });
         self.request_redraw();
     }
 

@@ -33,6 +33,7 @@ mod editor;
 mod fields;
 mod git;
 mod overlays;
+mod plugin_ui;
 #[cfg(all(test, unix))]
 pub(crate) use overlays::NOTICE_TEXT_X;
 mod popup_menu;
@@ -132,6 +133,7 @@ fn draw_tab_drop(app: &App, frame: &mut Frame<'_>) {
 pub fn draw(app: &mut App, frame: &mut Frame<'_>) {
     // 设置浮层出现、消失的动画期间，下方的窗口和卡片内容不变，用动画开始时保存的快照绘制。
     if settings::draw_cached(app, frame) || settings::draw_scrolling(app, frame) {
+        plugin_ui::draw_overlays(app, frame);
         return;
     }
     app.hits.clear();
@@ -232,6 +234,7 @@ pub fn draw(app: &mut App, frame: &mut Frame<'_>) {
     if dialog_open {
         dialog::draw(app, frame);
         draw_modal(app, frame);
+        plugin_ui::draw_overlays(app, frame);
         return;
     }
 
@@ -240,6 +243,7 @@ pub fn draw(app: &mut App, frame: &mut Frame<'_>) {
     if app.settings.open {
         settings::draw(app, frame);
         draw_modal(app, frame);
+        plugin_ui::draw_overlays(app, frame);
         return;
     }
     if app.settings.motion.is_some() {
@@ -251,10 +255,12 @@ pub fn draw(app: &mut App, frame: &mut Frame<'_>) {
     let modal = app.popup().is_some() || app.overlays.alert.is_some();
     draw_modal(app, frame);
     if modal {
+        plugin_ui::draw_overlays(app, frame);
         return;
     }
     // 鼠标在其他窗格上时，提示按那个窗格的标签和按钮写。
     app.in_hovered_pane(|app| tooltip::draw_tooltip(app, frame));
+    plugin_ui::draw_overlays(app, frame);
 }
 
 /// 提示和冲突卡片留在所属区域内，终端最大化时随区域移到终端内容上。

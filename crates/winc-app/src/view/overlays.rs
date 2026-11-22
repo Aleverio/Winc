@@ -769,6 +769,9 @@ fn draw_palette_rows(app: &App, frame: &mut Frame<'_>, parts: &PickerParts) {
             crate::app::CommandRef::Plugin { plugin, command } => app
                 .plugin_command_titles(plugin, command)
                 .unwrap_or(("", "")),
+            crate::app::CommandRef::Wasm(index) => {
+                app.wasm_command_titles(index).unwrap_or(("", ""))
+            }
         };
         let marked = app.palette_matched(title);
         let at = (row.x + PICKER_TEXT_X, row);

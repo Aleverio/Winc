@@ -52,6 +52,8 @@ pub struct Hits {
     pub(crate) diff: Vec<(Rect, DiffTarget)>,
     /// 状态栏右侧各可点击项的区域。
     pub(crate) status: Vec<(Rect, StatusItem)>,
+    /// 插件状态项的提示区域，以及它在 `App::wasm.status_entries()` 中的下标。
+    pub(crate) plugin_status: Vec<(Rect, usize)>,
     /// 状态栏路径中各段的可点击区域，以及段序号。
     pub(crate) crumbs: Vec<(Rect, usize)>,
     /// 文件树工具栏各按钮的位置，绘制时填入，点击时使用。
@@ -160,6 +162,7 @@ impl Hits {
             project,
             diff,
             status,
+            plugin_status,
             crumbs,
             tree_tools,
             tree_more,
@@ -213,6 +216,7 @@ impl Hits {
         *project = Rect::default();
         diff.clear();
         status.clear();
+        plugin_status.clear();
         crumbs.clear();
         tree_tools.clear();
         *tree_more = None;

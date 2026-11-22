@@ -173,6 +173,9 @@ impl App {
     /// 文件在预览标签中时，该标签成为普通标签。
     pub(in crate::app) fn open_path(&mut self, path: &Path) {
         self.open_file(path, false);
+        if let Some(id) = self.editor.active().map(|doc| doc.id.0) {
+            self.wasm_event(winc_plugin::api::EventKind::DocumentOpened { id });
+        }
     }
 
     /// 从窗口外打开了文件 `path`（命令行、文件管理器、程序坞、拖入、「打开」面板）：记入最近
@@ -1023,6 +1026,7 @@ impl App {
                 self.blame_saved(id);
                 self.latex_saved(id);
                 self.run_file_saved(id);
+                self.wasm_document_saved(id.0);
                 if saved_as {
                     if let Some((other, _)) = other {
                         self.close_documents(&[other]);

@@ -27,6 +27,7 @@ mod status;
 pub(crate) mod terminal;
 pub(crate) mod tickets;
 pub(crate) mod vim;
+mod wasm;
 pub(crate) mod workspace;
 
 pub use animation::Clock;
@@ -631,6 +632,8 @@ pub enum Hover {
     Crumb(usize),
     /// 状态栏右侧可点击的一项（缩进、行尾）。
     Status(StatusItem),
+    /// 插件在状态栏贡献的一项；参数是 `wasm.status_entries()` 中的下标。
+    PluginStatus(usize),
     /// 编辑区顶部钉住的一层，参数是层级。
     Sticky(usize),
     /// 编辑区行号栏：显示可折叠行的箭头。
@@ -676,6 +679,7 @@ impl Hover {
                         | terminal::HeaderHit::Hide
                         | terminal::HeaderHit::Run(_),
                 )
+                | Hover::PluginStatus(_)
                 | Hover::Status(
                     StatusItem::Terminal
                         | StatusItem::Settings
@@ -991,6 +995,8 @@ pub struct App {
     pub config: Config,
     /// 从用户配置的清单中发现的插件；命令须显式启用并信任后才会运行。
     pub(crate) plugins: PluginRegistry,
+    /// 已激活的 WebAssembly 插件实例及其贡献的命令、设置和覆盖层。
+    pub(crate) wasm: wasm::Manager,
     /// 配置与状态文件的写回：文件的路径、配置文件当前的内容和配置的版本号。
     pub(crate) store: settings::Store,
     /// 配置中的主题选择；`Auto` 时跟随系统外观。

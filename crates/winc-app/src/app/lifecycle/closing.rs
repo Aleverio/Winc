@@ -475,9 +475,11 @@ impl App {
             _ => self.editor.close(index),
         };
         if let Some(doc) = closed {
+            let id = doc.id.0;
             self.forget_git_document(doc.id, doc.path.as_deref());
             self.preview.markdown.forget(doc.id);
             self.preview.latex.forget(doc.id);
+            self.wasm_event(winc_plugin::api::EventKind::DocumentClosed { id });
         }
         self.bars.search.current = None;
         self.check_waiting();

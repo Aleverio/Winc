@@ -337,6 +337,8 @@ pub struct Config {
     pub plugin_trusted: Vec<String>,
     /// 插件设置值：插件 id → 键 → 值。
     pub plugin_values: BTreeMap<String, BTreeMap<String, String>>,
+    /// 用户批准的能力：插件 id → capability 名称。
+    pub plugin_grants: BTreeMap<String, Vec<String>>,
 }
 
 /// 终端里哪一边的 ⌥ 当 Meta 用；另一边仍然输入 `å`、`∑` 这类字符。

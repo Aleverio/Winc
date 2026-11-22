@@ -47,7 +47,7 @@ impl App {
         let theme_choice = config.theme.unwrap_or(ThemeChoice::Auto);
         let vim = (config.vim_enabled == Some(true)).then(Box::default);
 
-        Self {
+        let mut app = Self {
             editor,
             terminal: terminal::TerminalPanel::default(),
             run: terminal::run::RunConfigs::default(),
@@ -71,6 +71,7 @@ impl App {
             diagnostic_scroll: (0.0, 0.0),
             config,
             plugins,
+            wasm: wasm::Manager::default(),
             theme_choice,
             state: State::default(),
             backup: backup::BackupState::default(),
@@ -254,7 +255,9 @@ impl App {
                 #[cfg(all(unix, not(target_os = "macos")))]
                 activation: None,
             },
-        }
+        };
+        app.reload_wasm_plugins();
+        app
     }
 
     /// 注册 macOS 的系统回调：菜单栏的「设置…」「更新日志」、右键菜单和目录菜单的选中项、`⌘Q`

@@ -199,6 +199,7 @@ impl App {
         self.ensure_caret_visible();
         self.reset_blink();
         self.request_redraw();
+        self.wasm_workspace_changed(Some(root.to_string_lossy().into_owned()));
     }
 
     /// 在工作区换成新打开的目录之后，完成界面切换。
@@ -242,6 +243,7 @@ impl App {
         self.set_window_title(crate::layout::PRODUCT_NAME);
         self.relayout();
         self.request_redraw();
+        self.wasm_workspace_changed(None);
     }
 
     /// 清除与上一个目录相关的状态。

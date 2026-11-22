@@ -40,6 +40,14 @@ pub const PLUGINS: &[Field] = &[
         },
         write: |config| string_maps_json(&config.plugin_values),
     },
+    Field {
+        key: "grants",
+        read: |config, value, name, problems| {
+            config.plugin_grants.clear();
+            read_string_lists_map(value, name, &mut config.plugin_grants, problems);
+        },
+        write: |config| string_lists_map_json(&config.plugin_grants),
+    },
 ];
 
 /// 读入一个字符串数组，空字符串和空白项忽略。
@@ -59,6 +67,41 @@ fn read_string_list(value: &Json, name: &str, out: &mut Vec<String>, problems: &
 /// 写出一个字符串数组；空数组不写。
 fn string_list_json(values: &[String]) -> Option<Json> {
     (!values.is_empty()).then(|| Json::Array(values.iter().cloned().map(Json::String).collect()))
+}
+
+/// 读入「插件 id → 字符串数组」的表。
+fn read_string_lists_map(
+    value: &Json,
+    name: &str,
+    out: &mut BTreeMap<String, Vec<String>>,
+    problems: &mut Vec<String>,
+) {
+    let Some(map) = value.as_object() else {
+        problems.push(t!("config-not-object", name = name));
+        return;
+    };
+    for (id, values) in map {
+        let mut list = Vec::new();
+        read_string_list(values, &format!("{name}.{id}"), &mut list, problems);
+        if !list.is_empty() {
+            out.insert(id.clone(), list);
+        }
+    }
+}
+
+/// 写出「插件 id → 字符串数组」的表。
+fn string_lists_map_json(values: &BTreeMap<String, Vec<String>>) -> Option<Json> {
+    if values.is_empty() {
+        return None;
+    }
+    let mut map = BTreeMap::new();
+    for (id, list) in values {
+        map.insert(
+            id.clone(),
+            Json::Array(list.iter().cloned().map(Json::String).collect()),
+        );
+    }
+    Some(Json::Object(map))
 }
 
 /// 读入「插件 id → 键 → 值」的字符串表。

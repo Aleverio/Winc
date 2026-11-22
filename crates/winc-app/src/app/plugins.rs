@@ -1,13 +1,14 @@
 //! 插件命令的运行：信任确认、占位符展开、后台执行和结果提示。
 //!
-//! 插件只是一段声明：程序、参数、工作目录和环境变量。这里不加载任何插件代码，只有用户显式
-//! 启用的插件才能贡献命令，命令内容变化后指纹变化，会再次询问是否信任。
+//! 外部命令插件只是一段声明：程序、参数、工作目录和环境变量。WASM 插件则在 `app/wasm.rs` 的
+//! 沙箱中运行；两者都必须由用户显式启用并信任。命令或 WASM 模块变化后指纹变化，会再次询问。
 
 use std::path::PathBuf;
 
 use winc_config::{PluginCommand, PluginInput, PluginManifest, PluginRegistry};
 use winc_editor::plugin::{Outcome, Request};
 use winc_i18n::t;
+use winc_plugin::api::Capability;
 
 use super::*;
 use crate::app::{AlertButton, NoticeKind};
@@ -29,9 +30,7 @@ impl App {
 
     /// 一条命令当前的信任指纹：命令 id 带上插件 id，避免两个插件的同名命令共用信任记录。
     fn fingerprint(plugin: &PluginManifest, command: &PluginCommand) -> String {
-        let mut fingerprinted = command.clone();
-        fingerprinted.id = PluginRegistry::command_id(plugin, command);
-        format!("{:x}", PluginManifest::fingerprint(&fingerprinted))
+        format!("{:x}", plugin.command_fingerprint(command))
     }
 
     /// 运行一条插件命令：按注册表下标定位，第一次运行先请求信任。
@@ -58,6 +57,17 @@ impl App {
 
     /// 从设置页的命令 id（`<插件 id>.<命令 id>`）找到当前注册的插件和命令并运行。
     pub(in crate::app) fn run_plugin_command_id(&mut self, id: &str) {
+        if let Some(command) = self
+            .wasm
+            .commands()
+            .iter()
+            .find(|command| format!("{}.{}", command.plugin, command.id) == id)
+        {
+            let plugin = command.plugin.clone();
+            let command = command.id.clone();
+            self.run_wasm_command(&plugin, &command);
+            return;
+        }
         for (plugin, manifest) in self.plugins.plugins.iter().enumerate() {
             if let Some(command) = manifest
                 .commands
@@ -71,17 +81,36 @@ impl App {
     }
 
     /// 弹出信任确认框：展示插件名、命令和参数，用户同意后记住指纹并运行。
-    fn ask_plugin_trust(&mut self, target: &PluginTarget, fingerprint: String) {
+    pub(in crate::app) fn ask_plugin_trust(&mut self, target: &PluginTarget, fingerprint: String) {
         let Some((plugin, command)) = self.plugin_command(target) else {
             return;
         };
         let message = t!("plugin-trust-title", name = plugin.name.as_str());
-        let args = command.args.join(" ");
-        let detail = t!(
-            "plugin-trust-detail",
-            command = command.program.as_str(),
-            args = args.as_str(),
-        );
+        let detail = if command.wasm {
+            let capabilities = plugin
+                .wasm
+                .as_ref()
+                .map(|wasm| {
+                    wasm.capabilities
+                        .iter()
+                        .filter_map(|name| Capability::parse(name).map(Capability::as_str))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .unwrap_or_default();
+            t!(
+                "plugin-trust-wasm-detail",
+                name = plugin.name.as_str(),
+                capabilities = capabilities.as_str(),
+            )
+        } else {
+            let args = command.args.join(" ");
+            t!(
+                "plugin-trust-detail",
+                command = command.program.as_str(),
+                args = args.as_str(),
+            )
+        };
         let asked = target.clone();
         self.show_alert(
             &message,
@@ -109,9 +138,25 @@ impl App {
             self.ask_plugin_trust(target, current);
             return;
         }
+        let wasm_capabilities = plugin
+            .wasm
+            .as_ref()
+            .map(|wasm| (plugin.id.clone(), wasm.capabilities.clone()));
         if !self.config.plugin_trusted.iter().any(|t| t == fingerprint) {
             self.config.plugin_trusted.push(fingerprint.to_owned());
             self.save_config();
+        }
+        if let Some((id, capabilities)) = wasm_capabilities {
+            // Hanya capability yang dikenal runtime yang boleh masuk grant. User nanti bisa
+            // mencabut sebagian lewat halaman setting plugin.
+            let capabilities = capabilities
+                .iter()
+                .filter_map(|name| Capability::parse(name).map(Capability::as_str))
+                .map(str::to_owned)
+                .collect();
+            self.config.plugin_grants.insert(id, capabilities);
+            self.save_config();
+            self.reload_wasm_plugins();
         }
         self.launch_plugin(target);
     }
@@ -121,6 +166,12 @@ impl App {
         let Some((plugin, command)) = self.plugin_command(target) else {
             return;
         };
+        if command.wasm {
+            let id = plugin.id.clone();
+            let command_id = command.id.clone();
+            self.run_wasm_command(&id, &command_id);
+            return;
+        }
         let Some(request) = self.plugin_request(plugin, command) else {
             self.notify(
                 NoticeKind::Error,

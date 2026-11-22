@@ -29,8 +29,10 @@ pub fn palette() -> &'static [Action] {
 pub enum CommandRef {
     /// 键位表中的内置动作。
     Builtin(Action),
-    /// 插件命令：`App.plugins` 中的插件下标和该插件 `commands` 中的下标。
+    /// 外部命令插件：`App.plugins` 中的插件下标和该插件 `commands` 中的下标。
     Plugin { plugin: usize, command: usize },
+    /// WebAssembly 插件命令：`App.wasm.commands()` 中的下标。
+    Wasm(usize),
 }
 
 /// 按 `query` 搜索命令，返回 [`palette()`] 中的下标，匹配度高的在前。
@@ -149,7 +151,22 @@ impl App {
                 wanted -= 1;
             }
         }
-        None
+        self.wasm
+            .commands()
+            .get(wanted)
+            .map(|_| CommandRef::Wasm(wanted))
+    }
+
+    /// WebAssembly 命令的标题和所属插件名。
+    pub(crate) fn wasm_command_titles(&self, index: usize) -> Option<(&str, &str)> {
+        let command = self.wasm.commands().get(index)?;
+        let name = self
+            .plugins
+            .plugins
+            .iter()
+            .find(|manifest| manifest.id == command.plugin)
+            .map_or(command.plugin.as_str(), |manifest| manifest.name.as_str());
+        Some((command.title.as_str(), name))
     }
 
     /// 命令面板中插件命令的标题和英文名；内置命令没有这一项。
@@ -256,6 +273,17 @@ impl App {
                 index += 1;
             }
         }
+        for command in self.wasm.commands() {
+            let score = if plugin_needle.is_empty() {
+                Some(index as u32)
+            } else {
+                rate(&plugin_needle, &command.title)
+            };
+            if let Some(score) = score {
+                plugin_hits.push((score, index));
+            }
+            index += 1;
+        }
         plugin_hits.sort();
         hits.extend(plugin_hits.into_iter().map(|(_, index)| index));
         self.overlays.picker.recent = 0;
@@ -297,6 +325,13 @@ impl App {
                 self.run_action(action);
             }
             CommandRef::Plugin { plugin, command } => self.run_plugin_command(plugin, command),
+            CommandRef::Wasm(index) => {
+                if let Some(command) = self.wasm.commands().get(index) {
+                    let plugin = command.plugin.clone();
+                    let id = command.id.clone();
+                    self.run_wasm_command(&plugin, &id);
+                }
+            }
         }
         self.request_redraw();
     }

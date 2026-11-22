@@ -234,7 +234,8 @@ fn plugin_settings_read_and_round_trip() {
             "paths": ["~/plugins", "/opt/plugins"],
             "enabled": ["demo"],
             "trusted": ["abc123"],
-            "values": {"demo": {"name": "Ada"}}
+            "values": {"demo": {"name": "Ada"}},
+            "grants": {"demo": ["editor_read", "notifications"]}
         }}"#,
     );
     assert!(problems.is_empty(), "{problems:?}");
@@ -242,6 +243,10 @@ fn plugin_settings_read_and_round_trip() {
     assert_eq!(config.plugin_enabled, ["demo"]);
     assert_eq!(config.plugin_trusted, ["abc123"]);
     assert_eq!(config.plugin_values["demo"]["name"], "Ada");
+    assert_eq!(
+        config.plugin_grants["demo"],
+        ["editor_read", "notifications"]
+    );
     assert_eq!(Config::parse(&config.to_json()).0, config);
 }
 
@@ -619,6 +624,7 @@ fn round_trips_through_json() {
             "demo".to_string(),
             BTreeMap::from([("name".to_string(), "Ada".to_string())]),
         )]),
+        plugin_grants: BTreeMap::from([("demo".to_string(), vec!["editor_read".to_string()])]),
     };
 
     let (parsed, problems) = Config::parse(&config.to_json());

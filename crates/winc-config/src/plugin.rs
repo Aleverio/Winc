@@ -1,7 +1,8 @@
-//! 声明式插件清单：从本机 JSONC 文件读入命令和设置，并计算命令指纹。
+//! 插件清单：从本机 JSONC 文件读入命令、设置和可选的 WebAssembly 模块，并计算信任指纹。
 //!
-//! 插件不加载任何本机代码：一个插件只是「命令 + 参数 + 环境变量」的描述。是否运行由用户显式
-//! 开启并信任；清单只从用户配置的路径读取，不自动执行项目仓库里的内容。
+//! 插件分两种：外部命令插件只描述「程序 + 参数 + 环境变量」；WASM 插件额外声明一个 `.wasm`
+//! 文件和所需 capability，由 `winc-plugin` 在沙箱里加载。两者都必须由用户显式开启并信任；
+//! 清单只从用户配置的路径读取，不自动执行项目仓库里的内容。
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -23,6 +24,19 @@ pub struct PluginManifest {
     pub commands: Vec<PluginCommand>,
     /// 插件的设置项。
     pub settings: Vec<PluginSetting>,
+    /// WebAssembly 模块；有值时命令由沙箱运行时执行，而不是启动外部程序。
+    pub wasm: Option<PluginWasm>,
+}
+
+/// 清单中声明的 WebAssembly 模块。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PluginWasm {
+    /// 相对清单目录的模块路径。
+    pub path: PathBuf,
+    /// 模块内容的 FNV-1a 哈希；改动模块会让信任指纹变化。
+    pub hash: u64,
+    /// 插件请求的 capability 名称。
+    pub capabilities: Vec<String>,
 }
 
 /// 一条插件命令。
@@ -44,6 +58,8 @@ pub struct PluginCommand {
     pub input: PluginInput,
     /// 运行结果的呈现方式。
     pub output: PluginOutput,
+    /// 为真时由 WASM 运行时执行 `id` 指定的导出命令，而不是启动 `program`。
+    pub wasm: bool,
 }
 
 /// 插件命令追加的上下文输入。
@@ -162,6 +178,30 @@ impl PluginManifest {
             .get("description")
             .and_then(Json::as_str)
             .map(str::to_owned);
+        let wasm = match object.get("runtime") {
+            None => None,
+            Some(Json::Object(fields)) => {
+                let path = fields
+                    .get("wasm")
+                    .and_then(Json::as_str)
+                    .filter(|path| !path.is_empty())
+                    .ok_or_else(|| "runtime.wasm must be a non-empty path".to_owned())?;
+                let capabilities = fields
+                    .get("capabilities")
+                    .and_then(Json::as_array)
+                    .unwrap_or(&[])
+                    .iter()
+                    .filter_map(Json::as_str)
+                    .map(str::to_owned)
+                    .collect();
+                Some(PluginWasm {
+                    path: dir.join(expand(path)),
+                    hash: 0,
+                    capabilities,
+                })
+            }
+            Some(_) => return Err("runtime must be an object".to_owned()),
+        };
         let commands = object
             .get("commands")
             .and_then(Json::as_array)
@@ -169,7 +209,8 @@ impl PluginManifest {
             .iter()
             .enumerate()
             .map(|(i, value)| {
-                PluginCommand::parse(value).map_err(|e| format!("commands[{i}]: {e}"))
+                PluginCommand::parse(value, wasm.is_some())
+                    .map_err(|e| format!("commands[{i}]: {e}"))
             })
             .collect::<Result<Vec<_>, _>>()?;
         let settings = object
@@ -189,7 +230,23 @@ impl PluginManifest {
             dir,
             commands,
             settings,
+            wasm,
         })
+    }
+
+    /// 命令的信任指纹：带上插件 id 和 WASM 模块哈希，模块或 capability 改动后需要重新确认。
+    pub fn command_fingerprint(&self, command: &PluginCommand) -> u64 {
+        let mut fingerprinted = command.clone();
+        fingerprinted.id = format!("{}.{}", self.id, command.id);
+        let mut text = format!("{:x}\0", Self::fingerprint(&fingerprinted));
+        if let Some(wasm) = &self.wasm {
+            text.push_str(&format!("{:x}\0", wasm.hash));
+            for capability in &wasm.capabilities {
+                text.push_str(capability);
+                text.push('\0');
+            }
+        }
+        fnv1a(text.bytes())
     }
 
     /// 这条命令的信任指纹：清单改变后需要重新确认。
@@ -208,17 +265,22 @@ impl PluginManifest {
             text.push_str(value);
             text.push('\0');
         }
-        let mut hash = 0xcbf2_9ce4_8422_2325u64;
-        for byte in text.bytes() {
-            hash ^= u64::from(byte);
-            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-        }
-        hash
+        fnv1a(text.bytes())
     }
 }
 
+/// FNV-1a 64 位哈希，用于模块内容和信任指纹。
+fn fnv1a(bytes: impl Iterator<Item = u8>) -> u64 {
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    for byte in bytes {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
 impl PluginCommand {
-    fn parse(value: &Json) -> Result<PluginCommand, String> {
+    fn parse(value: &Json, wasm: bool) -> Result<PluginCommand, String> {
         let object = value
             .as_object()
             .ok_or_else(|| "the command must be an object".to_owned())?;
@@ -266,12 +328,21 @@ impl PluginCommand {
         Ok(PluginCommand {
             id: required("id")?,
             title: required("title")?,
-            program: required("program")?,
+            program: if wasm {
+                object
+                    .get("program")
+                    .and_then(Json::as_str)
+                    .unwrap_or_default()
+                    .to_owned()
+            } else {
+                required("program")?
+            },
             args,
             cwd,
             env,
             input,
             output,
+            wasm,
         })
     }
 }
@@ -374,7 +445,19 @@ pub fn load_plugins(paths: &[String]) -> PluginRegistry {
             };
             let dir = file.parent().unwrap_or(Path::new(".")).to_path_buf();
             match PluginManifest::parse(&value, dir) {
-                Ok(manifest) => {
+                Ok(mut manifest) => {
+                    if let Some(wasm) = &mut manifest.wasm {
+                        match std::fs::read(&wasm.path) {
+                            Ok(bytes) => wasm.hash = fnv1a(bytes.iter().copied()),
+                            Err(err) => {
+                                registry.problems.push(format!(
+                                    "{}: could not read WASM module: {err}",
+                                    wasm.path.display()
+                                ));
+                                continue;
+                            }
+                        }
+                    }
                     if registry.plugins.iter().any(|p| p.id == manifest.id) {
                         registry.problems.push(format!(
                             "{}: duplicate plugin id “{}”",
@@ -418,5 +501,30 @@ mod tests {
     fn rejects_incomplete_manifest() {
         let json = Json::parse(r#"{"id":"demo"}"#).unwrap();
         assert!(PluginManifest::parse(&json, PathBuf::new()).is_err());
+    }
+
+    #[test]
+    fn parses_wasm_manifest_and_fingerprints_module() {
+        let json = Json::parse(
+            r#"{"id":"w","name":"W","runtime":{"wasm":"p.wasm","capabilities":["editor_read"]},"commands":[{"id":"hi","title":"Hi"}]}"#,
+        )
+        .unwrap();
+        let manifest = PluginManifest::parse(&json, PathBuf::from("/plugins/w")).unwrap();
+        let wasm = manifest.wasm.as_ref().unwrap();
+        assert_eq!(wasm.path, PathBuf::from("/plugins/w/p.wasm"));
+        assert_eq!(wasm.capabilities, ["editor_read"]);
+        assert!(manifest.commands[0].wasm);
+        let a = manifest.command_fingerprint(&manifest.commands[0]);
+        let mut changed = manifest.clone();
+        changed.wasm.as_mut().unwrap().hash = 1;
+        assert_ne!(a, changed.command_fingerprint(&changed.commands[0]));
+        let mut changed = manifest.clone();
+        changed
+            .wasm
+            .as_mut()
+            .unwrap()
+            .capabilities
+            .push("editor_write".to_owned());
+        assert_ne!(a, changed.command_fingerprint(&changed.commands[0]));
     }
 }

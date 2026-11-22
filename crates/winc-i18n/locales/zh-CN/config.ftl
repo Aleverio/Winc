@@ -78,6 +78,9 @@ config-label-contrast = 对比度
 
 plugin-trust-title = 运行插件 { $name } 的命令？
 plugin-trust-detail = 程序：{ $command }；参数：{ $args }。只运行你信任的插件
+plugin-trust-wasm-detail = WebAssembly 插件 { $name } 请求权限：{ $capabilities }。只运行你信任的插件
+plugin-capability = 权限：{ $name }
+plugin-unsupported-effect = 当前构建暂不支持该插件操作
 plugin-trust-action = 运行
 plugin-done = { $name }：{ $command } 已完成
 plugin-failed = { $name } 运行失败：{ $error }

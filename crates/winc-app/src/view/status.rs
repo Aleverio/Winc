@@ -5,6 +5,7 @@
 
 use winc_core::Lines;
 use winc_i18n::t;
+use winc_plugin::api::StatusAlign;
 
 use super::*;
 use crate::app::{StatusEntry, StatusItem, StatusKey, StatusMotion, indent_label};
@@ -874,6 +875,40 @@ pub(super) fn draw_status(app: &mut App, frame: &mut Frame<'_>) {
         ui_text_small(frame, app, x, bar, &message, p.status_message, left);
     }
 
+    // 插件通过激活或 StatusSet 提供的文字；有提示文字时登记命中区域，其余不覆盖原生可点击项。
+    for (index, entry) in app.wasm.status_entries().into_iter().enumerate() {
+        if entry.text.is_empty() {
+            continue;
+        }
+        let width = frame.measure(FontKind::Ui, app.fonts.ui_small, &entry.text);
+        let at = match entry.align {
+            StatusAlign::Right => {
+                if width + 8.0 >= right - bar.x {
+                    continue;
+                }
+                right -= width + 8.0;
+                ui_text_small(frame, app, right, bar, &entry.text, p.text_dim, bar);
+                Some(right)
+            }
+            StatusAlign::Left => {
+                if x + width + 8.0 >= left.right() {
+                    continue;
+                }
+                let at = x;
+                x = ui_text_small(frame, app, x, bar, &entry.text, p.text_dim, left) + 8.0;
+                Some(at)
+            }
+        };
+        if entry.tooltip.is_some()
+            && let Some(at) = at
+        {
+            app.hits
+                .plugin_status
+                .push((Rect::new(at, bar.y, width, bar.h), index));
+        }
+    }
+
+    super::plugin_ui::draw_status_surface(app, frame);
     app.status.motion = motion;
     app.hits.crumbs = hits;
     app.hits.status = status_hits;
