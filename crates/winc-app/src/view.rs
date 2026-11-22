@@ -187,6 +187,7 @@ pub fn draw(app: &mut App, frame: &mut Frame<'_>) {
     if layout.search.h > 0.0 {
         draw_search(app, frame);
     }
+    workspace::search_dialog::draw(app, frame);
 
     // 位置浮窗显示在名称旁边，有独立的动画（滑出、淡出）。
     let bar_open = app.bars.goto_input.is_some() && !app.bars.prompt_kind.is_vim();
