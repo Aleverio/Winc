@@ -129,6 +129,7 @@ impl SettingsPage {
                     Setting::WholeLines,
                     Setting::Minimap,
                     Setting::StickyScroll,
+                    Setting::SmoothCaret,
                     Setting::RenderWhitespace,
                 ]),
                 plain(vec![
@@ -303,6 +304,8 @@ pub enum Setting {
     RestoreFolder,
     /// 粘滞滚动：滚动时在编辑区顶部钉住当前所在的函数、类和标题。
     StickyScroll,
+    /// 光标移动时滑到新位置的方式。
+    SmoothCaret,
     /// Vim 模式。
     VimMode,
     /// Vim 模式下无名寄存器与系统剪贴板的同步方式。
@@ -527,6 +530,7 @@ impl Setting {
             | Setting::CompactFolders
             | Setting::PreviewOnClick
             | Setting::StickyScroll
+            | Setting::SmoothCaret
             | Setting::VimMode
             | Setting::VimClipboard
             | Setting::VimRelativeNumber
@@ -614,6 +618,7 @@ impl Setting {
             Setting::DropFolder => t!("settings-drop-folder"),
             Setting::FindInFiles => t!("settings-find-in-files"),
             Setting::StickyScroll => t!("settings-sticky-scroll"),
+            Setting::SmoothCaret => t!("settings-smooth-caret"),
             Setting::VimMode => t!("settings-vim-mode"),
             Setting::VimClipboard => t!("settings-vim-clipboard"),
             Setting::VimRelativeNumber => t!("settings-vim-relative-number"),
@@ -730,6 +735,7 @@ impl Setting {
             Setting::BackgroundFit => Some(t!("settings-background-fit-desc")),
             Setting::BackgroundOpacity => Some(t!("settings-background-opacity-desc")),
             Setting::RemoteImages => Some(t!("settings-remote-images-desc")),
+            Setting::SmoothCaret => Some(t!("settings-smooth-caret-desc")),
             Setting::TextWidth => Some(t!("settings-text-width-desc")),
             Setting::MarkdownLineNumbers => Some(t!("settings-markdown-line-numbers-desc")),
             Setting::MarkdownShortcuts => Some(t!("settings-markdown-shortcuts-desc")),
@@ -853,6 +859,7 @@ impl Setting {
             | Setting::DropFolder
             | Setting::FindInFiles
             | Setting::AutoSave
+            | Setting::SmoothCaret
             | Setting::GitOpenWorktree
             | Setting::GitPullMode => SettingControl::Choice,
             Setting::AddLanguage | Setting::AddFixLanguage => SettingControl::Action,

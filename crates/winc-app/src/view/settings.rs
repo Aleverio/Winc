@@ -447,6 +447,9 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
             } else if row.setting == Setting::AutoSave {
                 let choice = app.config.auto_save.unwrap_or_default();
                 (crate::layout::auto_save_label(choice).to_owned(), false)
+            } else if row.setting == Setting::SmoothCaret {
+                let choice = app.config.smooth_caret_movement.unwrap_or_default();
+                (crate::layout::smooth_caret_label(choice).to_owned(), false)
             } else if row.setting == Setting::DropFolder {
                 let choice = app.config.drop_folder.unwrap_or_default();
                 (crate::layout::drop_folder_label(choice).to_owned(), false)
