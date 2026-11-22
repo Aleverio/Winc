@@ -957,6 +957,17 @@ pub(super) fn find<'a>(fields: &'a [Field], key: &str) -> Option<&'a Field> {
     fields.iter().find(|field| field.key == key)
 }
 
+/// 返回名为 `name` 的设置：节名加键名（如 `editor.size`），或顶层的键（如 `theme`）。
+pub(super) fn named(name: &str) -> Option<&'static Field> {
+    match name.split_once('.') {
+        Some((section, key)) => {
+            let fields = SECTIONS.iter().find(|&&(name, _)| name == section)?.1;
+            find(fields, key)
+        }
+        None => find(TOP_LEVEL, name),
+    }
+}
+
 /// 顶层的 `key` 是否是认识的设置：[`SECTIONS`] 中某一节的名字，或 [`TOP_LEVEL`] 中的一项。
 pub(super) fn is_known(key: &str) -> bool {
     SECTIONS.iter().any(|&(name, _)| name == key) || find(TOP_LEVEL, key).is_some()

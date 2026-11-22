@@ -272,6 +272,10 @@ fn settings_point(app: &App, part: SettingsPart) -> (f32, f32) {
         SettingsPart::Close => layout.close,
         SettingsPart::SearchField => layout.search,
         SettingsPart::Page(page) => layout.pages.iter().find(|(p, _)| *p == page).unwrap().1,
+        SettingsPart::Reset(s) => {
+            let links = app.hits.reset_links.iter();
+            links.clone().find(|(setting, _)| *setting == s).unwrap().1
+        }
         SettingsPart::Field(s) | SettingsPart::Switch(s) | SettingsPart::Action(s) => {
             layout.row(s).unwrap().control
         }

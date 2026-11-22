@@ -8,6 +8,7 @@ mod card;
 mod formatters;
 pub(super) mod shortcuts;
 mod stepper;
+mod values;
 
 use stepper::step;
 
@@ -48,6 +49,8 @@ pub struct SettingsState {
     pub scroll: f32,
     /// 鼠标悬停的部件。
     pub hover: Option<SettingsPart>,
+    /// 取值与默认不同的设置项：名称后面有「恢复默认」。打开设置和配置变化时重新算。
+    pub changed: Vec<Setting>,
     /// 格式化页列出的语言。
     ///
     /// 打开设置时确定，打开期间只会增加，不会减少，已列出的语言也不换位置。
@@ -206,6 +209,7 @@ impl App {
         // 每次打开设置重新查询发行版中的工具：其间新安装的能列出来。
         self.format.formatter.forget_wsl();
         self.refresh_format_rows(true);
+        self.refresh_changed_settings();
         // 列出字体要读取字体文件，先在后台读好，打开字体菜单时不必等待；「默认 Shell」菜单中的
         // shell 同样在后台检测。
         std::thread::spawn(winc_render::installed_fonts);
@@ -261,8 +265,8 @@ impl App {
 
     /// 返回设置浮层中窗口坐标 (`x`, `y`) 处的部件。
     ///
-    /// 先判断上一帧绘制出的「安装方法…」链接，再判断布局中的部件。滚动到标题之下而不可见的
-    /// 链接不可点击。
+    /// 先判断上一帧绘制出的「安装方法…」和「恢复默认」，再判断布局中的部件。滚动到标题之下而
+    /// 不可见的链接不可点击。
     pub(super) fn settings_part_at(&self, x: f32, y: f32) -> Option<SettingsPart> {
         let layout = self.settings_layout();
         if layout.page == SettingsPage::Keys
@@ -278,6 +282,11 @@ impl App {
             .find(|(_, r)| r.contains(x, y) && layout.body.contains(x, y));
         if let Some(&(setting, _)) = link {
             return Some(SettingsPart::Install(setting));
+        }
+        let reset = (self.hits.reset_links.iter())
+            .find(|(_, r)| r.contains(x, y) && layout.body.contains(x, y));
+        if let Some(&(setting, _)) = reset {
+            return Some(SettingsPart::Reset(setting));
         }
         match layout.part_at(x, y)? {
             // 版本号和链接只有文字那一块可点，与悬停底色一致。
@@ -1379,6 +1388,9 @@ impl App {
         self.vim_swap_options();
         self.write_config();
         self.vim_swap_options();
+        if self.settings.open {
+            self.refresh_changed_settings();
+        }
     }
 
     /// 把配置写入配置文件。

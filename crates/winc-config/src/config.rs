@@ -668,6 +668,30 @@ impl Config {
         self.render(None)
     }
 
+    /// 名为 `name` 的设置（节名加键名如 `editor.size`，或顶层的键如 `theme`）是否写了值；
+    /// 没有这项设置时为否。
+    pub fn is_set(&self, name: &str) -> bool {
+        fields::named(name).is_some_and(|field| (field.write)(self).is_some())
+    }
+
+    /// 去掉名为 `name` 的设置的值，使它回到默认；其余各项不变。
+    pub fn unset(&mut self, name: &str) {
+        let Some(Json::Object(mut root)) = Json::parse(&self.to_json()) else {
+            return;
+        };
+        match name.split_once('.') {
+            Some((section, key)) => {
+                if let Some(Json::Object(values)) = root.get_mut(section) {
+                    values.remove(key);
+                }
+            }
+            None => {
+                root.remove(name);
+            }
+        }
+        *self = Config::parse(&Json::Object(root).compact()).0;
+    }
+
     /// 序列化为缩进 2 个空格的 JSON：各节和各项按 [`SECTIONS`]、[`TOP_LEVEL`] 的顺序写出，只写出
     /// 有值的项。
     ///

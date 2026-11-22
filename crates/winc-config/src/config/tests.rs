@@ -824,3 +824,21 @@ fn pull_reads_its_three_values_and_rejects_others() {
     assert_eq!(config.git_pull, None);
     assert_eq!(problems.len(), 1);
 }
+
+#[test]
+fn a_setting_can_be_checked_and_unset_by_name() {
+    let text = r#"{"editor": {"size": 15, "minimap": true}, "theme": "dark"}"#;
+    let (mut config, problems) = Config::parse(text);
+    assert!(problems.is_empty());
+    assert!(config.is_set("editor.size") && config.is_set("editor.minimap"));
+    assert!(config.is_set("theme"));
+    assert!(!config.is_set("editor.wordWrap") && !config.is_set("editor.unknown"));
+    config.unset("editor.size");
+    config.unset("theme");
+    assert_eq!((config.editor_size, config.theme), (None, None));
+    assert_eq!(config.minimap, Some(true));
+    // 写出再读入不改变内容。
+    let mut same = config.clone();
+    same.unset("editor.wordWrap");
+    assert_eq!(same, config);
+}
