@@ -424,6 +424,17 @@ impl App {
                 if kind.is_none() {
                     menu.extend(self.folder_items(folder));
                 }
+                // 脚本文件：「在终端中打开」之后加「在终端中运行」。
+                let opens = |entry: &MenuEntry| {
+                    matches!(entry, MenuEntry::Item(MenuCommand::OpenInTerminal, _))
+                };
+                if let Some(path) = path.as_deref()
+                    && kind == Some(EntryKind::File)
+                    && self.can_run_script(path)
+                    && let Some(at) = menu.iter().position(opens)
+                {
+                    menu.insert(at + 1, MenuEntry::Item(MenuCommand::RunScript, true));
+                }
                 // Git 模块开着、文件在仓库里：最后加「显示文件历史」，有更改的文件再加暂存与回滚。
                 if let Some(path) = path.as_deref()
                     && kind == Some(EntryKind::File)
