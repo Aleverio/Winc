@@ -259,6 +259,7 @@ pub fn run() {
         .set_staging(app.config.git_staging_area == Some(true));
     app.editor.diff_unified = app.config.diff_inline == Some(true);
     app.state = state;
+    app.restore_text_places();
     app.restore_panel_width();
     // 临时打开（`--wait`、`-`）时不记录现场、不加入最近列表、不备份，下次启动的状态不受影响。
     if args.one_off() {
@@ -277,7 +278,12 @@ pub fn run() {
         // `ssh://` 参数，或者上次开着的远端目录。
         match cli::remote_open(&args.targets) {
             Some(open) => app.open_remote(open),
-            None if args.targets.is_empty() => app.restore_remote_folder(),
+            None if args.targets.is_empty() => {
+                let reconnecting = app.restore_remote_folder();
+                if !reconnecting {
+                    app.start_with_new_file();
+                }
+            }
             None => {}
         }
     }

@@ -307,6 +307,8 @@ fn snapshot_english() {
     app.overlays.context_menu = None;
     for page in [
         SettingsPage::Editor,
+        SettingsPage::Files,
+        SettingsPage::Markdown,
         SettingsPage::Format,
         SettingsPage::Terminal,
         SettingsPage::Keys,

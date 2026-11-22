@@ -123,6 +123,7 @@ impl App {
                 setup_intro: None,
                 setup_outro: None,
                 setup_page: None,
+                about_logo: None,
                 tool_fold: ToolFold::default(),
                 bar_card: Default::default(),
                 dialog_card: Default::default(),
@@ -131,6 +132,7 @@ impl App {
                 module_fx: Default::default(),
                 fold_motion: None,
                 diff_fold: None,
+                caret_motion: None,
             },
             release_notes: Default::default(),
             wallpaper: Default::default(),
@@ -169,6 +171,7 @@ impl App {
             },
             text_content_w: 0.0,
             preview_tab: None,
+            startup_file: None,
             clipboard: Default::default(),
             vim,
             bars: crate::app::editor::InputBars {
