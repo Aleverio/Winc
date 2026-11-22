@@ -1076,7 +1076,7 @@ fn remote_launch(
         args.extend(["-p".to_owned(), port.to_string()]);
     }
     args.extend([
-        at.target.host().to_owned(),
+        at.target.host().into_owned(),
         "--".to_owned(),
         format!("cd '{dir}' && {start}"),
     ]);

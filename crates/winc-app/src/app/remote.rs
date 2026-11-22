@@ -463,12 +463,20 @@ const CONNECTING: u64 = u64::MAX;
 
 /// 把用户输入的 `主机`、`主机:端口`、`主机:目录` 或 `主机:端口:目录` 拆成连接目标和目录；没有
 /// 目录时目录为空。主机之后全是数字的一段是端口。主机或端口不符合 [`Target`] 的要求时返回
-/// `None`。
+/// `None`。IPv6 地址写在方括号中。
 fn parse_destination(input: &str) -> Option<(Target, &str)> {
     let input = input.trim();
-    let Some((host, rest)) = input.split_once(':') else {
-        return Some((Target::new(input)?, ""));
-    };
+    if let Some(target) = Target::with_port(input, None) {
+        return Some((target, ""));
+    }
+    // 主机的方括号中的 `:` 不拆分。
+    let open = input
+        .find('[')
+        .filter(|&open| input.find(':').is_some_and(|colon| open < colon));
+    let bracket = open.and_then(|_| input.find(']')).map_or(0, |at| at + 1);
+    let (host, rest) = input[bracket..]
+        .split_once(':')
+        .map(|(tail, rest)| (&input[..bracket + tail.len()], rest))?;
     let (port, folder) = match rest.split_once(':') {
         Some((port, folder)) if is_port(port) => (Some(port), folder),
         None if is_port(rest) => (Some(rest), ""),
@@ -1250,6 +1258,20 @@ mod tests {
         assert_eq!(parsed("me@devbox:"), Some((host, "")));
         // 主机之后的内容原样作为目录，其中的 `:` 不再拆分。
         assert_eq!(parsed("box:/a:b"), Some(("box".to_owned(), "/a:b")));
+        // IPv6 地址。
+        let ipv6 = "me@[2001:db8::1]".to_owned();
+        assert_eq!(parsed("me@2001:db8::1"), Some((ipv6.clone(), "")));
+        assert_eq!(parsed("me@[2001:db8::1]"), Some((ipv6.clone(), "")));
+        assert_eq!(parsed("me@[2001:db8::1]:~/app"), Some((ipv6, "~/app")));
+        assert_eq!(
+            parsed("[::1]:22022:/srv/a[1]:b"),
+            Some(("[::1]:22022".to_owned(), "/srv/a[1]:b"))
+        );
+        assert_eq!(
+            parsed("box:/srv/a[1]:b"),
+            Some(("box".to_owned(), "/srv/a[1]:b"))
+        );
+        assert_eq!(parsed("[::1]x:/srv"), None);
         // 主机之后全是数字的一段是端口，其后才是目录。
         assert_eq!(
             parsed("me@box:22022"),
