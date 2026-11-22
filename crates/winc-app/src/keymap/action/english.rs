@@ -130,6 +130,8 @@ impl Action {
             SortLinesAscending => "Sort Lines Ascending",
             SortLinesDescending => "Sort Lines Descending",
             TrimTrailingWhitespace => "Trim Trailing Whitespace",
+            UnescapeUnicode => "Convert Unicode Escapes to Characters",
+            EscapeUnicode => "Convert Characters to Unicode Escapes",
             IndentUsingSpaces => "Indent Using Spaces",
             IndentUsingTabs => "Indent Using Tabs",
             ConvertIndentationToSpaces => "Convert Indentation to Spaces",
