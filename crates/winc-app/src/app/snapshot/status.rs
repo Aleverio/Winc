@@ -528,17 +528,20 @@ fn shoot_notice_kinds() {
 /// 回归：工作区内的长路径占满状态栏左侧，消息被截短或不显示。
 #[test]
 fn long_crumbs_fold_to_keep_the_message() {
+    // 目录名较短、层数较多：路径总长不超过 Windows 的 260 个字符。窗口取 800 宽，路径放不下。
     let dir = sample_folder("crumbs-fold");
-    let deep: PathBuf = (1..=9)
-        .map(|n| format!("a-rather-long-directory-name-{n}"))
-        .collect();
+    let deep: PathBuf = (1..=8).map(|n| format!("directory-{n}")).collect();
     std::fs::create_dir_all(dir.join(&deep)).unwrap();
     let file = dir.join(&deep).join("settings.rs");
     std::fs::write(&file, "fn main() {}\n").unwrap();
     let mut app = app_with(&dir, false);
+    let narrow = Renderer::offscreen(800.0, 420.0, SCALE, app.palette.frame_bg, None, None);
+    app.frame.renderer = Some(narrow.unwrap());
+    app.measure_fonts();
     let root = app.editor.workspace.as_ref().unwrap().root.clone();
     app.open_path(&root.join(&deep).join("settings.rs"));
     paint(&mut app);
+    assert_eq!(app.crumbs().len(), 10);
     let last = app.crumbs().len() - 1;
     // 显示的段（下标）和最后一段的右边缘。
     let shown = |app: &App| {

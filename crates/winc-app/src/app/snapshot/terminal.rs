@@ -1036,19 +1036,29 @@ fn powerline_separators_fill_the_cell_height() {
     renderer.draw(|frame| scale = frame.scale());
     paint(&mut app);
     let image = app.frame.renderer.as_ref().unwrap().image().unwrap();
-    let (cell, lh) = (app.metrics.terminal_cell, app.fonts.terminal_line_height);
-    // 第 `col` 格中横向 `u`、纵向 `t`（格子的比例）处是否为黄色。
-    let yellow_at = |col: usize, u: f32, t: f32| {
-        let (x, y) = cell_center(&app, 0, col);
-        let (x, y) = (x + (u - 0.5) * cell, y + (t - 0.5) * lh);
-        let (x, y) = ((x * scale) as usize, (y * scale) as usize);
+    let yellow = |x: usize, y: usize| {
         image.pixels[y * image.width as usize + x] & 0x00ff_ffff == 0x00d7_9921
     };
-    for t in [0.06, 0.5, 0.94] {
-        assert!(yellow_at(0, 0.95, t), "半圆的平边，高度 {t}");
-        assert!(yellow_at(2, 0.05, t), "三角的底边，高度 {t}");
+    // 从黄底的那一格的中心量出这一行的上下边，不依赖字体的度量。
+    let (x, y) = cell_center(&app, 0, 1);
+    let (x, y) = ((x * scale) as usize, (y * scale) as usize);
+    assert!(yellow(x, y));
+    let top = (0..=y).rev().take_while(|&y| yellow(x, y)).last().unwrap();
+    let bottom = (y..).take_while(|&y| yellow(x, y)).last().unwrap();
+    // 每一行上黄色从中间那一格的中心向左、向右各延伸多少个物理像素。
+    let reach = |y: usize, left: bool| {
+        let step = |n: &usize| yellow(if left { x - n } else { x + n }, y);
+        (1..x).take_while(step).count()
+    };
+    let half = (app.metrics.terminal_cell * scale / 2.0).ceil() as usize;
+    // 半圆的平边和三角的底边紧贴中间那一格，从上到下没有缺口。
+    for y in top + 4..=bottom - 4 {
+        assert!(reach(y, true) >= half + 2, "半圆，第 {} 行", y - top);
+        assert!(reach(y, false) >= half + 2, "三角，第 {} 行", y - top);
     }
-    assert!(!yellow_at(0, 0.05, 0.06) && !yellow_at(2, 0.95, 0.06));
+    // 圆弧和斜边之外是底色：靠上的一行到不了相邻那一格的另一侧（中心起一格半）。
+    let across = 3 * half - 2;
+    assert!(reach(top + 4, true) < across && reach(top + 4, false) < across);
 }
 
 /// 回归：远端主机的集成脚本和 shell 列表尚未准备完时恢复终端标签。
