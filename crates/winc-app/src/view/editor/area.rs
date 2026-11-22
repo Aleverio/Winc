@@ -270,6 +270,9 @@ pub(super) fn draw_text_area(app: &mut App, frame: &mut Frame<'_>, index: usize)
                 let rect = app.caret_position(target);
                 caret_bar(app, frame, rect.x, rect.y, layout.text);
             }
+            // 编辑区有焦点，但光标这一帧不在屏幕上（随跳转滚出了视野）：保留动画状态，
+            // 等视口滚到目标时从原来的位置滑过去。
+            None if !scratch.caret_drawn && app.focus == Focus::Editor => {}
             None => app.caret_hidden(),
         }
     }
@@ -384,6 +387,8 @@ struct Scratch {
     ime_cursor: Option<Rect>,
     /// 主光标本帧的目标位置；播放移动动画时在行都画完之后按动画位置绘制。
     caret_motion: Option<CaretTarget>,
+    /// 本帧是否处理了主光标：没有时它可能在屏幕之外（随跳转滚出视野），动画状态保留。
+    caret_drawn: bool,
 }
 
 impl Scratch {
@@ -399,6 +404,7 @@ impl Scratch {
             long_hits: Vec::new(),
             ime_cursor: None,
             caret_motion: None,
+            caret_drawn: false,
         }
     }
 }

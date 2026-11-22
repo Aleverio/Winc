@@ -240,3 +240,80 @@ fn smooth_caret_movement_glides_between_positions() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 方向键换行时播放动画：移动后的第一帧仍在旧行，到时换到新行。
+#[test]
+fn arrow_keys_animate_line_changes() {
+    let dir = sample_folder("caret-lines");
+    std::fs::write(dir.join("lines.txt"), "one\ntwo\nthree\nfour\nfive\n").unwrap();
+    let mut app = app_with(&dir.join("lines.txt"), false);
+    app.config.smooth_caret_movement = Some(SmoothCaret::Gliding);
+    app.focus = Focus::Editor;
+    app.window.focused = true;
+    paint(&mut app);
+
+    let start = app.ime.cursor.expect("光标在第一行");
+    app.press_editor_key(winit::keyboard::NamedKey::ArrowDown);
+    paint(&mut app);
+    let target = app.ime.cursor.expect("光标在第二行");
+    assert!(target.y > start.y);
+
+    // 第一帧仍画在旧行，动画在运行。
+    assert!(app.animating(), "换行后应播放动画");
+    let caret = app.palette.caret;
+    let near = |px: u32, c: Color| {
+        let ch = |shift: u32, v: f32| ((px >> shift) & 0xff).abs_diff((v * 255.0).round() as u32);
+        ch(16, c.r) <= 2 && ch(8, c.g) <= 2 && ch(0, c.b) <= 2
+    };
+    let pixel = |app: &App, (x, y): (f32, f32)| {
+        let image = app.frame.renderer.as_ref().unwrap().image().unwrap();
+        let (x, y) = ((x * SCALE) as usize, (y * SCALE) as usize);
+        image.pixels[y * image.width as usize + x]
+    };
+    let lh = app.fonts.line_height;
+    let point = |rect: Rect| (rect.x.round() + 1.0, rect.y + lh / 2.0);
+    assert!(near(pixel(&app, point(start)), caret), "第一帧应还在旧行");
+
+    // 到时停在新行。
+    app.motion
+        .caret_motion
+        .as_mut()
+        .unwrap()
+        .freeze(Duration::from_millis(120));
+    paint(&mut app);
+    assert!(!app.animating());
+    assert!(near(pixel(&app, point(target)), caret), "到时应在新的行");
+    assert!(!near(pixel(&app, point(start)), caret), "旧行应没有光标");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 跳到视野之外的行时保留动画状态：视口滚到目标后，从原来的位置滑过去。
+#[test]
+fn a_jump_out_of_view_keeps_the_caret_animation() {
+    let dir = sample_folder("caret-jump");
+    let text: String = (0..120).map(|i| format!("line {i}\n")).collect();
+    std::fs::write(dir.join("long.txt"), text).unwrap();
+    let mut app = app_with(&dir.join("long.txt"), false);
+    app.config.smooth_caret_movement = Some(SmoothCaret::Gliding);
+    app.focus = Focus::Editor;
+    app.window.focused = true;
+    paint(&mut app);
+
+    // 不经过「保证光标可见」直接移到很下面的行：这一帧光标不在屏幕上，动画状态保留。
+    let target = app.editor.active().unwrap().text().line_start(100);
+    app.editor.active_mut().unwrap().selection = winc_core::Selection::point(target);
+    paint(&mut app);
+    assert!(
+        app.motion.caret_motion.is_some(),
+        "光标在屏幕外时不应清除动画状态"
+    );
+
+    // 视口滚到目标：光标回到屏幕上，从原来的位置开始滑动。
+    app.ensure_caret_visible();
+    app.scroll.glide = None;
+    paint(&mut app);
+    assert!(app.animating(), "跳转后应播放动画");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -5,7 +5,8 @@
 //! 走向新目标，并逐次缩短时长，使连续按键时不会落后于输入。
 //!
 //! 位置由绘制时算出的光标矩形给出（见 `view::editor`），本模块只负责状态和插值。视口滚动、
-//! 换行或布局变化时目标随之改变：光标随文字移动，不单独播放动画。
+//! 换行或布局变化时目标随之改变：光标停在原处时随文字直接移动；移动途中的目标跟着视口走，
+//! 光标继续滑向新目标。
 
 use std::time::Duration;
 
@@ -32,13 +33,11 @@ const URGENCY_DECAY: f32 = 0.8;
 /// 小于一个像素的差别看不出来；目标每帧重新计算，不能因此把动画当成被滚动打断。
 const SAME_SPOT: f32 = 0.1;
 
-/// 光标在屏幕上的位置，以及它所在的文档、字符偏移和视口位置。
+/// 光标在屏幕上的位置，以及它所在的文档和字符偏移。
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CaretTarget {
     /// 光标所在的文档和字符偏移；位置改变时开始新的移动。
     pub key: (DocumentId, usize),
-    /// 视口位置（显示行、横向滚动）：滚动时光标随文字移动，直接跳到目标。
-    pub scroll: (f64, f32),
     /// 光标矩形（逻辑像素）；宽、高在移动中不变。
     pub rect: Rect,
 }
@@ -51,8 +50,6 @@ pub(crate) struct CaretMotion {
     /// 动画起点和当前目标（逻辑像素）。
     from: Rect,
     to: Rect,
-    /// 上一帧的视口位置。
-    scroll: (f64, f32),
     /// 动画时钟。
     clock: Clock,
     /// 连续被打断时缩短的时长比例，停下后恢复为 1。
@@ -68,7 +65,6 @@ impl CaretMotion {
             key: target.key,
             from: target.rect,
             to: target.rect,
-            scroll: target.scroll,
             clock: Clock::new(CARET_MOVE),
             urgency: 1.0,
             moving: false,
@@ -137,8 +133,9 @@ impl App {
 
     /// 根据本帧的光标位置推进移动动画，返回本帧要绘制的光标矩形。
     ///
-    /// `target` 是绘制时算出的光标位置。位置改变时从当前画面上的位置开始新的移动；视口滚动、
-    /// 换了文档或光标不在屏幕上（状态已被清除）时直接跳到目标。
+    /// `target` 是绘制时算出的光标位置。位置改变时从当前画面上的位置开始新的移动；同一位置
+    /// 的目标随视口滚动时，移动中的光标保持进度跟过去，停下的光标直接画在新位置；换了文档或
+    /// 光标不在屏幕上（状态已被清除）时直接跳到目标。
     pub(crate) fn caret_position(&mut self, target: CaretTarget) -> Rect {
         let style = self.smooth_caret();
         if style == SmoothCaret::Off {
@@ -151,22 +148,32 @@ impl App {
         };
 
         motion.settle();
-        if motion.key == target.key && same_spot(motion.to, target.rect) {
-            let rect = motion.painted(style);
-            self.motion.caret_motion = Some(motion);
-            return rect;
+        if motion.key == target.key {
+            if same_spot(motion.to, target.rect) {
+                let rect = motion.painted(style);
+                self.motion.caret_motion = Some(motion);
+                return rect;
+            }
+            if motion.moving {
+                // 视口滚动或布局变化把目标挪走了：保持进度，跟着新目标，不重新计时。
+                motion.to = target.rect;
+                let rect = motion.painted(style);
+                self.motion.caret_motion = Some(motion);
+                return rect;
+            }
+            // 光标没动，只是视口滚动或换行、布局变化：直接画在新位置。
+            self.motion.caret_motion = Some(CaretMotion::at(target));
+            return target.rect;
         }
-        // 同一光标的目标变了（滚动、换行或布局变化），或换了文档：直接跳到目标。
-        if motion.key == target.key
-            || motion.key.0 != target.key.0
-            || motion.scroll != target.scroll
-        {
+        if motion.key.0 != target.key.0 {
+            // 换了文档：直接到新位置。
             self.motion.caret_motion = Some(CaretMotion::at(target));
             return target.rect;
         }
 
-        // 光标移动到了新的位置：从当前画面上的位置接着滑过去。被打断的移动一次比一次短，
-        // 连续按键时不会一直追不上输入。
+        // 光标移动到了新的位置：从当前画面上的位置接着滑过去。即使视口同时滚动（跳到视野之外
+        // 的行），也从原来的位置滑向新位置；被打断的移动一次比一次短，连续按键时不会一直
+        // 追不上输入。
         let from = motion.painted(style);
         let urgency = if motion.moving {
             (motion.urgency * URGENCY_DECAY).max(MIN_URGENCY)
@@ -176,7 +183,6 @@ impl App {
         motion.key = target.key;
         motion.from = from;
         motion.to = target.rect;
-        motion.scroll = target.scroll;
         motion.clock = Clock::new(CARET_MOVE.mul_f32(urgency));
         motion.urgency = urgency;
         motion.moving = true;

@@ -24,7 +24,6 @@ fn app(style: SmoothCaret) -> App {
 fn target(doc: u64, pos: usize, x: f32, y: f32) -> CaretTarget {
     CaretTarget {
         key: (DocumentId(doc), pos),
-        scroll: (0.0, 0.0),
         rect: Rect::new(x, y, 2.0, 18.0),
     }
 }
@@ -86,21 +85,55 @@ fn a_move_glides_over_the_configured_duration() {
 }
 
 #[test]
-fn scrolling_moves_the_caret_with_the_text_without_animation() {
+fn scrolling_the_view_moves_the_caret_with_the_text() {
     let mut app = app(SmoothCaret::Gliding);
     let start = target(1, 0, 100.0, 20.0);
     app.caret_position(start);
 
-    // 同一帧中光标移动、视口也滚动：直接跳到新位置，不从旧位置滑过去。
-    let mut moved = target(1, 5, 200.0, 120.0);
-    moved.scroll = (3.0, 0.0);
-    assert!(same_spot(app.caret_position(moved), moved.rect));
+    // 光标没动、视口滚动：直接画在新的位置，不播放动画。
+    let scrolled = target(1, 0, 100.0, 8.0);
+    assert!(same_spot(app.caret_position(scrolled), scrolled.rect));
     assert!(!app.animating());
+}
 
-    // 光标没动、视口滚动：同样直接画在新的位置。
-    let mut scrolled = moved;
-    scrolled.rect = Rect::new(200.0, 100.0, 2.0, 18.0);
-    scrolled.scroll = (4.0, 0.0);
+#[test]
+fn a_move_that_scrolls_the_view_still_animates() {
+    let mut app = app(SmoothCaret::Gliding);
+    let start = target(1, 0, 100.0, 300.0);
+    app.caret_position(start);
+
+    // 光标换到了另一行，视口同时滚动（例如跳到视野之外的行）：仍从旧位置滑过去。
+    let moved = target(1, 5, 200.0, 20.0);
+    assert!(same_spot(app.caret_position(moved), start.rect));
+    assert!(app.animating());
+
+    freeze(&mut app, 60);
+    let half = app.caret_position(moved);
+    assert!(half.y < start.rect.y && half.y > moved.rect.y);
+
+    freeze(&mut app, 120);
+    assert!(same_spot(app.caret_position(moved), moved.rect));
+}
+
+#[test]
+fn a_moving_target_is_followed_without_restarting() {
+    let mut app = app(SmoothCaret::Gliding);
+    let start = target(1, 0, 0.0, 0.0);
+    let first = target(1, 1, 100.0, 0.0);
+    let scrolled = target(1, 1, 100.0, 50.0);
+    app.caret_position(start);
+    app.caret_position(first);
+    freeze(&mut app, 60);
+    app.caret_position(first);
+
+    // 目标随视口滚动移动到新位置：保持进度和时钟，不重新开始一次移动。
+    app.caret_position(scrolled);
+    let motion = app.motion.caret_motion.unwrap();
+    assert!(motion.moving);
+    assert!(same_spot(motion.to, scrolled.rect));
+    assert_eq!(motion.clock.duration(), CARET_MOVE);
+
+    freeze(&mut app, 120);
     assert!(same_spot(app.caret_position(scrolled), scrolled.rect));
     assert!(!app.animating());
 }

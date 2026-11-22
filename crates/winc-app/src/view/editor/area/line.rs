@@ -36,6 +36,7 @@ impl Screen<'_> {
             long_hits,
             ime_cursor,
             caret_motion,
+            caret_drawn,
         } = scratch;
         let (text_rect, lh) = (self.text_rect, self.lh);
         // 第一段的顶边和基线按 `f64` 计算（见 `Screen::line_y`），基线的算法同 `baseline_in`。
@@ -174,7 +175,7 @@ impl Screen<'_> {
         self.draw_whitespace(frame, &row);
         let cells = self.draw_content(frame, &row, tokens);
         self.draw_tail(frame, &row, cells, (folded_hits, long_hits));
-        self.draw_carets(frame, &row, ime_cursor, caret_motion);
+        self.draw_carets(frame, &row, ime_cursor, caret_motion, caret_drawn);
     }
 
     /// 返回位置 `pos` 在本行中的段号（从 0 起）和 x 坐标。
@@ -536,6 +537,7 @@ impl Screen<'_> {
         row: &Row<'_>,
         ime_cursor: &mut Option<Rect>,
         caret_motion: &mut Option<CaretTarget>,
+        caret_drawn: &mut bool,
     ) {
         let (app, lh, text_rect) = (self.app, self.lh, self.text_rect);
         // 超出 `chars` 末尾的光标绘制在末尾；所在段不在 `chars` 内时不绘制。
@@ -551,12 +553,14 @@ impl Screen<'_> {
             && let Some(pos) = caret_pos(self.caret_col).filter(|_| row.line == self.caret_line)
             && shown
         {
+            *caret_drawn = true;
             self.draw_vim_caret(frame, row, pos, shape);
             return;
         }
         if let Some(pos) =
             caret_pos(self.caret_col).filter(|_| row.line == self.caret_line && self.focused)
         {
+            *caret_drawn = true;
             let (part, x) = self.place(row, pos);
             let shift = part as f32 * lh;
             let target = Rect::new(x, row.y + shift, 2.0, lh);
@@ -564,7 +568,6 @@ impl Screen<'_> {
                 // 滑动中的光标可能位于其他行上，行都画完之后再画，不会被后面绘制的行盖住。
                 *caret_motion = Some(CaretTarget {
                     key: (self.doc.id, pos),
-                    scroll: (self.doc.scroll_line, self.doc.scroll_x),
                     rect: target,
                 });
                 *ime_cursor = Some(target);
