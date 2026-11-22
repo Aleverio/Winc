@@ -1020,6 +1020,37 @@ fn contrast_protection_keeps_shape_characters_seamless() {
     assert_eq!(pixel(1), pixel(0));
 }
 
+/// 回归：Powerline 分隔符的字形低于行高，相邻格子的色块在其上下露出。
+#[test]
+fn powerline_separators_fill_the_cell_height() {
+    let mut app = blank_app(false);
+    // 左半圆、黄底的空格、右向三角。
+    let yellow = "215;153;33";
+    let (round, wedge) = ('\u{e0b6}', '\u{e0b0}');
+    let bytes = format!(
+        "\x1b[?25l\x1b[38;2;{yellow}m{round}\x1b[0;48;2;{yellow}m \x1b[0;38;2;{yellow}m{wedge}"
+    );
+    show_terminal(&mut app, &bytes);
+    let mut scale = 1.0;
+    let renderer = app.frame.renderer.as_mut().unwrap();
+    renderer.draw(|frame| scale = frame.scale());
+    paint(&mut app);
+    let image = app.frame.renderer.as_ref().unwrap().image().unwrap();
+    let (cell, lh) = (app.metrics.terminal_cell, app.fonts.terminal_line_height);
+    // 第 `col` 格中横向 `u`、纵向 `t`（格子的比例）处是否为黄色。
+    let yellow_at = |col: usize, u: f32, t: f32| {
+        let (x, y) = cell_center(&app, 0, col);
+        let (x, y) = (x + (u - 0.5) * cell, y + (t - 0.5) * lh);
+        let (x, y) = ((x * scale) as usize, (y * scale) as usize);
+        image.pixels[y * image.width as usize + x] & 0x00ff_ffff == 0x00d7_9921
+    };
+    for t in [0.06, 0.5, 0.94] {
+        assert!(yellow_at(0, 0.95, t), "半圆的平边，高度 {t}");
+        assert!(yellow_at(2, 0.05, t), "三角的底边，高度 {t}");
+    }
+    assert!(!yellow_at(0, 0.05, 0.06) && !yellow_at(2, 0.95, 0.06));
+}
+
 /// 回归：远端主机的集成脚本和 shell 列表尚未准备完时恢复终端标签。
 #[cfg(unix)]
 #[test]

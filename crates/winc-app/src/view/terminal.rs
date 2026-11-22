@@ -9,6 +9,7 @@
 
 mod grid;
 mod list;
+mod powerline;
 mod tabs;
 
 use grid::*;
