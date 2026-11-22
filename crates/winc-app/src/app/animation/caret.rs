@@ -2,7 +2,7 @@
 //!
 //! 曲线和时长取自 IntelliJ IDEA 的平滑光标移动：Snappy 在开始的一小段时间里走过大半距离，
 //! 之后缓缓停住；Gliding 沿整段距离平滑移动。移动途中光标再次移动时，从当前画面上的位置接着
-//! 走向新目标，并逐次缩短时长，使连续按键时不会落后于输入。
+//! 走向新目标；接连的移动逐次缩短时长，使连续按键时不会落后于输入。
 //!
 //! 位置由绘制时算出的光标矩形给出（见 `view::editor`），本模块只负责状态和插值。视口滚动、
 //! 换行或布局变化时目标随之改变：光标停在原处时随文字直接移动；移动途中的目标跟着视口走，
@@ -22,10 +22,10 @@ use super::*;
 /// 连续按键时不会明显滞后。
 pub(in crate::app) const CARET_MOVE: Duration = Duration::from_millis(120);
 
-/// 连续被打断的移动依次缩短时长，最少缩到完整时长的这一比例。
+/// 接连的移动依次缩短时长，最少缩到完整时长的这一比例。
 const MIN_URGENCY: f32 = 0.2;
 
-/// 每次被打断时时长乘以这一比例。
+/// 接连的移动中每一次的时长乘以这一比例。
 const URGENCY_DECAY: f32 = 0.8;
 
 /// 判断两个光标位置是否画在同一处（逻辑像素）。
@@ -71,7 +71,9 @@ pub(crate) struct CaretMotion {
     to: Rect,
     /// 动画时钟。
     clock: Clock,
-    /// 连续被打断时缩短的时长比例，停下后恢复为 1。
+    /// 上一次移动开始后的一段完整时长：其间开始的移动算作接连的移动。
+    run: Option<Clock>,
+    /// 接连移动时缩短的时长比例；隔了一段完整时长后再移动时恢复为 1。
     urgency: f32,
     /// 是否正在移动。
     moving: bool,
@@ -85,6 +87,7 @@ impl CaretMotion {
             from: target.rect,
             to: target.rect,
             clock: Clock::new(CARET_MOVE),
+            run: None,
             urgency: 1.0,
             moving: false,
         }
@@ -122,19 +125,25 @@ impl CaretMotion {
         }
 
         // 光标移动到了新的位置：从当前画面上的位置接着滑过去。即使视口同时滚动（跳到视野之外
-        // 的行），也从原来的位置滑向新位置；被打断的移动一次比一次短，连续按键时不会一直
-        // 追不上输入。
+        // 的行），也从原来的位置滑向新位置。上一次移动开始后一段完整时长之内的移动一次比
+        // 一次短，按住按键时不会一直追不上输入，也不会走完一次就回到完整时长。
         let from = self.painted(style);
-        let urgency = if self.moving {
-            (self.urgency * URGENCY_DECAY).max(MIN_URGENCY)
-        } else {
-            1.0
+        let urgency = match self.run.filter(|run| !run.done()) {
+            Some(_) => (self.urgency * URGENCY_DECAY).max(MIN_URGENCY),
+            None => 1.0,
         };
         self.key = target.key;
-        self.from = from;
         self.to = target.rect;
-        self.clock = Clock::new(CARET_MOVE.mul_f32(urgency));
+        self.run = Some(Clock::new(CARET_MOVE));
         self.urgency = urgency;
+        if same_spot(from, target.rect) {
+            // 画面上的位置没有变（光标之前的文字变了）：不必滑动。
+            self.from = target.rect;
+            self.moving = false;
+            return target.rect;
+        }
+        self.from = from;
+        self.clock = Clock::new(CARET_MOVE.mul_f32(urgency));
         self.moving = true;
         from
     }
@@ -150,10 +159,11 @@ impl CaretMotion {
         )
     }
 
-    /// 把动画时钟固定在已过 `at` 处，仅用于测试。
+    /// 把动画时钟和接连移动的计时固定在已过 `at` 处，仅用于测试。
     #[cfg(test)]
     pub(in crate::app) fn freeze(&mut self, at: Duration) {
         self.clock = Clock::frozen(at, self.clock.duration());
+        self.run = self.run.map(|_| Clock::frozen(at, CARET_MOVE));
     }
 
     /// 动画已经结束时把光标停在目标处。

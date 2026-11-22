@@ -266,9 +266,13 @@ fn arrow_keys_animate_line_changes() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// 跳到视野之外的行时保留动画状态：视口滚到目标后，从原来的位置滑过去。
+/// 跳到视野之外的行：视口平滑滚向它的途中光标不在屏幕上，动画状态保留，滚到目标后从原来的
+/// 位置滑过去。用滚轮滚出视野的光标不保留，回到视野时直接出现。
 #[test]
 fn a_jump_out_of_view_keeps_the_caret_animation() {
+    use crate::app::animation::SCROLL_GLIDE;
+    use crate::app::scroll::ScrollGlide;
+
     let dir = sample_folder("caret-jump");
     let text: String = (0..120).map(|i| format!("line {i}\n")).collect();
     std::fs::write(dir.join("long.txt"), text).unwrap();
@@ -278,21 +282,42 @@ fn a_jump_out_of_view_keeps_the_caret_animation() {
     app.window.focused = true;
     paint(&mut app);
 
-    // 不经过「保证光标可见」直接移到很下面的行：这一帧光标不在屏幕上，动画状态保留。
-    let target = app.editor.active().unwrap().text().line_start(100);
+    // 跳到很下面的行，平滑滚动刚开始：这一帧光标还不在屏幕上，动画状态保留。
+    let doc = app.editor.active().unwrap();
+    let (id, from) = (doc.id, doc.scroll_line);
+    let target = doc.text().line_start(100);
     app.editor.active_mut().unwrap().selection = winc_core::Selection::point(target);
+    app.ensure_caret_visible();
+    app.scroll.glide = Some(ScrollGlide {
+        doc: id,
+        from,
+        clock: Clock::frozen(Duration::ZERO, SCROLL_GLIDE),
+    });
+    let frame = app.begin_scroll_frame();
     paint(&mut app);
+    app.end_scroll_frame(frame);
     assert!(app.ime.cursor.is_none(), "这一帧光标不在屏幕上");
-    assert!(
-        app.motion.caret_motion.is_some(),
-        "光标在屏幕外时不应清除动画状态"
-    );
+    assert!(app.motion.caret_motion.is_some(), "滚向光标时保留动画状态");
 
     // 视口滚到目标：光标回到屏幕上，从原来的位置开始滑动。
-    app.ensure_caret_visible();
     app.scroll.glide = None;
     paint(&mut app);
     assert!(app.animating(), "跳转后应播放动画");
+
+    // 用滚轮把光标滚出视野：没有滚向光标的平滑滚动，动画状态清除。
+    app.motion.caret_motion = None;
+    paint(&mut app);
+    assert!(app.motion.caret_motion.is_some());
+    app.set_active_scroll(0.0);
+    paint(&mut app);
+    assert!(app.ime.cursor.is_none() && app.motion.caret_motion.is_none());
+    // 这时移动光标并滚回去：直接出现在新位置，不从很久以前的位置滑过来。
+    let next = app.editor.active().unwrap().text().line_start(101);
+    app.editor.active_mut().unwrap().selection = winc_core::Selection::point(next);
+    app.ensure_caret_visible();
+    app.scroll.glide = None;
+    paint(&mut app);
+    assert!(app.ime.cursor.is_some() && !app.animating());
 
     let _ = std::fs::remove_dir_all(&dir);
 }

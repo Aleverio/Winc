@@ -41,7 +41,7 @@ Measured on macOS; results vary with hardware and system load.
 
 | Area | Capabilities |
 | --- | --- |
-| Editing | Multiple cursors, find and replace, native input methods, smooth scrolling in gigabyte-sized files, smooth caret movement, and an experimental Vim mode |
+| Editing | Multiple cursors, find and replace, native input methods, smooth scrolling in gigabyte-sized files, and an experimental Vim mode |
 | Syntax | Highlighting for common programming, markup, data, and configuration languages, plus lightweight go-to-definition and usages without a language server |
 | Formatting | Whole-file formatting with external tools such as rustfmt, Prettier, Black, Ruff, and gofmt |
 | Preview | Markdown with math and Mermaid diagrams, images, SVG, PDF (macOS and Windows), Word documents (docx), and spreadsheets (xlsx, csv), with the source one click away |

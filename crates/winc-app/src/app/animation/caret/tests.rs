@@ -189,6 +189,46 @@ fn an_interrupted_move_continues_from_where_it_is_and_gets_shorter() {
 }
 
 #[test]
+fn moves_in_quick_succession_stay_short_after_one_finishes() {
+    let mut app = app(SmoothCaret::Gliding);
+    let at = |pos: usize| target(1, pos, pos as f32 * 10.0, 0.0);
+    app.advance_caret(at(0));
+    app.advance_caret(at(1));
+    freeze(&mut app, CARET_MOVE / 2);
+    app.advance_caret(at(2));
+    let urgency = |app: &App| app.motion.caret_motion.unwrap().urgency;
+    assert!((urgency(&app) - 0.8).abs() < 1e-6);
+
+    // 缩短了的移动已经走完，但离它开始还不到一次完整时长：下一次移动接着缩短，不回到完整时长。
+    freeze(&mut app, Duration::from_millis(100));
+    assert!(same_spot(app.advance_caret(at(2)), at(2).rect));
+    assert!(!app.animating());
+    app.advance_caret(at(3));
+    assert!((urgency(&app) - 0.64).abs() < 1e-6);
+
+    // 隔了一次完整时长之后再移动：恢复完整时长。
+    freeze(&mut app, CARET_MOVE);
+    app.advance_caret(at(3));
+    app.advance_caret(at(4));
+    assert!((urgency(&app) - 1.0).abs() < 1e-6);
+    assert_eq!(
+        app.motion.caret_motion.unwrap().clock.duration(),
+        CARET_MOVE
+    );
+}
+
+#[test]
+fn a_move_that_stays_in_place_does_not_animate() {
+    let mut app = app(SmoothCaret::Snappy);
+    let before = target(1, 10, 100.0, 20.0);
+    app.advance_caret(before);
+    // 光标之前的文字变了：字符偏移不同，画面上的位置相同。
+    let after = target(1, 14, 100.0, 20.0);
+    assert!(same_spot(app.advance_caret(after), after.rect));
+    assert!(!app.animating());
+}
+
+#[test]
 fn without_animation_the_caret_jumps() {
     let mut app = app(SmoothCaret::Off);
     let start = target(1, 0, 100.0, 20.0);
