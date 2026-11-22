@@ -158,6 +158,25 @@ Alverion's builds and releases for this fork are published on
 For the original project, visit [DEEIX-AI/Winc](https://github.com/DEEIX-AI/Winc) or
 [winc.si](https://winc.si).
 
+## Install
+
+This fork is named **Winct**, and installs through the `winctup` runtime. One command installs the
+runtime and the newest stable release; later updates, rollback and self-update are handled by the
+same runtime:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Aleverio/Winc/dev/release/runtime/install.sh | bash
+```
+
+```powershell
+irm https://raw.githubusercontent.com/Aleverio/Winc/dev/release/runtime/install.ps1 | iex
+```
+
+Add `~/.local/bin` (or `%LOCALAPPDATA%\winct\bin`) to `PATH`, then use `winctup status`,
+`winctup update` and `winctup rollback`. See [release/runtime/README.md](release/runtime/README.md)
+for the architecture, channels and security model. Native installers remain available on the
+Releases page.
+
 ## Command Line
 
 ```bash
@@ -167,7 +186,7 @@ winc --wait file        # wait until the tab closes, for example as the Git edit
 cargo build 2>&1 | winc -   # read standard input
 ```
 
-The Windows installers and the Linux deb and Arch packages add `winc` to `PATH`; the Windows portable ZIP leaves `PATH` unchanged. On macOS, choose **Winc → Install winc Command…** from the menu bar or run **Shell Command: Install winc Command** from the command palette; with the Linux AppImage, use the command palette.
+The Windows installers, the Linux deb and Arch packages, and `winctup` add `winc` to `PATH` (the runtime also installs the `winct` alias); the standalone Windows portable ZIP leaves `PATH` unchanged. On macOS, choose **Winct → Install winc Command…** from the menu bar or run **Shell Command: Install winc Command** from the command palette; with the Linux AppImage, use the command palette.
 
 On macOS the app is started by the system, so it does not inherit the environment variables of your shell. Use `winc --new-instance` to keep them.
 

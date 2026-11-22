@@ -24,6 +24,7 @@ tag.
 | `release/linux/arch/` | Arch package recipe, repository staging and installer template |
 | `release/windows/` | `package.ps1` (NSIS, MSI, portable zip), `sign.ps1`, `verify.ps1`, installer templates |
 | `release/common/` | Shared by all platforms: version, build config, update signing, asset staging, publication |
+| `release/runtime/` | `winctup` bootstrap, runtime, PowerShell scripts, checksums, offline tests and its own README |
 
 ## Version and source
 
@@ -99,16 +100,19 @@ binaries. The Arch package is updated with `pacman -U` through the update script
 Each release also has four signed appcasts for the in-app updater: `appcast-macos-arm64.xml`,
 `appcast-macos-x86_64.xml`, `appcast-linux.xml`, and `appcast-windows.xml`. They list the dmg, the
 AppImage, and the NSIS and MSI installers, each with its EdDSA signature; the deb, the rpm and the
-portable zip are downloads only. Installs that cannot update themselves (deb, rpm, the Arch
-package, the portable zip) still read their platform's appcast and only notify: the update button
-opens the downloads page, or suggests the Arch update script. `SHA256SUMS` covers the assets assembled before publication.
+portable zip are downloads only. The portable zip is the payload used by `winctup`, which updates it
+itself. Installs that cannot update themselves (deb, rpm and the Arch package) still read their
+platform's appcast and only notify: the update button opens the downloads page, or suggests the Arch
+update script. `SHA256SUMS` covers the assets assembled before publication and is what `winctup`
+verifies before installing.
 
-### Package-manager distributions
+### winctup runtime distributions
 
-Publishing a stable release also renders AUR, Homebrew, Scoop and winget manifests from those same
-assets. The packages are named `winct` and display **Winct Editor**; the binary and config directory
-stay `winc`. See [packaging/README.md](../packaging/README.md) for the generator, templates, tokens
-and the full list of targets.
+Instead of AUR, Homebrew, Scoop or winget packages, a single `curl` (or PowerShell `irm`) bootstrap
+installs the `winctup` runtime. The runtime resolves releases, verifies their `SHA256SUMS`, extracts
+the portable asset, flips the active release atomically, keeps the previous one for rollback, and
+updates itself. See [runtime/README.md](runtime/README.md) for the install commands, architecture,
+security model and environment variables. Native packages are still built for users who prefer them.
 
 ### In-app update channels (GitHub Releases)
 
