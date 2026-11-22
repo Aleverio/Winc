@@ -22,7 +22,13 @@ fn app(style: SmoothCaret) -> App {
 
 /// 文档 `doc` 中字符偏移 `pos` 处的光标矩形。
 fn target(doc: u64, pos: usize, x: f32, y: f32) -> CaretTarget {
-    CaretTarget::new(DocumentId(doc), pos, Rect::new(x, y, 2.0, 18.0))
+    CaretTarget::new(DocumentId(doc), pos, Rect::new(x, y, 2.0, 18.0), false)
+}
+
+/// 把目标标记为随跳转的平滑滚动逐帧移动。
+fn following(mut target: CaretTarget) -> CaretTarget {
+    target.follow_scroll = true;
+    target
 }
 
 /// 把动画时钟固定在已过 `at` 处：测试不依赖实际经过的时间。
@@ -113,13 +119,13 @@ fn a_moving_target_is_followed_without_restarting() {
     let mut app = app(SmoothCaret::Gliding);
     let start = target(1, 0, 0.0, 0.0);
     let first = target(1, 1, 100.0, 0.0);
-    let scrolled = target(1, 1, 100.0, 50.0);
+    let scrolled = following(target(1, 1, 100.0, 50.0));
     app.advance_caret(start);
     app.advance_caret(first);
     freeze(&mut app, CARET_MOVE / 2);
     app.advance_caret(first);
 
-    // 目标随视口滚动移动到新位置：保持进度和时钟，不重新开始一次移动。
+    // 跳转的平滑滚动把目标带到新位置：保持进度和时钟，不重新开始一次移动。
     app.advance_caret(scrolled);
     let motion = app.motion.caret_motion.unwrap();
     assert!(motion.moving);
@@ -128,6 +134,22 @@ fn a_moving_target_is_followed_without_restarting() {
 
     freeze(&mut app, CARET_MOVE);
     assert!(same_spot(app.advance_caret(scrolled), scrolled.rect));
+    assert!(!app.animating());
+}
+
+#[test]
+fn a_wheel_scroll_mid_flight_snaps_to_the_target() {
+    let mut app = app(SmoothCaret::Gliding);
+    let start = target(1, 0, 0.0, 0.0);
+    let first = target(1, 1, 100.0, 0.0);
+    // 滚轮滚动时目标同样会移动，但它不是这次移动引起的：直接画在新位置。
+    let wheeled = target(1, 1, 100.0, 50.0);
+    app.advance_caret(start);
+    app.advance_caret(first);
+    freeze(&mut app, CARET_MOVE / 2);
+    app.advance_caret(first);
+
+    assert!(same_spot(app.advance_caret(wheeled), wheeled.rect));
     assert!(!app.animating());
 }
 

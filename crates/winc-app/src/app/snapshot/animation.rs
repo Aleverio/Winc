@@ -425,3 +425,51 @@ fn ime_composition_does_not_animate_the_caret() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Shift 单击产生选区：和拖动一样直接到位，不播放动画。
+#[test]
+fn selecting_with_a_shift_click_does_not_animate() {
+    let dir = sample_folder("caret-shift-click");
+    std::fs::write(dir.join("lines.txt"), "one\ntwo\nthree\nfour\n").unwrap();
+    let mut app = app_with(&dir.join("lines.txt"), false);
+    app.config.smooth_caret_movement = Some(SmoothCaret::Gliding);
+    app.focus = Focus::Editor;
+    paint(&mut app);
+
+    // 量出第 2 行行首的位置，再回到第 0 行。
+    app.select(8, 8);
+    paint(&mut app);
+    let target = app.ime.cursor.expect("光标在第 2 行");
+    app.select(0, 0);
+    paint(&mut app);
+    app.motion.caret_motion.as_mut().unwrap().freeze(CARET_MOVE);
+    paint(&mut app);
+    let start = app.ime.cursor.expect("光标在第 0 行");
+
+    // Shift 单击第 2 行：按下与松开之间绘制一帧。
+    app.pointer.modifiers = winit::keyboard::ModifiersState::SHIFT;
+    let point = caret_point(&app, target);
+    app.on_mouse_move(point.0, point.1);
+    app.on_mouse_down(winit::event::MouseButton::Left);
+    paint(&mut app);
+    app.on_mouse_up(winit::event::MouseButton::Left);
+    paint(&mut app);
+    app.pointer.modifiers = winit::keyboard::ModifiersState::empty();
+
+    assert!(
+        !app.editor.active().unwrap().selection.is_empty(),
+        "Shift 单击应产生选区"
+    );
+    assert!(!app.animating(), "产生选区的点击应直接到位");
+    let caret = app.palette.caret;
+    assert!(
+        near(pixel(&app, caret_point(&app, target)), caret),
+        "应直接画在点击处"
+    );
+    assert!(
+        !near(pixel(&app, caret_point(&app, start)), caret),
+        "起点应没有光标"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

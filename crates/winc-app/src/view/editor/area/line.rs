@@ -563,7 +563,12 @@ impl Screen<'_> {
             let target = caret_rect(x, row.y + shift, lh);
             if self.caret_animates() {
                 // 滑动中的光标可能位于其他行上，行都画完之后再画，不会被后面绘制的行盖住。
-                *caret = CaretDraw::Sliding(CaretTarget::new(self.doc.id, pos, target));
+                *caret = CaretDraw::Sliding(CaretTarget::new(
+                    self.doc.id,
+                    pos,
+                    target,
+                    self.app.caret_scrolls(),
+                ));
                 *ime_cursor = Some(target);
             } else {
                 *caret = CaretDraw::Static;
@@ -589,15 +594,17 @@ impl Screen<'_> {
 
     /// 主光标是否播放移动动画。
     ///
-    /// 开关打开、界面没有关闭动态效果时播放。拖动鼠标选择（选区有范围）、有多个光标、输入法
-    /// 正在组字或正在播放折叠动画时不播放，直接画在目标处。多个光标一起移动时全部直接到位：
-    /// 只让主光标滑动会让其余光标显得不同步。
+    /// 开关打开、界面没有关闭动态效果时播放。有选区（拖动选择、Shift 单击、双击选词、行号栏
+    /// 选行）、有多个光标、输入法正在组字或正在播放折叠动画时不播放，直接画在目标处。多个
+    /// 光标一起移动时全部直接到位：只让主光标滑动会让其余光标显得不同步。单击留下的是点选区，
+    /// 按下期间也会播放。
     fn caret_animates(&self) -> bool {
         self.focused
             && self.app.smooth_caret() != SmoothCaret::Off
             && self.app.animations_on()
-            // 单击落下的是点选区，仍在拖动状态中；只有拖出范围时才让光标跟随指针。
-            && (!self.app.dragging() || self.doc.selection.is_empty())
+            // 有选区时（拖动、Shift 单击、双击选词、行号栏选行）光标跟随指针；单击留下
+            // 点选区，仍从旧位置滑过去。
+            && self.doc.selection.is_empty()
             && self.doc.extra_selections().is_empty()
             && self.motion.is_none()
             && self.app.preedit_at(Focus::Editor).is_empty()

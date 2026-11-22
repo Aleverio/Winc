@@ -45,14 +45,18 @@ struct CaretKey {
 pub(crate) struct CaretTarget {
     key: CaretKey,
     rect: Rect,
+    /// 视口是否正随这次光标移动平滑滚动（跳转、居中光标）：目标会逐帧移动，移动中的
+    /// 光标应跟着它走，而不是直接跳到目标。
+    follow_scroll: bool,
 }
 
 impl CaretTarget {
     /// 返回文档 `doc` 中字符偏移 `pos` 处的光标矩形 `rect`。
-    pub(crate) fn new(doc: DocumentId, pos: usize, rect: Rect) -> Self {
+    pub(crate) fn new(doc: DocumentId, pos: usize, rect: Rect, follow_scroll: bool) -> Self {
         Self {
             key: CaretKey { doc, pos },
             rect,
+            follow_scroll,
         }
     }
 }
@@ -93,20 +97,21 @@ impl CaretMotion {
 
     /// 按本帧的光标目标推进，返回本帧要绘制的矩形。
     ///
-    /// 位置改变时从当前画面上的位置开始新的移动；同一位置的目标随视口滚动时，移动中的光标
-    /// 保持进度跟过去，停下的光标直接画在新位置；换了文档时直接跳到目标。
+    /// 位置改变时从当前画面上的位置开始新的移动；同一光标的目标随跳转的平滑滚动移动时保持
+    /// 进度跟过去，光标没动而视口滚动（滚轮、滚动条）或布局变化时直接画在新位置；换了文档
+    /// 时直接跳到目标。
     fn advance(&mut self, target: CaretTarget, style: SmoothCaret) -> Rect {
         self.settle();
         if self.key == target.key {
             if same_spot(self.to, target.rect) {
                 return self.painted(style);
             }
-            if self.moving {
-                // 视口滚动或布局变化把目标挪走了：保持进度，跟着新目标，不重新计时。
+            if self.moving && target.follow_scroll {
+                // 跳转的平滑滚动带着目标走：保持进度跟过去，不重新计时。
                 self.to = target.rect;
                 return self.painted(style);
             }
-            // 光标没动，只是视口滚动或换行、布局变化：直接画在新位置。
+            // 光标没动，或只是滚轮滚动、换行、布局变化：直接画在新位置。
             *self = CaretMotion::at(target);
             return target.rect;
         }
