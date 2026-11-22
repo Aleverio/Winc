@@ -623,7 +623,7 @@ impl App {
     }
 
     /// `y` 是否在写全名的结果行的高度内：该行覆盖在滚动条和分隔条之上。
-    pub(in crate::app) fn over_result_overflow_row(&self, y: f32) -> bool {
+    pub(crate) fn over_result_overflow_row(&self, y: f32) -> bool {
         self.panel_shown()
             && (self.panels.global.overflow)
                 .map(|o| self.result_row_rect(o.index))

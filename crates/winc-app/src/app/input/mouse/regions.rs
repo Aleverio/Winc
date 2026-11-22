@@ -38,11 +38,10 @@ impl App {
         }
 
         // 面板只负责顶栏以下、分隔条以左的区域；侧栏开关和分隔条由后面的判断处理。写全名的结果行
-        // 覆盖在分隔条和滚动条之上，伸出侧栏的那一段同样属于这一行。
+        // 覆盖在滚动条之上，伸出侧栏的那一段同样属于这一行；分隔条始终可以拖动。
         let panel = self.panel_rect();
         let over_overflow = self.over_result_overflow_row(y);
-        let on_splitter =
-            self.panels.sidebar.visible && self.layout.splitter.contains(x, y) && !over_overflow;
+        let on_splitter = self.on_sidebar_splitter(x, y);
         let in_panel = panel.contains(x, y) || self.in_result_overflow(x, y);
 
         if !self.panel_shown() || !in_panel || on_splitter {

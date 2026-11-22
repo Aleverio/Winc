@@ -70,9 +70,9 @@ pub(crate) fn base(app: &App) -> [(Rect, Color); 3] {
     ]
 }
 
-/// 编辑区的内容和交互区域都留在窗格内，包括终端最大化后的零宽、零高区域。
+/// 绘制编辑区；差异和日志的点击区域裁剪在编辑区内，包括终端最大化后的零宽、零高区域。
 fn draw_editor(app: &mut App, frame: &mut Frame<'_>) {
-    frame.within(app.layout.editor, |frame| editor::draw_editor(app, frame));
+    editor::draw_editor(app, frame);
     for (rect, _) in &mut app.hits.diff {
         *rect = rect.intersect(app.layout.editor);
     }

@@ -1201,10 +1201,15 @@ impl App {
     pub(in crate::app) fn check_disk(&mut self) {
         self.check_remote();
         self.sync_documents(|_| true);
-        // 系统监视也可能漏发通知（如 Windows 通知缓冲区溢出），回到窗口时补查 Git 状态。
         self.git_discover();
         self.restart_exited_watcher();
-        self.git_refresh();
+        // `.git` 在监视范围内时分支、储藏的变化已由监视报告，只补查一次工作区状态；否则（打开的
+        // 是仓库中的子目录、工作树或子模块，或没有监视）连同分支、储藏一起重读。
+        if self.git_watched() {
+            self.git_refresh_status();
+        } else {
+            self.git_refresh();
+        }
         let live = self
             .disk
             .watcher

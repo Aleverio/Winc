@@ -539,7 +539,7 @@ fn git_status_rechecks_recover_missed_notifications() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// 即使本地系统监视正常启动，窗口回焦也补查一次，避免把漏通知的旧状态一直当作最新状态。
+/// 本地系统监视正常时，窗口回焦只补查一次工作区状态；Git 视图开着时不再定时运行 `git`。
 #[test]
 fn focus_rechecks_git_with_a_live_local_watcher() {
     let Some((mut app, root)) = git_watch_app("git-focus-recheck") else {
@@ -560,6 +560,10 @@ fn focus_rechecks_git_with_a_live_local_watcher() {
             .iter()
             .any(|e| e.path == path)
     );
+    assert!(app.git_watched());
+    app.run_action(Action::ShowCommit);
+    app.window.focused = true;
+    assert!(app.git_status_tick(std::time::Instant::now()).is_none());
     drop(app);
     let _ = std::fs::remove_dir_all(&root);
 }

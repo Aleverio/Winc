@@ -368,10 +368,9 @@ impl App {
         if l.search.contains(x, y) {
             return Target::Search;
         }
-        // 文件树、搜索结果的展开行覆盖分隔条；Git 改动列表始终保留分隔条的命中区域。
+        // 展开的全名可以画在分隔条上，分隔条仍然可以拖动；鼠标停在分隔条上时全名保持展开。
         let over_row = self.over_tree_overflow_row(y);
-        let over_any = over_row || over_result_row;
-        if self.panels.sidebar.visible && !over_any && l.splitter.contains(x, y) {
+        if self.panels.sidebar.visible && l.splitter.contains(x, y) {
             return Target::Splitter;
         }
         if let Some(tool) = hit(&self.hits.tree_tools, x, y) {
