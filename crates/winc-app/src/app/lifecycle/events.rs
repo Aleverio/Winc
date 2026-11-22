@@ -143,6 +143,7 @@ impl ApplicationHandler<UserEvent> for App {
                 &self.config.terminal_font,
                 !terminal.is_empty(),
             ),
+            ("markdown.font", &self.config.markdown_font, true),
         ]
         .into_iter()
         .filter(|&(_, _, own)| own)
@@ -167,7 +168,12 @@ impl ApplicationHandler<UserEvent> for App {
                 &terminal,
                 self.font_weight(),
                 self.terminal_font_weight(),
-            ),
+            )
+            .map(|mut renderer| {
+                let prose = super::appearance::configured_fonts(&self.config.markdown_font);
+                renderer.set_prose_fonts(&prose);
+                renderer
+            }),
         };
         let renderer = match renderer {
             Ok(renderer) => renderer,

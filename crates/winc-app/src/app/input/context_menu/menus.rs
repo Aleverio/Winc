@@ -837,16 +837,16 @@ pub(crate) const COMMON_UI_FONTS: &[&str] = &[
 /// 返回字体菜单的菜单项：第一项是「系统默认」（终端字体为「跟随编辑器」），其后是已安装的
 /// 字族，当前的选择打勾；最后一组是子菜单「其他字体」和「后备字体」（见 [`fallback_font_menu`]）。
 ///
-/// 直接列出已安装的常用字体（编辑器和终端为 [`COMMON_FONTS`]，界面为 [`COMMON_UI_FONTS`]）和
-/// 当前的字体（`current` 中的第一个）。编辑器和终端的「其他字体」中先列其余的等宽字体，再列
-/// 非等宽字体。
+/// 直接列出已安装的常用字体（编辑器和终端为 [`COMMON_FONTS`]，界面和预览正文为
+/// [`COMMON_UI_FONTS`]）和当前的字体（`current` 中的第一个）。编辑器和终端的「其他字体」中先列
+/// 其余的等宽字体，再列非等宽字体。
 pub fn font_menu(setting: Setting, current: Option<&str>) -> Vec<MenuEntry> {
     use MenuEntry::{Item, Separator, Submenu};
 
     let item = |(i, _)| Item(MenuCommand::Font(i), true);
     let fonts = winc_render::installed_fonts().iter().enumerate();
     let primary = winc_config::font_list(current).first().copied();
-    let ui = setting == Setting::UiFont;
+    let ui = matches!(setting, Setting::UiFont | Setting::MarkdownFont);
     let common = if ui { COMMON_UI_FONTS } else { COMMON_FONTS };
     let (first, rest): (Vec<_>, Vec<_>) = fonts.partition(|(_, family)| {
         common.contains(&family.name.as_str()) || primary == Some(family.name.as_str())

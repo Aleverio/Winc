@@ -370,3 +370,49 @@ fn the_split_preview_reaches_its_end_with_the_text() {
     assert_eq!(scrolled(&mut app, 0.0).0, 0.0);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// `markdown.font` 只更换预览正文的字体，界面文字不变；清空后与界面字体相同。
+#[cfg(target_os = "macos")]
+#[test]
+fn the_preview_font_setting_changes_only_the_preview_body() {
+    use winc_render::FontKind;
+    let (mut app, dir) = readme("md-font", false, PreviewMode::Split);
+    let widths = |app: &App| {
+        let renderer = app.frame.renderer.as_ref().unwrap();
+        let width = |kind| renderer.measure(kind, 13.0, "winc 编辑器 Preview");
+        (width(FontKind::Prose), width(FontKind::Ui))
+    };
+    let (body, ui) = widths(&app);
+    assert_eq!(body, ui);
+
+    app.config.markdown_font = Some("Courier New".to_owned());
+    app.apply_fonts().unwrap();
+    paint(&mut app);
+    let (changed, same) = widths(&app);
+    assert_ne!(changed, body);
+    assert_eq!(same, ui);
+
+    app.config.markdown_font = None;
+    app.apply_fonts().unwrap();
+    assert_eq!(widths(&app), (body, ui));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 没有设置 `markdown.size` 时预览正文的字号随编辑区字号按比例变化；设置后用设置的值。
+#[test]
+fn the_preview_size_setting_overrides_the_scaled_size() {
+    use crate::layout::Setting;
+    let (mut app, dir) = readme("md-size", false, PreviewMode::Split);
+    let body = |app: &mut App| {
+        paint(app);
+        app.preview.markdown.layout.as_ref().unwrap().key.base
+    };
+    assert_eq!(body(&mut app), (app.fonts.code * 16.0 / 13.0).round());
+    app.config.markdown_size = Some(app.fonts.code);
+    assert_eq!(body(&mut app), app.fonts.code);
+    // 设置页的步进按钮从当前显示的字号起调整。
+    app.settings_adjust(Setting::MarkdownSize, true);
+    assert_eq!(app.config.markdown_size, Some(app.fonts.code + 1.0));
+    assert_eq!(body(&mut app), app.fonts.code + 1.0);
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -53,6 +53,10 @@ impl App {
                 f32::from(self.terminal_font_weight()),
                 Config::FONT_WEIGHT_RANGE,
             ),
+            Setting::MarkdownSize => (
+                crate::app::preview::markdown::laid::body_size(self),
+                Config::EDITOR_SIZE_RANGE,
+            ),
             Setting::TabWidth => (
                 self.config.tab_width.unwrap_or(self.editor.tab_width) as f32,
                 Config::TAB_WIDTH_RANGE,
@@ -106,6 +110,11 @@ impl App {
                 let current = ViewFonts::of(&self.config).terminal;
                 self.config.terminal_size = Some(step(current, up, Config::EDITOR_SIZE_RANGE));
                 self.apply_font_sizes();
+            }
+            Setting::MarkdownSize => {
+                let current = crate::app::preview::markdown::laid::body_size(self);
+                self.config.markdown_size = Some(step(current, up, Config::EDITOR_SIZE_RANGE));
+                self.request_redraw();
             }
             Setting::TabWidth => {
                 let current = self.config.tab_width.unwrap_or(self.editor.tab_width);
