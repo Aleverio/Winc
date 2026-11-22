@@ -187,6 +187,7 @@ impl Action {
             ToggleRegex => t!("cmd-toggle-regex"),
             FilterLines => t!("cmd-filter-lines"),
             FindInFiles => t!("cmd-find-in-files"),
+            OpenSearchDialog => t!("cmd-open-search-dialog"),
             ReplaceInFiles => t!("cmd-replace-in-files"),
             ReplaceAllInFiles => t!("cmd-replace-all-in-files"),
             NextResult => t!("cmd-next-result"),

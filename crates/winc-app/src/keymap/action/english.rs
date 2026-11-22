@@ -179,6 +179,7 @@ impl Action {
             ToggleRegex => "Toggle Regex",
             FilterLines => "Show Only Matching Lines",
             FindInFiles => "Find in Files",
+            OpenSearchDialog => "Find in Files (Dialog)",
             ReplaceInFiles => "Replace in Files",
             ReplaceAllInFiles => "Replace All in Files",
             NextResult => "Focus Next Search Result",

@@ -215,6 +215,7 @@ pub enum Action {
     ToggleRegex,
     FilterLines,
     FindInFiles,
+    OpenSearchDialog,
     ReplaceInFiles,
     ReplaceAllInFiles,
     NextResult,
@@ -559,8 +560,8 @@ impl Action {
             | Fix => Group::Edit,
             Find | Replace | FindNext | FindPrevious | HighlightWord | ClearWordHighlights
             | ReplaceOne | ReplaceAll | SelectAllMatches | ToggleCase | ToggleWord
-            | ToggleRegex | FilterLines | FindInFiles | ReplaceInFiles | ReplaceAllInFiles
-            | NextResult | PreviousResult => Group::Find,
+            | ToggleRegex | FilterLines | FindInFiles | OpenSearchDialog | ReplaceInFiles
+            | ReplaceAllInFiles | NextResult | PreviousResult => Group::Find,
             RenameFile
             | DeleteFile
             | DeleteFilePermanently
@@ -971,6 +972,7 @@ pub const ACTIONS: &[Action] = {
         ToggleRegex,
         FilterLines,
         FindInFiles,
+        OpenSearchDialog,
         ReplaceInFiles,
         ReplaceAllInFiles,
         NextResult,

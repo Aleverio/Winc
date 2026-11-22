@@ -137,6 +137,7 @@ impl App {
                 bar_card: Default::default(),
                 dialog_card: Default::default(),
                 alert_card: Default::default(),
+                search_card: Default::default(),
                 module_fx: Default::default(),
                 fold_motion: None,
                 diff_fold: None,
@@ -188,6 +189,7 @@ impl App {
                 prompt_kind: PromptKind::GoTo,
             },
             word_highlights: Vec::new(),
+            search_dialog: Default::default(),
             hits: Default::default(),
             disk: crate::app::workspace::DiskState {
                 watcher: None,

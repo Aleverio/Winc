@@ -81,6 +81,7 @@ impl SettingsPage {
                     Setting::RestoreFolder,
                     Setting::DropFolder,
                     Setting::PreviewOnClick,
+                    Setting::FindInFiles,
                 ]),
             ],
             SettingsPage::Terminal => {
