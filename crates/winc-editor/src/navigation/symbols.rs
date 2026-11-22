@@ -383,7 +383,7 @@ impl Skip {
             }
         }
 
-        if language.long_brackets.is_some() {
+        if let Some(comment) = language.long_brackets {
             if let Some(close) = &self.long_bracket {
                 if content.contains(close.as_str()) {
                     self.long_bracket = None;
@@ -391,7 +391,7 @@ impl Skip {
                 return true;
             }
             // 开头所在的行按其余规则处理：`local text = [[` 是定义，`--[[` 是注释。
-            self.long_bracket = long_bracket_left_open(content);
+            self.long_bracket = long_bracket_left_open(content, comment);
         }
 
         if language.triple_quotes {
@@ -413,20 +413,39 @@ impl Skip {
 }
 
 /// `content` 中有长括号的开头（`[`、若干个 `=`、`[`）而没有在本行结束时，返回结束它的写法。
-fn long_bracket_left_open(content: &str) -> Option<String> {
-    let mut rest = content;
-    while let Some(at) = rest.find('[') {
-        let after = &rest[at + 1..];
-        let level = after.bytes().take_while(|&b| b == b'=').count();
-        if !after[level..].starts_with('[') {
-            rest = after;
+///
+/// 引号中的内容除外；行注释 `comment` 之后只有紧跟的长括号是开头，其余到行尾都是注释。
+fn long_bracket_left_open(content: &str, comment: &str) -> Option<String> {
+    let bytes = content.as_bytes();
+    let mut at = 0;
+    while at < bytes.len() {
+        if let quote @ (b'"' | b'\'') = bytes[at] {
+            at += 1;
+            while at < bytes.len() && bytes[at] != quote {
+                at += 1 + usize::from(bytes[at] == b'\\');
+            }
+            at += 1;
             continue;
         }
-        let close = format!("]{}]", "=".repeat(level));
-        let body = &after[level + 1..];
-        match body.find(&close) {
-            Some(end) => rest = &body[end + close.len()..],
-            None => return Some(close),
+        let rest = &content[at..];
+        let commented = rest.starts_with(comment);
+        let open = at + if commented { comment.len() } else { 0 };
+        let after = &content[open..];
+        let level = after.strip_prefix('[').map(|inner| {
+            let level = inner.bytes().take_while(|&b| b == b'=').count();
+            (level, inner[level..].starts_with('['))
+        });
+        match level {
+            Some((level, true)) => {
+                let close = format!("]{}]", "=".repeat(level));
+                let body = open + level + 2;
+                match content[body..].find(&close) {
+                    Some(end) => at = body + end + close.len(),
+                    None => return Some(close),
+                }
+            }
+            _ if commented => return None,
+            _ => at += rest.chars().next().map_or(1, char::len_utf8),
         }
     }
     None

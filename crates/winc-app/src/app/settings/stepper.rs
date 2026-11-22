@@ -112,8 +112,10 @@ impl App {
                 self.apply_font_sizes();
             }
             Setting::MarkdownSize => {
-                let current = crate::app::preview::markdown::laid::body_size(self);
-                self.config.markdown_size = Some(step(current, up, Config::EDITOR_SIZE_RANGE));
+                use crate::app::preview::markdown::laid::{body_size, scaled_body_size};
+                // 调回随编辑区变化的字号时清除设置，之后继续随编辑区字号变化。
+                let next = step(body_size(self), up, Config::EDITOR_SIZE_RANGE);
+                self.config.markdown_size = (next != scaled_body_size(self)).then_some(next);
                 self.request_redraw();
             }
             Setting::TabWidth => {

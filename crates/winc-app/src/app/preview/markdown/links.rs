@@ -199,10 +199,16 @@ impl App {
         if name.is_empty() {
             return self.editor.active().and_then(|doc| doc.path.clone());
         }
-        let wanted = match Path::new(name).extension() {
-            Some(_) => name.to_owned(),
-            None => format!("{name}.md"),
-        };
+        // 名字中的 `.` 不一定是扩展名：按原名找不到时再按补上 `.md` 的名字找。
+        let named = format!("{name}.md");
+        match Path::new(name).extension() {
+            Some(_) => self.wiki_file(name).or_else(|| self.wiki_file(&named)),
+            None => self.wiki_file(&named),
+        }
+    }
+
+    /// 返回文件名（或路径的末尾）为 `wanted` 的文件，规则见 [`Self::wiki_target`]。
+    fn wiki_file(&self, wanted: &str) -> Option<PathBuf> {
         let wanted = wanted.replace('\\', "/");
         let here = (self.editor.active()).and_then(|doc| doc.path.as_deref()?.parent());
         let index = &self.overlays.picker.index;

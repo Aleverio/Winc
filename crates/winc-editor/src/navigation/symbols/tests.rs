@@ -445,4 +445,10 @@ fn lua_long_brackets_hide_their_lines() {
         "--[[ 同一行结束 ]]\nfunction after()\nend\n",
     );
     assert_eq!(names("lua", text), ["get5x", "after"]);
+    // 引号中的、行注释中不紧跟注释符的 `[[` 不是开头。
+    let text = concat!(
+        "local s = find(\"[[\", '\\'[[')\nfunction quoted()\nend\n",
+        "-- 见 [[ 的写法\nfunction commented()\nend\n",
+    );
+    assert_eq!(names("lua", text), ["quoted", "commented"]);
 }

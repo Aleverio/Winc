@@ -231,7 +231,8 @@ impl App {
         };
         let line = laid.line_of_y(y, doc.text().line_count());
         set_scroll_line(doc, text_row(doc, line).clamp(0.0, max.max(0.0)));
-        self.preview.markdown.synced = Some((doc.id, doc.scroll_line, laid.height()));
+        let bottom = laid.height() - self.preview.markdown.area.h;
+        self.preview.markdown.synced = Some((doc.id, doc.scroll_line, bottom));
     }
 
     /// 滚动文字，使原文第 `line` 行（小数）位于顶部。
@@ -270,7 +271,9 @@ impl App {
         else {
             return;
         };
-        let now = (doc.id, doc.scroll_line, laid.height());
+        // 内容或预览区域的高度变化后同样重新对齐。
+        let bottom = laid.height() - self.preview.markdown.area.h;
+        let now = (doc.id, doc.scroll_line, bottom);
         if self.preview.markdown.synced == Some(now) {
             return;
         }
@@ -281,7 +284,6 @@ impl App {
         let max = self.max_scroll_line();
         let screen = f64::from(self.scroll_track().h / self.fonts.line_height).min(max);
         let (end, _) = preview_line(doc, lines, max);
-        let bottom = laid.height() - self.preview.markdown.area.h;
         let rest = (bottom - laid.y_of_line(end, total)).max(0.0);
         let share = match screen > 0.0 {
             true => ((doc.scroll_line - (max - screen)) / screen).clamp(0.0, 1.0),

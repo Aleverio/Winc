@@ -414,5 +414,11 @@ fn the_preview_size_setting_overrides_the_scaled_size() {
     app.settings_adjust(Setting::MarkdownSize, true);
     assert_eq!(app.config.markdown_size, Some(app.fonts.code + 1.0));
     assert_eq!(body(&mut app), app.fonts.code + 1.0);
+    // 调回按比例算出的字号时清除设置。
+    let scaled = (app.fonts.code * 16.0 / 13.0).round();
+    app.config.markdown_size = Some(scaled - 1.0);
+    app.settings_adjust(Setting::MarkdownSize, true);
+    assert_eq!(app.config.markdown_size, None);
+    assert_eq!(body(&mut app), scaled);
     let _ = std::fs::remove_dir_all(&dir);
 }

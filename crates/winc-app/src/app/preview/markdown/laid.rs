@@ -18,10 +18,14 @@ use crate::app::{App, Focus};
 /// 16 逻辑像素。
 const BASE_RATIO: f32 = 16.0 / 13.0;
 
-/// 返回预览正文的字号（逻辑像素）：`markdown.size`，未设置时按编辑区字号算出并取整。
+/// 返回没有设置 `markdown.size` 时预览正文的字号（逻辑像素）：按编辑区字号算出并取整。
+pub(crate) fn scaled_body_size(app: &App) -> f32 {
+    (app.fonts.code * BASE_RATIO).round()
+}
+
+/// 返回预览正文的字号（逻辑像素）：`markdown.size`，未设置时为 [`scaled_body_size`]。
 pub(crate) fn body_size(app: &App) -> f32 {
-    let scaled = (app.fonts.code * BASE_RATIO).round();
-    app.config.markdown_size.unwrap_or(scaled)
+    (app.config.markdown_size).unwrap_or_else(|| scaled_body_size(app))
 }
 /// 正文宽度为「标准」（`markdown.textWidth`）时正文的最大宽度（逻辑像素，经验值）：更宽时居中、
 /// 两侧留白。

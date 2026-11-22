@@ -25,6 +25,7 @@ fn notes(name: &str) -> (App, PathBuf) {
         std::fs::write(dir.join(folder).join("note.md"), "# 笔记\n").unwrap();
     }
     std::fs::write(dir.join("near/data.csv"), "a,b\n").unwrap();
+    std::fs::write(dir.join("near/v1.2 notes.md"), "# 说明\n").unwrap();
     let index = concat!(
         "# 开头\n\n见 https://winc.si/zh-cn/ 和 [数据](data.csv)。\n\n",
         "[[note]] [[data.csv|表]] [[missing]] [到结尾](#结尾)\n\n",
@@ -63,6 +64,10 @@ fn links_in_markdown_source_open_from_the_caret() {
     assert!(app.open_link_at_caret());
     let opened = app.editor.active().unwrap().path.clone();
     assert_eq!(opened, Some(dir.join("near/note.md")));
+
+    // 名字中有 `.` 而没有扩展名：按补上 `.md` 的名字找到。
+    let dotted = app.wiki_target("v1.2 notes");
+    assert_eq!(dotted, Some(dir.join("near/v1.2 notes.md")));
 
     // 找不到的文件只提示，不新建。
     app.open_path(&dir.join("near/index.md"));
