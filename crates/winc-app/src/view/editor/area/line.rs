@@ -594,14 +594,15 @@ impl Screen<'_> {
 
     /// 主光标是否播放移动动画。
     ///
-    /// 开关打开、界面没有关闭动态效果时播放。拖动鼠标选择、有多个光标、输入法正在组字或正在
-    /// 播放折叠动画时不播放，直接画在目标处。多个光标一起移动时全部直接到位：只让主光标滑动
-    /// 会让其余光标显得不同步。
+    /// 开关打开、界面没有关闭动态效果时播放。拖动鼠标选择（选区有范围）、有多个光标、输入法
+    /// 正在组字或正在播放折叠动画时不播放，直接画在目标处。多个光标一起移动时全部直接到位：
+    /// 只让主光标滑动会让其余光标显得不同步。
     fn caret_animates(&self) -> bool {
         self.focused
             && self.app.smooth_caret() != SmoothCaret::Off
             && self.app.animations_on()
-            && !self.app.dragging()
+            // 单击落下的是点选区，仍在拖动状态中；只有拖出范围时才让光标跟随指针。
+            && (!self.app.dragging() || self.doc.selection.is_empty())
             && self.doc.extra_selections().is_empty()
             && self.motion.is_none()
             && self.app.preedit_at(Focus::Editor).is_empty()

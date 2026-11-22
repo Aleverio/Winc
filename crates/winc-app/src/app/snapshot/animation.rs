@@ -317,3 +317,62 @@ fn a_jump_out_of_view_keeps_the_caret_animation() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 鼠标单击换行时也播放动画。按下与松开之间常会绘制一帧；这一帧不能把动画状态清掉。
+#[test]
+fn mouse_clicks_animate_the_caret() {
+    let dir = sample_folder("caret-click");
+    std::fs::write(dir.join("lines.txt"), "one\ntwo\nthree\nfour\n").unwrap();
+    let mut app = app_with(&dir.join("lines.txt"), false);
+    app.config.smooth_caret_movement = Some(SmoothCaret::Gliding);
+    app.focus = Focus::Editor;
+    app.window.focused = true;
+    paint(&mut app);
+
+    // 量出第 2 行行首的位置，再回到第 0 行。
+    let start = app.ime.cursor.expect("光标在第 0 行");
+    app.select(8, 8);
+    paint(&mut app);
+    let target = app.ime.cursor.expect("光标在第 2 行");
+    app.select(0, 0);
+    paint(&mut app);
+    assert!(target.y > start.y);
+
+    // 按下、松开之间绘制一帧，与真实的事件顺序一致。
+    let point = (target.x + 1.0, target.y + app.fonts.line_height / 2.0);
+    app.on_mouse_move(point.0, point.1);
+    app.on_mouse_down(winit::event::MouseButton::Left);
+    paint(&mut app);
+    app.on_mouse_up(winit::event::MouseButton::Left);
+    paint(&mut app);
+
+    assert!(app.animating(), "单击后应播放动画");
+    let caret = app.palette.caret;
+    let near = |px: u32, c: Color| {
+        let ch = |shift: u32, v: f32| ((px >> shift) & 0xff).abs_diff((v * 255.0).round() as u32);
+        ch(16, c.r) <= 2 && ch(8, c.g) <= 2 && ch(0, c.b) <= 2
+    };
+    let pixel = |app: &App, (x, y): (f32, f32)| {
+        let image = app.frame.renderer.as_ref().unwrap().image().unwrap();
+        let (x, y) = ((x * SCALE) as usize, (y * SCALE) as usize);
+        image.pixels[y * image.width as usize + x]
+    };
+    let lh = app.fonts.line_height;
+    let point = |rect: Rect| (rect.x.round() + 1.0, rect.y + lh / 2.0);
+    assert!(near(pixel(&app, point(start)), caret), "起点应画着光标");
+    assert!(
+        !near(pixel(&app, point(target)), caret),
+        "点击处还不应有光标"
+    );
+
+    // 到时停在新位置。
+    app.motion
+        .caret_motion
+        .as_mut()
+        .unwrap()
+        .freeze(Duration::from_millis(120));
+    paint(&mut app);
+    assert!(near(pixel(&app, point(target)), caret), "到时应在点击处");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
