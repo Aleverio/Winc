@@ -238,10 +238,11 @@ mod imp {
     /// 取值由界面线程的正常处理耗时决定，取自调参：界面线程阻塞（例如系统菜单处于打开状态）
     /// 超过该时长仍未答复时回 `busy`，由新进程自己打开目标。
     const ANSWER_TIMEOUT: Duration = Duration::from_millis(1500);
-    /// 新进程等待对方回复的时长（秒）。
+    /// 新进程等待对方回复、对方等待完整消息的时长（秒）。
     ///
     /// 取值由 [`ANSWER_TIMEOUT`] 决定：比对方等待界面线程答复的时长更长，保证对方先给出答复。
-    const REPLY_TIMEOUT: Duration = Duration::from_secs(3);
+    /// 同时也覆盖负载较高时读写消息的时间，避免把超时误判成旧版本而回退到无令牌消息。
+    const REPLY_TIMEOUT: Duration = Duration::from_secs(10);
     /// 单条消息可读取的最大字节数（字节），超过时按格式错误处理。
     ///
     /// 取值由系统对命令行参数总长的限制决定：macOS 为 1 MiB，Linux 默认为 2 MiB；参数中的相对
