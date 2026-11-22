@@ -207,7 +207,9 @@ fn release_appcast_matches_packages() {
         (Some("nsis"), "nsis", "windows-x64-setup.exe"),
         (Some("msi"), "msi", "windows-x64.msi"),
     ];
-    #[cfg(not(windows))]
+    #[cfg(all(not(windows), target_arch = "aarch64"))]
+    let packages = [(None, "appimage", "linux-arm64.AppImage")];
+    #[cfg(all(not(windows), not(target_arch = "aarch64")))]
     let packages = [(None, "appimage", "linux-x64.AppImage")];
     for (installer, directory, suffix) in packages {
         let item = newest_for_installer(xml, std::env::consts::ARCH, installer).unwrap();
