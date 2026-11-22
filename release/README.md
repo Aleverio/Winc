@@ -103,6 +103,13 @@ portable zip are downloads only. Installs that cannot update themselves (deb, rp
 package, the portable zip) still read their platform's appcast and only notify: the update button
 opens the downloads page, or suggests the Arch update script. `SHA256SUMS` covers the assets assembled before publication.
 
+### Package-manager distributions
+
+Publishing a stable release also renders AUR, Homebrew, Scoop and winget manifests from those same
+assets. The packages are named `winct` and display **Winct Editor**; the binary and config directory
+stay `winc`. See [packaging/README.md](../packaging/README.md) for the generator, templates, tokens
+and the full list of targets.
+
 ### In-app update channels (GitHub Releases)
 
 The release workflow creates a draft. After a maintainer publishes it, `update-feeds.yml` copies its

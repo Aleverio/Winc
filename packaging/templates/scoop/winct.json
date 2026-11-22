@@ -1,0 +1,24 @@
+{
+  "version": "{{VERSION}}",
+  "architecture": {
+    "64bit": {
+      "url": "{{URL_PORTABLE}}",
+      "hash": "{{SHA_PORTABLE}}"
+    }
+  },
+  "bin": "winc.exe",
+  "name": "Winct Editor",
+  "homepage": "https://winc.si",
+  "description": "A lighter, faster desktop code editor",
+  "license": "Apache-2.0",
+  "checkver": {
+    "github": "https://github.com/{{REPO}}"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/{{REPO}}/releases/download/v$version/Winc-$version-windows-x64-portable.zip"
+      }
+    }
+  }
+}

@@ -83,6 +83,23 @@ jobs:
       - name: rustfmt
         run: cargo fmt --all --check
 
+  # The package manifests are generated from release assets by a Node script; keep its renderer and
+  # templates covered on the same push as the Rust workspace.
+  manifests:
+    name: Package manifests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Manifest generator tests
+        run: node --test release/common/package-manifests.test.mjs
+
   lint:
     name: lint (${{ matrix.name }})
     needs: changes
@@ -216,7 +233,7 @@ jobs:
   result:
     name: CI
     if: always()
-    needs: [changes, format, lint, test]
+    needs: [changes, format, manifests, lint, test]
     runs-on: ubuntu-24.04
     steps:
       - name: All checks passed
