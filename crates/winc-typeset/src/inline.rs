@@ -179,7 +179,8 @@ impl Cx<'_, '_> {
         };
         // 不超过一行的宽度，按比例缩小。
         let fit = (room / w).min(1.0);
-        Some((path, (w * fit).floor().max(1.0), (h * fit).floor().max(1.0)))
+        let (w, h) = bounded((w * fit).floor().max(1.0), (h * fit).floor().max(1.0));
+        Some((path, w, h))
     }
 
     /// 把行内文字拆成一个个字，量好宽度、标好哪里能换行。
@@ -758,6 +759,24 @@ fn no_break_before(c: char) -> bool {
 /// 标点 `c` 是否不能出现在行尾。
 fn no_break_after(c: char) -> bool {
     "（〔［｛「『【《〈〖〘〝“‘«‹([{".contains(c)
+}
+
+/// 行内图片显示面积的上限（逻辑像素的平方）。
+///
+/// 图片按显示大小分配像素，显示大小取自文档（`height` 属性、SVG 自身的尺寸），不限制时一张
+/// 图即可要求任意多的内存。取自调参：1600 万相当于 800 × 20000 的长截图，更大的图按比例
+/// 缩小；长边因此不超过 1600 万，仍可由 `f32` 逐一表示。
+const MAX_IMAGE_AREA: f32 = 16_000_000.0;
+
+/// 返回把 `width` × `height`（逻辑像素，均不小于 1）按比例缩小到 [`MAX_IMAGE_AREA`] 以内的
+/// 大小，每边至少 1 像素；本来就在上限以内时原样返回。
+fn bounded(width: f32, height: f32) -> (f32, f32) {
+    let shrink = (MAX_IMAGE_AREA / (width * height)).sqrt();
+    if shrink >= 1.0 {
+        return (width, height);
+    }
+    let side = |side: f32| (side * shrink).floor().clamp(1.0, MAX_IMAGE_AREA);
+    (side(width), side(height))
 }
 
 #[cfg(test)]

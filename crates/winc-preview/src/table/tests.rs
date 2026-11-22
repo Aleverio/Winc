@@ -192,6 +192,10 @@ fn number_formats_follow_the_format_code() {
     assert_eq!(classify("h:mm:ss"), date(false, true, true));
     assert_eq!(classify("yyyy-mm-dd hh:mm"), date(true, true, false));
     assert_eq!(classify("0.0%"), NumberFormat::Percent(1));
+    // 小数位数取自文件：位数极大的格式代码按上限处理，能照常写出。
+    let wide = classify(&format!("0.{}%", "0".repeat(100_000)));
+    assert_eq!(wide, NumberFormat::Percent(30));
+    assert!(super::xlsx::format_number(0.5, wide, false).starts_with("50.000"));
     assert_eq!(classify("#,##0.00"), NumberFormat::General);
     // 引号中的文字、方括号中的颜色和币种不算。
     assert_eq!(classify("0 \"days\""), NumberFormat::General);
@@ -360,4 +364,53 @@ fn the_pull_reader_reports_malformed_xml() {
         tokens.by_ref().for_each(drop);
         assert!(!tokens.well_formed(), "{broken}");
     }
+}
+
+/// 只在很靠后的列上有内容的行要记下前面的空单元格：单元格数有上限，超出时记为截断。
+#[test]
+fn a_sheet_keeps_a_bounded_number_of_cells() {
+    let mut rows = Rows::default();
+    for _ in 0..MAX_CELLS {
+        rows.push("");
+    }
+    rows.push("kept?");
+    rows.end_row();
+    let sheet = rows.finish(String::new(), false);
+    assert!(sheet.truncated);
+    assert!(sheet.text.is_empty());
+}
+
+/// 工作簿把同一个工作表文件列了两次：只读一次。
+#[test]
+fn a_worksheet_listed_twice_is_read_once() {
+    let bytes = workbook(true);
+    let archive = crate::zip::Archive::open(&bytes).unwrap();
+    let mut files: Vec<(String, Vec<u8>)> = Vec::new();
+    let names = [
+        "_rels/.rels",
+        "xl/workbook.xml",
+        "xl/_rels/workbook.xml.rels",
+        "xl/sharedStrings.xml",
+        "xl/styles.xml",
+        "xl/worksheets/sheet1.xml",
+        "xl/worksheets/sheet2.xml",
+        "xl/worksheets/sheet3.xml",
+    ];
+    for name in names {
+        let mut content = archive.read(name).unwrap().unwrap();
+        if name == "xl/workbook.xml" {
+            let text = String::from_utf8(content).unwrap().replace(
+                "<sheet name=\"空表\"",
+                "<sheet name=\"再来\" sheetId=\"9\" r:id=\"rId1\"/><sheet name=\"空表\"",
+            );
+            content = text.into_bytes();
+        }
+        files.push((name.to_owned(), content));
+    }
+    let files: Vec<(&str, &[u8])> = (files.iter())
+        .map(|(name, content)| (name.as_str(), content.as_slice()))
+        .collect();
+    let table = read_workbook(&crate::zip::build(&files, true)).unwrap();
+    let names: Vec<&str> = table.sheets.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["数据", "空表"]);
 }

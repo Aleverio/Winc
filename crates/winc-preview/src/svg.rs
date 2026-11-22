@@ -65,11 +65,6 @@ const MAX_EFFECT_WORK: usize = 3_000;
 const MAX_FILTER_WORK: usize = 300;
 /// 图案里最多再嵌套几层图案（层）：图案每层引用十个上一层时，绘制的图块数按层数指数增长。
 const MAX_PATTERN_NESTING: usize = 2;
-/// 元素最多嵌套的层数（层，经验值）。
-///
-/// XML 解析按层递归，几千层就会耗尽后台线程的栈，导致进程中止；绘制本来也只展开
-/// [`MAX_DEPTH`] 层，因此在解析之前先数一遍。
-const MAX_NESTING: usize = 512;
 /// `XLink` 的命名空间 URI，用于识别 `xlink:href` 属性。
 const XLINK: &str = "http://www.w3.org/1999/xlink";
 
@@ -392,10 +387,10 @@ impl Drawing {
     ) -> Result<Drawing, String> {
         // 先展开 DOCTYPE 中的实体，之后的 XML 解析不支持 DTD（见 `dtd`）。
         let text = dtd::expand(text)?;
-        if nesting_exceeds(&text, MAX_NESTING) {
+        if crate::xml::nesting_exceeds(&text, crate::xml::MAX_NESTING) {
             return Err(winc_i18n::t!(
                 "preview-svg-nesting-too-deep",
-                max = MAX_NESTING
+                max = crate::xml::MAX_NESTING
             ));
         }
         let document = roxmltree::Document::parse(&text)
@@ -931,69 +926,6 @@ fn fade_solid(shape: &mut Shape, opacity: f32) -> bool {
     };
     color[3] = (f32::from(color[3]) * opacity.clamp(0.0, 1.0)).round() as u8;
     true
-}
-
-/// `text` 里元素的嵌套是否超过 `limit` 层。
-///
-/// 只粗略地识别 XML 写法：注释、CDATA、`<!DOCTYPE>`、处理指令、属性值里的 `>`。多算几层不要紧，
-/// 只要不会少算。
-fn nesting_exceeds(text: &str, limit: usize) -> bool {
-    let bytes = text.as_bytes();
-    let skip_to = |from: usize, end: &[u8]| {
-        memchr::memmem::find(&bytes[from..], end).map_or(bytes.len(), |i| from + i + end.len())
-    };
-    let (mut i, mut depth) = (0, 0usize);
-    while let Some(at) = memchr::memchr(b'<', &bytes[i..]) {
-        let at = i + at;
-        let rest = &bytes[at + 1..];
-        i = if rest.starts_with(b"!--") {
-            skip_to(at, b"-->")
-        } else if rest.starts_with(b"![CDATA[") {
-            skip_to(at, b"]]>")
-        } else if rest.starts_with(b"?") {
-            skip_to(at, b"?>")
-        } else if rest.starts_with(b"!") {
-            // `<!DOCTYPE … [ … ]>`：内部子集里的声明也带尖括号。
-            let mut j = at + 2;
-            let mut brackets = 0usize;
-            while j < bytes.len() {
-                match bytes[j] {
-                    b'[' => brackets += 1,
-                    b']' => brackets = brackets.saturating_sub(1),
-                    b'>' if brackets == 0 => break,
-                    _ => {}
-                }
-                j += 1;
-            }
-            j + 1
-        } else {
-            // 开始或结束标签：找到不在引号里的 `>`。
-            let mut j = at + 1;
-            let mut quote = None;
-            while j < bytes.len() {
-                match (quote, bytes[j]) {
-                    (None, b'"' | b'\'') => quote = Some(bytes[j]),
-                    (Some(q), c) if c == q => quote = None,
-                    (None, b'>') => break,
-                    _ => {}
-                }
-                j += 1;
-            }
-            if rest.starts_with(b"/") {
-                depth = depth.saturating_sub(1);
-            } else if bytes.get(j.wrapping_sub(1)) != Some(&b'/') {
-                depth += 1;
-                if depth > limit {
-                    return true;
-                }
-            }
-            j + 1
-        };
-        if i >= bytes.len() {
-            break;
-        }
-    }
-    false
 }
 
 #[cfg(test)]

@@ -136,6 +136,27 @@ fn deleted_text_and_field_codes_are_left_out() {
 }
 
 #[test]
+fn letter_labels_stay_short_for_any_start_value() {
+    assert_eq!(letters(1), "a");
+    assert_eq!(letters(27), "aa");
+    assert_eq!(letters(26 * MAX_LETTER_REPEAT).len(), 26);
+    assert_eq!(letters(u32::MAX), u32::MAX.to_string());
+}
+
+/// 文本框一层套一层：每个文本框只转换一次，耗时不随层数翻倍。
+#[test]
+fn nested_text_boxes_are_converted_once_each() {
+    let mut body = p("", None, &r("core"));
+    for _ in 0..40 {
+        let boxed =
+            format!("<w:r><w:drawing><w:txbxContent>{body}</w:txbxContent></w:drawing></w:r>");
+        body = p("", None, &boxed);
+    }
+    let text = markdown(&body);
+    assert_eq!(text.matches("core").count(), 1);
+}
+
+#[test]
 fn a_merged_cell_spans_a_bounded_number_of_columns() {
     let table = format!(
         "<w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val=\"4000000000\"/></w:tcPr>{}</w:tc>\

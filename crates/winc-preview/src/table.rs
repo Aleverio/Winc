@@ -17,6 +17,16 @@ pub const MAX_COLUMNS: usize = 16_384;
 ///
 /// 再大的工作簿解压后占用内存过多。
 pub(crate) const MAX_FILE: u64 = 256 * 1024 * 1024;
+/// 一张工作表最多保存的单元格数（个，含行内的空单元格）。
+///
+/// 每个单元格记一个 4 字节的结束位置。只在很靠后的列上有内容的行，前面的空单元格都要记：
+/// 不限制时几十 MB 的文件可以要求数十 GB。取 2²⁴ 个，结束位置共占 64 MiB。
+pub(crate) const MAX_CELLS: usize = 1 << 24;
+/// 一张工作表的文字总量的上限（字节，1 GiB）。
+///
+/// 共享字符串在每个引用它的单元格里各存一份，文字总量可以远超文件的大小；结束位置以 `u32`
+/// 保存，该上限同时保证位置不溢出。
+pub(crate) const MAX_TEXT: usize = 1 << 30;
 
 /// 单元格区域，用于合并的单元格和选中的单元格。
 ///
@@ -96,15 +106,16 @@ impl Rows {
         self.sheet.row_ends.len()
     }
 
-    /// 在当前行末尾加入一个单元格；文字总量超过 `u32` 能表示的范围时丢弃并记下截断。
+    /// 在当前行末尾加入一个单元格；单元格数达到 [`MAX_CELLS`] 或文字总量超过 [`MAX_TEXT`] 时
+    /// 丢弃并记下截断。
     pub(crate) fn push(&mut self, cell: &str) {
-        match u32::try_from(self.sheet.text.len() + cell.len()) {
-            Ok(end) => {
-                self.sheet.text.push_str(cell);
-                self.sheet.ends.push(end);
-            }
-            Err(_) => self.sheet.truncated = true,
+        let end = self.sheet.text.len() + cell.len();
+        if self.sheet.ends.len() >= MAX_CELLS || end > MAX_TEXT {
+            self.sheet.truncated = true;
+            return;
         }
+        self.sheet.text.push_str(cell);
+        self.sheet.ends.push(end as u32);
     }
 
     /// 结束当前行，去掉行末的空单元格。

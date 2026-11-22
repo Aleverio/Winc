@@ -67,6 +67,8 @@ pub(super) fn read(bytes: &[u8]) -> Result<Table, String> {
     };
 
     let mut sheets = Vec::new();
+    // 一个工作表文件只读一次：工作簿可以把同一个文件列为任意多张工作表，每张各占一份内存。
+    let mut read = std::collections::HashSet::new();
     for node in workbook
         .descendants()
         .filter(|n| n.tag_name().name() == "sheet")
@@ -81,7 +83,7 @@ pub(super) fn read(bytes: &[u8]) -> Result<Table, String> {
         let Some((kind, path)) = id.and_then(|id| relations.get(id)) else {
             continue;
         };
-        if !kind.ends_with("/worksheet") {
+        if !kind.ends_with("/worksheet") || !read.insert(path.as_str()) {
             continue;
         }
         let Some(bytes) = part(&archive, path)? else {
@@ -213,6 +215,12 @@ fn builtin(id: u32) -> NumberFormat {
     }
 }
 
+/// 百分比格式最多保留的小数位数（位）。
+///
+/// 位数取自文件中的格式代码；`f64` 只有约 17 位有效数字，更多的位数全是 0，位数极大时格式化
+/// 还会失败。30 位是电子表格软件的数字格式允许的最大小数位数。
+const MAX_DECIMALS: usize = 30;
+
 /// 自定义格式代码 `code` 对应的格式：去掉引号中的文字、方括号中的条件和颜色、转义的字符后，
 /// 有年、日或月是日期，有时、秒是时间，有 `%` 是百分比。
 pub(super) fn classify(code: &str) -> NumberFormat {
@@ -255,7 +263,7 @@ pub(super) fn classify(code: &str) -> NumberFormat {
         let decimals = plain.split_once('.').map_or(0, |(_, rest)| {
             rest.chars().take_while(|&c| c == '0').count()
         });
-        NumberFormat::Percent(decimals)
+        NumberFormat::Percent(decimals.min(MAX_DECIMALS))
     } else {
         NumberFormat::General
     }

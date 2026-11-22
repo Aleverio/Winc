@@ -191,7 +191,8 @@ impl Reader<'_> {
     fn named(&self, name: &[u8]) -> Option<Obj> {
         let names = self.file.resolve(self.catalog.get(b"Names"));
         let tree = names.and_then(|names| self.file.resolve(names.get(b"Dests")));
-        if let Some(found) = tree.and_then(|tree| self.lookup(&tree, name, 0)) {
+        if let Some(found) = tree.and_then(|tree| self.lookup(&tree, name, 0, &mut HashSet::new()))
+        {
             return Some(found);
         }
         let dests = self.file.resolve(self.catalog.get(b"Dests"))?;
@@ -200,7 +201,15 @@ impl Reader<'_> {
 
     /// 在名字树的节点 `node` 下查 `name`：叶子的 `/Names` 是 `[名字 值 …]`，中间节点的 `/Kids`
     /// 按 `/Limits` 下钻。
-    fn lookup(&self, node: &Obj, name: &[u8], depth: usize) -> Option<Obj> {
+    ///
+    /// `seen` 记下已经下钻过的节点的对象号：节点可以把自己或上级列为下级，每个节点只查一次。
+    fn lookup(
+        &self,
+        node: &Obj,
+        name: &[u8],
+        depth: usize,
+        seen: &mut HashSet<u32>,
+    ) -> Option<Obj> {
         if depth > TREE_LIMIT {
             return None;
         }
@@ -215,6 +224,9 @@ impl Reader<'_> {
             return None;
         };
         for kid in &kids {
+            if matches!(kid, Obj::Ref(n, _) if !seen.insert(*n)) {
+                continue;
+            }
             let Some(kid) = self.file.resolve(Some(kid)) else {
                 continue;
             };
@@ -225,7 +237,7 @@ impl Reader<'_> {
             {
                 continue;
             }
-            if let Some(found) = self.lookup(&kid, name, depth + 1) {
+            if let Some(found) = self.lookup(&kid, name, depth + 1, seen) {
                 return Some(found);
             }
         }

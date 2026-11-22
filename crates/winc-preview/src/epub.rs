@@ -324,7 +324,14 @@ fn parse(bytes: &[u8]) -> Option<Document<'_>> {
 }
 
 /// 把 `text` 解析成 XML 文档；允许文档类型声明（XHTML 常带 DTD），实体的展开由解析器限制。
+/// 嵌套过深或实体的值里带标签时返回 `None`。
 fn parse_text(text: &str) -> Option<Document<'_>> {
+    // 嵌套过深、或用实体展开出标签（层数数不到）的文件不解析，原因见 `xml::MAX_NESTING`。
+    if crate::xml::nesting_exceeds(text, crate::xml::MAX_NESTING)
+        || crate::xml::declares_markup(text)
+    {
+        return None;
+    }
     let options = ParsingOptions {
         allow_dtd: true,
         ..ParsingOptions::default()

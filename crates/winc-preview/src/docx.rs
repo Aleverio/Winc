@@ -503,10 +503,20 @@ fn roman(mut n: u32) -> String {
     out
 }
 
-/// 小写字母序号：1 为 a，26 为 z，27 为 aa（同一字母重复，WordprocessingML 的规则）。
+/// 字母序号中同一字母最多重复的次数（次）。
+///
+/// 序号取自文件中的起始值，字母的重复次数与它成正比。取自调参：重复 26 次时序号为 676，
+/// 超过实际文档中列表的长度。
+const MAX_LETTER_REPEAT: u32 = 26;
+
+/// 小写字母序号：1 为 a，26 为 z，27 为 aa（同一字母重复，WordprocessingML 的规则）；重复超过
+/// [`MAX_LETTER_REPEAT`] 次的数写成阿拉伯数字。
 fn letters(n: u32) -> String {
     if n == 0 {
         return String::new();
+    }
+    if n > 26 * MAX_LETTER_REPEAT {
+        return n.to_string();
     }
     let letter = char::from(b'a' + ((n - 1) % 26) as u8);
     std::iter::repeat_n(letter, ((n - 1) / 26 + 1) as usize).collect()
@@ -886,10 +896,15 @@ impl<'a, 'i> Converter<'a, 'i> {
     /// 转换 `<w:drawing>`、`<w:pict>` 中的图片、图表和文本框。
     fn drawing(&mut self, node: Node<'a, 'i>, out: &mut String) {
         // 文本框：内容是段落，放在所在段落之后。
-        for content in node
-            .descendants()
-            .filter(|n| n.tag_name().name() == "txbxContent")
-        {
+        // 只取本层的文本框：嵌在其中的文本框在转换其内容时处理，在这里一并取出会使每嵌套
+        // 一层工作量翻倍。
+        let is_box = |n: &Node<'a, 'i>| n.tag_name().name() == "txbxContent";
+        let nested = |n: &Node<'a, 'i>| {
+            (n.ancestors().skip(1))
+                .take_while(|a| *a != node)
+                .any(|a| is_box(&a))
+        };
+        for content in node.descendants().filter(|n| is_box(n) && !nested(n)) {
             let start = self.blocks.len();
             self.blocks(content);
             let inner: Vec<Block> = self.blocks.drain(start..).collect();

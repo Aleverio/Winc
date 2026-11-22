@@ -811,6 +811,13 @@ fn image_sizes_written_by_other_editors_are_read() {
     assert_eq!(c.zoom, Some(50));
     let d = image("<img src=\"a.png\" width=\"100\" style=\"width: 70%; height: 40px\">");
     assert_eq!((d.width, d.height), (Some(Length::Percent(7000)), Some(40)));
+    // 写明的宽高不超过上限：数值取自文档，显示时按它分配像素。
+    let e = image("<img src=\"a.png\" width=\"1e9\" height=\"4000000000\">");
+    assert_eq!((e.width, e.height), (Some(Length::Px(16384)), Some(16384)));
+    let f = image("<img src=\"a.png\" style=\"height: 99999999999px\">");
+    assert_eq!(f.height, Some(16384));
+    let g = image("![|99999999x99999999](a.png)");
+    assert_eq!((g.width, g.height), (Some(Length::Px(16384)), Some(16384)));
 }
 
 /// 维基链接是地址以 [`syntax::WIKI`] 开头的链接，显示 `|` 之后的文字，没有时显示名字。
