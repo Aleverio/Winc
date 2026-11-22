@@ -475,15 +475,34 @@ fn draw_header(app: &mut App, frame: &mut Frame<'_>, card: Rect) {
     let position = Rect::new(hide.x - TAB_GAP - BUTTON, button_y, BUTTON, BUTTON);
     let maximize = Rect::new(position.x - TAB_GAP - BUTTON, button_y, BUTTON, BUTTON);
     // 「终端 / 问题」两个面板标签在终端标签之前；终端标签紧接其后，间距与编辑区标签栏相同。
+    // 竖排模式下运行配置占着工具栏左端，面板标签接在它后面。
     let mut hits = Vec::new();
-    let tab_left = draw_panel_tabs(app, frame, left, maximize.x - TAB_GAP, y, header, &mut hits);
+    let vertical = app.terminal_tab_list().is_some();
     if app.problems.open {
+        draw_panel_tabs(app, frame, left, maximize.x - TAB_GAP, y, header, &mut hits);
         draw_panel_controls(app, frame, position, hide, header, &mut hits);
         app.hits.terminal = hits;
         return;
     }
-    let run = run_buttons(app, frame, tab_left, maximize.x - TAB_GAP, button_y);
-    let vertical = app.terminal_tab_list().is_some();
+    let (run, tab_left) = if vertical {
+        let run = run_buttons(app, frame, left, maximize.x - TAB_GAP, button_y);
+        let tabs_from = run.map_or(left, |[_, _, stop]| stop.right() + TAB_GAP);
+        let tab_left = draw_panel_tabs(
+            app,
+            frame,
+            tabs_from,
+            maximize.x - TAB_GAP,
+            y,
+            header,
+            &mut hits,
+        );
+        (run, tab_left)
+    } else {
+        let tab_left =
+            draw_panel_tabs(app, frame, left, maximize.x - TAB_GAP, y, header, &mut hits);
+        let run = run_buttons(app, frame, tab_left, maximize.x - TAB_GAP, button_y);
+        (run, tab_left)
+    };
     // 标签和「+」放得下的宽度。
     let rest = if vertical {
         maximize.x
