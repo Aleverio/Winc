@@ -378,7 +378,10 @@ impl App {
                         ));
                     }
                 }
-                Some(Delivery::Pacman) => self.flash(t!("workspace-status-update-pacman")),
+                Some(Delivery::Pacman) => self.flash(t!(
+                    "workspace-status-update-pacman",
+                    command = crate::updates::arch_update_command()
+                )),
                 _ => crate::updates::install(),
             },
         }

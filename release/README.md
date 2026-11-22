@@ -94,14 +94,14 @@ the window system libraries loaded at run time are required by soname, so it ins
 or newer, RHEL 10 and openSUSE Tumbleweed. Debian and RPM prerelease versions use `~` so the final
 release sorts after its betas.
 Stable `X.Y.Z` releases also include `winc-<version>-1-x86_64.pkg.tar.zst` built from the same Linux
-binaries. The Arch package uses pacman for updates.
+binaries. The Arch package is updated with `pacman -U` through the update script below.
 
 Each release also has four signed appcasts for the in-app updater: `appcast-macos-arm64.xml`,
 `appcast-macos-x86_64.xml`, `appcast-linux.xml`, and `appcast-windows.xml`. They list the dmg, the
 AppImage, and the NSIS and MSI installers, each with its EdDSA signature; the deb, the rpm and the
 portable zip are downloads only. Installs that cannot update themselves (deb, rpm, the Arch
 package, the portable zip) still read their platform's appcast and only notify: the update button
-opens the downloads page, or suggests `pacman -Syu` for the Arch package. `SHA256SUMS` covers the assets assembled before publication.
+opens the downloads page, or suggests the Arch update script. `SHA256SUMS` covers the assets assembled before publication.
 
 ### In-app update channels (GitHub Releases)
 
@@ -169,6 +169,23 @@ sudo bash ./install-arch.sh
 
 Once the repository is configured, install with `sudo pacman -Syu winc` and update with
 `sudo pacman -Syu`.
+
+### Arch updates without a repository
+
+Forks do not publish the signed `deeix-ai-winc` repository, so a package installed directly from a
+GitHub Release cannot be updated with `pacman -Syu` (`target not found: winc`). For those installs,
+run the update script, which downloads the latest stable Arch package from this repository, checks
+it against the release's `SHA256SUMS`, and installs it with `pacman -U`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Aleverio/Winc/dev/release/linux/arch/update-arch.sh \
+  -o /tmp/update-arch.sh
+sudo bash /tmp/update-arch.sh
+```
+
+Set `WINC_RELEASE_REPO=owner/repo` to update from another fork. The script targets
+`release/linux/arch/update-arch.sh` on the `dev` branch, so keep that path stable. After an update
+the package has no repository origin, so later updates must use the script again.
 
 ## Verification and publication
 

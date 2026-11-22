@@ -699,7 +699,11 @@ fn found_text(version: &str) -> String {
                 return t!("settings-updates-found-download", version = version);
             }
             Some(Delivery::Pacman) => {
-                return t!("settings-updates-found-pacman", version = version);
+                return t!(
+                    "settings-updates-found-pacman",
+                    version = version,
+                    command = crate::updates::arch_update_command()
+                );
             }
             _ => {}
         }

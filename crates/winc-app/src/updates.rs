@@ -168,6 +168,18 @@ pub fn delivery() -> Option<Delivery> {
     UPDATER.get().map(|updater| updater.delivery)
 }
 
+/// Arch 更新脚本所在的仓库；其他 fork 请改成自己的 `owner/repo`。
+const ARCH_UPDATE_REPO: &str = "Aleverio/Winc";
+
+/// 在 Arch 上取得更新的命令：下载本仓库最新稳定版中的更新脚本并运行。
+///
+/// 脚本从同一个 Release 取包和 `SHA256SUMS`，核对后交给 pacman，不需要第三方软件源。
+pub(crate) fn arch_update_command() -> String {
+    format!(
+        "curl -fsSL https://raw.githubusercontent.com/{ARCH_UPDATE_REPO}/dev/release/linux/arch/update-arch.sh -o /tmp/update-arch.sh && sudo bash /tmp/update-arch.sh"
+    )
+}
+
 /// 是否由 Arch 的 pacman 安装：程序是 `/usr/bin/winc`，pacman 的本地数据库里有 winc 包。
 #[allow(
     clippy::disallowed_methods,
