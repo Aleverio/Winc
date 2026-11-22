@@ -221,6 +221,20 @@ const EDITOR: &[Field] = &[
     bool_field!("wholeLines", whole_lines),
     bool_field!("minimap", minimap),
     bool_field!("smoothScrolling", smooth_scrolling),
+    Field {
+        key: "smoothCaretMovement",
+        read: |config, value, name, problems| {
+            config.smooth_caret_movement = value.as_str().and_then(SmoothCaret::from_value);
+            if config.smooth_caret_movement.is_none() {
+                problems.push(t!("config-smooth-caret-invalid", name = name));
+            }
+        },
+        write: |config| {
+            config
+                .smooth_caret_movement
+                .map(|choice| Json::String(choice.as_str().into()))
+        },
+    },
     bool_field!("outline", outline),
     Field {
         key: "renderWhitespace",

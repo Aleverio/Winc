@@ -241,6 +241,13 @@ impl App {
                     self.set_auto_save(choice);
                 }
             }
+            MenuTarget::SmoothCaret => {
+                if let MenuCommand::SmoothCaret(i) = command
+                    && let Some(&choice) = winc_config::SmoothCaret::ALL.get(i)
+                {
+                    self.set_smooth_caret(choice);
+                }
+            }
             MenuTarget::OpenWorktree => {
                 if let MenuCommand::OpenWorktree(i) = command
                     && let Some(&choice) = winc_config::WorktreeOpen::ALL.get(i)

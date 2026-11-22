@@ -141,6 +141,7 @@ impl SettingsPage {
                         S::WordWrap,
                         S::Minimap,
                         S::StickyScroll,
+                        S::SmoothCaret,
                         S::RenderWhitespace,
                         S::WholeLines,
                     ],

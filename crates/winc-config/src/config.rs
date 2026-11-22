@@ -93,6 +93,8 @@ pub struct Config {
     pub minimap: Option<bool>,
     /// 鼠标滚轮每滚一格平滑地滑到位，而不是立即跳到，默认为是。
     pub smooth_scrolling: Option<bool>,
+    /// 光标移动时滑到新位置的方式，默认为不播放动画。
+    pub smooth_caret_movement: Option<SmoothCaret>,
     /// 在侧栏文件视图的底部显示大纲（当前文件的函数、类型、标题），默认为是。
     pub outline: Option<bool>,
     /// 何时显示空格和制表符，默认为选中时。
@@ -492,6 +494,42 @@ impl RenderWhitespace {
         RenderWhitespace::Trailing,
         RenderWhitespace::All,
     ];
+}
+
+/// 光标移动的动画方式。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SmoothCaret {
+    /// 不播放动画，光标直接出现在新位置。
+    #[default]
+    Off,
+    /// 几乎立即落到新位置，再缓缓停住；连续移动时也不显得滞后。
+    Snappy,
+    /// 沿整段距离平滑移动，远距离跳转时也看得清方向。
+    Gliding,
+}
+
+impl SmoothCaret {
+    /// 全部选项，顺序与设置中菜单的顺序一致。
+    pub const ALL: [SmoothCaret; 3] = [SmoothCaret::Off, SmoothCaret::Snappy, SmoothCaret::Gliding];
+
+    /// 返回配置文件中的写法。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SmoothCaret::Off => "off",
+            SmoothCaret::Snappy => "snappy",
+            SmoothCaret::Gliding => "gliding",
+        }
+    }
+
+    /// 读配置文件中的写法；不认识时返回 `None`。
+    pub fn from_value(value: &str) -> Option<Self> {
+        match value {
+            "off" => Some(SmoothCaret::Off),
+            "snappy" => Some(SmoothCaret::Snappy),
+            "gliding" => Some(SmoothCaret::Gliding),
+            _ => None,
+        }
+    }
 }
 
 /// Markdown 预览正文的最大宽度：更宽的预览中正文居中、两侧留白。

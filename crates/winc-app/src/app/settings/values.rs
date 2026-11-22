@@ -14,6 +14,9 @@ impl App {
         } else if setting == Setting::AutoSave {
             let choice = self.config.auto_save.unwrap_or_default();
             (crate::layout::auto_save_label(choice).to_owned(), false)
+        } else if setting == Setting::SmoothCaret {
+            let choice = self.config.smooth_caret_movement.unwrap_or_default();
+            (crate::layout::smooth_caret_label(choice).to_owned(), false)
         } else if setting == Setting::DropFolder {
             let choice = self.config.drop_folder.unwrap_or_default();
             (crate::layout::drop_folder_label(choice).to_owned(), false)

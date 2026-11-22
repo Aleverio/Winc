@@ -9,6 +9,7 @@ mod shortcuts;
 mod terminal;
 
 use super::*;
+use winc_config::SmoothCaret;
 #[cfg(unix)]
 use winc_editor::format::{PRESETS, Task};
 
@@ -1077,6 +1078,52 @@ fn smooth_scrolling_switches_off_on_its_own() {
     let listed =
         (app.settings_layout().rows.iter()).any(|row| row.setting == Setting::SmoothScrolling);
     assert_eq!(listed, cfg!(target_os = "macos"));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// 平滑光标移动是编辑器页的下拉选项：默认关闭，两个模式列出当前的选择并写回配置。
+#[test]
+fn smooth_caret_movement_lists_its_modes() {
+    let dir = sample_folder("settings-smooth-caret");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    app.config.smooth_caret_movement = None;
+    assert_eq!(app.smooth_caret(), SmoothCaret::Off);
+    assert_eq!(Setting::SmoothCaret.page(), SettingsPage::Editor);
+    assert_eq!(
+        Setting::SmoothCaret.control(),
+        crate::layout::SettingControl::Choice
+    );
+
+    app.open_settings();
+    app.settings_show_page(SettingsPage::Editor);
+    app.settings_open_menu(Setting::SmoothCaret);
+    assert_eq!(
+        app.overlays.context_menu.as_ref().map(|m| &m.target),
+        Some(&MenuTarget::SmoothCaret)
+    );
+    let listed: Vec<_> = menu_commands(&app)
+        .into_iter()
+        .map(|(command, _)| command)
+        .collect();
+    assert_eq!(
+        listed,
+        (0..SmoothCaret::ALL.len())
+            .map(MenuCommand::SmoothCaret)
+            .collect::<Vec<_>>()
+    );
+    assert!(app.menu_checked(MenuCommand::SmoothCaret(0)));
+    assert_eq!(
+        app.menu_label(MenuCommand::SmoothCaret(2)).title,
+        crate::layout::smooth_caret_label(SmoothCaret::Gliding)
+    );
+
+    // 选中「滑行」后写入配置，再次打开菜单时该项打勾。
+    app.run_menu_command(MenuCommand::SmoothCaret(2));
+    assert_eq!(app.config.smooth_caret_movement, Some(SmoothCaret::Gliding));
+    assert_eq!(app.smooth_caret(), SmoothCaret::Gliding);
+    app.settings_open_menu(Setting::SmoothCaret);
+    assert!(app.menu_checked(MenuCommand::SmoothCaret(2)));
+
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

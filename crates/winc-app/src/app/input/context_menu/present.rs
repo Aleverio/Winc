@@ -362,6 +362,9 @@ impl App {
             MenuTarget::AutoSave => (0..winc_config::AutoSave::ALL.len())
                 .map(|i| MenuEntry::Item(MenuCommand::AutoSave(i), true))
                 .collect(),
+            MenuTarget::SmoothCaret => (0..winc_config::SmoothCaret::ALL.len())
+                .map(|i| MenuEntry::Item(MenuCommand::SmoothCaret(i), true))
+                .collect(),
             MenuTarget::DefaultShell => default_shell_menu(self.terminal.shells.len()),
             MenuTarget::Zoom => zoom_menu(),
             MenuTarget::BackgroundImage => background_menu(),
@@ -829,6 +832,7 @@ impl App {
                 | MenuTarget::DropFolder
                 | MenuTarget::SearchStyle
                 | MenuTarget::AutoSave
+                | MenuTarget::SmoothCaret
                 | MenuTarget::Zoom
                 | MenuTarget::BackgroundImage
                 | MenuTarget::BackgroundFit
@@ -849,6 +853,7 @@ impl App {
             MenuTarget::DropFolder => Some(Setting::DropFolder),
             MenuTarget::SearchStyle => Some(Setting::FindInFiles),
             MenuTarget::AutoSave => Some(Setting::AutoSave),
+            MenuTarget::SmoothCaret => Some(Setting::SmoothCaret),
             MenuTarget::Zoom => Some(Setting::Zoom),
             MenuTarget::BackgroundImage => Some(Setting::BackgroundImage),
             MenuTarget::BackgroundFit => Some(Setting::BackgroundFit),
@@ -1155,6 +1160,10 @@ impl App {
             MenuCommand::AutoSave(i) => {
                 winc_config::AutoSave::ALL.get(i)
                     == Some(&self.config.auto_save.unwrap_or_default())
+            }
+            MenuCommand::SmoothCaret(i) => {
+                winc_config::SmoothCaret::ALL.get(i)
+                    == Some(&self.config.smooth_caret_movement.unwrap_or_default())
             }
             MenuCommand::DefaultShell(i) => {
                 let configured = self.configured_shell().map(|shell| shell.command);
