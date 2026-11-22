@@ -256,7 +256,8 @@ impl App {
             return;
         }
         self.preview.markdown.align = None;
-        let (line, total) = preview_line(doc, self.preview.markdown.lines.as_deref());
+        let lines = self.preview.markdown.lines.as_deref();
+        let (line, total) = preview_line(doc, lines, doc.scroll_line);
         let y = laid.y_of_line(line, total);
         self.preview.markdown.scroll_to(y);
     }
@@ -273,8 +274,20 @@ impl App {
         if self.preview.markdown.synced == Some(now) {
             return;
         }
-        let (line, total) = preview_line(doc, self.preview.markdown.lines.as_deref());
-        let y = laid.y_of_line(line, total);
+        let lines = self.preview.markdown.lines.as_deref();
+        let (line, total) = preview_line(doc, lines, doc.scroll_line);
+        // 文字滚到底时预览可能还没有到底（预览中折行更多）：余下的距离在文字的最后一屏中
+        // 按比例补上，两侧同时到底。
+        let max = self.max_scroll_line();
+        let screen = f64::from(self.scroll_track().h / self.fonts.line_height).min(max);
+        let (end, _) = preview_line(doc, lines, max);
+        let bottom = laid.height() - self.preview.markdown.area.h;
+        let rest = (bottom - laid.y_of_line(end, total)).max(0.0);
+        let share = match screen > 0.0 {
+            true => ((doc.scroll_line - (max - screen)) / screen).clamp(0.0, 1.0),
+            false => 0.0,
+        };
+        let y = laid.y_of_line(line, total) + rest * share as f32;
         self.preview.markdown.scroll_to(y);
         self.preview.markdown.synced = Some(now);
     }

@@ -346,3 +346,27 @@ fn home_and_end_follow_the_wrapped_rows() {
     assert_eq!(app.live_caret_source().unwrap(), at);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 回归：分栏时文字滚到底，预览中折行较多的内容还没有到底。
+#[test]
+fn the_split_preview_reaches_its_end_with_the_text() {
+    let item = format!("- {}\n", "lorem ipsum dolor sit amet ".repeat(40));
+    let (mut app, dir) = live_doc("md-split-end", &item.repeat(120));
+    app.set_preview_mode(PreviewMode::Split);
+    settle(&mut app);
+    let max = app.max_scroll_line();
+    let scrolled = |app: &mut App, row: f64| {
+        app.set_active_scroll(row);
+        settle(app);
+        let preview = &app.preview.markdown;
+        (preview.scroll(), preview.max_scroll())
+    };
+    let (at, bottom) = scrolled(&mut app, max);
+    assert!(max > 0.0 && bottom > 0.0);
+    assert!((at - bottom).abs() < 1.0, "{at} {bottom}");
+    // 最后一屏之前按行对应，位置随文字单调变化。
+    let (half, _) = scrolled(&mut app, max / 2.0);
+    assert!(half > 0.0 && half < at, "{half} {at}");
+    assert_eq!(scrolled(&mut app, 0.0).0, 0.0);
+    let _ = std::fs::remove_dir_all(&dir);
+}
