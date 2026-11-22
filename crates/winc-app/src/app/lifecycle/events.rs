@@ -530,6 +530,10 @@ impl App {
                 }
             }
             UserEvent::CloseConfirmed(ok) => self.close_confirmed(ok),
+            UserEvent::LatexRc(approved) => {
+                let (doc, dir, text) = *approved;
+                self.latex_rc_approved(doc, &dir, &text);
+            }
             UserEvent::GitLogConfirmed(op) => self.run_log_confirmed(op),
             UserEvent::GitRemoveWorktree(path, branch) => self.remove_worktree_now(&path, branch),
             UserEvent::GitOpenWorktree(path, new, remember) => {

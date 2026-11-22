@@ -192,7 +192,12 @@ pub fn serve(mut input: impl Read, output: impl Write + Send + 'static) -> io::R
 /// 写出请求 `id` 的最终应答。
 fn reply(output: &Output, id: u32, result: io::Result<Vec<u8>>) -> io::Result<()> {
     let (kind, payload) = match result {
-        Ok(payload) => (kind::OK, payload),
+        Ok(payload) if wire::fits_frame(&payload) => (kind::OK, payload),
+        // 应答装不进一帧是这一个请求的错误：照常应答，连接和其他请求不受影响。
+        Ok(_) => {
+            let error = io::Error::new(io::ErrorKind::InvalidInput, "reply too large");
+            (kind::ERROR, wire::encode_error(&error))
+        }
         Err(error) => (kind::ERROR, wire::encode_error(&error)),
     };
     let mut output = output.lock();
@@ -586,7 +591,8 @@ fn batch(payload: &[u8]) -> io::Result<Vec<u8>> {
             Ok(body) => (true, body),
             Err(error) => (false, wire::encode_error(&error)),
         };
-        size += body.len();
+        // 每项除内容外还有 1 字节的结果和 4 字节的长度。
+        size += 1 + 4 + body.len();
         out = out.u8(u8::from(ok)).bytes(&body);
     }
     input.finish()?;

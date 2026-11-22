@@ -919,8 +919,8 @@ impl CommitState {
         self.busy || self.commit_queued || self.todo_asked
     }
 
-    /// 是否这次提交成功以后继续推送。
-    #[cfg(test)]
+    /// 是否这次提交成功以后继续推送；只有在真实仓库里提交的测试用到，这些测试只在 Unix 上编译。
+    #[cfg(all(test, unix))]
     pub(crate) fn pushes_after(&self) -> bool {
         self.push_after
     }

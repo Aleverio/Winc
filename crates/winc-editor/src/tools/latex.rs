@@ -267,19 +267,84 @@ pub struct Job {
     pub log: PathBuf,
 }
 
-/// 返回编译 `root` 的命令；`rc` 是 `latexmkrc` 的内容，设了 `$pdf_mode` 时不指定引擎。
-pub fn job(tool: &Toolchain, root: &Path, engine: Engine, out: &Path, rc: Option<&str>) -> Job {
+/// 主文件所在目录中的 `latexmkrc`。
+///
+/// 该文件是一段 Perl 程序，`latexmk` 启动时执行；它来自项目，未经用户同意不执行。
+#[derive(Debug, Clone, Copy)]
+pub struct ProjectRc<'a> {
+    /// 文件的内容。
+    pub text: &'a str,
+    /// 用户是否同意过执行这份内容。
+    pub run: bool,
+}
+
+/// 返回 `latexmkrc` 的内容 `rc` 中 `$pdf_mode` 指定的引擎；没有设置或是其他方式时返回 `None`。
+///
+/// `latexmk` 的取值：1 为 pdflatex，4 为 lualatex，5 为 xelatex。
+fn pdf_mode(rc: &str) -> Option<Engine> {
+    let (_, value) = rc.split_once("$pdf_mode")?;
+    let value = value.trim_start().strip_prefix('=')?.trim_start();
+    match value.chars().next()? {
+        '1' => Some(Engine::Pdf),
+        '4' => Some(Engine::Lua),
+        '5' => Some(Engine::Xe),
+        _ => None,
+    }
+}
+
+/// 返回用户自己的 `latexmkrc`（主目录和配置目录中的），只含存在的文件。
+///
+/// 不读取项目的配置文件时（`-norc`）用户自己的也不再读取，因此逐个以 `-r` 传给 `latexmk`。
+#[allow(clippy::disallowed_methods, reason = "只访问本机：编译只在本机进行")]
+fn user_rc_files() -> Vec<PathBuf> {
+    let var = |key: &str| std::env::var_os(key).filter(|v| !v.is_empty());
+    let home = var(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from);
+    let config = var("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| home.as_ref().map(|home| home.join(".config")));
+    let files = [
+        config.map(|config| config.join("latexmk/latexmkrc")),
+        home.map(|home| home.join(".latexmkrc")),
+    ];
+    files
+        .into_iter()
+        .flatten()
+        .filter(|f| f.is_file())
+        .collect()
+}
+
+/// 返回编译 `root` 的命令；`rc` 是主文件所在目录中的 `latexmkrc`，没有时为 `None`。
+///
+/// 用户同意过的 `latexmkrc` 由 `latexmk` 读取，其中设了 `$pdf_mode` 时不指定引擎。没有同意的
+/// 不读取（`-norc`），只沿用其中 `$pdf_mode` 选的引擎，用户自己的配置文件另行传入。
+pub fn job(
+    tool: &Toolchain,
+    root: &Path,
+    engine: Engine,
+    out: &Path,
+    rc: Option<ProjectRc<'_>>,
+) -> Job {
     let dir = root.parent().unwrap_or(Path::new("")).to_path_buf();
-    let name = root.file_name().map(OsString::from).unwrap_or_default();
+    // 写成 `./名字`：以 `-` 开头的文件名不会被当作选项。
+    let name = root.file_name().map(|name| Path::new(".").join(name));
+    let name = name.map(OsString::from).unwrap_or_default();
     let stem = root
         .file_stem()
         .map_or_else(|| "main".into(), |s| s.to_string_lossy().into_owned());
     let mut args: Vec<OsString> = Vec::new();
     let program = match tool {
         Toolchain::Latexmk(path) => {
-            if !rc.is_some_and(|rc| rc.contains("pdf_mode")) {
+            let chosen = rc.and_then(|rc| pdf_mode(rc.text));
+            let reads_rc = rc.is_none_or(|rc| rc.run);
+            if !reads_rc {
+                args.push("-norc".into());
+                for file in user_rc_files() {
+                    args.extend(["-r".into(), file.into_os_string()]);
+                }
+            }
+            if !(reads_rc && chosen.is_some()) {
                 args.push(
-                    match engine {
+                    match chosen.unwrap_or(engine) {
                         Engine::Pdf => "-pdf",
                         Engine::Xe => "-xelatex",
                         Engine::Lua => "-lualatex",

@@ -206,8 +206,9 @@ pub(crate) struct BranchState {
     pub(in crate::app) remember: Option<Arc<AtomicBool>>,
     /// 用户是否取消了当前操作的输入请求；为真时该操作的失败不按错误提示。
     pub(in crate::app) declined: bool,
-    /// 登录对话框中填写的密码及其远程地址，用于答复随后的密码请求，操作结束时清除。
-    pub(in crate::app) password: Option<(String, String)>,
+    /// 登录对话框中填写的密码、提问的来源及其远程地址，用于答复同一来源随后的密码请求，
+    /// 该来源结束时清除。
+    pub(in crate::app) password: Option<(super::question::Asker, String, String)>,
 }
 
 impl Default for BranchState {

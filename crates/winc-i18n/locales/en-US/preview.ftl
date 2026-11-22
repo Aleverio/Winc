@@ -132,6 +132,9 @@ latex-problems =
        *[other] { $count } errors
     }
 latex-problems-tip = Click to list the errors
+latex-rc-confirm = Run the project’s latexmkrc?
+latex-rc-confirm-detail = The latexmkrc in “{ $path }” is a program that latexmk executes when compiling. Without it the document still compiles, but its settings do not apply.
+latex-rc-confirm-button = Run
 
 ## Writing commands opened with /
 

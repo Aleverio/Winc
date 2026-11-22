@@ -135,11 +135,10 @@ pub struct State {
     /// 每项为（工具所在目录，是否运行该目录中的程序）；`false` 表示改用系统安装的程序。
     /// 最多 [`MAX_TOOL_CHOICES`] 项。
     tool_choices: Vec<(PathBuf, bool)>,
-    /// 用户同意运行的项目设置（`.winc/config.json`）中的命令，最近的在前，最多
-    /// [`MAX_TOOL_CHOICES`] 项。
+    /// 用户同意运行的来自项目的命令，最近的在前，最多 [`MAX_TOOL_CHOICES`] 项。
     ///
-    /// 每项为（项目的 `.winc` 目录，命令的原文）：同意只对这条命令有效，项目设置改写命令后
-    /// 重新询问。
+    /// 每项为（所在的目录，原文）：项目设置（`.winc/config.json`）中的命令记在项目的 `.winc`
+    /// 目录下，`latexmkrc` 记在它所在的目录下。同意只对这份原文有效，改写后重新询问。
     approved_commands: Vec<(PathBuf, String)>,
     /// 用户信任了配置的 Git 仓库（根目录）和当时配置的指纹，最近的在前，最多
     /// [`MAX_TOOL_CHOICES`] 项。
@@ -1083,6 +1082,11 @@ impl State {
     /// 按命令的原文比较：项目设置改写命令后不再算同意过。
     pub fn command_approved(&self, folder: &Path, command: &str) -> bool {
         (self.approved_commands.iter()).any(|(p, c)| p == folder && c == command)
+    }
+
+    /// 返回用户同意过运行的全部命令：（所在的目录，命令的原文），供后台线程核对。
+    pub fn approved_commands(&self) -> &[(PathBuf, String)] {
+        &self.approved_commands
     }
 
     /// 记录用户同意运行 `folder` 的项目设置中的命令 `command`，移到最前面，超出

@@ -950,6 +950,27 @@ fn common_operations_take_one_round_trip() {
     remote::disconnect(&target);
 }
 
+/// 一次查询的路径多到各应答合计超过一帧：分几次往返取回，一项不少，连接照常可用。
+#[test]
+fn file_information_for_many_paths_is_fetched_in_several_trips() {
+    let target = connect("many-paths");
+    let dir = scratch("many-paths");
+    let far = through(&target, &dir);
+    std::fs::write(dir.join("here.txt"), "hello").unwrap();
+    let mut paths: Vec<PathBuf> = (0..30_000).map(|i| far.join(format!("no-{i}"))).collect();
+    paths.push(far.join("here.txt"));
+    let found = fs::metadata_many(&paths);
+    assert_eq!(found.len(), paths.len());
+    assert!(
+        found[..30_000]
+            .iter()
+            .all(|m| m.as_ref().is_err_and(fs::is_absent))
+    );
+    assert!(found[30_000].as_ref().is_ok_and(|m| m.len == 5));
+    assert_eq!(fs::read(far.join("here.txt")).unwrap(), b"hello");
+    remote::disconnect(&target);
+}
+
 #[test]
 fn requests_and_replies_larger_than_one_frame_are_split() {
     use std::os::unix::fs::PermissionsExt;

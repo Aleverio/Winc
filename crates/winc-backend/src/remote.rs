@@ -1237,6 +1237,40 @@ pub struct Ssh {
     pub share: bool,
 }
 
+/// 读取 `ssh` 生效配置最长的等待时间（5 秒）。
+///
+/// `ssh -G` 不建立连接，通常在几十毫秒内结束；配置中的 `Match exec` 命令或主机名的规范化
+/// 可以使它等待。超过该时间按读不到配置处理，不补任何设置，连接照常进行。
+const CONFIG_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// 运行 `command` 并返回它的标准输出；无法运行、以失败结束或超过 `timeout` 时返回 `None`，
+/// 超时的进程被结束。
+fn output_within(command: &mut Command, timeout: Duration) -> Option<Vec<u8>> {
+    let mut child = (command.stdout(Stdio::piped()).stderr(Stdio::null()))
+        .spawn()
+        .ok()?;
+    let mut stdout = child.stdout.take()?;
+    // 另起线程读输出：输出超过管道的容量时，进程等不到有人读就不会结束。
+    let reader = thread::spawn(move || {
+        let mut output = Vec::new();
+        io::Read::read_to_end(&mut stdout, &mut output).map(|_| output)
+    });
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(10)),
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break None;
+            }
+        }
+    };
+    let output = reader.join().ok()?.ok()?;
+    status?.success().then_some(output)
+}
+
 impl Ssh {
     /// 返回为 `target` 补上用户没有设置的各项之后的行为，不向用户提问与否由调用方决定。
     ///
@@ -1249,9 +1283,9 @@ impl Ssh {
             command.arg("-p").arg(port.to_string());
         }
         command.arg("-G").arg(&*target.host()).stdin(Stdio::null());
-        match command.output() {
-            Ok(output) => Self::missing(&String::from_utf8_lossy(&output.stdout)),
-            Err(_) => Self::default(),
+        match output_within(&mut command, CONFIG_TIMEOUT) {
+            Some(config) => Self::missing(&String::from_utf8_lossy(&config)),
+            None => Self::default(),
         }
     }
 

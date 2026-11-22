@@ -346,6 +346,8 @@ pub enum UserEvent {
     GitBlame,
     /// 后台已编译完一个 LaTeX 文档。
     Latex,
+    /// 确认框中同意运行项目的 `latexmkrc`：要重新编译的文档，文件所在的目录和内容。
+    LatexRc(Box<(DocumentId, PathBuf, String)>),
     /// 后台已检查或重读被其他程序修改的文件。
     Reread,
     /// 后台已重读文件树中被其他程序修改的目录。
