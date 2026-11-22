@@ -362,6 +362,10 @@ impl App {
             .iter_mut()
             .for_each(|(path, _)| relocate(path));
         self.jumps.navigation.relocate(from, to);
+        let known = |(path, _): &(PathBuf, _)| path.starts_with(from);
+        if self.state.places.iter().any(known) {
+            self.update_state(|state| state.move_places(from, to));
+        }
         self.picker_touched(vec![from.to_path_buf(), to.to_path_buf()]);
         self.files_changed_under_results();
     }

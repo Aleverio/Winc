@@ -148,6 +148,31 @@ fn the_full_preview_stays_editable_after_the_file_changes_on_disk() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// 只看预览的 Markdown 关掉后再打开：光标回到原来的那一段，预览滚到那里。
+#[test]
+fn the_full_preview_reopens_at_the_caret() {
+    let text: String = (0..80).map(|i| format!("第 {i} 段\n\n")).collect();
+    let (mut app, dir) = live_doc("md-live-place", &text);
+    app.go_to(120, 2, 0);
+    settle(&mut app);
+    let scroll = app.preview.markdown.scroll();
+    assert!(scroll > 0.0);
+    app.remember_session();
+
+    let mut next = blank_app(false);
+    next.state = app.state.clone();
+    next.open_path(&dir.join("LIVE.md"));
+    paint(&mut next);
+    next.set_preview_mode(PreviewMode::Preview);
+    settle(&mut next);
+    assert!(next.markdown_live());
+    let doc = next.editor.active().unwrap();
+    assert_eq!(doc.text().pos_to_line_col(doc.selection.head), (120, 2));
+    let reopened = next.preview.markdown.scroll();
+    assert!(reopened > 0.0, "预览停在开头");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn the_caret_paragraph_keeps_its_look() {
     use crate::app::preview::markdown::laid::full_text;

@@ -329,12 +329,16 @@ impl App {
         self.remember_session();
     }
 
-    /// 记录当前目录的现场。
+    /// 记录当前目录的现场，以及各文件此刻的位置（见 `places`）；没有打开目录时只记后者。
     ///
-    /// 内容包括：有路径且仍在磁盘上的标签、有备份的未保存内容、书签、折叠的块、大纲里收起的
-    /// 符号、各 PDF 文件的阅读位置，以及当前标签。
+    /// 现场的内容包括：有路径且仍在磁盘上的标签、有备份的未保存内容、书签、折叠的块、大纲里
+    /// 收起的符号，以及当前标签。
     pub(in crate::app) fn remember_session(&mut self) {
+        let places = self.places_now();
         let Some(folder) = self.editor.root().map(Path::to_path_buf) else {
+            if !places.is_empty() {
+                self.update_state(|state| places::record(state, &places));
+            }
             return;
         };
 
@@ -378,11 +382,10 @@ impl App {
             .collect();
         let outline = self.outline_session(&folder);
         let folds = self.editor.all_folds().into_iter().collect();
-        let pdf_places = self.pdf_session(&folder);
-        let book_places = self.book_session(&folder);
         let earlier = self.state.session_for(&folder).and_then(|s| s.window);
         let window = self.window_frame_now().or(earlier);
         self.update_state(|state| {
+            places::record(state, &places);
             state.set_session(Session {
                 folder,
                 tabs,
@@ -390,8 +393,6 @@ impl App {
                 bookmarks,
                 outline,
                 folds,
-                pdf_places,
-                book_places,
                 terminal,
                 run,
                 folders,

@@ -642,7 +642,8 @@ fn saving_from_the_close_prompt_formats_too() {
     app.answer_save_prompt(SaveChoice::Save);
     app.wait_formatting();
     assert!(app.closing.quit_requested);
-    assert!(on_disk("main.rs").starts_with("// z\n// x\n"));
+    // 再次打开时光标回到上次关闭时的位置（第二行开头），新的一行写在那里。
+    assert!(on_disk("main.rs").starts_with("// x\n// z\n"));
 
     let _ = std::fs::remove_dir_all(&dir);
 }
