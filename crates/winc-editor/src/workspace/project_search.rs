@@ -32,7 +32,7 @@ use memchr::{memchr_iter, memchr2_iter};
 use ropey::Rope;
 use winc_core::Lines;
 
-use crate::document::encoding::{UTF8_BOM, decode, utf16_bom};
+use crate::document::encoding::{UTF8_BOM, decode, utf16_text};
 use crate::document::large::{LINE_CAP, visible_len};
 use crate::document::{BINARY_SNIFF, Document, DocumentId, LARGE_FILE, OPEN_LIMIT, looks_binary};
 use crate::editing::search::{Matcher, Options, Pattern, Search, count_chars, joined, unescape};
@@ -183,6 +183,10 @@ pub struct ProjectSearch {
     /// 当前结果对应的条件和工作区根目录。
     query: Option<Query>,
     root: PathBuf,
+    /// 一并搜索的附加目录，见 [`Self::set_extra_folders`]。
+    extra: Vec<PathBuf>,
+    /// 各个附加目录在相对路径中的前缀和目录，每次 [`Self::start`] 时确定。
+    labelled: Arc<[(String, PathBuf)]>,
     /// 按 `query` 编译好的匹配器，重新搜索个别文件时复用；查询为空或无法编译时为 `None`。
     matcher: Option<Matcher>,
     /// [`Self::start`] 收到的唤醒回调，后台重新搜索一批文件时同样使用；与 `matcher` 同时设置。
@@ -196,6 +200,14 @@ pub struct ProjectSearch {
 }
 
 impl ProjectSearch {
+    /// 设置与工作区根目录一并搜索的附加目录，下一次 [`Self::start`] 起生效。
+    ///
+    /// 其中的文件的相对路径以该目录的前缀开头（与快速打开的文件表相同）。包含、排除的通配相对于工作区根目录，对附加的
+    /// 目录按文件名和完整路径匹配。
+    pub fn set_extra_folders(&mut self, folders: Vec<PathBuf>) {
+        self.extra = folders;
+    }
+
     /// 按新条件从头搜索，旧的搜索作废。
     ///
     /// `dirty` 是有未保存修改的文档：路径和当前内容。后台线程有新结果（最多每 50 ms 一次）和
@@ -207,9 +219,34 @@ impl ProjectSearch {
         dirty: Vec<(PathBuf, Rope)>,
         wake: impl Fn() + Send + Sync + 'static,
     ) {
+        self.begin(root, query, dirty, Arc::new(wake), false);
+    }
+
+    /// 和 [`Self::start`] 一样，但只在根目录和附加目录下的依赖目录（`node_modules`、`.venv`
+    /// 等）里找，其中被 `.gitignore` 忽略的文件也搜索；「包含」「排除」不生效。
+    pub fn start_in_dependencies(
+        &mut self,
+        root: &Path,
+        query: &Query,
+        dirty: Vec<(PathBuf, Rope)>,
+        wake: impl Fn() + Send + Sync + 'static,
+    ) {
+        self.begin(root, query, dirty, Arc::new(wake), true);
+    }
+
+    fn begin(
+        &mut self,
+        root: &Path,
+        query: &Query,
+        dirty: Vec<(PathBuf, Rope)>,
+        wake: Arc<dyn Fn() + Send + Sync>,
+        dependencies: bool,
+    ) {
         self.clear();
         self.query = Some(query.clone());
         self.root = root.to_path_buf();
+        let labels = crate::workspace::tree::folder_prefixes(root, &self.extra);
+        self.labelled = labels.into_iter().zip(self.extra.iter().cloned()).collect();
 
         if query.text.is_empty() {
             return;
@@ -233,12 +270,12 @@ impl ProjectSearch {
         };
 
         self.matcher = Some(matcher);
-        self.wake = Some(Arc::new(wake));
-        self.launch(
-            Source::Tree(overrides, query.include_ignored),
-            Arc::new(dirty.into_iter().collect()),
-            None,
-        );
+        self.wake = Some(wake);
+        let source = match dependencies {
+            true => Source::Dependencies,
+            false => Source::Tree(overrides, query.include_ignored),
+        };
+        self.launch(source, Arc::new(dirty.into_iter().collect()), None);
     }
 
     /// 清空结果并作废正在进行的搜索：版本号递增，之后到达的旧结果会被丢弃。
@@ -423,8 +460,9 @@ impl ProjectSearch {
                 &AtomicBool::new(false),
             ),
         };
-        let fresh =
-            found.and_then(|(matches, lossy)| file_result(&self.root, path, matches, lossy));
+        let fresh = found.and_then(|(matches, lossy)| {
+            file_result((&self.root, &self.labelled), path, matches, lossy)
+        });
 
         if let Some(refresh) = self.job.as_mut().and_then(|job| job.refresh.as_mut()) {
             refresh.files.remove(path);

@@ -5,6 +5,8 @@
 //! [`LogView::finish`] 接上交回来的），提交图从上一批继续往下算。取提交、取详情都在后台线程
 //! 里完成，本模块只保存结果和取提交的进度。
 
+use std::path::PathBuf;
+
 use winc_core::graph::{Graph, GraphRow};
 
 use crate::git::{Commit, CommitFile, LogQuery, Ref};
@@ -49,10 +51,14 @@ pub struct LogView {
     pub details_scroll: f32,
     /// 重取的次数；后台请求交回来时该值不匹配就丢弃。
     generation: u64,
+    /// 所在仓库的根目录，取提交、详情和差异都在这里取。
+    pub root: Option<PathBuf>,
     /// 筛选条件。
     pub query: LogQuery,
     /// 正在比较两个版本（两个提交，或者两个分支）：详情一栏换成两者之间改了的文件。
     pub compare: Option<Compare>,
+    /// 发起或退出比较的次数；与输入的版本比较的结果返回时次数已变即为过时，不再使用。
+    pub compare_request: u64,
     /// 重取了、新的第一批还没到。
     ///
     /// `commits`、`graph` 还是重取之前的内容，仍然可以显示和点击，第一批到达时整体替换
@@ -125,6 +131,10 @@ pub struct Compare {
     pub from: String,
     /// 新的一边。
     pub to: String,
+    /// `from` 由输入的分支名或标签名解析而来时的那个名称，显示时代替提交号。
+    pub from_name: Option<String>,
+    /// `to` 由输入的分支名或标签名解析而来时的那个名称，显示时代替提交号。
+    pub to_name: Option<String>,
     /// 改了的文件；取回来之前为 `None`。
     pub files: Option<Vec<CommitFile>>,
     /// 取文件列表失败的原因。
@@ -138,10 +148,16 @@ pub struct Details {
     pub oid: String,
     /// 完整的说明。
     pub message: Option<String>,
-    /// 改动的文件（和第一个父提交比）。
+    /// 改动的文件（和 `base` 比）。
     pub files: Option<Vec<CommitFile>>,
+    /// 改动的文件对照的版本：第一个父提交，根提交为 `None`。按路径筛选的日志里列表上的父提交
+    /// 是改写过的（[`crate::git::LogQuery::rewrites_parents`]），这里是真正的父提交。
+    pub base: Option<String>,
     /// 取详情失败的原因。
     pub error: Option<String>,
+    /// 包含该提交的本地分支和远程分支（[`crate::git::Git::containing_branches`]），本地的在前；
+    /// 取回来之前为 `None`。分支随时会变，重取日志时作废。
+    pub branches: Option<Vec<String>>,
 }
 
 impl LogView {
@@ -154,6 +170,11 @@ impl LogView {
     pub fn is_loading(&self) -> bool {
         matches!(self.fetch, Fetch::Running { generation, refetch, .. }
             if refetch || generation == self.generation)
+    }
+
+    /// 重取的次数：每次重取（换筛选条件、刷新）加一。
+    pub fn generation(&self) -> u64 {
+        self.generation
     }
 
     /// 要取下一批时调用：返回要后台取的那一批，后台把结果交给 [`LogView::finish`]。
@@ -246,6 +267,35 @@ impl LogView {
         if self.selected.is_none() {
             self.details = None;
         }
+        // 重取多半是分支变了（提交、拉取、切换）：包含各提交的分支重新查。
+        let details = self.details.iter_mut().chain(&mut self.previous);
+        for d in details.chain(&mut self.cache) {
+            d.branches = None;
+        }
+    }
+
+    /// 换成仓库 `root` 的日志，从头取：提交、选中项、详情、比较和筛选条件都清空，筛选只留
+    /// `branches`。后台还在跑的请求就此作废。
+    pub fn restart(&mut self, root: Option<PathBuf>, branches: Vec<String>) {
+        *self = LogView {
+            root,
+            query: LogQuery {
+                branches,
+                ..LogQuery::default()
+            },
+            generation: self.generation + 1,
+            compare_request: self.compare_request + 1,
+            fetch: self.fetch,
+            ..LogView::default()
+        };
+    }
+
+    /// 记下包含提交 `oid` 的分支：选中的、之前显示的和缓存里的详情一并更新。
+    pub fn set_branches(&mut self, oid: &str, branches: &[String]) {
+        let details = self.details.iter_mut().chain(&mut self.previous);
+        for d in details.chain(&mut self.cache).filter(|d| d.oid == oid) {
+            d.branches = Some(branches.to_vec());
+        }
     }
 
     /// 丢弃重取之前的提交（新的第一批到了，或者重取失败了）。
@@ -288,6 +338,43 @@ impl LogView {
     /// 返回显示行数：一个提交一行，没有提交时也占一行（写提示）。
     pub fn row_count(&self) -> usize {
         self.commits.len().max(1)
+    }
+
+    /// 提交 `oid` 是否在 `HEAD` 上（是 `HEAD` 或它的祖先），按已列出的提交和父提交判断。
+    ///
+    /// 按说明、作者、路径、日期筛选过，或 `HEAD` 不在列表里时，列出的提交连不起来，返回 `None`。
+    /// 列表按 `--date-order` 排列，子提交都在父提交前面，`HEAD` 到 `oid` 之间的提交已经列出。
+    pub fn on_head(&self, oid: &str) -> Option<bool> {
+        let query = &self.query;
+        if query.graphless() || query.rewrites_parents() || query.since_days.is_some() {
+            return None;
+        }
+        let head = self
+            .commits
+            .iter()
+            .position(|c| (c.refs.iter()).any(|r| matches!(r, Ref::Head(_) | Ref::Detached)))?;
+        let target = self.commits.iter().position(|c| c.oid == oid)?;
+        if target < head {
+            return Some(false);
+        }
+        // 从 `HEAD` 沿父提交往下走；只有排在 `HEAD` 和 `oid` 之间的提交可能在路上。
+        let rows = &self.commits[head..=target];
+        let index: std::collections::HashMap<&str, usize> = (rows.iter().enumerate())
+            .map(|(i, c)| (c.oid.as_str(), i))
+            .collect();
+        let mut reached = vec![false; rows.len()];
+        reached[0] = true;
+        for i in 0..rows.len() {
+            if !reached[i] {
+                continue;
+            }
+            for parent in &rows[i].parents {
+                if let Some(&j) = index.get(parent.as_str()) {
+                    reached[j] = true;
+                }
+            }
+        }
+        Some(reached[rows.len() - 1])
     }
 
     /// 选中的提交号。

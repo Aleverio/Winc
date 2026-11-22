@@ -13,6 +13,26 @@ use std::time::{Duration, Instant};
 use winc_pty::protocol::{
     Block, Decoder, Frame, FromHelper, Line, MAGIC, Marks, Message, Size, ToHelper, VERSION,
 };
+/// 写入可执行的脚本 `path`，内容为 `text`。
+///
+/// 由子进程写入：本进程不持有文件的写入端，其他测试线程同时启动子进程时，执行该脚本不会得到
+/// `ExecutableFileBusy`。
+pub fn write_script(path: &std::path::Path, text: &str) {
+    let mut child = Command::new("/bin/sh")
+        .args(["-c", r#"cat > "$1" && chmod 755 "$1""#, "sh"])
+        .arg(path)
+        .stdin(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(text.as_bytes())
+        .unwrap();
+    assert!(child.wait().unwrap().success());
+}
+
 /// 等待一条消息或一次退出的最长时间（10 s）。
 pub const WAIT: Duration = Duration::from_secs(10);
 
@@ -212,13 +232,34 @@ impl Client {
         env: Vec<(Vec<u8>, Vec<u8>)>,
         integration: &std::path::Path,
     ) {
+        self.spawn_shell_in(
+            tab,
+            program,
+            login,
+            env,
+            integration,
+            std::path::Path::new("/"),
+        );
+    }
+
+    /// 在指定目录启动带集成的交互式 shell。
+    #[cfg(unix)]
+    pub fn spawn_shell_in(
+        &mut self,
+        tab: u16,
+        program: &str,
+        login: bool,
+        env: Vec<(Vec<u8>, Vec<u8>)>,
+        integration: &std::path::Path,
+        cwd: &std::path::Path,
+    ) {
         use std::os::unix::ffi::OsStrExt;
         self.send(ToHelper::Spawn {
             tab,
             program: Some(program.into()),
             args: vec![],
             login,
-            cwd: b"/".to_vec(),
+            cwd: cwd.as_os_str().as_bytes().to_vec(),
             env,
             scrollback: 1000,
             // 高到测试里的命令都不会滚出屏幕：屏幕上的行号就是绝对行号。

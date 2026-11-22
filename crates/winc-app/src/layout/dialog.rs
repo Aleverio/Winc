@@ -26,6 +26,8 @@ pub const REBASE_PILL_W: f32 = 84.0;
 const REBASE_ROWS: usize = 10;
 /// 交互式变基信息框的高度（逻辑像素）：容纳约四行文字。
 const REBASE_MESSAGE_H: f32 = 84.0;
+/// 编辑提交说明的信息框高度（逻辑像素）：容纳约六行文字。
+const REWORD_MESSAGE_H: f32 = 124.0;
 /// 交互式变基上移、下移按钮的边长（逻辑像素）。
 const REBASE_MOVE: f32 = 28.0;
 
@@ -110,6 +112,23 @@ impl DialogLayout {
     /// 卡片宽 [`DIALOG_W`]，窗口太窄时缩到窗口以内；高度按内容算，水平居中。竖直方向偏上：
     /// 顶边距窗口上边缘为剩余空间高度的 42%，使视觉重心落在窗口中部。
     pub fn compute(window: Rect, location: bool, options: &[DialogPart]) -> Self {
+        Self::form(window, location, options, 0)
+    }
+
+    /// 计算推送对话框的几何：远程的菜单、目标分支的输入框，其下 `lines` 行待推送的提交，再往下
+    /// 是勾选项。
+    ///
+    /// 版式与 [`DialogLayout::compute`] 相同，只是菜单在上、输入框在下；提交列表在 `message`，
+    /// 它的名称是 `labels` 的最后一项。
+    pub fn push(window: Rect, lines: usize, options: &[DialogPart]) -> Self {
+        let mut layout = Self::form(window, false, options, lines);
+        std::mem::swap(&mut layout.branch, &mut layout.base);
+        layout
+    }
+
+    /// [`DialogLayout::compute`] 的实现；`lines` 不为 0 时各行之后多一块 `lines` 行高的只读
+    /// 文字（`message`），名称加在 `labels` 末尾。
+    fn form(window: Rect, location: bool, options: &[DialogPart], lines: usize) -> Self {
         let w = DIALOG_W.min(window.w - SETTINGS_MARGIN * 2.0).max(0.0);
         let inner = (w - SETTINGS_PAD * 2.0).max(0.0);
         // 先按卡片左上角在原点排好，最后整体平移到窗口里。
@@ -148,6 +167,15 @@ impl DialogLayout {
             (location, change)
         });
 
+        let message = if lines > 0 {
+            labels.push(Rect::new(x, y, DIALOG_LABEL_W, QUESTION_LINE_H));
+            let block = Rect::new(cx, y, cw, lines as f32 * QUESTION_LINE_H);
+            y = block.bottom() + DIALOG_GAP;
+            Some(block)
+        } else {
+            None
+        };
+
         // 勾选项排在框那一列，勾选框的左边和框的左边对齐。
         y += 2.0;
         let options: Vec<_> = (options.iter())
@@ -183,7 +211,7 @@ impl DialogLayout {
         DialogLayout {
             card: at(Rect::new(0.0, 0.0, w, h)),
             list: Rect::default(),
-            message: Rect::default(),
+            message: message.map(at).unwrap_or_default(),
             values: Vec::new(),
             second: Rect::default(),
             third: Rect::default(),
@@ -201,11 +229,18 @@ impl DialogLayout {
     }
 
     /// 计算询问对话框的几何：`lines` 是说明文字的行数，`values` 是只读信息的行数，`inputs` 是输入框
-    /// 的个数（最多 3 个）。
+    /// 的个数（最多 3 个），`remember` 表示输入框下面有「记住密码」一项
+    /// （[`DialogPart::Checkout`]）。
     ///
     /// 窗口太窄时卡片缩到窗口以内，位置规则与 [`DialogLayout::compute`] 相同。标签在 `labels` 中
     /// 按只读信息、输入框的顺序排列。
-    pub fn question(window: Rect, lines: usize, values: usize, inputs: usize) -> Self {
+    pub fn question(
+        window: Rect,
+        lines: usize,
+        values: usize,
+        inputs: usize,
+        remember: bool,
+    ) -> Self {
         let w = QUESTION_W.min(window.w - SETTINGS_MARGIN * 2.0).max(0.0);
         let inner = (w - SETTINGS_PAD * 2.0).max(0.0);
         let x = SETTINGS_PAD;
@@ -232,6 +267,12 @@ impl DialogLayout {
         };
         let rows: Vec<Rect> = (0..values).map(|_| row(&mut y)).collect();
         let fields: Vec<Rect> = (0..inputs).map(|_| row(&mut y)).collect();
+        // 勾选框的左边与输入框的左边对齐，与上面一行的间隔同其他表单的勾选项。
+        let option = remember.then(|| {
+            let option = Rect::new(cx, y + 2.0, cw, DIALOG_FIELD_H);
+            y = option.bottom();
+            option
+        });
         y += 6.0;
         let confirm = Rect::new(
             x + inner - DIALOG_BUTTON_W,
@@ -263,6 +304,9 @@ impl DialogLayout {
             close: at(close),
             labels: labels.into_iter().map(at).collect(),
             branch: field(0),
+            options: (option.into_iter())
+                .map(|row| (DialogPart::Checkout, at(row)))
+                .collect(),
             cancel: at(cancel),
             confirm: at(confirm),
             ..DialogLayout::default()
@@ -329,9 +373,64 @@ impl DialogLayout {
         }
     }
 
+    /// 计算编辑提交说明对话框的几何：名称列与询问对话框相同，宽度与交互式变基相同。
+    ///
+    /// `values` 是提交一行，`branch` 是信息框，`labels` 依次是两行的名称。
+    pub fn reword(window: Rect) -> Self {
+        let w = REBASE_W.min(window.w - SETTINGS_MARGIN * 2.0).max(0.0);
+        let inner = (w - SETTINGS_PAD * 2.0).max(0.0);
+        let x = SETTINGS_PAD;
+        let cx = x + QUESTION_LABEL_W + DIALOG_LABEL_GAP;
+        let cw = (inner - QUESTION_LABEL_W - DIALOG_LABEL_GAP).max(0.0);
+        let header = Rect::new(0.0, 0.0, w, SETTINGS_HEADER);
+        let close = Rect::new(
+            w - 12.0 - BUTTON,
+            (SETTINGS_HEADER - BUTTON) / 2.0,
+            BUTTON,
+            BUTTON,
+        );
+        let mut y = header.bottom() + 4.0;
+        let commit = Rect::new(cx, y, cw, DIALOG_FIELD_H);
+        let commit_label = Rect::new(x, y, QUESTION_LABEL_W, DIALOG_FIELD_H);
+        y = commit.bottom() + DIALOG_GAP;
+        let field = Rect::new(cx, y, cw, REWORD_MESSAGE_H);
+        let field_label = Rect::new(x, y, QUESTION_LABEL_W, DIALOG_FIELD_H);
+        y = field.bottom() + DIALOG_GAP + 6.0;
+        let confirm = Rect::new(
+            x + inner - DIALOG_BUTTON_W,
+            y,
+            DIALOG_BUTTON_W,
+            SETTINGS_CONTROL_H,
+        );
+        let cancel = Rect::new(
+            confirm.x - 8.0 - DIALOG_BUTTON_W,
+            y,
+            DIALOG_BUTTON_W,
+            SETTINGS_CONTROL_H,
+        );
+        let h = confirm.bottom() + SETTINGS_PAD;
+        let room = (window.h - h).max(0.0);
+        let (dx, dy) = (
+            (window.x + (window.w - w) / 2.0).round(),
+            (window.y + room * 0.42).round(),
+        );
+        let at = |r: Rect| Rect::new(r.x + dx, r.y + dy, r.w, r.h);
+        DialogLayout {
+            card: at(Rect::new(0.0, 0.0, w, h)),
+            values: vec![at(commit)],
+            labels: vec![at(commit_label), at(field_label)],
+            header: at(header),
+            close: at(close),
+            branch: at(field),
+            cancel: at(cancel),
+            confirm: at(confirm),
+            ..DialogLayout::default()
+        }
+    }
+
     /// 计算克隆仓库对话框的几何：地址和位置两行，版式与询问对话框相同。
     pub fn clone_form(window: Rect) -> Self {
-        let mut layout = Self::question(window, 0, 0, 2);
+        let mut layout = Self::question(window, 0, 0, 2, false);
         let rect = std::mem::take(&mut layout.second);
         let change = Rect::new(
             rect.right() - 2.0 - DIALOG_CHANGE_W,
@@ -346,7 +445,7 @@ impl DialogLayout {
     /// 计算连接远端主机对话框的几何：主机、端口和密钥文件三行，版式与克隆仓库相同；密钥
     /// 文件一行的右端有选文件的按钮，位置同「位置」一行的目录按钮。
     pub fn connect_form(window: Rect) -> Self {
-        let mut layout = Self::question(window, 0, 0, 3);
+        let mut layout = Self::question(window, 0, 0, 3, false);
         let rect = layout.third;
         layout.choose = Some(Rect::new(
             rect.right() - 2.0 - DIALOG_CHANGE_W,

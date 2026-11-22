@@ -9,7 +9,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Range;
 use std::path::Path;
 
-use self::transform::{contents, rebase, shrink};
+use self::transform::{contents, rebase};
 use pulldown_cmark::{
     Alignment, BlockQuoteKind, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd,
 };
@@ -369,6 +369,9 @@ pub struct Inline {
     /// 文字与原文的对照，原文位置相对于 [`Inline::source`]；由原文生成的文字（列表、表格之外
     /// 自动加的标题、front matter 的表格）为空。
     pub map: SourceMap,
+    /// HTML 写的锚点（`<a id="…">`、`<a name="…">`，转成小写）：排版时记在这段文字所在块的
+    /// 上边缘，链接 `#…` 可以转到这里。
+    pub ids: Vec<String>,
     /// 这段文字最靠前的原文位置（字节偏移，相对所在顶层块的起点，见 [`Markdown::ranges`]）。
     ///
     /// 不计入哈希：排版缓存按内容取用，同样的文字挪了位置仍然命中，取出时再按记录的原文
@@ -384,6 +387,7 @@ impl Hash for Inline {
         self.images.hash(state);
         self.align.hash(state);
         self.map.hash(state);
+        self.ids.hash(state);
     }
 }
 
@@ -446,10 +450,12 @@ pub struct Image {
     pub url: String,
     /// 替代文字：图片无法显示时显示的文字。
     pub alt: String,
-    /// HTML `<img>` 写明的宽度。
+    /// 写明的宽度：HTML 的 `width`、`style="width: …"`，或替代文字末尾的 `|300`。
     pub width: Option<Length>,
-    /// HTML `<img>` 写明的高度（像素）。
+    /// 写明的高度（像素）：HTML 的 `height`、`style="height: …"`，或替代文字末尾的 `|300x200`。
     pub height: Option<u32>,
+    /// `style="zoom: …"` 写明的缩放比例（百分数），只在没有写明宽高时生效。
+    pub zoom: Option<u32>,
     /// 深色外观时换用的地址：`<picture>` 里 `media="(prefers-color-scheme: dark)"` 的
     /// `<source>` 的地址（README 常这样为深色主题配一张图）。
     pub dark: Option<String>,
@@ -504,8 +510,8 @@ impl Inline {
 
     /// 去掉开头和末尾的空白（HTML 里常见，分段处的换行和缩进）。
     fn trim(mut self) -> Inline {
-        let end = self.text.trim_end().len();
         let start = self.text.len() - self.text.trim_start().len();
+        let end = self.text.trim_end().len().max(start);
         if start == 0 && end == self.text.len() {
             return self;
         }
@@ -545,7 +551,9 @@ pub fn parse(text: &str) -> Markdown {
         source: text,
         ..Builder::default()
     };
-    for (event, range) in Parser::new_ext(text, options).into_offset_iter() {
+    // `\(…\)`、`\[…\]` 和公式环境换成等长的 `$$` 后解析，位置仍按原文。
+    let masked = delims::mask(text);
+    for (event, range) in Parser::new_ext(&masked, options).into_offset_iter() {
         // 顶层块开始的地方：不在任何容器、段落、代码块、HTML 块里。分隔线没有开始、结束两个
         // 事件，只有一个。
         if matches!(event, Event::Start(_) | Event::Rule)
@@ -602,7 +610,7 @@ struct Builder<'s> {
     start: usize,
     cursor: usize,
     end: usize,
-    /// 最近一个软换行在原文中的位置：换成的空格对应这里。
+    /// 最近一个软换行在原文中的位置：换成的换行或空格对应这里。
     soft_at: usize,
     /// 正在收集的代码块与原文的对照。
     code_map: SourceMap,
@@ -617,14 +625,16 @@ struct Builder<'s> {
     code: Option<(String, String)>,
     /// 正在收集的 HTML 块。
     html: Option<String>,
+    /// 当前 HTML 块中已读到的 `<img>` 个数。
+    html_images: usize,
     /// 正文里引用过的脚注标签，按第一次引用的先后；编号是位置加 1。
     notes: Vec<String>,
     /// 脚注的内容和定义所在的原文范围，放到文档最后。
     footnotes: Vec<(String, Vec<Block>, Range<usize>)>,
     /// 包着当前内容的 HTML 标签（`<p>`、`<div>`、`<center>`、`<h1>`……）各自的对齐，一层一层。
     aligns: Vec<Align>,
-    /// 刚才有一个软换行，还没决定要不要换成空格：两边都是中日韩文字时不加（中文段落里折行处
-    /// 不会多出一个空格），否则加一个空格。
+    /// 刚才有一个软换行，还没写入：段落里照原文换行；标题等处两边都是中日韩文字时不加，否则加
+    /// 一个空格。
     soft: bool,
     /// `<picture>` 里浅色、深色外观的 `<source>` 写的地址，留给后面的 `<img>`。
     sources: (Option<String>, Option<String>),
@@ -644,6 +654,9 @@ struct Builder<'s> {
     leaf: Option<Range<usize>>,
     /// 正在处理 HTML 块：块里排出的段落、表格不单独记为叶子块，整个 HTML 块是一个。
     in_html: bool,
+    /// 还没有落到段落或标题上的锚点（见 [`Inline::ids`]）：写在段落之外，或者所在的段落没有
+    /// 文字，记到下一个段落或标题上。
+    ids: Vec<String>,
 }
 
 impl Builder<'_> {
@@ -705,20 +718,24 @@ impl Builder<'_> {
         }
     }
 
-    /// 前面有软换行时，按下一个字 `next` 决定加不加空格（见 [`Builder::soft`]）。
+    /// 写入前面的软换行，`next` 是其后的第一个字（见 [`Builder::soft`]）。
     fn resolve_soft(&mut self, next: Option<char>) {
         if !std::mem::take(&mut self.soft) {
             return;
         }
         let style = self.style();
         let soft_at = self.soft_at;
+        let lines = matches!(self.inline, Some((Leaf::Paragraph | Leaf::Loose, _)));
         let inline = self.inline();
         let joined =
             inline.text.chars().next_back().is_some_and(is_cjk) && next.is_some_and(is_cjk);
-        if !joined {
-            inline.map.push(inline.text.len(), soft_at, 0);
-            inline.push(" ", style);
-        }
+        let text = match (lines, joined) {
+            (true, _) => "\n",
+            (false, true) => return,
+            (false, false) => " ",
+        };
+        inline.map.push(inline.text.len(), soft_at, 0);
+        inline.push(text, style);
     }
 
     /// 结束一个容器块（引用、列表、`<details>`）。
@@ -870,13 +887,23 @@ impl Builder<'_> {
         };
         emoji::shortcodes(&mut inline);
         autolink::autolink(&mut inline);
+        mark::apply(&mut inline, self.source);
         if leaf != Leaf::Cell && inline.align == Align::None {
             inline.align = self.aligns.last().copied().unwrap_or_default();
+        }
+        // 段落、标题收下之前没有落下的锚点；其余位置的锚点留给下一个段落或标题。
+        if matches!(leaf, Leaf::Paragraph | Leaf::Loose | Leaf::Heading(_)) {
+            let waiting = std::mem::take(&mut self.ids);
+            inline.ids.splice(0..0, waiting);
+        } else {
+            self.ids.append(&mut inline.ids);
         }
         match leaf {
             Leaf::Paragraph | Leaf::Loose => {
                 if !inline.is_blank() || !inline.images.is_empty() {
                     self.push_block(Block::Paragraph(inline));
+                } else {
+                    self.ids.append(&mut inline.ids);
                 }
             }
             // 只有 `#`、后面没有空格：按文字显示，输入空格后才成为标题。
@@ -916,11 +943,16 @@ impl Builder<'_> {
             Event::Text(text) => self.text(&text, 0),
             Event::Code(text) => self.text(&text, Style::CODE),
             Event::InlineMath(text) => self.text(&text, Style::MATH),
-            // `$$…$$` 单独成一块居中显示；写在表格里的只能留在格子里。
-            Event::DisplayMath(text) if self.in_cell() => self.text(&text, Style::MATH),
+            // `$$…$$` 单独成一块居中显示；写在表格里的、写成 `\(…\)` 的留在行内。
             Event::DisplayMath(text) => {
-                self.finish_inline();
-                self.push_block(Block::Math(text.trim().to_owned(), self.start));
+                let source = self.source.get(self.start..self.end).unwrap_or_default();
+                let (inline, text) = delims::restore(source, &text);
+                if inline || self.in_cell() {
+                    self.text(&text, Style::MATH);
+                } else {
+                    self.finish_inline();
+                    self.push_block(Block::Math(text.trim().to_owned(), self.start));
+                }
             }
             Event::Html(html) | Event::InlineHtml(html) => match &mut self.html {
                 Some(block) => block.push_str(&html),
@@ -944,7 +976,9 @@ impl Builder<'_> {
                 self.soft = true;
                 self.soft_at = self.start;
             }
-            Event::SoftBreak => self.text(" ", 0),
+            Event::SoftBreak if self.image.is_some() => self.text(" ", 0),
+            // 段落被单独成行的公式分开后，后半段不以空格开头。
+            Event::SoftBreak => {}
             Event::HardBreak => self.text("\n", 0),
             Event::Rule => {
                 self.finish_inline();
@@ -1006,6 +1040,7 @@ impl Builder<'_> {
                     self.finish_inline();
                 }
                 self.html = Some(String::new());
+                self.html_images = 0;
                 self.in_html = true;
             }
             Tag::List(start) => {
@@ -1151,7 +1186,8 @@ impl Builder<'_> {
                 self.styles.pop();
             }
             TagEnd::Image => {
-                if let Some(image) = self.image.take() {
+                if let Some(mut image) = self.image.take() {
+                    resize::alt_size(&mut image);
                     self.push_image(image);
                 }
             }
@@ -1171,9 +1207,14 @@ impl Builder<'_> {
     }
 
     fn push_image(&mut self, image: Image) {
+        let at = self.start;
+        self.push_image_at(image, at);
+    }
+
+    /// 加入一张图片，`at` 是其原文的开头（`![` 或 `<img` 处）。
+    pub(super) fn push_image_at(&mut self, image: Image, at: usize) {
         self.resolve_soft(Some(IMAGE_MARK));
         let style = self.style();
-        let at = self.start;
         let inline = self.inline();
         inline.images.push(image);
         inline.map.push(inline.text.len(), at, 0);
@@ -1215,17 +1256,13 @@ impl Builder<'_> {
         for (block, range) in self.root.iter_mut().zip(&self.ranges) {
             rebase(block, range.start);
         }
-        shrink(&mut self.root);
+        shrink::shrink(&mut self.root);
         self.ranges.shrink_to_fit();
         let mut lines = Vec::with_capacity(self.root.len());
         let (mut line, mut counted) = (0, 0);
-        for i in 0..self.root.len() {
+        for (i, range) in self.ranges.iter().enumerate().take(self.root.len()) {
             // 脚注没有记起点：算在末尾。起点不会往回走，取不小于上一个的值。
-            let at = if i < main {
-                self.ranges[i].start
-            } else {
-                source.len()
-            };
+            let at = if i < main { range.start } else { source.len() };
             let at = at.max(counted);
             line += memchr::memchr_iter(b'\n', &source.as_bytes()[counted..at]).count();
             counted = at;
@@ -1291,7 +1328,7 @@ fn heading_level(level: HeadingLevel) -> u8 {
 }
 
 /// 中日韩文字和全角标点。
-fn is_cjk(c: char) -> bool {
+pub(crate) fn is_cjk(c: char) -> bool {
     matches!(c as u32,
         0x2E80..=0x9FFF | 0xAC00..=0xD7AF | 0xF900..=0xFAFF | 0xFE30..=0xFE4F | 0xFF00..=0xFFEF
         | 0x20000..=0x2FA1F)
@@ -1320,13 +1357,25 @@ mod autolink;
 mod transform;
 pub use transform::slug;
 pub mod cells;
+mod delims;
 mod emoji;
 pub mod enter;
 pub mod format;
+pub mod from_html;
 mod front;
 mod html;
+mod mark;
+mod shrink;
+pub(crate) use html::named_entity;
 pub mod math;
 pub mod mermaid;
+pub mod paragraph;
+pub mod resize;
+mod sections;
+pub use sections::Section;
+#[cfg(test)]
+mod corpus;
 pub mod reveal;
 #[cfg(test)]
 mod tests;
+pub mod words;

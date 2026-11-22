@@ -17,7 +17,8 @@ impl App {
     pub(crate) fn under_cursor(&self) -> bool {
         #[cfg(target_os = "macos")]
         if let Some(window) = &self.window.handle {
-            return crate::macos::under_cursor(window);
+            let log = &self.frame.frame_log;
+            return log.time_query(|| crate::macos::under_cursor(window));
         }
         true
     }
@@ -87,11 +88,12 @@ impl App {
     /// 打开 `targets` 里的文件（目录跳过：已经是本窗口的目录），`文件:行:列` 跳到该位置，再把
     /// 窗口切到前台。
     pub(crate) fn open_files(&mut self, targets: &[crate::cli::Target]) {
-        for target in targets
-            .iter()
-            .filter(|t| !winc_backend::fs::is_dir(&t.path))
-        {
+        for target in targets {
+            if self.is_folder(&target.path) {
+                continue;
+            }
             self.open_path(&target.path);
+            self.note_opened_file(&target.path);
             if let Some(line) = target.line {
                 self.jump_to(line, target.col.unwrap_or(0), 0);
             }
@@ -242,6 +244,7 @@ impl App {
     ///
     /// 窗口尺寸、面板宽度、标签或预览状态变化后调用；面板跟着焦点关闭也在这一步完成。
     pub(crate) fn relayout(&mut self) {
+        self.note_terminal_tab_position();
         // 面板打开以后换了标签（⌘W、切换标签、后退前进、新建文件）：面板里的符号、书签、用法
         // 都属于原来的文档，回车会在新标签里跳到错误的位置，所以关掉。`close_picker` 会再次
         // 调用本函数，那时面板已经关了。
@@ -308,6 +311,17 @@ impl App {
             self.gutter_width(),
             status_height,
         );
+        // 差异标签：查找条放在差异的标题栏下面，不盖住标题栏右端的按钮。
+        let diff = self.editor.active().and_then(|d| d.diff.as_deref());
+        if let Some(view) = diff.filter(|_| self.layout.search.h > 0.0) {
+            self.layout.search.y += crate::app::diff::diff_top(view);
+        }
+
+        self.place_terminal();
+        self.place_window_controls();
+        self.place_panes();
+        self.place_editor_parts();
+        // 依附于触发位置的浮层在终端、窗格都排好以后再放。
         self.place_places();
         self.place_git_picker();
         self.animate_picker((w, h));
@@ -315,27 +329,23 @@ impl App {
             self.layout.picker.y = bottom - self.layout.picker.h;
         }
 
-        // 差异标签：查找条放在差异的标题栏下面，不盖住标题栏右端的按钮。
-        if self.layout.search.h > 0.0 && self.editor.active().is_some_and(|d| d.diff.is_some()) {
-            self.layout.search.y += crate::app::diff::DIFF_HEADER;
-        }
-
-        self.place_terminal();
-        self.place_window_controls();
-        self.place_preview_button();
-        self.place_browser_button();
-        self.place_split();
-        self.place_merge_panes();
-        self.place_minimap();
-
         self.place_outline();
-        // 搜索和历史差异各有自己的列表，不能命中工作区文件树原来的区域。
-        if self.panels.sidebar.view == SidebarView::Search || self.log_diff_tree().is_some() {
+        // 搜索有自己的列表，不能命中工作区文件树原来的区域。
+        if self.panels.sidebar.view == SidebarView::Search {
             let tree = self.layout.tree;
             self.layout.tree = Rect::new(tree.x, tree.y, 0.0, 0.0);
         }
         self.sync_wrap();
         self.sync_terminal();
+    }
+
+    /// 在编辑区里放置随当前标签变化的部分：标签栏右端的按钮、分栏预览、合并的两侧、缩略图。
+    pub(in crate::app) fn place_editor_parts(&mut self) {
+        self.place_preview_button();
+        self.place_browser_button();
+        self.place_split();
+        self.place_merge_panes();
+        self.place_minimap();
     }
 
     /// 当前文件能预览（SVG）时，在标签栏右端留出「源代码 / 分栏 / 预览」三个按钮，标签栏
@@ -459,13 +469,29 @@ impl App {
     /// 可以上下拖动改面板高度。
     ///
     /// 放在右边时（`terminal.position`）从编辑区右边切出整个一栏，间距里左右拖动改面板宽度；
-    /// 窗口放不下最小尺寸时面板不显示。动画里面板只露出一部分，这时间距不能拖。
+    /// 窗口放不下最小尺寸时面板不显示。动画里面板只露出一部分，这时间距不能拖。最大化时两种
+    /// 位置相同：面板铺满编辑区一栏（连同顶栏那一行），编辑区不占地方，见
+    /// [`Self::place_full_terminal`]。
     fn place_terminal(&mut self) {
         let (shown, right) = self.terminal_shown();
+        let full = self.terminal_fill();
         let l = &mut self.layout;
         l.terminal = Rect::default();
         l.terminal_divider = Rect::default();
+        l.column = Rect::default();
         if shown <= 0.0 {
+            return;
+        }
+        // 编辑区一栏：顶栏那一行连同下面的编辑区。
+        let column = Rect::new(
+            l.top_bar.x,
+            l.top_bar.y,
+            l.top_bar.w,
+            l.editor.bottom() - l.top_bar.y,
+        );
+        l.column = column;
+        if full >= 1.0 {
+            self.place_full_terminal(column, shown, right);
             return;
         }
         let gap = if shown < 1.0 { 0.0 } else { ISLAND_GAP };
@@ -475,16 +501,10 @@ impl App {
                 return;
             }
             let w = match self.terminal.width {
-                _ if self.terminal.maximized => room,
                 w if w > 0.0 => w,
                 _ => terminal::DEFAULT_WIDTH,
             };
             let w = w.clamp(terminal::MIN_WIDTH, room);
-            let w = self
-                .terminal
-                .grow
-                .map_or(w, |(from, c)| c.between(from, w))
-                .round();
             let shrink = ((w + ISLAND_GAP) * shown).round();
             for rect in [&mut l.top_bar, &mut l.tabs, &mut l.editor, &mut l.text] {
                 rect.w = (rect.w - shrink).max(0.0);
@@ -499,27 +519,116 @@ impl App {
             let h = l.editor.bottom() - top;
             l.terminal = Rect::new(l.editor.right() + ISLAND_GAP, top, w, h);
             l.terminal_divider = Rect::new(l.editor.right(), top, gap, h);
-            return;
+        } else {
+            let room = l.editor.h - terminal::EDITOR_MIN - ISLAND_GAP;
+            if room < terminal::MIN_HEIGHT {
+                return;
+            }
+            let h = self.terminal.height.clamp(terminal::MIN_HEIGHT, room);
+            let shrink = ((h + ISLAND_GAP) * shown).round();
+            for rect in [&mut l.editor, &mut l.gutter, &mut l.text] {
+                rect.h = (rect.h - shrink).max(0.0);
+            }
+            l.terminal = Rect::new(l.editor.x, l.editor.bottom() + ISLAND_GAP, l.editor.w, h);
+            l.terminal_divider = Rect::new(l.editor.x, l.editor.bottom(), l.editor.w, gap);
         }
-        let room = l.editor.h - terminal::EDITOR_MIN - ISLAND_GAP;
-        if room < terminal::MIN_HEIGHT {
-            return;
+        // 最大化、还原途中：编辑区按平常的大小排好不动，面板在平常的位置和整栏之间伸缩，
+        // 盖在编辑区上面；途中分隔条不能拖。
+        if full > 0.0 {
+            let from = l.terminal;
+            let mix = |a: f32, b: f32| (a + (b - a) * full).round();
+            l.terminal = Rect::new(
+                mix(from.x, column.x),
+                mix(from.y, column.y),
+                mix(from.w, column.w),
+                mix(from.h, column.h),
+            );
+            l.terminal_divider = Rect::default();
         }
-        let h = match self.terminal.maximized {
-            true => room,
-            false => self.terminal.height.clamp(terminal::MIN_HEIGHT, room),
+    }
+
+    /// 最大化的面板：铺满编辑区一栏 `column`，编辑区、标签栏都不占地方；⌘P 面板仍在这一栏
+    /// 中间，浮在面板上。
+    ///
+    /// 打开、收起的动画里面板整个从窗口边上滑进滑出（下面的滑到状态栏后面，右边的滑出窗口），
+    /// 这时编辑区照常显示在它后面。
+    fn place_full_terminal(&mut self, column: Rect, shown: f32, right: bool) {
+        let l = &mut self.layout;
+        let slide = 1.0 - shown;
+        l.terminal = if right {
+            let dx = ((column.w + ISLAND_GAP) * slide).round();
+            Rect::new(column.x + dx, column.y, column.w, column.h)
+        } else {
+            let dy = ((column.h + ISLAND_GAP) * slide).round();
+            Rect::new(column.x, column.y + dy, column.w, column.h)
         };
-        let h = self
-            .terminal
-            .grow
-            .map_or(h, |(from, c)| c.between(from, h))
-            .round();
-        let shrink = ((h + ISLAND_GAP) * shown).round();
-        for rect in [&mut l.editor, &mut l.gutter, &mut l.text] {
-            rect.h = (rect.h - shrink).max(0.0);
+        if shown < 1.0 {
+            return;
         }
-        l.terminal = Rect::new(l.editor.x, l.editor.bottom() + ISLAND_GAP, l.editor.w, h);
-        l.terminal_divider = Rect::new(l.editor.x, l.editor.bottom(), l.editor.w, gap);
+        for rect in [
+            &mut l.top_bar,
+            &mut l.tabs,
+            &mut l.editor,
+            &mut l.gutter,
+            &mut l.text,
+        ] {
+            rect.w = 0.0;
+        }
+        l.search = Rect::default();
+    }
+
+    /// 终端面板铺满编辑区一栏的程度：0 是平常的大小，1 是铺满；最大化、还原时随时钟过渡。
+    pub(in crate::app) fn terminal_fill(&self) -> f32 {
+        match self.terminal.grow {
+            Some(clock) if self.terminal.maximized => clock.progress(),
+            Some(clock) => 1.0 - clock.progress(),
+            None if self.terminal.maximized => 1.0,
+            None => 0.0,
+        }
+    }
+
+    /// 右上角的提示、冲突卡片和输入条所在的区域：平常是编辑区；面板铺满编辑区一栏时是面板
+    /// 标签栏以下的内容区域。最大化、还原途中按同一进度在两者之间过渡，不随面板的边移动。
+    pub(crate) fn overlay_area(&self) -> Rect {
+        let editor = self.layout.editor;
+        let fill = match self.terminal.grow {
+            Some(_) => self.terminal_fill(),
+            None if editor.w <= 0.0 => 1.0,
+            None => 0.0,
+        };
+        let card = self.terminal_content_card_in(self.layout.column);
+        if fill <= 0.0 || self.layout.terminal.w <= 0.0 || card.w <= 0.0 || card.h <= 0.0 {
+            return editor;
+        }
+        let top = card.y + terminal::header_height(card);
+        let full = Rect::new(card.x, top, card.w, card.bottom() - top);
+        if fill >= 1.0 {
+            return full;
+        }
+        let mix = |a: f32, b: f32| (a + (b - a) * fill).round();
+        let (x, y) = (mix(editor.x, full.x), mix(editor.y, full.y));
+        let (right, bottom) = (
+            mix(editor.right(), full.right()),
+            mix(editor.bottom(), full.bottom()),
+        );
+        Rect::new(x, y, right - x, bottom - y)
+    }
+
+    /// 右上角浮层的上边界（不含留白）：编辑区或面板的查找条打开时是查找条的下边；最大化、
+    /// 还原途中是区域的上边。
+    pub(crate) fn overlay_top(&self) -> f32 {
+        let area = self.overlay_area();
+        if area != self.layout.editor {
+            if self.terminal.grow.is_some() {
+                return area.y;
+            }
+            return self.terminal_find_bar().map_or(area.y, |bar| bar.bottom());
+        }
+        if self.layout.search.h > 0.0 {
+            self.layout.search.bottom()
+        } else {
+            area.y
+        }
     }
 
     /// 向渲染器声明下一帧的底色矩形（`view::base`），使其随窗口背景色一趟绘制。
@@ -562,6 +671,8 @@ impl App {
         self.track_modules();
         self.track_commit_bars();
         self.track_search_rows();
+        self.track_words();
+        self.track_suggest();
         self.git_follow_active();
         self.relayout();
         self.run_when_loaded();
@@ -590,6 +701,7 @@ impl App {
         let elapsed = started.elapsed();
         self.frame.renderer = Some(renderer);
         if !drawn {
+            self.frame.frame_log.frame_skipped();
             self.retry_frame(started);
             return;
         }
@@ -598,7 +710,9 @@ impl App {
         {
             let size = window.inner_size();
             let refresh = frame_interval(window);
-            (self.frame.frame_log).record(elapsed, refresh, (size.width, size.height));
+            let reclaimed = (self.frame.renderer.as_mut()).map_or(0, Renderer::take_reclaimed);
+            let size = (size.width, size.height);
+            (self.frame.frame_log).record(elapsed, refresh, size, reclaimed);
         }
         self.refresh_hover();
         // 命中测试区域随本帧的布局更新；两帧之间的落指与抬手由 `on_touch` 另行同步。
@@ -650,12 +764,30 @@ impl App {
             }
             Next::Key { vim, step } => {
                 let started = Instant::now();
+                if self.markdown_live() {
+                    self.start_live_editing();
+                }
                 if vim {
                     self.vim_bench_key(step);
                 } else if step % 40 == 39 {
                     self.run(Command::Newline);
                 } else {
                     self.run(Command::Insert("x".into()));
+                }
+                self.frame.bench.key_handled(started.elapsed());
+                self.request_redraw();
+            }
+            Next::Move { step } => {
+                // 每 10 帧按一次方向键：先向下 8 次，再向上 8 次。
+                let started = Instant::now();
+                if step % 10 == 0 {
+                    self.start_live_editing();
+                    let down = (step / 10 / 8) % 2 == 0;
+                    let key = match down {
+                        true => winit::keyboard::NamedKey::ArrowDown,
+                        false => winit::keyboard::NamedKey::ArrowUp,
+                    };
+                    self.markdown_key(&winit::keyboard::Key::Named(key), false);
                 }
                 self.frame.bench.key_handled(started.elapsed());
                 self.request_redraw();
@@ -743,6 +875,8 @@ pub struct WindowState {
     ///
     /// 最小化期间不更新；从最小化的窗口打开新窗口时按该位置错开（见 `App::cascade_from`）。
     pub(crate) frame: Option<winc_config::WindowFrame>,
+    /// 下一次记录 `frame` 的时刻（见 `App::window_frame_tick`）；没有待记录的变化时为 `None`。
+    pub(in crate::app) frame_due: Option<Instant>,
     /// 窗口是否完全不可见（被遮挡、最小化或位于其他桌面）；不可见时不绘制，窗口画面标记为可清除。
     pub(in crate::app) occluded: bool,
 }
@@ -755,6 +889,7 @@ impl Default for WindowState {
             focused: true,
             hidden: false,
             frame: None,
+            frame_due: None,
             occluded: false,
         }
     }

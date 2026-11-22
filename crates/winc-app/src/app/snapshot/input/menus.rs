@@ -378,7 +378,7 @@ fn bookmark_commands_are_available_in_the_editor_menu() {
 }
 
 #[test]
-fn cmd_i_copies_a_reference_to_the_lines() {
+fn copy_reference_copies_the_lines() {
     use crate::app::snapshot::editor::navigation::press;
     use crate::keymap::KeyCode::Char;
     use winc_core::Selection;
@@ -387,7 +387,7 @@ fn cmd_i_copies_a_reference_to_the_lines() {
     let mut app = app_with(&dir.join("short.rs"), false);
     let copy = |app: &mut App, anchor, head| {
         app.editor.active_mut().unwrap().selection = Selection { anchor, head };
-        assert!(press(app, &["cmd"], Char('i')));
+        assert!(press(app, &["cmd", "shift", "alt"], Char('c')));
         app.clipboard.copied.clone().unwrap()
     };
     // `short.rs` 的第 0 行是 `fn main() {`，第 1 行从字符偏移 12 起，第 2 行从字符偏移 35 起。
@@ -397,8 +397,8 @@ fn cmd_i_copies_a_reference_to_the_lines() {
     assert_eq!(copy(&mut app, 0, 35), "short.rs:1-2");
     assert_eq!(copy(&mut app, 0, 36), "short.rs:1-3");
 
-    // ⌘L：完整路径。
-    assert!(press(&mut app, &["cmd"], Char('l')));
+    // 完整路径。
+    assert!(app.run_action(crate::keymap::Action::CopyAbsoluteReference));
     let file = app.editor.active().unwrap().path.clone().unwrap();
     let expected = format!("{}:1-3", file.display());
     assert_eq!(app.clipboard.copied.as_deref(), Some(expected.as_str()));
@@ -486,6 +486,160 @@ fn menus_without_a_system_menu_are_drawn_in_the_window() {
     app.on_mouse_up(MouseButton::Left);
     assert!(app.overlays.context_menu.is_none());
     assert_eq!(app.editor.active().unwrap().selection, caret);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 窗口内绘制的语言菜单可以键入文字筛选：第一行写出键入的文字，名称以它开头的排在前面，停在
+/// 第一项，↩ 选中；`⌫` 删去最后一个字，没有匹配时写一行说明，`Esc` 先清空筛选、再关掉菜单。
+/// 按住 ⌘/Ctrl 的按键不筛选；有子菜单的菜单（编码）不筛选。
+#[test]
+fn typing_filters_the_language_menu() {
+    use crate::app::PopupRow;
+    use crate::app::status::status_bar::StatusItem;
+    use winit::keyboard::{Key, NamedKey};
+    let dir = sample_folder("popup-filter");
+    let mut app = app_with(&dir.join("a.txt"), false);
+    paint(&mut app);
+    let typed = |app: &mut App, text: &str| {
+        for c in text.chars() {
+            let key = match c {
+                ' ' => Key::Named(NamedKey::Space),
+                c => Key::Character(c.to_string().into()),
+            };
+            assert!(app.popup_logical_key(&key));
+        }
+    };
+    let named = |app: &mut App, key: NamedKey| assert!(app.popup_logical_key(&Key::Named(key)));
+    let titles = |app: &App| -> Vec<String> {
+        (app.popup().unwrap().levels[0].rows.iter())
+            .filter_map(|r| match r {
+                PopupRow::Item { label, .. } => Some(label.title.clone()),
+                PopupRow::Query(q) => Some(format!("[{q}]")),
+                _ => None,
+            })
+            .collect()
+    };
+
+    app.open_status_menu(StatusItem::Language);
+    paint(&mut app);
+    let all = app.popup().unwrap().levels[0].rows.len();
+    typed(&mut app, "Ru");
+    let found = titles(&app);
+    assert_eq!(found[0], "[Ru]");
+    assert_eq!(found[1], "Ruby");
+    assert!(found.contains(&"Rust".to_owned()));
+    // 名称以「ru」开头的都排在只是含有「ru」的之前。
+    let prefix: Vec<bool> = (found[1..].iter())
+        .map(|t| t.to_lowercase().starts_with("ru"))
+        .collect();
+    assert!(prefix.windows(2).all(|w| w[0] || !w[1]), "{found:?}");
+    assert_eq!(app.popup().unwrap().levels[0].hover, Some(1));
+    typed(&mut app, "s");
+    assert_eq!(&titles(&app)[1..], ["Rust"]);
+    named(&mut app, NamedKey::Enter);
+    assert!(app.overlays.context_menu.is_none());
+    assert_eq!(
+        app.editor.active().unwrap().highlighter.language().name,
+        "Rust"
+    );
+
+    // 没有匹配：一行说明，不能选中；⌫ 删字后恢复匹配。
+    app.open_status_menu(StatusItem::Language);
+    paint(&mut app);
+    typed(&mut app, "zzq");
+    assert_eq!(titles(&app), ["[zzq]", "无匹配项"]);
+    assert_eq!(app.popup().unwrap().levels[0].hover, None);
+    named(&mut app, NamedKey::Backspace);
+    assert_eq!(app.popup().unwrap().query, "zz");
+    // 按住 ⌘/Ctrl 的按键是快捷键，不写进筛选文字。
+    app.pointer.modifiers = if cfg!(target_os = "macos") {
+        winit::keyboard::ModifiersState::SUPER
+    } else {
+        winit::keyboard::ModifiersState::CONTROL
+    };
+    typed(&mut app, "c");
+    app.pointer.modifiers = winit::keyboard::ModifiersState::empty();
+    assert_eq!(app.popup().unwrap().query, "zz");
+    // Esc：先清空筛选，列出全部；再按一次关掉菜单。
+    named(&mut app, NamedKey::Escape);
+    assert_eq!(app.popup().unwrap().levels[0].rows.len(), all);
+    named(&mut app, NamedKey::Escape);
+    assert!(app.overlays.context_menu.is_none());
+
+    // 筛选时空格是文字：「Visual Basic」这类名字可以接着键入。
+    app.open_status_menu(StatusItem::Language);
+    paint(&mut app);
+    typed(&mut app, "a b");
+    assert_eq!(app.popup().unwrap().query, "a b");
+    named(&mut app, NamedKey::Escape);
+    named(&mut app, NamedKey::Escape);
+
+    // 编码菜单有子菜单：键入的文字不筛选。
+    app.open_status_menu(StatusItem::Encoding);
+    paint(&mut app);
+    typed(&mut app, "u");
+    assert!(app.popup().unwrap().query.is_empty());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 截图：键入「ru」筛选语言菜单（`popup-filter-light`）。
+#[test]
+#[ignore = "截图，手动运行"]
+fn shoot_popup_filter() {
+    use crate::app::status::status_bar::StatusItem;
+    use winit::keyboard::Key;
+    let dir = sample_folder("popup-filter-shot");
+    let mut app = app_with(&dir.join("a.txt"), false);
+    paint(&mut app);
+    app.open_status_menu(StatusItem::Language);
+    paint(&mut app);
+    for c in ["r", "u"] {
+        app.popup_logical_key(&Key::Character(c.into()));
+    }
+    shoot(&mut app, "popup-filter-light");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 命令「更改文件的语言」在面板中列出语言，键入文字筛选：查询恰好是扩展名的语言排在最前，名字
+/// 中分散出现的也能找到；没有匹配时列表为空。
+#[test]
+fn the_language_picker_filters_by_name_and_extension() {
+    use crate::app::LanguageRow;
+    let dir = sample_folder("language-picker");
+    let mut app = app_with(&dir.join("a.txt"), false);
+    paint(&mut app);
+    app.run_action(crate::keymap::Action::ChangeLanguageMode);
+    let first = |app: &mut App, query: &str| {
+        app.overlays.picker.input.set_text(query);
+        app.picker_refresh();
+        (app.overlays.picker.hits.first())
+            .and_then(|&h| LanguageRow::of(h))
+            .map(LanguageRow::title)
+    };
+    assert_eq!(first(&mut app, "ts"), Some("TypeScript"));
+    assert_eq!(first(&mut app, "md"), Some("Markdown"));
+    assert_eq!(first(&mut app, "rust"), Some("Rust"));
+    assert!(first(&mut app, "rs").is_some());
+    assert_eq!(first(&mut app, "zzqq"), None);
+    // 命中的字标出：「rust」标出 Rust 的四个字。
+    first(&mut app, "rust");
+    assert_eq!(app.language_matched(0), [0, 1, 2, 3]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 截图：面板中的语言列表，键入「ru」筛选（`language-picker-light`）。
+#[test]
+#[ignore = "截图，手动运行"]
+fn shoot_language_picker() {
+    let dir = sample_folder("language-picker-shot");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    paint(&mut app);
+    app.run_action(crate::keymap::Action::ChangeLanguageMode);
+    paint(&mut app);
+    shoot(&mut app, "language-picker-open");
+    app.overlays.picker.input.set_text("ru");
+    app.picker_refresh();
+    shoot(&mut app, "language-picker-light");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -584,7 +738,7 @@ fn alerts_without_a_system_dialog_are_drawn_in_the_window() {
 }
 
 /// 截图：窗口内绘制的提示框（关闭有未保存修改的标签时那样的三个按钮和「不再询问」）
-/// （`alert-light`、`alert-dark`）。
+/// （`alert-light`、`alert-dark`），以及只有一句的关闭前确认（`alert-short-*`）。
 #[test]
 #[ignore = "截图，手动运行"]
 fn shoot_alert() {
@@ -612,6 +766,52 @@ fn shoot_alert() {
         let button = app.overlays.alert.as_ref().unwrap().parts.buttons[1];
         app.on_mouse_move(button.x + 10.0, button.y + 10.0);
         shoot(&mut app, &format!("alert-{theme}"));
+
+        // 只有一句的提示框按内容收窄。
+        let mut app = app_with(&dir.join("short.rs"), dark);
+        app.config.confirm_close = Some(true);
+        app.ask_quit();
+        paint(&mut app);
+        shoot(&mut app, &format!("alert-short-{theme}"));
         let _ = std::fs::remove_dir_all(&dir);
     }
+}
+
+/// 二进制文件「以文本打开」以后，编码菜单里「通过编码重新打开」的各项可用，选了 UTF-16 LE 就按它
+/// 显示，不再只读。
+#[test]
+fn a_binary_file_can_be_reopened_with_an_encoding() {
+    use crate::app::PlaceholderAction;
+    use crate::app::status::status_bar::StatusItem;
+    use winc_editor::Encoding;
+    use winc_editor::encoding::CHOICES;
+    let dir = sample_folder("reopen-binary-menu");
+    let path = dir.join("wide.txt");
+    let wide: Vec<u8> = "中文 ok\n"
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    std::fs::write(&path, wide).unwrap();
+    let mut app = app_with(&path, false);
+    app.run_placeholder_action(PlaceholderAction::OpenAsText);
+    let doc = app.editor.active().unwrap();
+    assert_eq!(doc.encoding, Encoding::Binary);
+    let id = doc.id;
+
+    paint(&mut app);
+    app.open_status_menu(StatusItem::Encoding);
+    let reopen = (menu_commands(&app).into_iter())
+        .filter(|(command, _)| matches!(command, MenuCommand::ReopenEncoding(_)));
+    assert!(reopen.into_iter().all(|(_, enabled)| enabled));
+    app.overlays.context_menu = None;
+
+    let le = (CHOICES.iter())
+        .position(|(e, _)| *e == Encoding::Utf16Le)
+        .unwrap();
+    app.run_status_command(MenuCommand::ReopenEncoding(le), id);
+    let doc = app.editor.active().unwrap();
+    assert_eq!(doc.encoding, Encoding::Utf16Le);
+    assert_eq!(doc.text().rope().unwrap().to_string(), "中文 ok\n");
+    assert!(doc.readonly_reason().is_none());
+    let _ = std::fs::remove_dir_all(&dir);
 }

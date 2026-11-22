@@ -13,6 +13,7 @@ const OPTIONS: EditOptions<'static> = EditOptions {
     indent_after: &[':', '{'],
     tag_indent: false,
     line_comment: Some("# "),
+    block_comment: None,
     single_quote_string: true,
 };
 
@@ -251,6 +252,51 @@ fn comment_toggle_round_trip() {
 }
 
 #[test]
+fn languages_without_line_comments_toggle_a_block_comment() {
+    let css = EditOptions {
+        line_comment: None,
+        block_comment: Some(("/*", "*/")),
+        ..OPTIONS
+    };
+    let toggle = |text: &str, selection| run(text, selection, |t, s| toggle_comment(t, s, &css)).0;
+    // 整行包起来，两端隔一个空格；再切换一次还原。
+    assert_eq!(
+        toggle("a { color: red; }", Selection::point(3)),
+        "/* a { color: red; } */"
+    );
+    assert_eq!(
+        toggle("/* a { color: red; } */", Selection::point(3)),
+        "a { color: red; }"
+    );
+    // 多行：从第一行的缩进之后包到最后一个非空行的末尾，缩进、行尾空白和末尾的空行不动。
+    let lines = "  a {\n    b: 1;  \n\n";
+    assert_eq!(
+        toggle(lines, Selection::new(0, lines.len())),
+        "  /* a {\n    b: 1; */  \n\n"
+    );
+    assert_eq!(
+        toggle("  /* a {\n    b: 1; */  \n\n", Selection::new(0, 23)),
+        "  a {\n    b: 1;  \n\n"
+    );
+    // 没有空格的注释同样能去掉；只有空行时不做任何事。
+    let html = EditOptions {
+        block_comment: Some(("<!--", "-->")),
+        ..css
+    };
+    let (out, _, _) = run("<!--x-->", Selection::point(0), |t, s| {
+        toggle_comment(t, s, &html)
+    });
+    assert_eq!(out, "x");
+    let blank = Rope::from_str("   \n");
+    assert!(toggle_comment(&blank, Selection::point(0), &css).is_none());
+    let none = EditOptions {
+        block_comment: None,
+        ..css
+    };
+    assert!(toggle_comment(&Rope::from_str("a"), Selection::point(0), &none).is_none());
+}
+
+#[test]
 fn delete_lines_and_to_line_start() {
     let (out, sel, _) = run("ab\ncd\nef", Selection::point(4), delete_lines);
     assert_eq!(out, "ab\nef");
@@ -265,6 +311,16 @@ fn delete_lines_and_to_line_start() {
     let (out, sel, _) = run("ab\ncd", Selection::point(3), delete_to_line_start);
     assert_eq!((out.as_str(), sel), ("abcd", Selection::point(2)));
     let (out, _, _) = run("ab\ncd", Selection::new(1, 4), delete_to_line_start);
+    assert_eq!(out, "ad");
+
+    // `⌃K`：删到行尾；已在行尾时删除换行符，与下一行相接；最后一行行尾无事可做；有选区时
+    // 删除选区。
+    let (out, sel, _) = run("ab  cd\nef", Selection::point(2), delete_to_line_end);
+    assert_eq!((out.as_str(), sel), ("ab\nef", Selection::point(2)));
+    let (out, sel, _) = run("ab\ncd", Selection::point(2), delete_to_line_end);
+    assert_eq!((out.as_str(), sel), ("abcd", Selection::point(2)));
+    assert!(delete_to_line_end(&Rope::from_str("ab\ncd"), Selection::point(5)).is_none());
+    let (out, _, _) = run("ab\ncd", Selection::new(1, 4), delete_to_line_end);
     assert_eq!(out, "ad");
 }
 

@@ -23,16 +23,17 @@ fn blocks_come_out_in_order() {
     assert_eq!(doc.blocks.len(), 4);
     assert_eq!(doc.hashes.len(), 4);
     assert!(matches!(&doc.blocks[0], Block::Heading(1, h) if h.text == "标题"));
-    // 中文之间的软换行不加空格。
-    assert_eq!(paragraph(&doc.blocks[1]).text, "第一段第二行");
+    // 段落里的软换行照原文换行。
+    assert_eq!(paragraph(&doc.blocks[1]).text, "第一段\n第二行");
     assert_eq!(doc.blocks[2], Block::Rule(Some(0)));
     assert!(matches!(
         &doc.blocks[3],
         Block::Code { lang, text, .. } if lang == "rust" && text == "fn main() {}"
     ));
-    // 西文之间、中西文之间照常是空格。
-    let doc = parse("one\ntwo\n中文\nthree");
-    assert_eq!(paragraph(&doc.blocks[0]).text, "one two 中文 three");
+    // 标题里的软换行：中文之间不加空格，西文之间、中西文之间是空格。
+    let doc = parse("一\n二\n===\n\none\ntwo\n中文\nthree\n---\n");
+    assert!(matches!(&doc.blocks[0], Block::Heading(1, h) if h.text == "一二"));
+    assert!(matches!(&doc.blocks[1], Block::Heading(2, h) if h.text == "one two 中文 three"));
 }
 
 #[test]
@@ -159,6 +160,21 @@ fn readme_html_becomes_headings_images_and_text() {
         spans(paragraph(&doc.blocks[0])),
         vec![("一\n二 ", 0), ("粗", Style::STRONG)]
     );
+}
+
+/// 没有地址的 `<a id>`、`<a name>` 是锚点：写在段落、标题中时记在其上，单独成块或所在段落
+/// 没有文字时记到下一个段落或标题上；`<a id="…"/>` 不影响后面文字的样式。
+#[test]
+fn html_anchors_land_on_the_next_paragraph_or_heading() {
+    let doc = parse(
+        "<a name=\"Top\"></a>\n\n# 标题\n\n正文 <a id=\"mid\"/>**粗**\n\n<a id=\"x\"></a>\n\n| a |\n|---|\n| <a id=\"cell\"></a>b |\n\n尾\n",
+    );
+    assert!(matches!(&doc.blocks[0], Block::Heading(1, h) if h.ids == ["top"]));
+    let body = paragraph(&doc.blocks[1]);
+    assert_eq!(body.ids, ["mid"]);
+    assert_eq!(spans(body), vec![("正文 ", 0), ("粗", Style::STRONG)]);
+    // 表格前单独成块的锚点和单元格里的锚点都落到表格之后的段落上。
+    assert_eq!(paragraph(&doc.blocks[3]).ids, ["x", "cell"]);
 }
 
 #[test]
@@ -333,6 +349,9 @@ fn footnotes_link_both_ways() {
     let note = paragraph(&blocks[0]);
     assert_eq!(note.text, "说明 ↩");
     assert_eq!(note.links, ["#fnref-1"]);
+    // 悬停在编号上时提示的文字：不带跳回正文的 ↩。
+    assert_eq!(doc.footnote_text("1").as_deref(), Some("说明"));
+    assert_eq!(doc.footnote_text("2"), None);
 }
 
 #[test]
@@ -624,4 +643,172 @@ fn a_task_box_without_text_is_already_a_task_item() {
         assert_eq!(items[0].task_source, text.find('[').unwrap(), "{text}");
         assert!(paragraph(&items[0].blocks[0]).text.is_empty(), "{text}");
     }
+}
+
+#[test]
+fn double_equals_highlight_text() {
+    let text = "前面 ==高亮== 后面";
+    let doc = parse(text);
+    let inline = paragraph(&doc.blocks[0]);
+    // 两个 `==` 不显示，中间的文字有底色。
+    assert_eq!(inline.text, "前面 高亮 后面");
+    assert_eq!(
+        spans(inline),
+        vec![("前面 ", 0), ("高亮", Style::MARK), (" 后面", 0)]
+    );
+    // 去掉标记之后，文字仍对应回原文。
+    assert_eq!(
+        source_of(&doc, 0, inline, "后面"),
+        text.find("后面").unwrap()
+    );
+    assert_eq!(
+        source_of(&doc, 0, inline, "高亮"),
+        text.find("高亮").unwrap()
+    );
+}
+
+#[test]
+fn highlight_needs_a_well_formed_pair() {
+    // 只有一个标记、中间是空白、或者标记连成三个 `=` 时都是普通文字。
+    for text in ["a ==b", "a == b ==", "a == == b", "a === b"] {
+        let doc = parse(text);
+        let inline = paragraph(&doc.blocks[0]);
+        assert!(inline.text.contains("=="), "{text}");
+        assert!(
+            inline.runs().all(|(_, style)| !style.has(Style::MARK)),
+            "{text}"
+        );
+    }
+    // 相邻的两段各算一段。
+    let doc = parse("==一== 和 ==二==");
+    let inline = paragraph(&doc.blocks[0]);
+    assert_eq!(
+        spans(inline),
+        vec![("一", Style::MARK), (" 和 ", 0), ("二", Style::MARK)]
+    );
+    // 高亮可以跨行。
+    let doc = parse("==跨\n行==");
+    assert_eq!(
+        spans(paragraph(&doc.blocks[0])),
+        vec![("跨\n行", Style::MARK)]
+    );
+    let doc = parse("==跨  \n行==");
+    assert_eq!(
+        spans(paragraph(&doc.blocks[0])),
+        vec![("跨\n行", Style::MARK)]
+    );
+    // 标记里面可以再套别的样式。
+    let doc = parse("==**粗**文==");
+    assert_eq!(
+        spans(paragraph(&doc.blocks[0])),
+        vec![("粗", Style::MARK | Style::STRONG), ("文", Style::MARK)]
+    );
+}
+
+#[test]
+fn highlight_skips_code_and_escaped_marks() {
+    // 行内代码里的 `==` 是文字。
+    let doc = parse("`==x==`");
+    let inline = paragraph(&doc.blocks[0]);
+    assert_eq!(inline.text, "==x==");
+    assert_eq!(spans(inline), vec![("==x==", Style::CODE)]);
+    // 转义的 `\==` 是文字，不成对。
+    let doc = parse("a \\==b\\==");
+    let inline = paragraph(&doc.blocks[0]);
+    assert_eq!(inline.text, "a ==b==");
+    assert!(inline.runs().all(|(_, style)| !style.has(Style::MARK)));
+    // 转义的标记不参与配对：其前后的标记仍然成对。
+    let doc = parse("==a\\==b==");
+    assert_eq!(
+        spans(paragraph(&doc.blocks[0])),
+        vec![("a==b", Style::MARK)]
+    );
+    // 两个反斜杠是转义的反斜杠，其后的 `==` 仍是标记。
+    let doc = parse("\\\\==a==");
+    assert_eq!(
+        spans(paragraph(&doc.blocks[0])),
+        vec![("\\", 0), ("a", Style::MARK)]
+    );
+}
+
+#[test]
+fn highlight_leaves_addresses_shown_as_link_text_alone() {
+    // 自动识别的网址和尖括号中的网址：显示的文字就是地址，其中的 `==` 不是标记。
+    for text in ["https://e.com/?q==x==y", "<https://e.com/?q==x==y>"] {
+        let doc = parse(text);
+        let inline = paragraph(&doc.blocks[0]);
+        assert_eq!(inline.text, "https://e.com/?q==x==y", "{text}");
+        assert_eq!(inline.links, ["https://e.com/?q==x==y"], "{text}");
+        assert!(
+            inline.runs().all(|(_, style)| !style.has(Style::MARK)),
+            "{text}"
+        );
+    }
+    // 链接文字不是地址时照常高亮，网址之外的文字不受影响。
+    let doc = parse("[==a==](https://e.com) 与 ==b== https://e.com/?q==x==y");
+    let inline = paragraph(&doc.blocks[0]);
+    assert_eq!(inline.text, "a 与 b https://e.com/?q==x==y");
+    let marked: Vec<&str> = (inline.runs())
+        .filter(|(_, style)| style.has(Style::MARK))
+        .map(|(range, _)| &inline.text[range])
+        .collect();
+    assert_eq!(marked, ["a", "b"]);
+}
+
+#[test]
+fn html_blocks_holding_only_a_line_break_are_dropped() {
+    let doc = parse(
+        "<details open>\n<summary>桌面</summary>\n<br>\n<p align=\"center\">\n  <img src=\"a.png\" alt=\"A\">\n</p>\n</details>\n",
+    );
+    let Block::Details { blocks, .. } = &doc.blocks[0] else {
+        panic!("{:?}", doc.blocks[0]);
+    };
+    assert_eq!(blocks.len(), 1);
+    assert_eq!(paragraph(&blocks[0]).images.len(), 1);
+    assert!(parse("<p>\n<br>\n</p>\n").blocks.is_empty());
+    assert!(parse("<div>  <br>  </div>\n").blocks.is_empty());
+}
+
+#[test]
+fn headings_fold_down_to_the_next_heading_of_their_level() {
+    let doc = parse("# 甲\n\n一\n\n## 乙\n\n二\n\n## 乙\n\n# 丙\n\n三[^a]\n\n[^a]: 注\n");
+    let sections = doc.sections();
+    let ends: Vec<_> = (sections.iter())
+        .map(|s| s.as_ref().map(|s| (s.key.as_str(), s.end)))
+        .collect();
+    // 第二个「乙」下面没有内容；「丙」一节到脚注之前为止。
+    assert_eq!(
+        ends,
+        [
+            Some(("甲", 5)),
+            None,
+            Some(("乙", 4)),
+            None,
+            None,
+            Some(("丙", 7)),
+            None,
+            None,
+            None
+        ]
+    );
+}
+
+#[test]
+fn image_sizes_written_by_other_editors_are_read() {
+    let image = |text: &str| paragraph(&parse(text).blocks[0]).images[0].clone();
+    // 替代文字末尾的 `|宽` 或 `|宽x高`。
+    let a = image("![说明|300](a.png)");
+    assert_eq!(
+        (a.alt.as_str(), a.width, a.height),
+        ("说明", Some(Length::Px(300)), None)
+    );
+    let b = image("![|120x80](a.png)");
+    assert_eq!((b.width, b.height), (Some(Length::Px(120)), Some(80)));
+    // 竖线后不是数字时保留在替代文字中。
+    assert_eq!(image("![a|b](a.png)").alt, "a|b");
+    // `style` 中的缩放比例和宽高优先于属性。
+    let c = image("<img src=\"a.png\" style=\"zoom: 50%\">");
+    assert_eq!(c.zoom, Some(50));
+    let d = image("<img src=\"a.png\" width=\"100\" style=\"width: 70%; height: 40px\">");
+    assert_eq!((d.width, d.height), (Some(Length::Percent(7000)), Some(40)));
 }

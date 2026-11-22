@@ -19,6 +19,12 @@ fn home_dir() -> Option<PathBuf> {
 }
 
 /// 目录 `dir` 是否已存在且不为空：`git clone` 只接受不存在或为空的目录。
+/// 是否可以把仓库克隆到目录 `parent` 之下。远端的目录在界面线程上查不到：按可用处理，不存在时
+/// 由克隆命令报告。
+fn clone_parent_usable(parent: &Path) -> bool {
+    winc_backend::is_remote(parent) || winc_backend::fs::is_dir(parent)
+}
+
 fn occupied(dir: &Path) -> bool {
     winc_backend::fs::read_dir(dir).is_ok_and(|mut entries| entries.next().is_some())
 }
@@ -30,7 +36,11 @@ impl App {
             return;
         };
         self.git_operate_in(root, t!("git-op-init").into(), |git, dir| {
-            git.init(dir).map(|summary| (summary, Then::Rescan))
+            let summary = git.init(dir)?;
+            // 新仓库顺带生成一份 `.gitignore`（已有时不动）：构建产物不会一上来就全是未跟踪的
+            // 文件。写不成不算初始化失败。
+            git.write_starter_ignore(dir);
+            Ok((summary, Then::Rescan))
         });
     }
 
@@ -62,7 +72,7 @@ impl App {
             None
         } else if name.is_none() || url.starts_with('-') {
             Some(t!("git-clone-invalid-url"))
-        } else if parent.as_ref().is_none_or(|p| !winc_backend::fs::is_dir(p)) {
+        } else if parent.as_ref().is_none_or(|p| !clone_parent_usable(p)) {
             Some(t!("git-clone-no-parent"))
         } else if dir.as_deref().is_some_and(occupied) {
             Some(t!("git-clone-occupied"))
@@ -207,6 +217,13 @@ impl App {
     /// 对标签 `name` 执行 `op`；删除前先确认。
     pub(in crate::app) fn run_tag_op(&mut self, op: TagOp, name: String) {
         match op {
+            TagOp::NewBranch => self.open_branch_dialog(Some(name), None),
+            TagOp::Merge => self.git_operate(
+                t!("git-op-merge", name = name.as_str()),
+                move |git, root| {
+                    git.operate(root, &["merge", "--no-edit", "--end-of-options", &name])
+                },
+            ),
             TagOp::Push => self.git_operate(
                 t!("git-op-tag-push", name = name.as_str()),
                 move |git, root| git.push_tag(root, &name),

@@ -67,6 +67,7 @@ pub fn reveal(text: &str, caret: Option<usize>, insert: Option<&str>) -> Block {
         let (at, src, len) = (a.text as usize, base + a.source as usize, a.len as usize);
         emit(&mut out, s..src.max(s), t..at.max(t));
         t = t.max(at);
+        s = s.max(src);
         if len > 0 {
             out.copy(inline, at..at + len, Some((src, &lines)), &elements, caret);
             t = at + len;
@@ -82,6 +83,7 @@ pub fn reveal(text: &str, caret: Option<usize>, insert: Option<&str>) -> Block {
         images: inline.images.clone(),
         align: inline.align,
         map: out.map,
+        ids: inline.ids.clone(),
         source: 0,
     };
     match heading {
@@ -92,28 +94,44 @@ pub fn reveal(text: &str, caret: Option<usize>, insert: Option<&str>) -> Block {
 
 /// 带标记的行内元素在 `plain` 中的字节范围。
 ///
-/// 包括强调、粗体、删除线、链接、图片、行内代码、公式、HTML 标签和脚注引用。
+/// 包括强调、粗体、删除线、高亮、链接、图片、行内代码、公式、HTML 标签和脚注引用。
 fn elements(plain: &str) -> Vec<Range<usize>> {
-    Parser::new_ext(plain, options())
-        .into_offset_iter()
-        .filter(|(event, _)| {
-            matches!(
-                event,
-                Event::Start(
-                    Tag::Emphasis
-                        | Tag::Strong
-                        | Tag::Strikethrough
-                        | Tag::Link { .. }
-                        | Tag::Image { .. }
-                ) | Event::Code(_)
-                    | Event::InlineMath(_)
-                    | Event::DisplayMath(_)
-                    | Event::InlineHtml(_)
-                    | Event::FootnoteReference(_)
-            )
+    let mut elements = Vec::new();
+    // 行内代码和公式里的 `==` 是文字，不高亮。
+    let mut code = Vec::new();
+    let masked = super::delims::mask(plain);
+    for (event, range) in Parser::new_ext(&masked, options()).into_offset_iter() {
+        match &event {
+            Event::Code(_) | Event::InlineMath(_) | Event::DisplayMath(_) => {
+                code.push(range.clone());
+            }
+            _ => {}
+        }
+        if matches!(
+            &event,
+            Event::Start(
+                Tag::Emphasis
+                    | Tag::Strong
+                    | Tag::Strikethrough
+                    | Tag::Link { .. }
+                    | Tag::Image { .. }
+            ) | Event::Code(_)
+                | Event::InlineMath(_)
+                | Event::DisplayMath(_)
+                | Event::InlineHtml(_)
+                | Event::FootnoteReference(_)
+        ) {
+            elements.push(range);
+        }
+    }
+    elements.extend(
+        super::mark::pairs(plain, |at| {
+            code.iter().any(|range| range.contains(&at)) || super::mark::escaped(plain, at)
         })
-        .map(|(_, range)| range)
-        .collect()
+        .into_iter()
+        .map(|[open, close]| open.start..close.end),
+    );
+    elements
 }
 
 /// 返回包含位置 `at` 的最内层元素。
@@ -281,7 +299,7 @@ impl Out {
 
     /// 处理原文中未显示为文字的一段 `gap`（相对 `plain`），返回其中是否显示了内容。
     ///
-    /// 光标接触的元素显示其标记，其余标记和换行不显示（软换行生成的空格已在文字中）。`own` 为真时，
+    /// 光标接触的元素显示其标记，其余标记和换行不显示（软换行已在文字中）。`own` 为真时，
     /// 不属于任何元素的标记单独成为一处（emoji 短码）；否则按行拆分，每段单独成为一处
     /// （标题的 `#`、转义的 `\`）。
     fn gap(
@@ -311,8 +329,10 @@ impl Out {
                 None => {
                     let p = piece(i);
                     let p = gap.start + p.start..gap.start + p.end;
-                    // 行首、行尾的空白（续行的缩进、硬换行的两个空格）不视为标记。
-                    !plain[p.clone()].trim().is_empty() && touches(&p, caret)
+                    // 空白只在行尾且光标接触时显示。
+                    let blank = plain[p.clone()].trim().is_empty();
+                    let end = p.end == plain.len() || plain[p.end..].starts_with('\n');
+                    (!blank || end) && touches(&p, caret)
                 }
             };
             if show {

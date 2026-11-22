@@ -32,9 +32,12 @@ impl App {
     /// 处理顺序：取消文件树拖动、关闭「⋯」菜单、设置浮层（模态）、键位表中的快捷键，
     /// 最后按焦点分发。
     pub(in crate::app) fn on_key(&mut self, event: &KeyEvent) {
+        self.track_tap(event);
         if event.state != ElementState::Pressed {
             return;
         }
+        // 按键后不再显示格式工具栏，鼠标重新选中时再显示。
+        self.preview.markdown.toolbar = None;
 
         let m = self.pointer.modifiers;
         let cmd = if cfg!(target_os = "macos") {
@@ -49,6 +52,7 @@ impl App {
 
         self.reset_blink();
         self.request_redraw();
+        self.scroll.keyed = true;
 
         if matches!(event.logical_key, Key::Named(NamedKey::Escape))
             && self.tree_dragging().is_some()
@@ -86,6 +90,10 @@ impl App {
         if self.diagram_view_key(&event.logical_key, &base, cmd) {
             return;
         }
+        // 链接地址的补全列表开着时，选择、写入和关掉列表的键先给它。
+        if self.suggest_key(&event.logical_key) {
+            return;
+        }
 
         // Vim 模式开启时，编辑区的按键先交给 Vim 层，列表中的移动按键换成方向键；Vim 层不处理
         // 的按键继续按原有的顺序处理。
@@ -117,7 +125,7 @@ impl App {
         }
 
         match self.focus {
-            Focus::Editor => self.on_key_editor(event, cmd),
+            Focus::Editor => self.on_key_editor(&EditorKey::of(event), cmd),
             Focus::Search | Focus::Replace => self.on_key_search(event, &base, cmd),
             Focus::Prompt => self.on_key_prompt(event, &base, cmd),
             Focus::Picker => self.on_key_picker(event, &base, cmd),
@@ -134,15 +142,7 @@ impl App {
             | Focus::GlobalExclude => self.on_key_panel_field(event, &base, cmd),
             Focus::Results => self.on_key_results(event),
             Focus::CommitMessage => self.on_key_commit_message(event, &base, cmd),
-            // 历史提交的文件列表借用提交视图的列表，按键同样交给它处理。
-            Focus::CommitList => {
-                if self
-                    .with_log_list(|app| app.on_key_commit_list(event))
-                    .is_none()
-                {
-                    self.on_key_commit_list(event);
-                }
-            }
+            Focus::CommitList => self.on_key_commit_list(event),
             Focus::Outline => self.outline_key(&event.logical_key),
             Focus::LogFilter => self.on_key_log_filter(event, &base, cmd),
             Focus::Terminal => self.on_key_terminal(event),
@@ -154,13 +154,14 @@ impl App {
     }
 
     /// 返回当前焦点对应的键位上下文，键位表按它划分适用范围。
-    pub(super) fn key_context(&self) -> Context {
+    pub(in crate::app) fn key_context(&self) -> Context {
         match self.focus {
-            Focus::Editor if self.markdown_live() => Context::Markdown,
+            Focus::Editor if self.markdown_keys() => Context::Markdown,
             Focus::Editor => Context::Editor,
             Focus::Search => Context::Find,
             Focus::Replace => Context::Replace,
             Focus::Tree => Context::Tree,
+            Focus::CommitList => Context::Changes,
             // 终端的查找框、标签上改名字的输入框也按终端的键位：`⌘W` 关的是终端标签，`⌘F` 回到
             // 终端的查找，不进入编辑区（编辑用的快捷键见 `run_action`，留给输入框）。
             Focus::Terminal | Focus::TerminalFind | Focus::TerminalRename => Context::Terminal,
@@ -197,7 +198,7 @@ impl App {
 
     /// 应用是否在当前的上下文中绑定了按键 `stroke`，含两步组合键的第一步。
     pub(in crate::app) fn binds(&self, stroke: Stroke) -> bool {
-        let lookup = keymap::lookup(keymap::current(), stroke, None, self.key_context());
+        let lookup = self.lookup_shortcut(stroke, None);
         !matches!(lookup, Lookup::None)
     }
 
@@ -207,14 +208,23 @@ impl App {
     /// 不是快捷键时返回 `false`，按键交给焦点所在的部件。
     pub(in crate::app) fn on_shortcut(&mut self, stroke: Stroke) -> bool {
         let table = keymap::current();
-        let context = self.key_context();
+
+        // 程序开始运行或输入策略改变后，旧的组合键等待不能继续截获程序输入。
+        if self.focus == Focus::Terminal
+            && self.pending_chord.is_some()
+            && (!self.terminal_at_prompt()
+                || self.config.terminal_application_priority == Some(true))
+        {
+            self.pending_chord = None;
+            self.status.message = None;
+        }
 
         if let Some(first) = self.pending_chord.take() {
             self.status.message = None;
             if stroke.key == keymap::KeyCode::Escape {
                 return true;
             }
-            match keymap::lookup(table, stroke, Some(first), context) {
+            match self.lookup_shortcut(stroke, Some(first)) {
                 Lookup::Run(actions)
                     if actions
                         .iter()
@@ -232,13 +242,19 @@ impl App {
         // 不移动，上下键仍然在列表里选文件。
         if self.focus == Focus::CommitList
             && self.diff_active()
-            && let Lookup::Run(actions) = keymap::lookup(table, stroke, None, Context::Editor)
+            && let Lookup::Run(actions) = keymap::lookup(&table, stroke, None, Context::Editor)
             && let Some(&action) = actions.iter().find(|a| a.navigates_diff())
         {
             return self.run_action(action);
         }
 
-        match keymap::lookup(table, stroke, None, context) {
+        match self.lookup_shortcut(stroke, None) {
+            Lookup::Run(actions)
+                if self.focus == Focus::Terminal
+                    && self.run_terminal_shortcut(stroke, &actions) =>
+            {
+                true
+            }
             Lookup::Run(actions) => actions
                 .into_iter()
                 .any(|a| self.run_action(self.keyboard_action(a))),
@@ -259,7 +275,7 @@ impl App {
     ///
     /// macOS 上没有打开的标签时，「关闭标签页」的快捷键改为关闭窗口：关掉最后一个标签后再按
     /// 一次 `⌘W` 关闭窗口。只对按键生效，在命令面板里选「关闭标签页」不会关闭窗口。
-    fn keyboard_action(&self, action: Action) -> Action {
+    pub(super) fn keyboard_action(&self, action: Action) -> Action {
         if cfg!(target_os = "macos")
             && action == Action::CloseTab
             && self.editor.documents.is_empty()
@@ -271,25 +287,30 @@ impl App {
     }
 
     /// 处理焦点在编辑区时的按键：移动光标、翻页、换行、缩进、删除和键入。
-    pub(in crate::app) fn on_key_editor(&mut self, event: &KeyEvent, cmd: bool) {
+    pub(in crate::app) fn on_key_editor(&mut self, event: &EditorKey, cmd: bool) {
         if self.editor.active.is_none() {
             if !event.repeat {
-                self.setup_key(&event.logical_key);
+                self.setup_key(event.key);
             }
             return;
         }
         if self.log_active() {
-            self.log_key(&event.logical_key);
+            self.log_key(event.key);
+            return;
+        }
+        if self.hex_active() {
+            self.hex_key(event.key, cmd);
             return;
         }
         if self.editor.active().is_some_and(|d| d.diff.is_some()) {
             if !self.diff_edit_key(event, cmd) {
-                self.diff_key(&event.logical_key, cmd);
+                self.diff_key(event.key, cmd);
             }
             return;
         }
+        // 补全列表开着时，选择、写入和关掉列表的键先给它。
         if self.lsp_completion.is_some() {
-            match &event.logical_key {
+            match event.key {
                 Key::Named(NamedKey::ArrowUp) => {
                     self.move_lsp_completion(false);
                     return;
@@ -310,14 +331,14 @@ impl App {
                 _ => self.lsp_completion = None,
             }
         }
-        if self.markdown_key(&event.logical_key, cmd)
-            || self.table_key(&event.logical_key, cmd)
-            || self.pdf_key(&event.logical_key)
+        if self.markdown_key(event.key, cmd)
+            || self.table_key(event.key, cmd)
+            || self.pdf_key(event.key)
         {
             return;
         }
         // 改动卡片开着时 `Esc` 先关卡片。
-        if self.git.changes.popup.is_some() && event.logical_key == Key::Named(NamedKey::Escape) {
+        if self.git.changes.popup.is_some() && *event.key == Key::Named(NamedKey::Escape) {
             self.git.changes.popup = None;
             self.request_redraw();
             return;
@@ -337,7 +358,7 @@ impl App {
         };
         let jump = cfg!(target_os = "macos") && cmd;
 
-        let command = match &event.logical_key {
+        let command = match event.key {
             Key::Named(NamedKey::ArrowLeft) if jump => Command::LineStart { extend },
             Key::Named(NamedKey::ArrowRight) if jump => Command::LineEnd { extend },
             Key::Named(NamedKey::ArrowUp) if jump => Command::DocStart { extend },
@@ -375,7 +396,7 @@ impl App {
             _ => {
                 // 普通字符输入；输入法提交的文字由 `Ime::Commit` 处理。
                 if !control
-                    && let Some(text) = &event.text
+                    && let Some(text) = event.text
                     && !text.chars().any(char::is_control)
                 {
                     self.run(Command::Insert(text.to_string()));
@@ -384,6 +405,11 @@ impl App {
             }
         };
 
+        self.run_key_command(command);
+    }
+
+    /// 在编辑区执行按键或快捷键对应的命令 `command`。
+    pub(in crate::app) fn run_key_command(&mut self, command: Command) {
         let head = self.editor.active().map(|d| (d.selection.head, d.revision));
         self.run(command);
         // 可编辑的 Markdown 预览：只移动了光标时，不停留在预览中不显示的块标记里。
@@ -392,6 +418,26 @@ impl App {
         {
             self.live_settle_caret(head);
         }
+    }
+
+    /// 像在编辑区按下 `key` 一样处理：只带 `⇧`（`shift` 为真且按着 `⇧` 时），其余修饰键不算。
+    ///
+    /// 键位表中等同于方向键、删除键的命令（macOS 的 `⌃N`、`⌃H` 等）由此执行，Markdown 预览、
+    /// 表格、差异和十六进制视图都按真的按下这个键处理。
+    pub(in crate::app) fn press_editor_key(&mut self, key: NamedKey) {
+        if self.focus != Focus::Editor {
+            return;
+        }
+        let held = self.pointer.modifiers;
+        self.pointer.modifiers = held & winit::keyboard::ModifiersState::SHIFT;
+        let key = Key::Named(key);
+        let event = EditorKey {
+            key: &key,
+            text: None,
+            repeat: false,
+        };
+        self.on_key_editor(&event, false);
+        self.pointer.modifiers = held;
     }
 
     /// 处理查找条（查找、替换输入框）中的按键。
@@ -567,6 +613,17 @@ impl App {
     fn on_key_settings(&mut self, event: &KeyEvent, base: &str, cmd: bool) {
         let shift = self.pointer.modifiers.shift_key();
 
+        // 修改快捷键时，按键都记作新键。
+        if self.settings.key_edit.is_some() {
+            let location = event.location;
+            if let Some(stroke) =
+                self.stroke_of(&event.logical_key, base, event.physical_key, location)
+            {
+                self.key_edit_stroke(stroke);
+            }
+            return;
+        }
+
         if self.focus == Focus::KeySearch {
             self.on_key_search_keys(event, base, cmd);
             return;
@@ -711,7 +768,7 @@ impl App {
     /// 录制按键时，按键写入搜索框，`Esc` 停止录制；不录制时，`Esc` 先清空搜索框，搜索框为空时
     /// 关闭设置。「录制按键」的快捷键在两种状态下都用于开关录制。
     pub(in crate::app) fn keys_page_stroke(&mut self, stroke: Stroke) -> bool {
-        let action = match keymap::lookup(keymap::current(), stroke, None, Context::Keys) {
+        let action = match keymap::lookup(&keymap::current(), stroke, None, Context::Keys) {
             Lookup::Run(actions) => actions.first().copied(),
             _ => None,
         };
@@ -1095,6 +1152,7 @@ impl App {
             Ime::Commit(text) => {
                 self.ime.preedit.clear();
                 self.ime.field_preedit.clear();
+                self.scroll.keyed = true;
 
                 let focus = self.focus;
                 match focus {
@@ -1194,4 +1252,24 @@ pub struct ImeState {
     pub(in crate::app) last_area: Option<winc_render::Rect>,
     /// 上一次告知窗口的输入法是否启用；尚未告知时为 `None`。
     pub(in crate::app) allowed: Option<bool>,
+}
+
+/// 交给编辑区的一次按键：键、键入的文字，以及是否为按住不放时的重复。
+///
+/// 键位表中等同于方向键、删除键的命令（见 [`App::press_editor_key`]）也以这种形式交给编辑区。
+pub(in crate::app) struct EditorKey<'a> {
+    pub key: &'a Key,
+    pub text: Option<&'a str>,
+    pub repeat: bool,
+}
+
+impl<'a> EditorKey<'a> {
+    /// 返回窗口送来的按键 `event` 对应的编辑区按键。
+    pub(in crate::app) fn of(event: &'a KeyEvent) -> Self {
+        EditorKey {
+            key: &event.logical_key,
+            text: event.text.as_deref(),
+            repeat: event.repeat,
+        }
+    }
 }

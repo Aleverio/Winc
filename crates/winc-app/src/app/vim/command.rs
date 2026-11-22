@@ -13,6 +13,7 @@ use winc_vim::{AppCommand, HostOption, Listing, Mapped, Mapping, Mode, Prompt, V
 use winit::keyboard::{Key, NamedKey};
 
 use super::shared;
+use crate::app::NoticeKind;
 use crate::app::{App, CloseRequest, Focus, PromptKind, SavePrompt};
 use crate::field::TextField;
 use crate::keymap::Action;
@@ -248,7 +249,7 @@ impl App {
                 let candidates = match found.kind {
                     Completing::Path => self.vim_paths(partial),
                     Completing::Buffer => {
-                        let names = self.editor.documents.iter().map(|doc| doc.name());
+                        let names = self.editor.tabs().iter().map(|doc| doc.name());
                         let mut names: Vec<String> = names
                             .filter(|name| name.starts_with(partial))
                             .map(|name| name.into_owned())
@@ -316,11 +317,10 @@ impl App {
                 if !name.starts_with(prefix) || hidden {
                     return None;
                 }
-                let slash = if winc_backend::fs::is_dir(entry.path()) {
-                    "/"
-                } else {
-                    ""
-                };
+                // 类别取自目录项，指向目录的符号链接再查一次。
+                let is_dir = entry.kind.is_dir()
+                    || entry.kind.is_symlink() && winc_backend::fs::is_dir(entry.path());
+                let slash = if is_dir { "/" } else { "" };
                 Some(format!("{folder}{name}{slash}"))
             })
             .collect();
@@ -373,21 +373,21 @@ impl App {
             AppCommand::Edit { path: None, .. } => self.flash(t!("editor-vim-unsupported")),
             AppCommand::New { path: None } => self.new_file(),
             AppCommand::BufferStep(step) => {
-                let count = self.editor.documents.len();
+                let count = self.editor.tab_count();
                 for _ in 0..step.unsigned_abs().min(count) {
                     self.cycle_tab(step > 0);
                 }
             }
             AppCommand::BufferNumber(number) => self.vim_activate(number.checked_sub(1)),
             AppCommand::BufferName(name) => {
-                let documents = self.editor.documents.iter();
+                let documents = self.editor.tabs().iter();
                 let found = documents
                     .enumerate()
                     .find(|(_, doc)| doc.name().contains(&name));
                 self.vim_activate(found.map(|(index, _)| index));
             }
             AppCommand::Only => {
-                let others = self.editor.documents.iter().map(|doc| doc.id);
+                let others = self.editor.tabs().iter().map(|doc| doc.id);
                 self.close_tabs(others.filter(|id| Some(*id) != active).collect());
             }
             AppCommand::List(listing) => self.vim_show_list(listing),
@@ -440,7 +440,12 @@ impl App {
         if doc.path.as_ref() == Some(&to) {
             return self.vim_save();
         }
-        if winc_backend::fs::exists(&to) && !force {
+        // 远端的路径在界面线程上查不到是否已有文件：不加 `!` 时不写入，不会不经确认就覆盖。
+        let unknown = winc_backend::is_remote(&to) && self.known_folder(&to).is_none();
+        if unknown && !force {
+            return self.flash(t!("editor-vim-file-unknown"));
+        }
+        if !unknown && self.may_exist(&to) && !force {
             return self.flash(t!("editor-vim-file-exists"));
         }
         if doc.path.is_none() {
@@ -456,11 +461,14 @@ impl App {
                 self.picker_touched(vec![to]);
                 self.flash(t!("editor-vim-written", name = name));
             }
-            Err(error) => self.notify(t!(
-                "workspace-save-failed",
-                name = name,
-                error = error.to_string()
-            )),
+            Err(error) => self.notify(
+                NoticeKind::Error,
+                t!(
+                    "workspace-save-failed",
+                    name = name,
+                    error = error.to_string()
+                ),
+            ),
         }
     }
 
@@ -479,7 +487,7 @@ impl App {
 
     /// 切换到第 `index` 个文档；不存在时提示。
     fn vim_activate(&mut self, index: Option<usize>) {
-        match index.filter(|index| *index < self.editor.documents.len()) {
+        match index.filter(|index| *index < self.editor.tab_count()) {
             Some(index) => self.activate_tab(index),
             None => self.flash(t!("editor-vim-no-buffer")),
         }
@@ -518,7 +526,7 @@ impl App {
             Some(content[start..=end].iter().collect::<String>())
         });
         let path = word.map(|word| self.vim_path(&word));
-        match path.filter(|path| winc_backend::fs::is_file(path)) {
+        match path.filter(|path| self.may_be_file(path)) {
             Some(path) => self.open_path(&path),
             None => self.flash(t!("editor-vim-no-file")),
         }
@@ -655,7 +663,7 @@ impl App {
                     })
                     .collect()
             }
-            Listing::Buffers => (self.editor.documents.iter().enumerate())
+            Listing::Buffers => (self.editor.tabs().iter().enumerate())
                 .map(|(index, doc)| {
                     let mark = if doc.is_dirty() { " +" } else { "" };
                     VimRow {
@@ -671,6 +679,7 @@ impl App {
         self.overlays.picker.branch_rows = None;
         self.overlays.picker.location_rows = None;
         self.overlays.picker.folders = false;
+        self.overlays.picker.languages = false;
         self.overlays.picker.remote = None;
         self.overlays.picker.vim_list = Some(VimList {
             kind: listing,

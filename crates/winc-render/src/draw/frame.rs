@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::draw::canvas::{Tinted, Wall};
+use winc_emoji as sequence;
 
 /// 一帧的绘制上下文：画布、字形缓存、覆盖率表和裁剪区域。
 ///
@@ -31,6 +32,8 @@ pub struct Frame<'a> {
     ///
     /// 由 [`Frame::with_opacity`] 临时相乘。
     pub(crate) opacity: f32,
+    /// 颜色混合的底色和原色保留的比例，见 [`Frame::with_fade`]。
+    pub(crate) toward: Option<(Color, f32)>,
     /// 背景色，`0xAARRGGBB`。
     pub(crate) background: u32,
     /// 已随背景色绘制的底色矩形（物理像素），见 [`Frame::base`]。
@@ -89,6 +92,28 @@ impl Frame<'_> {
         result
     }
 
+    /// 执行 `paint`，其中绘制的颜色按 `amount`（0–1）向纯色底 `backdrop` 混合。
+    ///
+    /// 不透明的颜色仍不透明，重叠处保持遮挡；图片按不透明度变淡。有窗口背景图时改用
+    /// [`Self::with_opacity`]。
+    pub fn with_fade<R>(
+        &mut self,
+        backdrop: Color,
+        amount: f32,
+        paint: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        if amount >= 1.0 {
+            return paint(self);
+        }
+        if self.wall.is_some() {
+            return self.with_opacity(amount, paint);
+        }
+        let outer = self.toward.replace((backdrop, amount.clamp(0.0, 1.0)));
+        let result = paint(self);
+        self.toward = outer;
+        result
+    }
+
     /// 保存画面上 `rect`（逻辑像素，先裁剪到画面之内）中当前的像素。
     ///
     /// 之后可用 [`Self::restore_tinted`] 写回该位置，或用 [`Self::blend_snapshot`] 作为图层叠加。
@@ -139,7 +164,22 @@ impl Frame<'_> {
 
     /// 返回乘以整体不透明度之后的颜色。
     fn faded(&self, color: Color) -> Color {
+        let color = match self.toward {
+            Some((b, k)) => Color {
+                r: b.r + (color.r - b.r) * k,
+                g: b.g + (color.g - b.g) * k,
+                b: b.b + (color.b - b.b) * k,
+                a: color.a,
+            },
+            None => color,
+        };
         color.alpha(color.a * self.opacity)
+    }
+
+    /// 返回绘制图片时的整体不透明度（0–255）。
+    fn pixel_opacity(&self) -> u32 {
+        let fade = self.toward.map_or(1.0, |(_, k)| k);
+        (self.opacity * fade * 255.0).round() as u32
     }
 
     /// 返回屏幕缩放系数（每个逻辑像素对应的物理像素数，Retina 屏幕上为 2）。
@@ -153,7 +193,7 @@ impl Frame<'_> {
     /// 不缩放，需要缩放时由调用方先处理。超出 `clip` 的部分不绘制；`rgba` 不足
     /// `width * height * 4` 字节时不绘制。
     pub fn pixels(&mut self, (x, y): (f32, f32), width: u32, height: u32, rgba: &[u8], clip: Rect) {
-        let opacity = (self.opacity * 255.0).round() as u32;
+        let opacity = self.pixel_opacity();
         if opacity == 0 || rgba.len() < (width as usize) * (height as usize) * 4 {
             return;
         }
@@ -172,7 +212,7 @@ impl Frame<'_> {
     /// 用于暂时显示尺寸不符的图像（例如缩放过渡期间）。超出 `clip` 的部分不绘制；`rgba` 不足
     /// `width * height * 4` 字节时不绘制。
     pub fn pixels_scaled(&mut self, rect: Rect, width: u32, height: u32, rgba: &[u8], clip: Rect) {
-        let opacity = (self.opacity * 255.0).round() as u32;
+        let opacity = self.pixel_opacity();
         let size = (width as usize, height as usize);
         if opacity == 0 || rgba.len() < size.0 * size.1 * 4 {
             return;
@@ -188,7 +228,7 @@ impl Frame<'_> {
     /// 不透明时按行一次填色；有半透明（淡入淡出）时逐格绘制。两种情况都只处理 `clip` 内的
     /// 方格，耗时与 `rect` 超出 `clip` 的部分无关。
     pub fn checker(&mut self, rect: Rect, cell: f32, (first, second): (Color, Color), clip: Rect) {
-        if self.opacity >= 1.0 && first.a >= 1.0 && second.a >= 1.0 {
+        if self.opacity >= 1.0 && self.toward.is_none() && first.a >= 1.0 && second.a >= 1.0 {
             let area = rect.to_pixels(self.scale);
             let cell = (cell * self.scale).round().max(1.0) as usize;
             let clip = clip.intersect(self.limit).to_pixels_outer(self.scale);
@@ -435,16 +475,117 @@ impl Frame<'_> {
     ) -> f32 {
         let mut pen = x;
 
-        for c in text.chars() {
-            let resolved = self.glyphs.lookup_faux(kind, faux, size, c);
+        for unit in sequence::units(text) {
             // 超出裁剪框右边的部分只累加宽度，不光栅化。
-            if pen <= clip.right().min(self.limit.right()) {
-                self.draw_glyph(kind, faux, size, (pen, baseline), c, resolved, color, clip);
+            let visible = pen <= clip.right().min(self.limit.right());
+            match unit {
+                sequence::Unit::Char(c) => {
+                    let resolved = self.glyphs.lookup_faux(kind, faux, size, c);
+                    if visible {
+                        let at = (pen, baseline);
+                        self.draw_glyph(kind, faux, size, at, c, resolved, color, clip);
+                    }
+                    pen += resolved.advance;
+                }
+                sequence::Unit::Sequence(unit) if visible => {
+                    pen += self.draw_sequence(kind, faux, size, (pen, baseline), unit, color, clip);
+                }
+                sequence::Unit::Sequence(unit) => {
+                    pen += self.glyphs.sequence_advance(kind, faux, size, unit);
+                }
             }
-            pen += resolved.advance;
         }
 
         pen
+    }
+
+    /// 在笔位置 `(x, baseline)` 绘制 emoji 序列 `unit`，返回它的前进宽度（逻辑像素）。
+    ///
+    /// 序列由 emoji 字体合成；无法合成时逐个绘制其中的可见字符。
+    #[allow(clippy::too_many_arguments)]
+    fn draw_sequence(
+        &mut self,
+        kind: FontKind,
+        faux: Faux,
+        size: f32,
+        (x, baseline): (f32, f32),
+        unit: &str,
+        color: Color,
+        clip: Rect,
+    ) -> f32 {
+        if let Some(shaped) = self.glyphs.shaped(unit) {
+            let base = unit.chars().next().unwrap_or(' ');
+            self.draw_shaped(kind, size, (x, baseline), (&shaped, base), color, clip);
+            return shaped.advance() * size;
+        }
+        let mut pen = x;
+        for c in unit.chars().filter(|&c| !sequence::ignorable(c)) {
+            let resolved = self.glyphs.lookup_faux(kind, faux, size, c);
+            self.draw_glyph(kind, faux, size, (pen, baseline), c, resolved, color, clip);
+            pen += resolved.advance;
+        }
+        pen - x
+    }
+
+    /// 在笔位置 `(x, baseline)` 绘制整形好的序列 `shaped`；`base` 是序列的第一个字符。
+    fn draw_shaped(
+        &mut self,
+        kind: FontKind,
+        size: f32,
+        (x, baseline): (f32, f32),
+        (shaped, base): (&Shaped, char),
+        color: Color,
+        clip: Rect,
+    ) {
+        let mut pen = x;
+        for &(glyph, dx, dy, advance) in &shaped.glyphs {
+            let resolved = Resolved {
+                slot: shaped.slot,
+                glyph,
+                advance: advance * size,
+            };
+            let at = (pen + dx * size, baseline - dy * size);
+            self.draw_glyph(kind, Faux::default(), size, at, base, resolved, color, clip);
+            pen += advance * size;
+        }
+    }
+
+    /// 在等宽网格上绘制 emoji 序列 `unit`，它占 `cells` 个格子（每格宽 `cell`，逻辑像素）；
+    /// 返回是否已绘制。
+    ///
+    /// 序列由 emoji 字体合成：窄于所占的格子时在图形所需的几格内水平居中，
+    /// 宽于格子时缩小到恰好容纳。按文字显示的序列或系统中没有 emoji 字体时返回假，
+    /// 由调用方逐字符绘制。
+    #[allow(clippy::too_many_arguments)]
+    pub fn cell_sequence(
+        &mut self,
+        kind: FontKind,
+        size: f32,
+        x: f32,
+        baseline: f32,
+        cell: f32,
+        cells: usize,
+        unit: &str,
+        color: Color,
+        clip: Rect,
+    ) -> bool {
+        let Some(shaped) = self.glyphs.shaped(unit) else {
+            return false;
+        };
+        let room = cell * cells.max(1) as f32;
+        let advance = shaped.advance() * size;
+        let size = if advance > room {
+            size * room / advance
+        } else {
+            size
+        };
+        let advance = advance.min(room);
+        // 连接符序列占的格数可能多于图形的宽度：只在图形所需的几格内居中，其余的格留空。
+        let used = (advance / cell).ceil().max(1.0) * cell;
+        let at = (x + (used.min(room) - advance) / 2.0, baseline);
+        let base = unit.chars().next().unwrap_or(' ');
+        self.draw_shaped(kind, size, at, (&shaped, base), color, clip);
+        true
     }
 
     /// 在等宽网格上用等宽字体 `kind`（编辑区或终端的正体、斜体）绘制字符 `c`。
@@ -481,9 +622,27 @@ impl Frame<'_> {
 
     /// 返回一段文字的宽度（逻辑像素）。
     pub fn measure(&mut self, kind: FontKind, size: f32, text: &str) -> f32 {
-        text.chars()
-            .map(|c| self.glyphs.advance(kind, size, c))
-            .sum()
+        self.glyphs.measure(kind, Faux::default(), size, text)
+    }
+
+    /// 返回一段文字按 `faux` 绘制时的宽度（逻辑像素）。
+    pub fn measure_faux(&mut self, kind: FontKind, faux: Faux, size: f32, text: &str) -> f32 {
+        self.glyphs.measure(kind, faux, size, text)
+    }
+
+    /// 返回 `chars` 中各字符按 `faux` 绘制时的前进宽度（逻辑像素），每个字符一项。
+    ///
+    /// emoji 序列的宽度记在第一个字符上，其余字符为 0；各项之和与 [`Self::measure_faux`] 相同。
+    pub fn advances_faux(
+        &mut self,
+        kind: FontKind,
+        faux: Faux,
+        size: f32,
+        chars: &[char],
+    ) -> Vec<f32> {
+        let mut out = Vec::with_capacity(chars.len());
+        self.glyphs.advances(kind, faux, size, chars, &mut out);
+        out
     }
 
     /// 返回字符 `c` 按 `faux` 绘制时的前进宽度（逻辑像素）。
@@ -518,8 +677,13 @@ impl Frame<'_> {
 
         let s = self.scale;
         // 先取整到 ¼ 像素，再拆成整像素和档位（0 至 3）；取整后小数部分达到 1 时，
-        // 进位到下一个像素的第 0 档。
-        let quarters = (x * s * 4.0).round();
+        // 进位到下一个像素的第 0 档。中日韩文字按整像素定位，见 [`full_width`]；emoji 同样是
+        // 方块形，彩色位图每像素 4 字节，按档位各存一份的占用是单色字形的 4 倍。
+        let quarters = if full_width(c) || self.glyphs.fonts.is_emoji_slot(slot) {
+            (x * s).round() * 4.0
+        } else {
+            (x * s * 4.0).round()
+        };
         let snapped = (quarters / 4.0).floor();
         let subpixel = (quarters - snapped * 4.0) as u8;
         let baseline_px = (baseline * s).round() as i32;
@@ -554,4 +718,16 @@ impl Frame<'_> {
             self.canvas.coverage(area, &glyph.data, color.argb(), clip);
         }
     }
+}
+
+/// 是否为中日韩文字或全角标点：按整像素定位，只用亚像素第 0 档。
+///
+/// 这些字形是方块形，横向不到半个物理像素的偏移看不出来；按档位分别光栅化时，常用汉字有数千个，
+/// 每字最多四份位图，滚动中文时光栅化次数和字形缓存的占用都成倍增加。区间与 `winc-core` 折行
+/// 时的宽字符相同：谚文、CJK 符号与标点、假名、汉字、全角形式。
+fn full_width(c: char) -> bool {
+    matches!(c as u32,
+        0x1100..=0x115F | 0x2E80..=0x303E | 0x3041..=0x33FF | 0x3400..=0x4DBF
+        | 0x4E00..=0x9FFF | 0xA000..=0xA4CF | 0xAC00..=0xD7A3 | 0xF900..=0xFAFF
+        | 0xFE30..=0xFE4F | 0xFF00..=0xFF60 | 0xFFE0..=0xFFE6 | 0x20000..=0x3FFFD)
 }

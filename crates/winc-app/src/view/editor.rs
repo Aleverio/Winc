@@ -5,6 +5,7 @@
 mod area;
 mod caret;
 mod glyphs;
+mod hex;
 pub(super) mod hint;
 mod minimap;
 mod picture;
@@ -13,11 +14,14 @@ pub(super) mod places;
 mod ruler;
 mod sticky;
 
+pub(in crate::view) use area::{blame_ages, draw_blame_cell};
+
 use area::draw_text_area;
 pub(super) use caret::*;
 pub(super) use glyphs::*;
 pub(crate) use minimap::MinimapRows;
 pub(in crate::view) use picture::*;
+pub(in crate::view) use placeholder::draw_waiting;
 use placeholder::*;
 pub(crate) use ruler::*;
 use sticky::*;
@@ -60,6 +64,7 @@ pub(super) fn draw_editor(app: &mut App, frame: &mut Frame<'_>) {
     // Markdown、PDF 预览绘制时重新填充；预览不显示时若仍保留，滚轮和点击事件会被预览接收。
     app.preview.markdown.area = Rect::default();
     app.preview.pdf.area = Rect::default();
+    app.preview.pdf.page = None;
     app.preview.pdf.strip = Rect::default();
 
     let Some(index) = app.editor.active else {
@@ -97,8 +102,10 @@ pub(super) fn draw_editor(app: &mut App, frame: &mut Frame<'_>) {
         }
         None => {}
     }
-    // docx：显示转换成 Markdown 后排版的阅读视图；读取或转换失败时说明原因。
-    if app.editor.documents[index].unsupported == Some(Unsupported::Docx) {
+    // docx、EPUB：显示转换成 Markdown 后排版的阅读视图；读取或转换失败时说明原因。
+    if (app.editor.documents[index].unsupported.as_ref())
+        .is_some_and(Unsupported::reads_as_markdown)
+    {
         match app.preview.markdown.failed.clone() {
             Some(reason) => {
                 use PlaceholderAction::*;
@@ -191,11 +198,17 @@ pub(super) fn draw_editor(app: &mut App, frame: &mut Frame<'_>) {
         return;
     }
     let doc = &app.editor.documents[index];
-    if doc.preview_kind() == Some(winc_editor::PreviewKind::Markdown)
+    if doc
+        .preview_kind()
+        .is_some_and(winc_editor::PreviewKind::typeset)
         && doc.preview_mode() == winc_editor::PreviewMode::Preview
     {
         let area = app.layout.editor;
-        super::preview::markdown::draw(app, frame, area);
+        if doc.preview_kind() == Some(winc_editor::PreviewKind::Latex) {
+            super::preview::latex::draw(app, frame, area);
+        } else {
+            super::preview::markdown::draw(app, frame, area);
+        }
         return;
     }
     // 分栏预览时缓存中保存的是右半部分的图片（`draw_split`），不清除。
@@ -210,21 +223,30 @@ pub(super) fn draw_editor(app: &mut App, frame: &mut Frame<'_>) {
         super::git::log::draw_log(app, frame, index);
         return;
     }
-    // 文件仍在读取（仅读取耗时较长时执行到此处）：提示正在读取的文件名。
+    if app.editor.documents[index].hex.is_some() {
+        hex::draw_hex(app, frame, index);
+        return;
+    }
+    // 文件仍在读取（仅读取耗时较长时执行到此处）：提示正在读取的文件名和读了多少。
     if app.editor.documents[index].is_pending() {
         let name = app.editor.documents[index].name().into_owned();
-        draw_placeholder(app, frame, t!("editor-reading", name = name), &[]);
+        match app.reading_bar(app.editor.documents[index].id) {
+            Some(fraction) => draw_reading(app, frame, &name, fraction),
+            None => draw_placeholder(app, frame, t!("editor-reading", name = name), &[]),
+        }
         return;
     }
     if let Some(reason) = app.editor.documents[index].unsupported.clone() {
         use PlaceholderAction::*;
         let actions: &[(PlaceholderAction, &str)] = match reason {
             Unsupported::Binary(_) => &[
+                (ShowHex, t!("editor-show-hex")),
                 (OpenAsText, t!("editor-open-anyway")),
                 (OpenWithDefaultApp, t!("editor-open-with-default-app")),
                 (Reveal, system::reveal_label()),
             ],
             Unsupported::TooLarge(_) => &[
+                (ShowHex, t!("editor-show-hex")),
                 (OpenWithDefaultApp, t!("editor-open-with-default-app")),
                 (Reveal, system::reveal_label()),
             ],
@@ -232,6 +254,7 @@ pub(super) fn draw_editor(app: &mut App, frame: &mut Frame<'_>) {
             | Unsupported::Image
             | Unsupported::Workbook
             | Unsupported::Docx
+            | Unsupported::Epub
             | Unsupported::Pdf => &[
                 (Retry, t!("editor-retry")),
                 (Reveal, system::reveal_label()),

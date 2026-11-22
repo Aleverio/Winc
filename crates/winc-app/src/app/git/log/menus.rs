@@ -1,9 +1,11 @@
-//! 提交的菜单，以及执行前要确认的操作。
+//! 提交和改动文件的菜单（含复制补丁、与本地版本比较），以及执行前要确认的操作。
 
 use winc_editor::git::TagTarget;
 use winc_i18n::t;
 
 use super::*;
+use crate::app::NoticeKind;
+use crate::app::input::context_menu::CommitActions;
 
 /// 返回引用 `reference` 的标签名；不是标签时返回 `None`。
 pub(in crate::app) fn tag_name(reference: &Ref) -> Option<&str> {
@@ -14,6 +16,51 @@ pub(in crate::app) fn tag_name(reference: &Ref) -> Option<&str> {
 }
 
 impl App {
+    /// 把文件 `path` 在详情里的版本（选中的提交；比较两个版本时是新的一边）和工作区里的版本
+    /// 并排比较，在后台读取，打开为新标签（见 [`Loaded::LocalDiff`]）。
+    pub(super) fn compare_log_file_with_local(&mut self, path: PathBuf) {
+        let Some(root) = self.active_log_root().map(Path::to_path_buf) else {
+            return;
+        };
+        let view = self.editor.active().and_then(|d| d.log.as_deref());
+        let rev = view.and_then(|v| match &v.compare {
+            Some(c) => Some(c.to.clone()),
+            None => v.selected_oid().map(str::to_owned),
+        });
+        let Some(rev) = rev else {
+            return;
+        };
+        let name = winc_editor::display_name(&path).into_owned();
+        let title = t!(
+            "git-log-local-diff-title",
+            name = name.as_str(),
+            rev = short(&rev)
+        );
+        let sender = self.git.log.results.0.clone();
+        self.spawn_git(UserEvent::GitLog, move |tool| {
+            let view = tool
+                .map_err(|e| unusable(&e))
+                .and_then(|git| local_diff(&git, &root, &rev, &path))
+                .map(Box::new);
+            let _ = sender.send(Loaded::LocalDiff { title, view });
+        });
+    }
+
+    /// 在后台取提交 `oid` 的补丁，取到后复制到剪贴板（见 [`Loaded::Patch`]）。
+    pub(super) fn copy_log_patch(&mut self, oid: String) {
+        let Some(root) = self.active_log_root().map(Path::to_path_buf) else {
+            return;
+        };
+        let sender = self.git.log.results.0.clone();
+        self.spawn_git(UserEvent::GitLog, move |tool| {
+            let result = match tool {
+                Ok(git) => git.commit_patch(&root, &oid, &Cancel::default()),
+                Err(e) => Err(unusable(&e)),
+            };
+            let _ = sender.send(Loaded::Patch { oid, result });
+        });
+    }
+
     /// 右键点在日志的一个提交上：选中它，返回它的提交号。
     pub(in crate::app) fn log_context_target(&mut self, x: f32, y: f32) -> Option<String> {
         if !self.log_active() {
@@ -50,6 +97,45 @@ impl App {
         local_branch(&self.log_commit(oid)?)
     }
 
+    /// 日志里提交 `oid` 的菜单里哪些操作可用。
+    ///
+    /// 另一个 Git 操作还在运行，或者正停在合并、变基中间时，会修改仓库的操作都不可用；撤销、推送、
+    /// 修正和压缩只在日志与提交视图是同一个仓库时可用。
+    pub(in crate::app) fn log_commit_actions(&self, oid: &str) -> CommitActions {
+        let status = self.git.status.as_ref();
+        let busy =
+            self.git.branch.running.is_some() || status.is_some_and(|s| s.operation.is_some());
+        let same = self.active_log_root() == self.git.root.as_deref();
+        let on_branch = self.git.branches.iter().any(|b| b.current && !b.remote);
+        let view = self.editor.active().and_then(|d| d.log.as_deref());
+        let commits = view.map_or(&[][..], |v| v.commits.as_slice());
+        CommitActions {
+            enabled: !busy,
+            undo: same && self.commit_undoable().is_some_and(|l| l.oid == oid),
+            push: same && on_branch && !self.git.remotes.is_empty(),
+            on_head: view.and_then(|view| view.on_head(oid)),
+            child: commits.iter().any(|c| c.parents.iter().any(|p| p == oid)),
+            parent: commits
+                .iter()
+                .any(|c| c.oid == oid && !c.parents.is_empty()),
+            changes: same && status.is_some_and(|s| !s.entries.is_empty()),
+        }
+    }
+
+    /// 编辑日志里选中的提交的说明（快捷键）；不能编辑时说明原因。
+    pub(in crate::app) fn reword_selected_commit(&mut self) {
+        let view = self.editor.active().and_then(|d| d.log.as_deref());
+        let Some(oid) = view.and_then(|v| v.selected_oid()).map(str::to_owned) else {
+            return;
+        };
+        let actions = self.log_commit_actions(&oid);
+        if actions.on_head == Some(false) {
+            self.notify(NoticeKind::Warning, t!("git-rebase-not-on-branch"));
+        } else if actions.enabled {
+            self.run_log_commit_command(MenuCommand::LogReword, &oid);
+        }
+    }
+
     /// 日志里提交 `oid` 的右键菜单选了 `command`。
     ///
     /// 会改仓库的事走分支操作同一套：后台运行、同一时刻只做一件、状态栏说结论、失败右上角说
@@ -58,6 +144,20 @@ impl App {
         let Some(commit) = self.log_commit(oid) else {
             return;
         };
+        let reads = matches!(
+            command,
+            MenuCommand::LogCopyOid
+                | MenuCommand::LogCopyShortOid
+                | MenuCommand::LogCopyMessage
+                | MenuCommand::LogCopyPatch
+                | MenuCommand::LogGoTo
+                | MenuCommand::LogGoToChild
+                | MenuCommand::LogGoToParent
+                | MenuCommand::LogCompareRevision
+        );
+        if !reads {
+            self.follow_log_root();
+        }
         let oid = oid.to_owned();
         let tag = short(&oid).to_owned();
         // 合并提交拣选、撤销时按第一个父提交算（`-m 1`）。
@@ -75,6 +175,16 @@ impl App {
             MenuCommand::LogNewWorktree => self.new_worktree_at(oid, local_branch(&commit)),
             MenuCommand::LogNewTag => self.open_tag_prompt(oid),
             MenuCommand::LogInteractiveRebase => self.start_interactive_rebase(oid),
+            MenuCommand::LogReword => self.start_reword(oid),
+            MenuCommand::LogFixup => self.start_commit_into(oid, false),
+            MenuCommand::LogSquashInto => self.start_commit_into(oid, true),
+            MenuCommand::LogDropCommit => self.start_drop_commit(oid),
+            MenuCommand::LogPushUpTo => self.start_push_up_to(oid),
+            MenuCommand::LogUndoCommit => {
+                if let Some(last) = self.commit_undoable().filter(|l| l.oid == oid).cloned() {
+                    self.confirm_undo_commit(&last);
+                }
+            }
             MenuCommand::LogTag(op, i) => {
                 let tag = commit.refs.iter().filter_map(tag_name).nth(i);
                 if let Some(name) = tag {
@@ -127,6 +237,16 @@ impl App {
                 self.set_clipboard(tag, false);
             }
             MenuCommand::LogGoTo => self.open_go_to_revision(),
+            MenuCommand::LogGoToChild | MenuCommand::LogGoToParent => {
+                let row = (self.editor.active().and_then(|d| d.log.as_deref()))
+                    .and_then(|v| v.commits.iter().position(|c| c.oid == oid));
+                if let Some(row) = row {
+                    self.select_log_row(row);
+                    self.go_to_log_relative(command == MenuCommand::LogGoToParent);
+                }
+            }
+            MenuCommand::LogCompareRevision => self.open_compare_revision(oid),
+            MenuCommand::LogCopyPatch => self.copy_log_patch(oid),
             MenuCommand::LogCopyMessage => {
                 let message = self
                     .editor
@@ -149,6 +269,11 @@ impl App {
         let (message, detail, action) = match &op {
             LogConfirmed::Detach(oid) => (
                 t!("git-log-detach-confirm", commit = short(oid)),
+                t!("git-log-detach-confirm-detail").to_owned(),
+                t!("git-log-detach-confirm-button"),
+            ),
+            LogConfirmed::CheckoutTag(name) => (
+                t!("git-tag-checkout-confirm", name = name.as_str()),
                 t!("git-log-detach-confirm-detail").to_owned(),
                 t!("git-log-detach-confirm-button"),
             ),
@@ -180,6 +305,7 @@ impl App {
                 t!("git-remote-remove-confirm-detail").to_owned(),
                 t!("git-remote-remove-confirm-button"),
             ),
+            LogConfirmed::DropCommit(plan) => super::super::rewrite::drop_prompt(plan),
             // 删除储藏、分支的确认在分支菜单中进行，不经过这里。
             LogConfirmed::DropStash(_) | LogConfirmed::DeleteBranch(..) => {
                 return self.run_log_confirmed(op);
@@ -196,7 +322,18 @@ impl App {
 
     /// 确认框上确认了 `op`。
     pub(in crate::app) fn run_log_confirmed(&mut self, op: LogConfirmed) {
+        self.follow_log_root();
         match op {
+            LogConfirmed::CheckoutTag(name) => {
+                // 写全引用：标签与分支同名时不会签出成分支。
+                let target = format!("refs/tags/{name}");
+                self.git_operate(
+                    t!("git-op-checkout", name = name.as_str()),
+                    move |git, root| {
+                        git.operate(root, &["switch", "--detach", "--end-of-options", &target])
+                    },
+                );
+            }
             LogConfirmed::Detach(oid) => {
                 let tag = short(&oid).to_owned();
                 self.git_operate(
@@ -225,6 +362,53 @@ impl App {
             LogConfirmed::DeleteBranch(name, force) => self.run_delete_branch(name, force),
             LogConfirmed::DeleteTag(name, target) => self.delete_tag(name, target),
             LogConfirmed::RemoveRemote(name) => self.remove_remote(name),
+            LogConfirmed::DropCommit(plan) => self.drop_commit(*plan),
         }
     }
+}
+
+/// 文件 `path` 在版本 `rev` 里与工作区里的并排差异：左边是该版本，右边是磁盘上的内容。
+fn local_diff(git: &Git, root: &Path, rev: &str, path: &Path) -> Result<DiffView, String> {
+    let name = winc_editor::display_name(path).into_owned();
+    let failed = |e: String| t!("git-read-file-failed", name = name.as_str(), error = e);
+    let old = git
+        .content_at(root, rev, path, &Cancel::default())
+        .map_err(failed)?;
+    let new = winc_backend::fs::read(path).map_err(|e| failed(e.to_string()))?;
+    for bytes in old.iter().chain([&new]) {
+        if bytes.len() as u64 > LARGE_FILE {
+            return Err(t!("git-diff-too-large", name = name.as_str()));
+        }
+        if looks_binary(bytes) {
+            return Err(t!("git-diff-binary", name = name.as_str()));
+        }
+    }
+    let language = winc_syntax::detect(&name);
+    let old_title = match old {
+        Some(_) => short(rev).to_owned(),
+        None => t!("git-diff-side-commit-missing", commit = short(rev)),
+    };
+    let old_text = old
+        .as_deref()
+        .map(|b| decode_unknown(b).0)
+        .unwrap_or_default();
+    let blame = |rev: Option<&str>| BlameSource {
+        root: root.to_path_buf(),
+        path: path.to_path_buf(),
+        rev: rev.map(str::to_owned),
+    };
+    let mut view = DiffView::new(
+        DiffSide::new(old_title, &old_text, None, language)
+            .with_missing(old.is_none())
+            .with_blame(blame(Some(rev))),
+        DiffSide::new(
+            t!("git-diff-side-worktree"),
+            &decode_unknown(&new).0,
+            None,
+            language,
+        )
+        .with_blame(blame(None)),
+    );
+    view.snapshot_path = Some(path.to_path_buf());
+    Ok(view)
 }

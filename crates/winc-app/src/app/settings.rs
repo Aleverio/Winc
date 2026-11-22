@@ -3,11 +3,14 @@
 //! [`SettingsState`] 保存选中的分类、页内滚动位置和正在编辑的控件；改动先更新运行时状态，
 //! 再写回 [`winc_config::Config`]。关闭浮层时先离开输入框。
 
+mod adopt;
+mod card;
 mod formatters;
-mod state;
-pub(crate) use state::ZOOM_STEPS;
-pub use state::{DialogCache, FormatRow, SettingsState};
-use state::{FONT_WEIGHT_STEP, OPACITY_STEP, SCROLL_BASE_KEEP, font_error, step, tool_setting};
+mod lsp;
+pub(super) mod shortcuts;
+mod switches;
+
+use std::ops::RangeInclusive;
 
 use winc_editor::format::{
     Auto, FormatError, PRESETS, Plan, Program, Task, knows_how_to_install, presets,
@@ -19,9 +22,229 @@ use super::editor::format::{task_commands, task_commands_mut};
 use super::input::context_menu::{MenuTarget, menu_below, tool_setting as tool_setting_of};
 use super::*;
 use crate::keymap::{self, Os, Stroke};
-use crate::layout::{KeysLayout, SettingsView, ToolLanguages};
+use crate::layout::{KeyRows, KeysLayout, SettingsView, ToolLanguages};
+
+/// 设置浮层的状态。
+#[derive(Debug, Default)]
+pub struct SettingsState {
+    /// 浮层是否打开。
+    ///
+    /// 打开时覆盖整个窗口，键盘和鼠标都先交给浮层。
+    pub open: bool,
+    /// 当前选中的设置项，由键盘上下键或鼠标点击选中；右侧显示的是该设置项所在的那一页。
+    pub selected: Setting,
+    /// 是否用键盘移动过选中项。
+    ///
+    /// 只有此时才给选中的那一行铺底色，使用鼠标时不显示。
+    pub keyboard: bool,
+    /// 正在编辑字体名或格式化命令时，对应的设置项和输入框的当前内容。
+    pub editing: Option<(Setting, TextField)>,
+    /// 开始编辑前的字体设置；按 `Esc` 或关闭浮层时退回该值。
+    pub editing_original: Option<String>,
+    /// 字体名无法识别等错误：出错的设置项和原因，原因用错误色写在该行输入框的左侧。
+    ///
+    /// 离开输入框后，输入退回原值，原因仍留在该行，换页、再次编辑或关闭浮层时清除。
+    pub error: Option<(Setting, String)>,
+    /// 当前页内容的纵向滚动位置（逻辑像素），换页时回到顶部。
+    pub scroll: f32,
+    /// 鼠标悬停的部件。
+    pub hover: Option<SettingsPart>,
+    /// 格式化页列出的语言。
+    ///
+    /// 打开设置时确定，打开期间只会增加，不会减少，已列出的语言也不换位置。
+    pub languages: ToolLanguages,
+    /// 格式化页每一行（格式化工具、修复工具）上显示的内容。
+    pub tool_rows: Vec<(Setting, FormatRow)>,
+    /// 正在后台查询 WSL 发行版中装了哪些工具，查完后重新计算各行。
+    pub probing: bool,
+    /// 分类栏顶部的搜索框：按设置项的名称和说明搜索，不为空白时正文换成搜索结果。
+    pub search: TextField,
+    /// 「关于」页顶部的产品图标：渲染时的边长（物理像素）和 RGBA 像素；关闭浮层时释放。
+    ///
+    /// 渲染失败时像素为空，不再重试，图标不显示。
+    pub logo: Option<(u32, Vec<u8>)>,
+    /// 快捷键页的搜索框：按命令名或按键搜索。
+    pub keys_query: TextField,
+    /// 是否正在录制按键：按下的键写入搜索框，不执行。
+    pub recording: bool,
+    /// 搜索框中的内容是否为录制的按键（按键搜索，而不是按名称搜索）。
+    pub keys_recorded: bool,
+    /// 「快捷键」页中正在修改的一行。
+    pub(crate) key_edit: Option<shortcuts::KeyEdit>,
+    /// 「快捷键」页中一行展开、收起的过渡：同时收起的另一行和时钟；展开的是 `key_edit` 的一行。
+    pub key_slide: Option<(Option<keymap::Action>, super::animation::Clock)>,
+    /// 「导入…」菜单列出的来源，打开菜单时查找。
+    pub(crate) import_sources: Vec<crate::keymap::import::Source>,
+    /// 浮层正在出现（`true`）或消失（`false`）的动画：出现时遮罩淡入，卡片整张淡入、从 95%
+    /// 放大到原大；消失时整张淡出、略微缩小。
+    ///
+    /// 消失期间 `open` 已经是 `false`，键盘和鼠标已经交回主界面，此时仍需绘制最后一帧。
+    pub motion: Option<(bool, super::animation::Clock)>,
+    /// 「模式」换了以后，凸起的那一段从原来那一段（`ThemeChoice`）滑过去。
+    pub mode_slide: Option<(ThemeChoice, super::animation::Clock)>,
+    /// 刚切换的开关（`Setting`）：圆钮滑到另一侧，底色渐变到新状态的颜色。
+    pub switch_slide: Option<(Setting, super::animation::Clock)>,
+    /// 出现、消失动画用的快照，动画开头画一次存下来，动画结束就释放。
+    pub cache: Option<DialogCache>,
+    /// 设置页滚动或拖动期间保存的窗口画面（含遮罩），用于代替逐帧重绘浮层下方的界面。
+    pub scroll_base: Option<winc_render::Snapshot>,
+    /// 最近一次滚动或拖动的时刻；两者都未进行时为 `None`。
+    pub scrolled_at: Option<Instant>,
+    /// 卡片相对窗口中央的偏移（逻辑像素），拖动标题行时改变；窗口存在期间保留，再次打开时
+    /// 卡片仍在原处。
+    pub offset: (f32, f32),
+}
+
+/// 设置浮层出现、消失的动画用的两张快照：动画开头画一次，途中每帧直接拿来用。
+#[derive(Debug)]
+pub struct DialogCache {
+    /// 浮层底下的整个窗口（主界面，不含浮层）。
+    pub base: winc_render::Snapshot,
+    /// 画好的卡片：原大、不透明，不含阴影。
+    pub card: winc_render::Snapshot,
+}
+
+/// 格式化页中一种语言的一行（格式化工具或修复工具）：右侧显示工具，名称下方显示来源和提醒。
+#[derive(Debug, Clone, PartialEq)]
+pub struct FormatRow {
+    /// 按钮上显示的文字：工具名（例如「Ruff」）；自己写的命令为「自定义」；
+    /// 没有可用工具时为「未设置」。
+    pub tool: String,
+    /// 是否没有可用的工具（按钮上写「未设置」）：此时按钮文字画成淡色。
+    pub unset: bool,
+    /// 名称下方那一行：工具的确定方式（例如「自动 · 根据 pyproject.toml」），
+    /// 指定了命令时为命令本身。
+    pub detail: String,
+    /// 自动选择会选中的工具（例如「Ruff（pyproject.toml）」），显示在菜单中「自动」之下；
+    /// 选不出来时为 `None`。
+    pub auto: Option<String>,
+    /// 项目设置（`.winc/config.json`）中写的命令。
+    ///
+    /// 存在时，该项目内使用此命令，不看用户设置。
+    pub project: Option<String>,
+    /// 「未安装」等提醒，接在 `detail` 之后。
+    pub warning: Option<String>,
+    /// 没装但知道安装方法的工具，菜单中有「安装方法…」。
+    pub install: Vec<String>,
+    /// 能否从列表中移除（菜单中有「移除」）：只有格式化工具一行，且这种语言是用户自己加的
+    /// （或写过命令），不看用户设置时不会列出。
+    pub removable: bool,
+}
+
+impl ToolLanguages {
+    /// 返回 `task`（格式化或修复）那一组列出的语言。
+    fn of(&mut self, task: Task) -> &mut Vec<&'static str> {
+        match task {
+            Task::Format => &mut self.format,
+            Task::Fix => &mut self.fix,
+        }
+    }
+}
+
+impl SettingsState {
+    /// 返回设置项 `setting`（`FormatCommand` 或 `FixCommand`）那一行上显示的内容。
+    pub fn tool_row(&self, setting: Setting) -> Option<&FormatRow> {
+        self.tool_rows
+            .iter()
+            .find(|(s, _)| *s == setting)
+            .map(|(_, r)| r)
+    }
+}
+
+/// 返回工具设置项对应的（任务种类，语言 ID）；不是工具设置项时返回 `None`。
+fn tool_setting(setting: Setting) -> Option<(Task, &'static str)> {
+    match setting {
+        Setting::FormatCommand(id) => Some((Task::Format, id)),
+        Setting::FixCommand(id) => Some((Task::Fix, id)),
+        _ => None,
+    }
+}
+
+/// 返回字体设置值 `value` 不能用的原因；未设置或能用时返回 `None`。
+fn font_error(value: &Option<String>) -> Option<String> {
+    let (spec, name, error) = unusable_font(value)?;
+    let name = name.as_str();
+    Some(match (error, spec) {
+        (FontError::NotFound, FontSpec::Name(_)) => t!("settings-font-not-installed", name = name),
+        (FontError::NotFound, FontSpec::Path(_)) => t!("settings-font-file-not-found", name = name),
+        (FontError::Unsupported, _) => t!("settings-font-unsupported", name = name),
+    })
+}
+
+/// 界面缩放的档位（百分比）：设置菜单中列出，快捷键依次经过。
+///
+/// 100% 附近每档 10%，便于微调；更大的倍数每档 25%，较少几次即可放大到上限。
+pub(crate) const ZOOM_STEPS: [u16; 9] = [70, 80, 90, 100, 110, 125, 150, 175, 200];
+
+/// 设置页中背景图片不透明度每次调整的量（百分比）。
+const OPACITY_STEP: f32 = 5.0;
+
+/// 设置页中字重每次调整的量。
+const FONT_WEIGHT_STEP: u16 = 100;
+
+/// 把 `value` 加 1（`up` 为 `true`）或减 1，结果限制在 `range` 之内。
+fn step(value: f32, up: bool, range: RangeInclusive<f32>) -> f32 {
+    let next = if up { value + 1.0 } else { value - 1.0 };
+    next.clamp(*range.start(), *range.end())
+}
+
+/// 把字重 `current` 调粗或调细一档，结果限制在 `range` 之内。
+fn step_weight(current: u16, up: bool, range: RangeInclusive<f32>) -> u16 {
+    let next = if up {
+        (current / FONT_WEIGHT_STEP + 1) * FONT_WEIGHT_STEP
+    } else {
+        current.saturating_sub(1) / FONT_WEIGHT_STEP * FONT_WEIGHT_STEP
+    };
+    next.clamp(*range.start() as u16, *range.end() as u16)
+}
 
 impl App {
+    /// 打开设置浮层；已经打开时不处理。
+    ///
+    /// 每次打开都从第一页的顶部开始。
+    pub(crate) fn open_settings(&mut self) {
+        if self.settings.open {
+            return;
+        }
+
+        // 先关闭其他浮层和菜单：设置浮层位于最上层，不与它们同时显示。
+        if self.overlays.picker.open {
+            self.close_picker();
+        }
+        self.close_form_dialog();
+        self.finish_name_input();
+
+        self.settings.open = true;
+        self.settings.motion = self
+            .clock(super::animation::DIALOG_IN)
+            .map(|clock| (true, clock));
+        self.settings.cache = None;
+        self.settings.scroll = 0.0;
+        self.settings.selected = Setting::default();
+        self.settings.search.set_text("");
+        self.settings.error = self.broken_font(self.settings.selected.page());
+        self.settings.keyboard = false;
+        self.settings.hover = None;
+        self.settings.languages = ToolLanguages::default();
+        // 每次打开设置重新查询发行版中的工具：其间新安装的能列出来。
+        self.format.formatter.forget_wsl();
+        self.refresh_format_rows(true);
+        self.refresh_lsp_languages();
+        // 列出字体要读取字体文件，先在后台读好，打开字体菜单时不必等待；「默认 Shell」菜单中的
+        // shell 同样在后台检测。
+        std::thread::spawn(winc_render::installed_fonts);
+        self.detect_terminal_shells();
+        // 能否找到工具取决于用户 shell 中的 `PATH`，因此在后台获取该环境，取到之后再补上提醒。
+        if let Some(proxy) = self.link.proxy.clone() {
+            self.format.formatter.prepare(move || {
+                let _ = proxy.send_event(UserEvent::FormatterReady);
+            });
+        }
+        self.focus = Focus::Settings;
+        self.set_hover(Hover::None);
+        self.request_redraw();
+    }
+
     /// 关闭设置浮层。
     ///
     /// 正在编辑的字体名按 `Esc` 处理：没有按回车确认就不生效。
@@ -31,6 +254,10 @@ impl App {
         }
 
         self.settings_cancel_field();
+        self.cancel_key_edit();
+        if self.settings_dragging() {
+            self.pointer.drag = Drag::None;
+        }
         self.settings.open = false;
         self.settings.motion = self
             .clock(super::animation::DIALOG_OUT)
@@ -62,14 +289,11 @@ impl App {
     /// 链接不可点击。
     pub(super) fn settings_part_at(&self, x: f32, y: f32) -> Option<SettingsPart> {
         let layout = self.settings_layout();
-        if layout.page == SettingsPage::Keys && !layout.searching {
-            let (search, record) = KeysLayout::header(layout.body);
-            if record.contains(x, y) {
-                return Some(SettingsPart::Record);
-            }
-            if search.contains(x, y) {
-                return Some(SettingsPart::KeySearch);
-            }
+        if layout.page == SettingsPage::Keys
+            && !layout.searching
+            && let Some(part) = self.keys_part_at(layout.body, x, y)
+        {
+            return Some(part);
         }
         let link = self
             .hits
@@ -176,6 +400,7 @@ impl App {
             git: self.motion.module_fx.git.share(self.git_enabled()),
             editing: self.settings.editing.as_ref().map(|(s, _)| *s),
             scroll: self.settings.scroll,
+            offset: self.settings.offset,
         };
         SettingsLayout::compute(self.layout.window, &view, measure)
     }
@@ -279,19 +504,28 @@ impl App {
 
     /// 返回快捷键页当前帧的几何布局，内容按搜索框中的文字筛选。
     pub(crate) fn keys_layout(&self) -> KeysLayout {
+        let open = self.settings.key_edit.as_ref().map(|edit| edit.action);
+        let (closing, t) = match self.settings.key_slide {
+            Some((closing, clock)) => (closing, clock.progress()),
+            None => (None, 1.0),
+        };
+        self.keys_layout_with(KeyRows { open, closing, t })
+    }
+
+    /// 返回快捷键页各行高度按 `rows` 计算时的几何布局。
+    pub(crate) fn keys_layout_with(&self, rows: KeyRows) -> KeysLayout {
         let query = self.settings.keys_query.text();
         let recorded = self.settings.keys_recorded;
-        let groups = keymap::current_rows()
-            .iter()
-            .map(|(group, rows)| {
-                let rows = rows
-                    .iter()
-                    .filter(|row| keymap::row_matches(row, query, Os::CURRENT, recorded))
-                    .collect();
-                (*group, rows)
-            })
-            .collect();
-        KeysLayout::compute(self.settings_layout().body, groups, self.settings.scroll)
+        let keep = |row: &keymap::Row| keymap::row_matches(row, query, Os::CURRENT, recorded);
+        let body = self.settings_layout().body;
+        let scroll = self.settings.scroll;
+        let layout = KeysLayout::compute(body, keymap::current_rows(), keep, rows, scroll);
+        // 收起一行后列表变短，滚动量超出范围时内容贴住底部。
+        let max = layout.max_scroll();
+        if scroll <= max {
+            return layout;
+        }
+        KeysLayout::compute(body, keymap::current_rows(), keep, rows, max)
     }
 
     /// 录制按键时处理一次按键 `stroke`：写入搜索框。
@@ -397,7 +631,8 @@ impl App {
     /// 按滚轮增量 `dy`（逻辑像素）滚动当前页，滚动位置限制在有效范围内。
     pub(in crate::app) fn settings_scroll_by(&mut self, dy: f32) {
         let (_, max) = self.settings_scroll_area();
-        self.settings.scroll = (self.settings.scroll - dy).clamp(0.0, max);
+        // 列表收短后（如快捷键页收起一行）滚动量可能超出范围，从有效范围内的位置起算。
+        self.settings.scroll = (self.settings.scroll.min(max) - dy).clamp(0.0, max);
         self.settings.scrolled_at = Some(Instant::now());
         self.request_redraw();
     }
@@ -411,26 +646,6 @@ impl App {
             let layout = self.settings_layout();
             (layout.body, layout.max_scroll())
         }
-    }
-
-    /// 当前帧是否可以使用保存的快照：设置页正在滚动，且快照与窗口的尺寸、缩放比例相同。
-    pub(crate) fn settings_reuses_base(&self, bounds: Rect, scale: f32) -> bool {
-        self.settings.open
-            && self.settings.motion.is_none()
-            && self.settings.scrolled_at.is_some()
-            && (self.settings.scroll_base.as_ref()).is_some_and(|b| b.covers(bounds, scale))
-    }
-
-    /// 滚动结束后释放快照并请求重绘，显示滚动期间浮层下方的变化；返回下一次唤醒的时刻。
-    pub(crate) fn settings_scroll_tick(&mut self, now: Instant) -> Option<Instant> {
-        let due = self.settings.scrolled_at? + SCROLL_BASE_KEEP;
-        if now < due {
-            return Some(due);
-        }
-        self.settings.scrolled_at = None;
-        self.settings.scroll_base = None;
-        self.request_redraw();
-        None
     }
 
     /// 处理 `←` `→`（`forward` 为 `true` 时为 `→`）：数值减一或加一，主题在缩略图之间移动一张。
@@ -547,249 +762,6 @@ impl App {
         }
     }
 
-    fn refresh_lsp_languages(&mut self) {
-        let mut languages: Vec<_> = self
-            .config
-            .lsp_servers
-            .keys()
-            .chain(self.config.lsp_auto.iter())
-            .filter_map(|id| winc_syntax::find(id).map(|language| language.id))
-            .collect();
-        languages.sort_unstable();
-        languages.dedup();
-        if let Some(id) = self
-            .editor
-            .active()
-            .map(|doc| doc.highlighter.language().id)
-            && !languages.contains(&id)
-        {
-            languages.push(id);
-        }
-        self.settings.languages.lsp = languages;
-    }
-
-    pub(crate) fn open_lsp_settings(&mut self) {
-        self.settings.languages.lsp.clear();
-        self.refresh_lsp_languages();
-        self.open_settings();
-        self.settings_show_page(SettingsPage::Lsp);
-        let active = self
-            .editor
-            .active()
-            .map(|doc| doc.highlighter.language().id);
-        self.settings.selected = active
-            .filter(|id| self.settings.languages.lsp.contains(id))
-            .map(|id| {
-                if self.config.lsp_auto.iter().any(|auto| auto == id) {
-                    Setting::LspAuto(id)
-                } else {
-                    Setting::LspServer(id)
-                }
-            })
-            .or_else(|| {
-                self.settings
-                    .languages
-                    .lsp
-                    .first()
-                    .copied()
-                    .map(Setting::LspServer)
-            })
-            .unwrap_or(Setting::AddLspLanguage);
-        self.settings_scroll_into_view();
-        self.request_redraw();
-    }
-
-    pub(super) fn settings_add_lsp_language(&mut self) {
-        let Some(language) = self.editor.active().map(|doc| doc.highlighter.language()) else {
-            self.flash(t!("settings-lsp-open-file"));
-            return;
-        };
-        if !self.settings.languages.lsp.contains(&language.id) {
-            self.settings.languages.lsp.push(language.id);
-        }
-        let setting = Setting::LspServer(language.id);
-        self.settings.selected = setting;
-        self.settings_scroll_into_view();
-        self.settings_start_editing(setting);
-    }
-
-    /// 开关 `setting` 当前是否开启。
-    pub(crate) fn switch_on(&self, setting: Setting) -> bool {
-        match setting {
-            Setting::LspAuto(language) => self.config.lsp_auto.contains(&language.to_owned()),
-            Setting::FormatOnSave => self.config.format_on_save == Some(true),
-            Setting::FixOnSave => self.config.fix_on_save == Some(true),
-            Setting::AutoSave => self.config.auto_save == Some(true),
-            Setting::AutoSaveTyping => self.config.auto_save_while_typing == Some(true),
-            Setting::HotExit => self.config.hot_exit != Some(false),
-            Setting::RestoreFolder => self.config.restore_folder != Some(false),
-            Setting::StickyScroll => self.config.sticky_scroll != Some(false),
-            Setting::VimMode => self.config.vim_enabled == Some(true),
-            Setting::VimRelativeNumber => self.config.vim_relative_number == Some(true),
-            Setting::VimYankHighlight => self.config.vim_yank_highlight != Some(0),
-            Setting::WordWrap => self.config.word_wrap == Some(true),
-            Setting::WholeLines => self.config.whole_lines == Some(true),
-            Setting::Minimap => self.config.minimap == Some(true),
-            Setting::Outline => self.config.outline != Some(false),
-            Setting::LineNumbers => self.config.line_numbers != Some(false),
-            Setting::DiffInline => self.config.diff_inline == Some(true),
-            Setting::StatusBar => self.config.status_bar != Some(false),
-            Setting::RestoreWindow => self.config.restore_window != Some(false),
-            Setting::Animations => self.animations_on(),
-            Setting::CompactFolders => self.config.compact_folders != Some(false),
-            Setting::PreviewOnClick => self.config.preview_on_click == Some(true),
-            Setting::RemoteImages => self.config.markdown_remote_images != Some(false),
-            Setting::CheckUpdates => self.config.update_auto_check != Some(false),
-            Setting::SystemTitleBar => self.config.ui_native_title_bar == Some(true),
-            Setting::GitModule => self.git_enabled(),
-            Setting::GitConfirmPush => self.config.git_confirm_push != Some(false),
-            Setting::TerminalModule => self.terminal_enabled(),
-            Setting::RemoteModule => self.remote_enabled(),
-            Setting::TerminalCopyOnSelect => self.config.terminal_copy_on_select == Some(true),
-            Setting::TerminalConfirmClose => self.config.terminal_confirm_close != Some(false),
-            Setting::TerminalPrompt => self.config.terminal_prompt != Some(false),
-            Setting::TerminalShellIntegration => {
-                self.config.terminal_shell_integration != Some(false)
-            }
-            _ => false,
-        }
-    }
-
-    /// 切换开关 `setting` 的状态。
-    pub(super) fn settings_toggle(&mut self, setting: Setting) {
-        if setting == Setting::StickyScroll {
-            self.caches.sticky_cache = None;
-        }
-        self.settings_set_switch(setting, !self.switch_on(setting));
-    }
-
-    fn settings_set_switch(&mut self, setting: Setting, on: bool) {
-        if self.switch_on(setting) == on {
-            return;
-        }
-        self.vim_forget_option(setting);
-        match setting {
-            Setting::LspAuto(language) => {
-                if on {
-                    if !self.config.lsp_auto.iter().any(|id| id == language) {
-                        self.config.lsp_auto.push(language.to_owned());
-                        self.config.lsp_auto.sort_unstable();
-                    }
-                } else {
-                    self.config.lsp_auto.retain(|id| id != language);
-                }
-                self.save_config();
-                self.reset_lsp_server(language);
-                self.settings.switch_slide = self
-                    .clock(super::animation::SWITCH_SLIDE)
-                    .filter(|_| self.settings.open)
-                    .map(|clock| (setting, clock));
-                self.request_redraw();
-                return;
-            }
-            Setting::FormatOnSave => self.config.format_on_save = Some(on),
-            Setting::FixOnSave => self.config.fix_on_save = Some(on),
-            Setting::AutoSave => self.config.auto_save = Some(on),
-            Setting::AutoSaveTyping => self.config.auto_save_while_typing = Some(on),
-            Setting::HotExit => self.config.hot_exit = Some(on),
-            Setting::RestoreFolder => self.config.restore_folder = Some(on),
-            Setting::StickyScroll => self.config.sticky_scroll = Some(on),
-            Setting::VimMode => {
-                self.config.vim_enabled = Some(on);
-                self.vim_apply_config();
-            }
-            Setting::VimRelativeNumber => self.config.vim_relative_number = Some(on),
-            // 关闭记为 0 毫秒，打开恢复默认的时长。
-            Setting::VimYankHighlight => self.config.vim_yank_highlight = (!on).then_some(0),
-            Setting::WordWrap => self.config.word_wrap = Some(on),
-            Setting::WholeLines => self.config.whole_lines = Some(on),
-            Setting::Minimap => self.config.minimap = Some(on),
-            Setting::Outline => self.config.outline = Some(on),
-            Setting::LineNumbers => self.config.line_numbers = Some(on),
-            Setting::DiffInline => self.config.diff_inline = Some(on),
-            Setting::StatusBar => self.config.status_bar = Some(on),
-            Setting::RestoreWindow => self.config.restore_window = Some(on),
-            Setting::Animations => self.config.ui_animations = Some(on),
-            Setting::CompactFolders => self.config.compact_folders = Some(on),
-            Setting::PreviewOnClick => self.config.preview_on_click = Some(on),
-            Setting::RemoteImages => self.config.markdown_remote_images = Some(on),
-            Setting::CheckUpdates => self.config.update_auto_check = Some(on),
-            Setting::SystemTitleBar => self.config.ui_native_title_bar = Some(on),
-            Setting::GitModule => self.config.git_enabled = Some(on),
-            Setting::GitConfirmPush => self.config.git_confirm_push = Some(on),
-            Setting::TerminalModule => self.config.terminal_enabled = Some(on),
-            Setting::RemoteModule => self.config.remote_enabled = Some(on),
-            Setting::TerminalCopyOnSelect => self.config.terminal_copy_on_select = Some(on),
-            Setting::TerminalConfirmClose => self.config.terminal_confirm_close = Some(on),
-            Setting::TerminalPrompt => self.config.terminal_prompt = Some(on),
-            Setting::TerminalShellIntegration => self.config.terminal_shell_integration = Some(on),
-            _ => return,
-        }
-        // 由命令切换（如 ⌥Z 自动换行）时看不到开关，不必播放动画；开关在设置浮层和「首次设置」
-        // 中可见。
-        let visible = self.settings.open || self.setup_shown();
-        self.settings.switch_slide = self
-            .clock(super::animation::SWITCH_SLIDE)
-            .filter(|_| visible)
-            .map(|clock| (setting, clock));
-        if setting == Setting::WordWrap {
-            self.word_wrap_changed();
-        }
-        if matches!(
-            setting,
-            Setting::Minimap | Setting::LineNumbers | Setting::StatusBar | Setting::Outline
-        ) {
-            self.relayout();
-        }
-        // 关掉大纲时焦点在大纲上的，交给文件树。
-        if setting == Setting::Outline && !on && self.focus == Focus::Outline {
-            self.focus = Focus::Tree;
-        }
-        if setting == Setting::DiffInline {
-            self.apply_diff_layout();
-        }
-        // 关闭预览标签时，现有的预览标签成为普通标签。
-        if setting == Setting::PreviewOnClick && !on {
-            self.preview_tab = None;
-        }
-        // 关掉以后不再沿用：之后再打开时从下一次关闭窗口开始记录。
-        if setting == Setting::RestoreWindow && !on {
-            self.update_state(|state| state.window = None);
-        }
-        if setting == Setting::CompactFolders {
-            self.apply_compact_folders();
-        }
-        if setting == Setting::RemoteImages {
-            self.preview.markdown.forget_images();
-        }
-        if setting == Setting::AutoSaveTyping {
-            if on {
-                self.schedule_dirty_auto_saves();
-            } else {
-                self.auto_save_pending.clear();
-            }
-        }
-        if setting == Setting::GitModule {
-            self.git_folder_changed();
-        }
-        if setting == Setting::RemoteModule && !on {
-            self.stop_remote();
-        }
-        if setting == Setting::SystemTitleBar {
-            self.sync_title_bar();
-            self.relayout();
-        }
-        // 关闭终端模块时辅助进程和里面的 shell 一起结束；开着时等用户按 ⌃` 再启动。
-        if setting == Setting::TerminalModule {
-            if !on {
-                self.stop_terminal();
-            }
-            self.reload_run_configs();
-        }
-        self.save_config();
-        self.request_redraw();
-    }
-
     /// 开始编辑文字或数值设置：输入框中是当前的设置并全选，直接键入即替换。
     pub(super) fn settings_start_editing(&mut self, setting: Setting) {
         if matches!(&self.settings.editing, Some((s, _)) if *s == setting) {
@@ -815,6 +787,8 @@ impl App {
                     .get(id)
                     .map(|args| crate::app::lsp::display_lsp_command(args)),
                 None if setting == Setting::TerminalShell => self.config.terminal_shell.clone(),
+                None if setting == Setting::GitPath => self.config.git_path.clone(),
+                None if setting == Setting::LatexPath => self.config.latex_path.clone(),
                 None => self.font_setting(setting).clone(),
             }
         };
@@ -838,14 +812,16 @@ impl App {
         [Setting::EditorFont, Setting::UiFont, Setting::TerminalFont]
             .into_iter()
             .filter(|setting| setting.page() == page)
-            .find_map(|setting| {
-                let value = match setting {
-                    Setting::UiFont => &self.config.ui_font,
-                    Setting::TerminalFont => &self.config.terminal_font,
-                    _ => &self.config.editor_font,
-                };
-                font_error(value).map(|error| (setting, error))
-            })
+            .find_map(|setting| font_error(self.font_value(setting)).map(|error| (setting, error)))
+    }
+
+    /// 字体设置项 `setting` 在配置中的值：以逗号分隔的字体列表，未设置时为 `None`。
+    pub(in crate::app) fn font_value(&self, setting: Setting) -> &Option<String> {
+        match setting {
+            Setting::UiFont => &self.config.ui_font,
+            Setting::TerminalFont => &self.config.terminal_font,
+            _ => &self.config.editor_font,
+        }
     }
 
     fn font_setting(&mut self, setting: Setting) -> &mut Option<String> {
@@ -957,42 +933,22 @@ impl App {
                 self.focus = Focus::Settings;
                 self.set_terminal_shell(value);
             }
+            None if setting == Setting::GitPath => {
+                self.settings.editing = None;
+                self.settings.editing_original = None;
+                self.settings.error = None;
+                self.focus = Focus::Settings;
+                self.set_git_path(value);
+            }
+            None if setting == Setting::LatexPath => {
+                self.settings.editing = None;
+                self.settings.editing_original = None;
+                self.settings.error = None;
+                self.focus = Focus::Settings;
+                self.set_latex_path(value);
+            }
             None => self.settings_commit_font(setting, value),
         }
-    }
-
-    fn settings_commit_lsp_server(
-        &mut self,
-        setting: Setting,
-        language: &'static str,
-        command: Option<String>,
-    ) {
-        let args = match command {
-            Some(command) => match crate::app::lsp::split_server_command(&command) {
-                Ok(args) => Some(args),
-                Err(error) => {
-                    self.settings.error = Some((setting, error));
-                    self.request_redraw();
-                    return;
-                }
-            },
-            None => None,
-        };
-        match args {
-            Some(args) => {
-                self.config.lsp_servers.insert(language.to_owned(), args);
-            }
-            None => {
-                self.config.lsp_servers.remove(language);
-            }
-        }
-        self.settings.editing = None;
-        self.settings.editing_original = None;
-        self.settings.error = None;
-        self.focus = Focus::Settings;
-        self.save_config();
-        self.reset_lsp_server(language);
-        self.request_redraw();
     }
 
     /// 提交格式化（修复）命令并写回配置；`command` 为 `None`（清空）表示自动选择。
@@ -1056,6 +1012,30 @@ impl App {
         self.settings.editing_original = self.font_setting(setting).clone();
         self.settings_commit_font(setting, value);
         self.settings.editing_original = None;
+    }
+
+    /// 字体菜单中选中字体 `name`：换掉列表中的第一个字体，其后的后备字体保留（`name` 原在其中
+    /// 时从中移去）。
+    pub(in crate::app) fn settings_choose_primary_font(&mut self, setting: Setting, name: &str) {
+        let current = self.font_value(setting).clone();
+        let list = winc_config::font_list(current.as_deref());
+        let rest = list.into_iter().skip(1).filter(|&n| n != name);
+        let list: Vec<&str> = std::iter::once(name).chain(rest).collect();
+        self.settings_choose_font(setting, Some(list.join(", ")));
+    }
+
+    /// 「后备字体」中点击字体 `name`：不在列表中时加到末尾，已在其中时移去。第一个字体不变。
+    pub(in crate::app) fn settings_toggle_fallback_font(&mut self, setting: Setting, name: &str) {
+        let current = self.font_value(setting).clone();
+        let mut list = winc_config::font_list(current.as_deref());
+        if list.first().is_none_or(|&first| first == name) {
+            return;
+        }
+        match list.iter().position(|&n| n == name) {
+            Some(at) => _ = list.remove(at),
+            None => list.push(name),
+        }
+        self.settings_choose_font(setting, Some(list.join(", ")));
     }
 
     /// 放大或缩小字号（`⌘+` `⌘−`），`⌘0` 还原（`up` 为 `None`）。
@@ -1138,6 +1118,10 @@ impl App {
                 Config::UI_SIZE_RANGE,
             ),
             Setting::FontWeight => (f32::from(self.font_weight()), Config::FONT_WEIGHT_RANGE),
+            Setting::TerminalFontWeight => (
+                f32::from(self.terminal_font_weight()),
+                Config::FONT_WEIGHT_RANGE,
+            ),
             Setting::BackgroundOpacity => (
                 (self.config.ui_background_opacity).unwrap_or(Config::BACKGROUND_OPACITY),
                 Config::BACKGROUND_OPACITY_RANGE,
@@ -1167,7 +1151,7 @@ impl App {
     }
 
     /// 对字号、Tab 宽度这类数值设置加一（`up` 为 `true`）或减一，并写回配置。
-    pub(super) fn settings_adjust(&mut self, setting: Setting, up: bool) {
+    pub(in crate::app) fn settings_adjust(&mut self, setting: Setting, up: bool) {
         match setting {
             Setting::EditorSize => {
                 let current = self.config.editor_size.unwrap_or(CODE_FONT);
@@ -1181,14 +1165,14 @@ impl App {
             }
             // 配置中的值不在档位上时，移到该方向上最近的一档。
             Setting::FontWeight => {
-                let (current, range) = (self.font_weight(), Config::FONT_WEIGHT_RANGE);
-                let next = if up {
-                    (current / FONT_WEIGHT_STEP + 1) * FONT_WEIGHT_STEP
-                } else {
-                    current.saturating_sub(1) / FONT_WEIGHT_STEP * FONT_WEIGHT_STEP
-                };
-                let next = next.clamp(*range.start() as u16, *range.end() as u16);
+                let next = step_weight(self.font_weight(), up, Config::FONT_WEIGHT_RANGE);
                 self.config.ui_font_weight = (next != Config::FONT_WEIGHT).then_some(next);
+                self.apply_fonts().ok();
+            }
+            // 同终端字号：调整过就记下，不再随全局字重变化。
+            Setting::TerminalFontWeight => {
+                let next = step_weight(self.terminal_font_weight(), up, Config::FONT_WEIGHT_RANGE);
+                self.config.terminal_font_weight = Some(next);
                 self.apply_fonts().ok();
             }
             Setting::BackgroundOpacity => {
@@ -1291,6 +1275,43 @@ impl App {
         self.request_redraw();
     }
 
+    /// 设置 `git` 程序的路径；`None` 表示在 `PATH` 里查找。随后重新查找 `git` 并刷新。
+    pub(in crate::app) fn set_git_path(&mut self, path: Option<String>) {
+        if self.config.git_path == path {
+            return;
+        }
+        self.config.git_path = path;
+        self.save_config();
+        self.git_program_changed();
+        self.request_redraw();
+    }
+
+    /// 设置编译 LaTeX 的程序，`None` 表示自动查找。
+    pub(in crate::app) fn set_latex_path(&mut self, path: Option<String>) {
+        if self.config.latex_path == path {
+            return;
+        }
+        self.config.latex_path = path;
+        self.save_config();
+        self.preview.latex.forget_tool();
+        self.find_latex_tool();
+        self.request_redraw();
+    }
+
+    /// 设置点击工作树时在哪个窗口打开它。
+    pub(in crate::app) fn set_open_worktree(&mut self, choice: winc_config::WorktreeOpen) {
+        self.config.git_open_worktree = Some(choice);
+        self.save_config();
+        self.request_redraw();
+    }
+
+    /// 设置拉取、同步时合并还是变基。
+    pub(in crate::app) fn set_pull_mode(&mut self, choice: winc_config::PullMode) {
+        self.config.git_pull = Some(choice);
+        self.save_config();
+        self.request_redraw();
+    }
+
     /// 设置 Vim 模式下无名寄存器与系统剪贴板的同步方式。
     pub(in crate::app) fn set_vim_clipboard(&mut self, choice: winc_config::VimClipboard) {
         self.config.vim_clipboard = Some(choice);
@@ -1320,6 +1341,18 @@ impl App {
         if right != self.terminal_right() {
             self.toggle_terminal_position();
         }
+    }
+
+    /// 设置终端标签的位置：`right` 为右侧，否则为顶部。
+    pub(in crate::app) fn set_terminal_tab_position(&mut self, right: bool) {
+        self.settings.selected = Setting::TerminalTabPosition;
+        if right == (self.config.terminal_vertical_tabs == Some(true)) {
+            return;
+        }
+        self.config.terminal_vertical_tabs = Some(right);
+        self.relayout();
+        self.save_config();
+        self.request_redraw();
     }
 
     /// 设置终端中用作 Meta 键的 ⌥。
@@ -1352,116 +1385,25 @@ impl App {
             Ok(saved) => {
                 if let Some(backup) = saved.backup {
                     let path = backup.path.display().to_string();
-                    self.notify(if backup.comments {
-                        t!("settings-config-comments-backed-up", path = path)
-                    } else {
-                        t!("settings-config-backed-up", path = path)
-                    });
+                    self.notify(
+                        NoticeKind::Warning,
+                        if backup.comments {
+                            t!("settings-config-comments-backed-up", path = path)
+                        } else {
+                            t!("settings-config-backed-up", path = path)
+                        },
+                    );
                 }
                 self.store.saved_config = saved.config.clone();
                 if saved.config != self.config {
                     self.adopt_config(saved.config);
                 }
             }
-            Err(e) => self.notify(t!("settings-config-write-failed", error = e.to_string())),
+            Err(e) => self.notify(
+                NoticeKind::Error,
+                t!("settings-config-write-failed", error = e.to_string()),
+            ),
         }
-    }
-}
-
-impl App {
-    /// 改用配置文件中刚写好的配置 `config`，按变化的项更新本窗口。
-    ///
-    /// `config` 由另一个窗口写入，或者是本窗口写回时文件中带有手动修改的项。更新的内容包括字体和
-    /// 字号、Tab 宽度、主题和各开关，效果与在本窗口的设置页中修改相同，只是不再写文件。
-    pub(crate) fn adopt_config(&mut self, config: Config) {
-        let old = std::mem::replace(&mut self.config, config);
-        let new = &self.config;
-        let zoom = old.ui_zoom != new.ui_zoom;
-        let fonts = (old.editor_font != new.editor_font || old.ui_font != new.ui_font)
-            || (old.editor_size != new.editor_size || old.ui_size != new.ui_size)
-            || (old.terminal_font != new.terminal_font || old.terminal_size != new.terminal_size);
-        let theme = (old.theme != new.theme || old.dark_theme != new.dark_theme)
-            || old.light_theme != new.light_theme;
-        let tab_width = (old.tab_width != new.tab_width)
-            .then_some(new.tab_width)
-            .flatten();
-        let terminal = old.terminal_minimum_contrast != new.terminal_minimum_contrast
-            || old.terminal_bold_is_bright != new.terminal_bold_is_bright;
-        let (wrap, sticky) = (
-            old.word_wrap != new.word_wrap,
-            old.sticky_scroll != new.sticky_scroll,
-        );
-        let images = old.markdown_remote_images != new.markdown_remote_images;
-        let minimap = old.minimap != new.minimap
-            || old.line_numbers != new.line_numbers
-            || old.status_bar != new.status_bar;
-        let compact = old.compact_folders != new.compact_folders;
-        let diff_layout = old.diff_inline != new.diff_inline;
-        // 窗口字体同步。
-        let glyph_language = old.language != new.language
-            && crate::set_locale(new.language.unwrap_or_default().resolve());
-        let git = old.git_enabled != new.git_enabled;
-        let title_bar = old.ui_native_title_bar != new.ui_native_title_bar;
-        let stop_terminal =
-            old.terminal_enabled != new.terminal_enabled && new.terminal_enabled == Some(false);
-        let stop_remote =
-            old.remote_enabled != new.remote_enabled && new.remote_enabled != Some(true);
-
-        if fonts || glyph_language {
-            // 别的窗口已经用上了这些字体，这里也用得上；万一用不上，留着原来的字体。
-            let _ = self.apply_fonts();
-        }
-        if zoom {
-            self.apply_zoom();
-        }
-        if let Some(width) = tab_width {
-            self.editor.tab_width = width;
-            self.ensure_caret_visible();
-        }
-        if theme {
-            self.apply_theme(self.config.theme.unwrap_or(ThemeChoice::Auto));
-        } else if terminal {
-            self.terminal_theme_changed();
-        }
-        if sticky {
-            self.caches.sticky_cache = None;
-        }
-        if wrap {
-            self.word_wrap_changed();
-        }
-        if minimap {
-            self.relayout();
-        }
-        if compact {
-            self.apply_compact_folders();
-        }
-        if diff_layout {
-            self.apply_diff_layout();
-        }
-        if images {
-            self.preview.markdown.forget_images();
-        }
-        if git {
-            self.git_folder_changed();
-        }
-        if stop_terminal {
-            self.stop_terminal();
-        }
-        if stop_remote {
-            self.stop_remote();
-        }
-        // 模块关闭后它的那一页不再列出：设置停在该页时改到「模块」页。
-        let page = self.settings.selected.page();
-        if self.settings.open && !SettingsPage::listed(self.settings_modules()).any(|p| p == page) {
-            self.settings_show_page(SettingsPage::Modules);
-        }
-        self.reload_run_configs();
-        if title_bar {
-            self.sync_title_bar();
-        }
-        self.vim_apply_config();
-        self.relayout();
-        self.request_redraw();
     }
 }
 

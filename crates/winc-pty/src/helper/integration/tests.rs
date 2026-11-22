@@ -47,8 +47,10 @@ fn only_plain_entry_into_the_default_shell_is_injected() {
 fn environment_for_wsl_keeps_what_the_user_forwards() {
     let mut env = vec![(b"WSLENV".to_vec(), b"GOPATH/l".to_vec())];
     forward_to_wsl(&mut env);
-    let forwarded = b"GOPATH/l:WINC_NONCE:WINC_PROMPT:COLORTERM:TERM_PROGRAM:TERM_PROGRAM_VERSION";
+    let mut forwarded = b"GOPATH/l:".to_vec();
+    forwarded.extend_from_slice(WSL_ENV);
     assert_eq!(env[0].1, forwarded);
+    assert!(WSL_ENV.starts_with(b"WINC_NONCE:WINC_PROMPT:WINC_PYTHON:"));
 
     let mut env = Vec::new();
     forward_to_wsl(&mut env);
@@ -59,13 +61,26 @@ fn environment_for_wsl_keeps_what_the_user_forwards() {
 mod boot {
     use super::*;
     use std::collections::HashMap;
-    use std::os::unix::fs::PermissionsExt;
     use std::path::Path;
     use std::process::Command;
 
     fn executable(path: &Path, text: &str) {
-        fs::write(path, text).unwrap();
-        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+        use std::io::Write;
+        // 由子进程写入：本进程不持有文件的写入端，其他测试线程启动子进程时执行它不会得到
+        // `ExecutableFileBusy`。
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", r#"cat > "$1" && chmod 755 "$1""#, "sh"])
+            .arg(path)
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(text.as_bytes())
+            .unwrap();
+        assert!(child.wait().unwrap().success());
     }
 
     /// 在 `dir` 中准备脚本和代替 `wslpath` 的程序，以名为 `shell` 的程序运行启动命令，返回该程序

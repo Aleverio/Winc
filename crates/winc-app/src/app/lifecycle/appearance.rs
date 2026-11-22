@@ -58,21 +58,32 @@ impl App {
         self.request_redraw();
     }
 
-    /// 返回配置中的编辑区字体、界面字体和终端字体；未配置时为 `None`。
+    /// 返回配置中的编辑区字体、界面字体和终端字体的列表；未配置时为空。
     ///
     /// 未配置时渲染层使用内置的系统字体路径表。按名字查询 CoreText 一次约 4–7 ms，
     /// 路径表只需几次 `stat`，因此未配置时不调用 CoreText。终端字体与编辑区字体相同时同样为
-    /// `None`，不重复加载。
-    pub(in crate::app) fn font_specs(&self) -> [Option<FontSpec>; 3] {
-        let terminal = configured_font(&self.config.terminal_font);
-        let editor = configured_font(&self.config.editor_font);
-        let terminal = terminal.filter(|spec| Some(spec) != editor.as_ref());
-        [editor, configured_font(&self.config.ui_font), terminal]
+    /// 空，不重复加载。
+    pub(in crate::app) fn font_specs(&self) -> [Vec<FontSpec>; 3] {
+        let terminal = configured_fonts(&self.config.terminal_font);
+        let editor = configured_fonts(&self.config.editor_font);
+        let terminal = if terminal == editor {
+            Vec::new()
+        } else {
+            terminal
+        };
+        [editor, configured_fonts(&self.config.ui_font), terminal]
     }
 
-    /// 返回全部文字的字重（`ui.fontWeight`），未配置时为 400。
+    /// 返回界面和编辑区文字的字重（`ui.fontWeight`），未配置时为 400。
     pub(in crate::app) fn font_weight(&self) -> u16 {
         self.config.ui_font_weight.unwrap_or(Config::FONT_WEIGHT)
+    }
+
+    /// 返回终端文字的字重（`terminal.fontWeight`）；没有调整过时同全局字重。
+    pub(in crate::app) fn terminal_font_weight(&self) -> u16 {
+        self.config
+            .terminal_font_weight
+            .unwrap_or_else(|| self.font_weight())
     }
 
     /// 应用主题选择：`Auto` 交由系统决定，`Dark`、`Light` 固定为指定外观。
@@ -135,10 +146,11 @@ impl App {
     pub(in crate::app) fn apply_fonts(&mut self) -> Result<(), String> {
         let [mono, ui, terminal] = self.font_specs();
         let weight = self.font_weight();
+        let terminal_weight = self.terminal_font_weight();
 
         if let Some(renderer) = &mut self.frame.renderer
             && renderer
-                .set_fonts(mono.as_ref(), ui.as_ref(), terminal.as_ref(), weight)
+                .set_fonts(&mono, &ui, &terminal, weight, terminal_weight)
                 .is_err()
         {
             return Err(winc_i18n::t!("workspace-font-unusable").to_owned());
@@ -149,18 +161,29 @@ impl App {
     }
 }
 
-/// 把配置中的字体名或字体文件路径转成 `FontSpec`。
+/// 把配置中以逗号分隔的字体名或字体文件路径转成 `FontSpec` 的列表，按书写顺序。
 ///
-/// 未配置或只有空白时返回 `None`，使用渲染层的默认字体。
-pub(in crate::app) fn configured_font(configured: &Option<String>) -> Option<FontSpec> {
-    let name = configured
-        .as_deref()
-        .map(str::trim)
-        .filter(|n| !n.is_empty())?;
-
-    Some(match resolve_font(Some(name), "") {
+/// 未配置或只有空白时返回空列表，使用渲染层的默认字体。
+pub(in crate::app) fn configured_fonts(configured: &Option<String>) -> Vec<FontSpec> {
+    let requests = resolve_font_list(configured.as_deref());
+    let spec = |request| match request {
         winc_config::FontRequest::Name(name) => FontSpec::Name(name),
         winc_config::FontRequest::Path(path) => FontSpec::Path(path),
+    };
+    requests.into_iter().map(spec).collect()
+}
+
+/// 配置的字体列表中第一个不可用的字体，及其写法和原因；都可用或未配置时返回 `None`。
+pub(in crate::app) fn unusable_font(
+    configured: &Option<String>,
+) -> Option<(FontSpec, String, FontError)> {
+    configured_fonts(configured).into_iter().find_map(|spec| {
+        let error = spec.check().err()?;
+        let name = match &spec {
+            FontSpec::Name(name) => name.clone(),
+            FontSpec::Path(path) => path.display().to_string(),
+        };
+        Some((spec, name, error))
     })
 }
 

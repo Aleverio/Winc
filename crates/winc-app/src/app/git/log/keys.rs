@@ -8,16 +8,17 @@ impl App {
     /// 处理日志标签有焦点时的按键。
     ///
     /// `↑` `↓` 选择提交，`PageUp` `PageDown` 翻页，`Home` `End` 移到首尾，回车打开第一个改动文件
-    /// 的差异，`→` 进入详情中的文件列表（见 [`App::log_file_key`]）。
+    /// 的差异，`Tab` 进入详情中的文件列表（见 [`App::log_file_key`]）。`←` `→` 转到子提交、父提交
+    /// 是可改键的命令，见 [`App::go_to_log_relative`]。
     pub(in crate::app) fn log_key(&mut self, key: &Key) {
         if self.git.log.file.is_some() {
             self.log_file_key(key);
             return;
         }
-        if *key == Key::Named(NamedKey::ArrowRight) {
-            if self.log_files_len() > 0 {
-                self.git.log.file = Some(0);
-                self.reveal_log_file(0);
+        if *key == Key::Named(NamedKey::Tab) && !self.pointer.modifiers.shift_key() {
+            if let Some(&first) = self.log_file_order().first() {
+                self.git.log.file = Some(first);
+                self.reveal_log_file(first);
                 self.request_redraw();
             }
             return;
@@ -47,7 +48,9 @@ impl App {
             }
             Key::Named(NamedKey::End) => count - 1,
             Key::Named(NamedKey::Enter) => {
-                self.open_log_file(0);
+                if let Some(first) = self.log_first_file() {
+                    self.open_log_file(first);
+                }
                 return;
             }
             _ => return,
@@ -57,24 +60,27 @@ impl App {
 
     /// 处理焦点位于详情文件列表时的按键。
     ///
-    /// `↑` `↓` `Home` `End` 选择文件，回车打开该文件的差异，`←`、`Esc` 返回提交列表。
+    /// `↑` `↓` `Home` `End` 选择文件，回车打开该文件的差异，`←`、`Shift+Tab`、`Esc` 返回提交列表。
     fn log_file_key(&mut self, key: &Key) {
-        let count = self.log_files_len();
-        let Some(at) = self.git.log.file.filter(|_| count > 0) else {
+        // 按详情里从上到下的顺序移动（排成树时与文件列表的下标不同）。
+        let order = self.log_file_order();
+        let Some(at) = self.git.log.file.filter(|_| !order.is_empty()) else {
             self.git.log.file = None;
             return;
         };
-        let at = at.min(count - 1);
+        let last = order.len() - 1;
+        let pos = order.iter().position(|&i| i == at).unwrap_or(0);
+        let at = order[pos];
         let file = match key {
-            Key::Named(NamedKey::ArrowUp) => at.saturating_sub(1),
-            Key::Named(NamedKey::ArrowDown) => (at + 1).min(count - 1),
-            Key::Named(NamedKey::Home) => 0,
-            Key::Named(NamedKey::End) => count - 1,
+            Key::Named(NamedKey::ArrowUp) => order[pos.saturating_sub(1)],
+            Key::Named(NamedKey::ArrowDown) => order[(pos + 1).min(last)],
+            Key::Named(NamedKey::Home) => order[0],
+            Key::Named(NamedKey::End) => order[last],
             Key::Named(NamedKey::Enter) => {
                 self.open_log_file(at);
                 return;
             }
-            Key::Named(NamedKey::ArrowLeft | NamedKey::Escape) => {
+            Key::Named(NamedKey::ArrowLeft | NamedKey::Escape | NamedKey::Tab) => {
                 self.git.log.file = None;
                 self.request_redraw();
                 return;
@@ -84,6 +90,53 @@ impl App {
         self.git.log.file = Some(file);
         self.reveal_log_file(file);
         self.request_redraw();
+    }
+
+    /// 焦点在日志的提交列表上：不在详情的文件列表里，也没有在比较两个提交。
+    pub(in crate::app) fn log_list_focused(&self) -> bool {
+        let view = self.editor.active().and_then(|d| d.log.as_deref());
+        self.focus == Focus::Editor
+            && self.git.log.file.is_none()
+            && view.is_some_and(|v| v.compare.is_none())
+    }
+
+    /// 转到选中提交的父提交（`parent`）或子提交，记入后退历史；不在列表里时说明。
+    ///
+    /// 合并提交转到第一个父提交。子提交有几个时，先取以它为第一个父提交的（同一条线上的），
+    /// 再取列表里离它最近的。
+    pub(in crate::app) fn go_to_log_relative(&mut self, parent: bool) {
+        let Some(view) = self.editor.active().and_then(|d| d.log.as_deref()) else {
+            return;
+        };
+        let Some(at) = view.selected else {
+            return;
+        };
+        let commit = &view.commits[at];
+        let row = if parent {
+            let first = commit.parents.first();
+            first.and_then(|p| view.commits.iter().position(|c| &c.oid == p))
+        } else {
+            let children = (view.commits[..at].iter().enumerate().rev())
+                .filter(|(_, c)| c.parents.contains(&commit.oid));
+            let mut nearest = None;
+            for (row, child) in children {
+                if child.parents.first() == Some(&commit.oid) {
+                    nearest = Some(row);
+                    break;
+                }
+                nearest = nearest.or(Some(row));
+            }
+            nearest
+        };
+        let missing = match (parent, commit.parents.is_empty()) {
+            (true, true) => t!("git-log-no-parent"),
+            (true, false) => t!("git-log-parent-not-loaded"),
+            (false, _) => t!("git-log-no-child"),
+        };
+        match row {
+            Some(row) => self.jump_log_row(row),
+            None => self.flash(missing),
+        }
     }
 
     /// 跳转到第 `row` 个提交（沿提交图的连线或点击详情中的父提交时使用）并选中。

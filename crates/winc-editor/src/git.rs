@@ -15,11 +15,14 @@ mod rebase;
 mod remote;
 mod sync;
 
-pub use output::output_text;
+pub use commit::RecentHistory;
+pub use output::{on_output, output_since, output_snapshot, output_text};
 pub use rebase::{RebaseAction, RebaseCommit, RebasePlan, RebaseStep, rebase_todo};
 pub use remote::{Remote, TagTarget, repository_dir_name};
-pub use sync::{Carried, Synced};
+pub use sync::{Carried, MINIMUM_VERSION, Outgoing, Synced};
 mod history;
+mod locate;
+pub use locate::runs_here;
 mod trust;
 mod worktree;
 
@@ -42,7 +45,7 @@ use crate::tools::shell::process::{self, Cancel, RunError};
 /// `git status` 最长的运行时间（30 秒）。
 ///
 /// 几十万个文件的仓库第一次运行需要数秒；超过该时间视为 `git` 失去响应。
-const STATUS_TIMEOUT: Duration = Duration::from_secs(30);
+pub(crate) const STATUS_TIMEOUT: Duration = Duration::from_secs(30);
 /// 日志中日期的格式参数。
 ///
 /// 本机时区的换算由 `git` 完成（`format-local`），不需要读取时区数据库。
@@ -96,13 +99,17 @@ pub struct LastCommit {
     pub local: String,
 }
 
-/// 只提交一部分改动的文件：提交成 `content`，工作区里的文件不变。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Partial {
-    /// 文件的路径。
-    pub path: PathBuf,
-    /// 要提交成的内容（工作区里的形式，换行符等与工作区文件相同）。
-    pub content: Vec<u8>,
+/// 提交时的选项，见 [`Git::commit_with`]。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CommitOptions {
+    /// 把全部已跟踪文件的改动一并提交（`git commit --all`）；提交失败时暂存区保持原状。
+    pub all: bool,
+    /// 修改上一次提交；暂存区没有改动时只改提交信息。
+    pub amend: bool,
+    /// 在提交信息末尾附加提交者的签署行（`--signoff`）。
+    pub sign_off: bool,
+    /// 不运行 `pre-commit` 和 `commit-msg` 钩子（`--no-verify`）。
+    pub no_verify: bool,
 }
 
 /// 一个分支。
@@ -128,6 +135,10 @@ pub struct Branch {
     pub time: i64,
     /// 提交时间在本机时区的写法「2026-10-26 14:32」。
     pub local: String,
+    /// 领先上游的提交数；没有上游时为 0，超过 `u16::MAX` 时记作 `u16::MAX`。
+    pub ahead: u16,
+    /// 落后上游的提交数；没有上游时为 0，超过 `u16::MAX` 时记作 `u16::MAX`。
+    pub behind: u16,
 }
 /// 日志里的一个提交。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -241,27 +252,41 @@ pub struct BlameCommit {
 pub struct LogQuery {
     /// 说明里含有这段文字（不分大小写，按字面找，不是正则）。
     pub text: String,
-    /// 只看该分支（本地或远程，如 `origin/main`）能走到的提交。
-    pub branch: Option<String>,
-    /// 作者名字或邮箱里含有这段文字（不分大小写，按字面找）。
-    pub author: Option<String>,
+    /// 只看这些分支（本地或远程，如 `origin/main`）能走到的提交；空着是全部分支。
+    pub branches: Vec<String>,
+    /// 作者名字或邮箱里含有其中任一段文字（不分大小写，按字面找）；空着是全部作者。
+    pub authors: Vec<String>,
     /// 只看改过该文件的提交（文件历史），越过改名继续往前查找。
     pub path: Option<PathBuf>,
+    /// 与 `path` 一起使用：只看改过这几行的提交（`git log -L`），按 `HEAD` 中的行号，从 1 起，
+    /// 首尾都含。`git` 随各次提交挪动这段范围，越过改名继续往前查找。
+    pub lines: Option<(usize, usize)>,
     /// 固定在最前面的提交（完整的提交号），见 [`Git::log_stream`]；「转到提交号、分支或标签」
     /// 找到的提交不在已列出的提交中时使用。
     pub pin: Option<String>,
+    /// 只看最近几天的提交（`--since`）。
+    pub since_days: Option<u32>,
+    /// 只看改过这些路径的提交：相对仓库根目录的路径或通配（`git` 的路径规格），目录包括其中
+    /// 的全部文件。与文件历史的 `path` 不同时使用。
+    pub paths: Vec<String>,
 }
 
 impl LogQuery {
     /// 是否因为按说明、作者或文件筛选而画不出提交图。
     ///
     /// 这些条件下结果里的父提交大多不在列表里，提交图连不起来；只按分支筛选时提交仍然相连，
-    /// 可以画图。
+    /// 可以画图；按路径筛选时父提交按路径改写（[`Self::rewrites_parents`]），同样可以画图。
     pub fn graphless(&self) -> bool {
         !self.text.trim().is_empty()
-            || self.author.is_some()
+            || !self.authors.is_empty()
             || self.path.is_some()
             || self.pin.is_some()
+    }
+
+    /// 是否按路径筛选、父提交按路径改写（`--parents`）：每个提交的父提交是它往下最近一个也改过
+    /// 这些路径的提交，提交图照样连得起来。真正的父提交另外查（见 [`log::Details::base`]）。
+    pub fn rewrites_parents(&self) -> bool {
+        !self.paths.is_empty() && self.path.is_none()
     }
 
     /// 是否按说明、分支或作者筛选过，或固定了一个提交。
@@ -269,9 +294,11 @@ impl LogQuery {
     /// 文件历史的文件不算：那本来就是该标签展示的内容。
     pub fn filtered(&self) -> bool {
         !self.text.trim().is_empty()
-            || self.branch.is_some()
-            || self.author.is_some()
+            || !self.branches.is_empty()
+            || !self.authors.is_empty()
             || self.pin.is_some()
+            || self.since_days.is_some()
+            || !self.paths.is_empty()
     }
 }
 
@@ -403,6 +430,8 @@ pub struct Status {
     pub ignored: Vec<PathBuf>,
     /// 正在进行、停下来等用户处理冲突的操作（合并、变基……）；没有时为 `None`。
     pub operation: Option<Operation>,
+    /// 进行中的变基的进度：（正在处理第几个提交，共几个）；不在变基中、无法读取时为 `None`。
+    pub progress: Option<(u32, u32)>,
     /// 有变化的文件超过 [`STATUS_LIMIT`] 个、`entries` 只含前一部分时为 `true`。
     pub truncated: bool,
     /// 仍含冲突标记（`<<<<<<<` … `>>>>>>>`）的冲突文件。
@@ -470,6 +499,25 @@ impl Operation {
     }
 }
 
+/// 返回仓库目录 `git_dir` 中进行中的变基的进度：（正在处理第几个提交，共几个）。
+///
+/// 两种变基方式各用一个目录记录，文件名不同：`rebase-merge` 中是 `msgnum` 和 `end`，
+/// `rebase-apply` 中是 `next` 和 `last`。
+fn rebase_progress(git_dir: &Path) -> Option<(u32, u32)> {
+    let number = |path: PathBuf| -> Option<u32> {
+        let text = winc_backend::fs::read_to_string(path).ok()?;
+        text.trim().parse().ok()
+    };
+    let layouts = [
+        ("rebase-merge", "msgnum", "end"),
+        ("rebase-apply", "next", "last"),
+    ];
+    layouts.into_iter().find_map(|(dir, at, total)| {
+        let dir = git_dir.join(dir);
+        Some((number(dir.join(at))?, number(dir.join(total))?))
+    })
+}
+
 /// 仓库 `root` 的 `.git` 目录：工作树和子模块里 `.git` 是一个写着 `gitdir: <路径>` 的文件。
 fn git_dir(root: &Path) -> Option<PathBuf> {
     let dot = root.join(".git");
@@ -530,6 +578,8 @@ impl Status {
 pub enum Unavailable {
     /// `PATH` 里没有 `git`。
     NotInstalled,
+    /// 设置的程序（`git.path`）不存在或不能运行，内容是设置的写法。
+    NotFound(String),
     /// macOS 上没有安装命令行开发者工具：`/usr/bin/git` 是占位程序，运行后只会弹出系统的
     /// 安装对话框。
     NoDeveloperTools,
@@ -540,6 +590,13 @@ impl std::fmt::Display for Unavailable {
         match self {
             Unavailable::NotInstalled => {
                 f.write_str(winc_i18n::t!("git-unavailable-not-installed"))
+            }
+            Unavailable::NotFound(program) => {
+                let program = program.as_str();
+                f.write_str(&winc_i18n::t!(
+                    "git-unavailable-not-found",
+                    program = program
+                ))
             }
             Unavailable::NoDeveloperTools => {
                 f.write_str(winc_i18n::t!("git-unavailable-no-developer-tools"))
@@ -562,6 +619,8 @@ pub enum BranchDeleted {
 pub struct Git {
     /// `git` 可执行文件的路径。
     program: PathBuf,
+    /// 本机是否有可用的 `git`；为否时只有发行版中的仓库可用（发行版内的 `git`）。
+    local: bool,
     /// 用户 shell 的环境：`git` 命令都在这个环境里运行。
     shell: Shell,
     /// 各仓库的配置检查结果和信任状态，[`Git`] 的各个副本共用。
@@ -569,6 +628,9 @@ pub struct Git {
     /// 处理输入请求的 askpass 程序，见 [`Git::with_askpass`]。
     askpass: Option<Askpass>,
 }
+
+/// askpass 程序作为凭据助手运行时的第一个参数，其后是 `git` 给出的动作。
+pub const CREDENTIAL_HELPER_ARG: &str = "git-credential";
 
 /// 传递 [`Askpass::endpoint`] 的环境变量名。
 pub const ASKPASS_ENDPOINT: &str = "WINC_GIT_ASKPASS";
@@ -580,34 +642,15 @@ pub struct Askpass {
     pub program: PathBuf,
     /// 程序连接的本地端点，由环境变量 [`ASKPASS_ENDPOINT`] 传递。
     pub endpoint: OsString,
+    /// 是否同时把该程序配置为排在最后的凭据助手（[`CREDENTIAL_HELPER_ARG`]）。
+    pub credential_helper: bool,
 }
 
 impl Git {
-    /// 在用户 shell 的 `PATH` 里找 `git`，确认它能用。
-    ///
-    /// 第一次调用要等取到环境。
-    ///
-    /// # Errors
-    ///
-    /// 找不到，或者 macOS 上找到的是没装开发者工具时的占位程序，返回 [`Unavailable`]。
-    pub fn find(shell: &Shell) -> Result<Git, Unavailable> {
-        // 仅在 WSL 中安装了 `git` 时仍然可用：发行版中的仓库使用发行版内的 `git`（`Git::at`）。
-        let program = shell
-            .find("git")
-            .or_else(|| crate::wsl::available().then(|| PathBuf::from("git.exe")))
-            .ok_or(Unavailable::NotInstalled)?;
-        if cfg!(target_os = "macos")
-            && program == Path::new("/usr/bin/git")
-            && !developer_tools_installed()
-        {
-            return Err(Unavailable::NoDeveloperTools);
-        }
-        Ok(Git {
-            program,
-            shell: shell.clone(),
-            trust: Arc::default(),
-            askpass: None,
-        })
+    /// 仓库 `root` 是否有可用的 `git`：本机的仓库需要本机的 `git`，发行版和远端主机上的仓库
+    /// 使用各自系统中的 `git`。
+    pub fn reaches(&self, root: &Path) -> bool {
+        self.local || winc_backend::is_remote(root) || crate::wsl::locate_here(root).is_some()
     }
 
     /// 在仓库 `root` 里运行 `git status`。
@@ -616,6 +659,9 @@ impl Git {
     ///
     /// `git` 运行失败、超时、被取消或者输出读不懂时返回原因。
     pub fn status(&self, root: &Path, cancel: &Cancel) -> Result<Status, String> {
+        if !self.reaches(root) {
+            return Err(Unavailable::NotInstalled.to_string());
+        }
         self.inspect(root)?;
         let mut command = self.command(root);
         command.args([
@@ -641,6 +687,9 @@ impl Git {
         let ((dir, operation), stdout) = crate::background::both(remote, marks, run);
         let mut status = parse_status(&stdout?, root)
             .ok_or_else(|| winc_i18n::t!("git-status-unreadable").to_owned())?;
+        if operation == Some(Operation::Rebase) {
+            status.progress = dir.as_deref().and_then(rebase_progress);
+        }
         (status.git_dir, status.operation) = (dir, operation);
         status.unresolved = status
             .entries
@@ -660,6 +709,17 @@ impl Git {
     /// 还有未解决的冲突、hooks 拒绝时返回 `git` 给出的原因。
     pub fn continue_operation(&self, root: &Path, operation: Operation) -> Result<String, String> {
         self.operate(root, &[operation.command(), "--continue"])
+    }
+
+    /// 跳过 `operation` 正在处理的提交，继续处理其后的提交（例如 `git rebase --skip`）。
+    ///
+    /// 该提交的更改和已经解决的冲突被丢弃。合并没有可以跳过的提交。
+    ///
+    /// # Errors
+    ///
+    /// `git` 报错时返回它的说明。
+    pub fn skip_operation(&self, root: &Path, operation: Operation) -> Result<String, String> {
+        self.operate(root, &[operation.command(), "--skip"])
     }
 
     /// 放弃 `operation`，回到开始之前的状态（例如 `git merge --abort`）。
@@ -690,12 +750,28 @@ impl Git {
         command.args([
             "for-each-ref",
             "--format=%(refname)%00%(HEAD)%00%(upstream:short)%00%(objectname)\
-             %00%(committerdate:unix)%00%(committerdate:format-local:%Y-%m-%d %H:%M)",
+             %00%(committerdate:unix)%00%(committerdate:format-local:%Y-%m-%d %H:%M)\
+             %00%(upstream:track,nobracket)",
             "refs/heads",
             "refs/remotes",
         ]);
         let stdout = self.run(&mut command, STATUS_TIMEOUT, cancel)?;
         Ok(parse_branches(&String::from_utf8_lossy(&stdout)))
+    }
+
+    /// 返回仓库中各个标签的名字，最近创建的在前。
+    ///
+    /// # Errors
+    ///
+    /// `git` 运行失败或超时时返回原因。
+    pub fn tags(&self, root: &Path, cancel: &Cancel) -> Result<Vec<String>, String> {
+        let mut command = self.command(root);
+        // `lstrip=2` 去掉 `refs/tags/`：`short` 在标签与分支同名时会带上 `tags/`。
+        let format = "--format=%(refname:lstrip=2)";
+        command.args(["for-each-ref", "--sort=-creatordate", format, "refs/tags"]);
+        let stdout = self.run(&mut command, STATUS_TIMEOUT, cancel)?;
+        let names = String::from_utf8_lossy(&stdout);
+        Ok(names.lines().map(str::to_owned).collect())
     }
 
     /// 返回仓库配置的远程名。
@@ -766,6 +842,27 @@ impl Git {
         self.run_operation(root, args, OPERATION_TIMEOUT)
     }
 
+    /// 在后台无人值守地获取所有远程（`git fetch --all --prune`）：需要密码、口令或确认主机密钥
+    /// 时直接失败，不等输入。
+    ///
+    /// `git` 自己的提示已经由 `GIT_TERMINAL_PROMPT` 关掉；`ssh` 还会从控制终端读口令（从终端
+    /// 启动时），这里让它只用 askpass，而 askpass 程序是总是失败的 `false`（不存在时同样失败）。
+    /// [`Git::with_askpass`] 指定的程序此时只作为凭据助手提供已保存的凭据。
+    ///
+    /// # Errors
+    ///
+    /// 同 [`Git::operate`]。
+    pub fn fetch_unattended(&self, root: &Path) -> Result<String, String> {
+        self.require_trust(root)?;
+        let args = ["fetch", "--all", "--prune"];
+        self.run_prepared(root, &args, OPERATION_TIMEOUT, |command| {
+            command
+                .env("GIT_ASKPASS", "false")
+                .env("SSH_ASKPASS", "false")
+                .env("SSH_ASKPASS_REQUIRE", "force");
+        })
+    }
+
     /// 把 `paths` 的当前状态加入暂存区（`git add --all`），已删除的文件记为删除。
     ///
     /// 路径以 `/` 分隔并按字面匹配：`[`、`*`、`?` 不作为通配符。
@@ -775,6 +872,31 @@ impl Git {
     /// 同 [`Git::operate`]。
     pub fn stage(&self, root: &Path, paths: &[PathBuf]) -> Result<String, String> {
         let mut args: Vec<OsString> = ["add", "--all", "--"].map(OsString::from).into();
+        args.extend(relative_all(root, paths));
+        self.operate(root, &args)
+    }
+
+    /// 储藏 `paths` 的改动（含未跟踪的文件），其余的改动留在工作区和暂存区；`message` 是储藏的
+    /// 说明，为空时由 `git` 生成。
+    ///
+    /// 路径以 `/` 分隔并按字面匹配：`[`、`*`、`?` 不作为通配符。
+    ///
+    /// # Errors
+    ///
+    /// 同 [`Git::operate`]。
+    pub fn stash_paths(
+        &self,
+        root: &Path,
+        message: &str,
+        paths: &[PathBuf],
+    ) -> Result<String, String> {
+        let mut args: Vec<OsString> = ["stash", "push", "--include-untracked"]
+            .map(OsString::from)
+            .into();
+        if !message.is_empty() {
+            args.extend(["--message", message].map(OsString::from));
+        }
+        args.push("--".into());
         args.extend(relative_all(root, paths));
         self.operate(root, &args)
     }
@@ -799,13 +921,26 @@ impl Git {
     ) -> Result<String, String> {
         let mut command = self.command(root);
         self.ask_through(root, &mut command);
+        // 本机的 `git`（不是远端主机和 WSL 里的）在联网的命令上跟随系统的代理设置；暂存、提交
+        // 这些不联网的命令不读系统设置，不为它们多跑一个进程。
+        let online = online(args.iter().map(AsRef::as_ref));
+        if online && !winc_backend::is_remote(root) && crate::wsl::locate_here(root).is_none() {
+            crate::proxy::apply(&mut command);
+        }
         prepare(&mut command);
         command.args(args).stderr(Stdio::piped());
-        match process::run(&mut command, Vec::new(), timeout, &Cancel::default()) {
+        // 命令一开始就记下，输出随到随记：开着的输出标签不用等命令结束。
+        let live = output::begin(root, args);
+        let watch: process::Watch = {
+            let live = Arc::clone(&live);
+            Arc::new(move |bytes: &[u8]| output::feed(&live, bytes))
+        };
+        let cancel = Cancel::default();
+        match process::run_watched(&mut command, Vec::new(), timeout, &cancel, Some(watch)) {
             Ok(output) => {
                 let mut text = output.stderr;
                 text.extend_from_slice(&output.stdout);
-                output::record(root, args, output.status.code(), &text);
+                output::finish(&live, output.status.code(), &text);
                 if output.status.success() {
                     Ok(summary(&text))
                 } else {
@@ -814,7 +949,7 @@ impl Git {
             }
             Err(e) => {
                 let reason = describe(&e);
-                output::record(root, args, None, reason.as_bytes());
+                output::finish(&live, None, reason.as_bytes());
                 Err(reason)
             }
         }
@@ -846,6 +981,8 @@ impl Git {
         if crate::wsl::locate_here(root).is_some() {
             let list = format!("{}:{}", crate::wsl::GIT_ENV, crate::wsl::ASKPASS_ENV);
             command.env("WSLENV", list);
+        } else if askpass.credential_helper && locate::runs_here(root) {
+            locate::add_credential_helper(command, &askpass.program);
         }
     }
 
@@ -876,7 +1013,8 @@ impl Git {
         }
     }
 
-    /// 推送当前分支。
+    /// 推送当前分支：有上游时推到上游，上游与当前分支不同名时写明推到上游的分支（`git` 默认
+    /// 拒绝推到不同名的上游）；推送去另一个远程或设置了 `push.default` 时按其设置。
     ///
     /// 没有上游时发布到 [`Git::publish_target`] 选出的远程（见 [`Git::publish`]）。
     ///
@@ -886,7 +1024,9 @@ impl Git {
     pub fn push(&self, root: &Path, has_upstream: bool) -> Result<String, String> {
         self.require_trust(root)?;
         if has_upstream {
-            return self.operate(root, &["push"]);
+            let mut args = vec!["push".to_owned()];
+            args.extend(self.push_target(root, &Cancel::default()));
+            return self.operate(root, &args);
         }
         let remote = self.publish_target(root)?;
         self.publish(root, &remote)
@@ -910,6 +1050,35 @@ impl Git {
         )
     }
 
+    /// 把 `head`（`HEAD` 或一个提交号）推送到远程 `remote` 的分支 `branch`；`tags` 为真时一并
+    /// 推送全部标签，`track` 为真时把它设为上游。
+    ///
+    /// # Errors
+    ///
+    /// `remote`、`branch` 以 `-` 开头，或 `git` 报错（被拒绝、需要认证）时返回原因。
+    pub fn push_to(
+        &self,
+        root: &Path,
+        (head, remote, branch): (&str, &str, &str),
+        tags: bool,
+        track: bool,
+    ) -> Result<String, String> {
+        self.require_trust(root)?;
+        if remote.starts_with('-') || branch.starts_with('-') {
+            return Err(winc_i18n::t!("git-push-no-remote").to_owned());
+        }
+        let spec = format!("{head}:refs/heads/{branch}");
+        let mut args = vec!["push"];
+        if tags {
+            args.push("--tags");
+        }
+        if track {
+            args.push("--set-upstream");
+        }
+        args.extend(["--end-of-options", remote, &spec]);
+        self.operate(root, &args)
+    }
+
     /// 返回发布当前分支（第一次推送）时使用的远程：优先取分支和仓库配置的推送目标，其次是
     /// `origin`，都没有时取第一个；跳过以 `-` 开头的远程名。
     ///
@@ -929,11 +1098,7 @@ impl Git {
     /// 仍然留着 `branch.<名字>.remote`。
     fn preferred_remote(&self, root: &Path) -> Vec<String> {
         let cancel = Cancel::default();
-        let mut command = self.command(root);
-        command.args(["symbolic-ref", "--quiet", "--short", "HEAD"]);
-        let branch = self.run(&mut command, STATUS_TIMEOUT, &cancel);
-        let branch = branch.map(|out| String::from_utf8_lossy(&out).trim().to_owned());
-        let branch = branch.unwrap_or_default();
+        let branch = self.current_branch(root, &cancel).unwrap_or_default();
         [
             format!("branch.{branch}.pushRemote"),
             "remote.pushDefault".to_owned(),
@@ -954,6 +1119,9 @@ impl Git {
             .env("GIT_TERMINAL_PROMPT", "0")
             // 不打开编辑器：`rebase --continue` 等操作会打开它修改提交信息，这里沿用原来的信息。
             .env("GIT_EDITOR", ":")
+            // 待办列表也不打开编辑器（`sequence.editor` 优先于 `GIT_EDITOR`）：`pull.rebase` 设为
+            // `interactive` 时按 `git` 生成的待办执行；交互式变基另行指定。
+            .env("GIT_SEQUENCE_EDITOR", ":")
             // 不验证签名：验证需要运行 `gpg.program`，仓库配置不可信时它可以是任意命令；验证结果
             // 还会混入 `log`、`show`、`stash list` 的输出，破坏解析。
             .args(["-c", "log.showSignature=false"]);
@@ -1282,14 +1450,24 @@ pub fn scan_repositories(dir: &Path, depth: usize, cancel: &Cancel) -> Vec<PathB
     found
 }
 
-/// macOS 上命令行开发者工具是否已安装（`xcode-select -p` 成功）。
-fn developer_tools_installed() -> bool {
-    let mut command = Command::new("/usr/bin/xcode-select");
-    command.arg("-p").stderr(Stdio::null());
-    matches!(
-        process::run(&mut command, Vec::new(), PROBE_TIMEOUT, &Cancel::default()),
-        Ok(output) if output.status.success()
-    )
+/// 会访问网络、需要代理的 `git` 子命令。
+const ONLINE: [&str; 6] = ["fetch", "pull", "push", "clone", "ls-remote", "remote"];
+
+/// `git args` 的子命令是否会访问网络（见 [`ONLINE`]）：跳过前面的 `-c 键=值` 和其他选项，看第一个
+/// 子命令。
+fn online<'a>(args: impl IntoIterator<Item = &'a OsStr>) -> bool {
+    let mut args = args.into_iter();
+    while let Some(arg) = args.next() {
+        if arg == "-c" {
+            args.next();
+            continue;
+        }
+        if arg.to_string_lossy().starts_with('-') {
+            continue;
+        }
+        return ONLINE.iter().any(|command| arg == *command);
+    }
+    false
 }
 
 /// 选出发布分支（第一次推送）的远程：先按 `preferred`（当前分支和仓库配置的推送目标，优先的在前），

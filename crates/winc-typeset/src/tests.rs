@@ -10,10 +10,15 @@ const TOKEN: Color = Color::hex(0x0000ff);
 
 /// 以宽 `width`（逻辑像素）、正文字号 16 排版 `markdown`，返回各顶层块排出的内容和高度。
 fn lay(markdown: &str, width: f32) -> Vec<(Out, f32)> {
+    lay_with(markdown, width, &HashMap::new())
+}
+
+/// 同 [`lay`]，图片按网址在 `images` 中查找。
+fn lay_with(markdown: &str, width: f32, images: &HashMap<PathBuf, ImageSlot>) -> Vec<(Out, f32)> {
     let parsed = winc_preview::markdown::parse(markdown);
     let mut renderer =
         Renderer::offscreen(800.0, 600.0, 1.0, Color::hex(0xffffff), None, None).unwrap();
-    let (images, toggled) = (HashMap::new(), HashSet::new());
+    let toggled = HashSet::new();
     let mut memo = Memo::default();
     let mut laid = Vec::new();
     renderer.draw(|frame| {
@@ -26,8 +31,8 @@ fn lay(markdown: &str, width: f32) -> Vec<(Out, f32)> {
             accent,
             colors: Colors::new(TEXT, Color::hex(0x808080), accent, false),
             dark: false,
-            images: &images,
-            image_path: &|_| None,
+            images,
+            image_path: &|url| (!images.is_empty()).then(|| PathBuf::from(url)),
             wanted: Vec::new(),
             memo: &mut memo,
             toggled: &toggled,
@@ -36,6 +41,10 @@ fn lay(markdown: &str, width: f32) -> Vec<(Out, f32)> {
             raw: None,
             cell: None,
             preedit: false,
+            line_numbers: false,
+            tall: f32::INFINITY,
+            repeat: 0,
+            toggles: HashMap::new(),
         };
         let env = Env {
             color: TEXT,
@@ -167,4 +176,135 @@ fn links_cover_their_text() {
     let (rect, url) = link.expect("链接排出一个 `Item::Link`");
     assert_eq!(url, "https://example.com");
     assert!(rect.w > 0.0 && rect.h > 0.0);
+}
+
+#[test]
+fn emoji_sequences_are_laid_out_as_one_piece() {
+    let spans = |out: &Out| -> Vec<(String, Vec<f32>)> {
+        out.items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Text { text, span, .. } => {
+                    Some((text.to_string(), span.as_ref()?.advances.to_vec()))
+                }
+                _ => None,
+            })
+            .collect()
+    };
+    let family = "👨\u{200d}👩\u{200d}👧";
+    for (markdown, unit) in [
+        (format!("a {family} b"), family),
+        ("a 👍\u{1f3fd} b".to_owned(), "👍\u{1f3fd}"),
+        ("a ⚠\u{fe0f} b".to_owned(), "⚠\u{fe0f}"),
+        (format!("```\na {family} b\n```"), family),
+    ] {
+        let laid = lay(&markdown, 600.0);
+        let found = spans(&laid[0].0);
+        let (text, advances) = found.iter().find(|(text, _)| text.contains(unit)).unwrap();
+        assert_eq!(advances.len(), text.chars().count(), "{markdown:?}");
+        // 序列的宽度记在第一个字符上，其余字符为 0；没有 emoji 字体时各字符仍有自己的宽度，
+        // 不做比较。
+        let at = text[..text.find(unit).unwrap()].chars().count();
+        let members = &advances[at + 1..at + unit.chars().count()];
+        if members.iter().all(|&w| w == 0.0) {
+            assert!(advances[at] > 0.0, "{markdown:?}");
+        }
+    }
+    // 很窄时在序列前后折行，序列中间不折：每一行的文字要么含整个序列，要么不含其中的字符。
+    let laid = lay(&format!("word {family} word {family} word"), 40.0);
+    for (_, _, _, text) in texts(&laid[0].0) {
+        let inside = text.chars().filter(|c| family.contains(*c)).count();
+        assert!(inside % family.chars().count() == 0, "{text:?}");
+    }
+}
+
+/// 状态图中往返和并排的连线上的文字不重叠。
+#[test]
+fn edge_labels_do_not_overlap() {
+    let source = "```mermaid\nstateDiagram-v2\n\
+        [*] --> queued: 提交通过校验\n\
+        [*] --> succeeded: 输入与通过验收的旧任务完全相同（复用结果）\n\
+        queued --> running: worker 领取（没有租约）\n\
+        running --> queued: 租约过期（worker 失联），重试次数未用完\n\
+        queued --> canceled: 取消\n\
+        running --> canceled: 心跳发现取消，终止 pi 容器\n\
+        queued --> failed: 排队超过截止时间（expired）\n\
+        running --> succeeded: 有结果（passed 或 degraded）\n\
+        running --> failed: 拿不出结果（input_error / refused / system_error）\n\
+        canceled --> [*]\nsucceeded --> [*]\nfailed --> [*]\n```\n";
+    let laid = lay(source, 900.0);
+    // 按字号估算文字宽度：汉字为一个字号，其余字符为半个字号。
+    let boxes: Vec<(String, Rect)> = laid[0]
+        .0
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Text {
+                x,
+                baseline,
+                text,
+                size,
+                ..
+            } => {
+                let w: f32 = text
+                    .chars()
+                    .map(|c| if c.is_ascii() { size * 0.5 } else { *size })
+                    .sum();
+                Some((
+                    text.to_string(),
+                    Rect::new(*x, baseline - size * 0.8, w, *size),
+                ))
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(boxes.iter().any(|(t, _)| t.contains("领取")), "{boxes:?}");
+    for (i, (a, ra)) in boxes.iter().enumerate() {
+        for (b, rb) in &boxes[i + 1..] {
+            let r = ra.inset(1.0, 1.0).intersect(rb.inset(1.0, 1.0));
+            assert!(r.w <= 0.0 || r.h <= 0.0, "「{a}」和「{b}」重叠");
+        }
+    }
+}
+
+#[test]
+fn list_markers_align_with_the_top_of_an_image_line() {
+    let slot = |width| ImageSlot::Ready {
+        width,
+        height: 400,
+        density: 1,
+        picture: None,
+        pixels: Vec::new(),
+        drawing: Vec::new(),
+    };
+    let images = HashMap::from([
+        (PathBuf::from("wide.png"), slot(2000)),
+        (PathBuf::from("dot.png"), slot(400)),
+    ]);
+    let marker_and_image = |markdown: &str| {
+        let laid = lay_with(markdown, 600.0, &images);
+        let out = &laid[0].0;
+        let image = out
+            .items
+            .iter()
+            .find_map(|item| match item {
+                Item::Image { rect, .. } => Some(*rect),
+                _ => None,
+            })
+            .unwrap();
+        let texts = texts(out);
+        let marker = texts.iter().find(|t| t.3 == "1.").unwrap().0;
+        let text = texts.iter().find(|t| t.3.contains("文字")).unwrap().0;
+        (marker, image, text)
+    };
+    // 图片独占首行：记号的顶端与图片的顶端对齐。
+    let (marker, image, text) = marker_and_image("1. ![a](wide.png) 文字\n");
+    assert!(
+        marker > image.y && marker < image.y + 16.0,
+        "{marker} {image:?}"
+    );
+    assert!(text > image.y + image.h);
+    // 图片与文字同行：记号与文字同一基线。
+    let (marker, _, text) = marker_and_image("1. ![a](dot.png) 文字\n");
+    assert_eq!(marker, text);
 }

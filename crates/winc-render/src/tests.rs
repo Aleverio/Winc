@@ -331,6 +331,26 @@ fn windows_sharing_glyphs_draw_the_same_and_rasterize_once() {
     assert_eq!(first.glyphs.borrow().cached(), before);
 }
 
+/// 中日韩文字按整像素定位：同一个字画在不同的亚像素位置只光栅化一次，拉丁字母仍按档位
+/// 分别光栅化。
+#[test]
+fn cjk_glyphs_are_rasterized_once_across_subpixel_positions() {
+    let mut renderer = Renderer::offscreen(80.0, 30.0, 2.0, Color::hex(0), None, None).unwrap();
+    let mut cached_after = |text: &str| {
+        renderer.draw(|frame| {
+            let all = frame.bounds();
+            for k in 0..4 {
+                let x = 2.0 + k as f32 * 10.0 + k as f32 * 0.125;
+                frame.text(FontKind::Ui, 16.0, x, 20.0, text, Color::hex(0xffffff), all);
+            }
+        });
+        renderer.glyphs.borrow().cached()
+    };
+    let before = cached_after("");
+    assert_eq!(cached_after("中") - before, 1);
+    assert!(cached_after("W") - before > 2);
+}
+
 #[test]
 fn base_rects_look_the_same_declared_or_not() {
     let new = || Renderer::offscreen(20.0, 10.0, 2.0, Color::hex(0x101010), None, None).unwrap();
@@ -390,7 +410,9 @@ fn font_weight_changes_the_ink_of_every_kind_of_font() {
     let ink = |spec: &FontSpec, weight: u16, c: char| {
         let mut renderer =
             Renderer::offscreen(60.0, 40.0, 1.0, Color::hex(0x000000), None, None).unwrap();
-        renderer.set_fonts(Some(spec), None, None, weight).unwrap();
+        renderer
+            .set_fonts(std::slice::from_ref(spec), &[], &[], weight, weight)
+            .unwrap();
         let mut advance = 0.0;
         renderer.draw(|frame| {
             let all = frame.bounds();
@@ -426,6 +448,40 @@ fn font_weight_changes_the_ink_of_every_kind_of_font() {
         } else {
             assert_eq!(light, regular, "{c}");
         }
+    }
+}
+
+/// 终端的字重与其余文字分开：终端的文字（含后备字体中的汉字）按终端的字重画，编辑区不变；
+/// 两者相同时画出的完全一样。
+#[cfg(target_os = "macos")]
+#[test]
+fn the_terminal_weight_changes_only_the_terminal_ink() {
+    let sf = FontSpec::Path("/System/Library/Fonts/SFNSMono.ttf".into());
+    let ink = |(weight, terminal): (u16, u16), kind: FontKind, c: char| {
+        let mut renderer =
+            Renderer::offscreen(60.0, 40.0, 1.0, Color::hex(0x000000), None, None).unwrap();
+        renderer
+            .set_fonts(std::slice::from_ref(&sf), &[], &[], weight, terminal)
+            .unwrap();
+        renderer.draw(|frame| {
+            let all = frame.bounds();
+            let text = c.to_string();
+            frame.text(kind, 30.0, 5.0, 32.0, &text, Color::hex(0xffffff), all);
+        });
+        let image = renderer.image().unwrap();
+        image.pixels.iter().map(|p| p & 0xff).sum::<u32>()
+    };
+    for c in ['H', '中'] {
+        let regular = ink((400, 400), FontKind::Terminal, c);
+        assert_eq!(ink((400, 400), FontKind::Mono, c), regular, "{c}");
+        let bold = ink((400, 700), FontKind::Terminal, c);
+        assert!(
+            bold as f32 > regular as f32 * 1.15,
+            "{c}：{regular} → {bold}"
+        );
+        assert_eq!(ink((400, 700), FontKind::Mono, c), regular, "{c}");
+        // 全局调粗、终端仍是常规字重：终端不随之变粗。
+        assert_eq!(ink((700, 400), FontKind::Terminal, c), regular, "{c}");
     }
 }
 
@@ -710,4 +766,29 @@ fn hinting_sharpens_horizontal_stems_and_keeps_advances() {
         (hinted as f32) < plain as f32 * 0.9,
         "未微调 {plain}，微调 {hinted}"
     );
+}
+
+#[test]
+fn emoji_are_rasterized_once_whatever_the_pen_position() {
+    let mut renderer =
+        Renderer::offscreen(200.0, 60.0, 1.0, Color::hex(0xffffff), None, None).unwrap();
+    // 系统中没有彩色 emoji 字体时不做比较。
+    if renderer.glyphs.borrow_mut().fonts.emoji_face().is_none() {
+        return;
+    }
+    let draw = |renderer: &mut Renderer, text: &str| {
+        let before = renderer.glyphs.borrow().cached();
+        renderer.draw(|frame| {
+            let all = frame.bounds();
+            for step in 0..4 {
+                let x = 10.0 + 40.0 * step as f32 + 0.25 * step as f32;
+                frame.text(FontKind::Ui, 20.0, x, 30.0, text, Color::hex(0x000000), all);
+            }
+        });
+        renderer.glyphs.borrow().cached() - before
+    };
+    // 字母按 ¼ 像素的档位各有一份位图；emoji 和 emoji 序列按整像素定位，只有一份。
+    assert_eq!(draw(&mut renderer, "a"), 4);
+    assert_eq!(draw(&mut renderer, "😀"), 1);
+    assert_eq!(draw(&mut renderer, "👍\u{1f3fd}"), 1);
 }

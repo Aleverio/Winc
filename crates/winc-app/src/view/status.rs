@@ -24,6 +24,7 @@ const CRUMB_PAD: f32 = 5.0;
 
 /// 文档组的项，按从左到右的顺序。
 const DOCUMENT: &[StatusKey] = &[
+    StatusKey::Words,
     StatusKey::Position,
     StatusKey::LineEnding,
     StatusKey::Encoding,
@@ -40,6 +41,9 @@ const PICTURE: &[StatusKey] = &[
     StatusKey::PictureFile,
     StatusKey::PictureFormat,
 ];
+
+/// PDF 预览组的项。
+const PDF: &[StatusKey] = &[StatusKey::PdfPage];
 
 /// 分支图标的宽度（逻辑像素），位于分支名左侧。
 const BRANCH_ICON: f32 = 14.0;
@@ -459,6 +463,31 @@ pub(super) fn draw_status(app: &mut App, frame: &mut Frame<'_>) {
         }
     }
 
+    // 只读开关位于远程按钮左侧；文档因自身的状态而只读时不显示。
+    if let Some(doc) = shown.filter(|doc| doc.can_lock()) {
+        let item = StatusItem::ReadOnly;
+        let slot = right - icons::SIDEBAR_WIDTH;
+        right -= icons::SIDEBAR_WIDTH + STATUS_GAP;
+        let pill = Rect::new(
+            slot - CRUMB_PAD,
+            bar.y + 4.0,
+            icons::SIDEBAR_WIDTH + 2.0 * CRUMB_PAD,
+            bar.h - 8.0,
+        );
+        let locked = doc.readonly_reason().is_some();
+        let hovered = app.pointer.hover == Hover::Status(item);
+        let pressed = app.overlays.menu_button == Some(MenuButton::Status(item));
+        draw_button(frame, p, pill, bar, hovered || locked, pressed);
+        let center = (slot + icons::SIDEBAR_WIDTH / 2.0, bar.y + bar.h / 2.0);
+        let color = if locked || hovered {
+            p.text
+        } else {
+            p.text_muted
+        };
+        icons::status_lock(frame, center, !locked, color, bar);
+        status_hits.push((pill, item));
+    }
+
     // 后台检查更新找到了新版本：在终端开关左边放一个更新按钮（见 [`update_button`]）。
     let mut items = Vec::new();
     if let Some(button) = update_button(app) {
@@ -505,6 +534,25 @@ pub(super) fn draw_status(app: &mut App, frame: &mut Frame<'_>) {
         &mut status_hits,
     );
 
+    // PDF 预览：视口中线所在的页和总页数。
+    let mut items = Vec::new();
+    if let Some((page, total)) = app.preview.pdf.page {
+        let text = t!("preview-pdf-page", page = page + 1, total = total);
+        items.push((StatusKey::PdfPage, text, None));
+    }
+    draw_group(
+        frame,
+        app,
+        &mut motion,
+        animate,
+        PDF,
+        items,
+        1.0,
+        bar,
+        &mut right,
+        &mut status_hits,
+    );
+
     let mut items = Vec::new();
     if let Some(doc) = shown {
         let (line, col) = doc.text().pos_to_line_col(doc.selection.head);
@@ -536,8 +584,19 @@ pub(super) fn draw_status(app: &mut App, frame: &mut Frame<'_>) {
         // 仅供查看的标签（格式化输出）没有可修改的缩进、行尾和编码。
         let clickable = |item| doc.title.is_none().then_some(item);
 
-        items = vec![
-            (StatusKey::Position, position, None),
+        items = vec![(StatusKey::Position, position, None)];
+        if let Some((total, selected)) = app.word_count() {
+            let words = match selected {
+                0 => t!("workspace-status-words", count = total),
+                n => t!(
+                    "workspace-status-words-selected",
+                    selected = n,
+                    count = total
+                ),
+            };
+            items.insert(0, (StatusKey::Words, words, None));
+        }
+        items.extend([
             (
                 StatusKey::LineEnding,
                 doc.line_ending.label().to_owned(),
@@ -554,7 +613,7 @@ pub(super) fn draw_status(app: &mut App, frame: &mut Frame<'_>) {
                 language.name.to_owned(),
                 clickable(StatusItem::Language),
             ),
-        ];
+        ]);
         if doc.title.is_none() {
             let lsp_text = match doc.path.as_ref() {
                 None => t!("workspace-status-lsp-off").to_owned(),
@@ -620,6 +679,19 @@ pub(super) fn draw_status(app: &mut App, frame: &mut Frame<'_>) {
                 }
             }
         }
+    } else if let Some(view) = doc.and_then(|d| d.hex.as_deref()) {
+        // 十六进制视图：光标所在的偏移和选中的字节数；编码一项可以切回文本。
+        let range = view.selection();
+        let offset = format!("0x{:X}", view.head);
+        let position = match range.end - range.start {
+            0 | 1 => t!("hex-status-offset", offset = offset),
+            n => t!("hex-status-selected", offset = offset, count = n),
+        };
+        let hex = t!("editor-encoding-hex").to_owned();
+        items = vec![
+            (StatusKey::Position, position, None),
+            (StatusKey::Encoding, hex, Some(StatusItem::Encoding)),
+        ];
     }
     draw_group(
         frame,

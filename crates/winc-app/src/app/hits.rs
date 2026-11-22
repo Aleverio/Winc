@@ -86,6 +86,10 @@ pub struct Hits {
     pub(crate) notice_button: Option<Rect>,
     /// 上一帧绘制的链接（区域和地址），点击时据此查找。
     pub(crate) markdown_links: Vec<(winc_render::Rect, String)>,
+    /// 上一帧在可编辑的预览中绘制的、原文可以改写的图片。
+    pub(crate) markdown_images: Vec<crate::app::preview::markdown::resize::ImageAt>,
+    /// 上一帧绘制的本地图片及其文件。
+    pub(crate) markdown_pictures: Vec<(winc_render::Rect, std::path::PathBuf)>,
     /// 上一帧绘制的代码块（屏幕坐标）：鼠标移入、移出时重绘，以显示或隐藏复制按钮。
     pub(crate) markdown_codes: Vec<winc_render::Rect>,
     /// 编辑区顶部钉住的各行，绘制时记录，点击和悬停时使用。
@@ -103,15 +107,27 @@ pub struct Hits {
     ///
     /// 同一时刻只显示一个表格的滚动条：鼠标所在的表格，或最近一次横向滚动的表格。
     pub(crate) markdown_table_bar: Option<crate::app::preview::markdown::TableBar>,
+    /// 上一帧绘制的格式工具栏；没有显示时为 `None`。
+    pub(crate) selection_card: Option<Rect>,
+    /// 上一帧绘制的格式工具栏中各按钮的位置。
+    pub(crate) selection_tools: Vec<(Rect, crate::app::preview::markdown::toolbar::Tool)>,
+    /// 上一帧绘制的链接地址补全列表的卡片；没有画出列表时为 `None`。
+    pub(crate) suggest_card: Option<Rect>,
+    /// 上一帧绘制的链接地址补全列表的各行：位置和行号。
+    pub(crate) suggest: Vec<(Rect, usize)>,
     /// 上一帧绘制的标题指示条和标题列表的可点击位置，见 `view::markdown` 的 `draw_toc`。
     pub(crate) markdown_toc: Vec<(winc_render::Rect, crate::app::preview::markdown::TocTarget)>,
     /// 上一帧标题指示条列出的各标题在内容里的高度（逻辑像素），与 [`TocTarget::Heading`] 的
     /// 序号对应；点击标题时滚动到该处。
     pub(crate) markdown_toc_tops: Vec<f32>,
+    /// 标题指示条列出的各标题所在的顶层块，与 `markdown_toc_tops` 对应。
+    pub(crate) markdown_toc_blocks: Vec<usize>,
     /// PDF 预览缩略图栏中各页的位置，以及点击后正文滚动到的位置（逻辑像素）。
     pub(crate) pdf_thumbs: Vec<(Rect, f32)>,
     /// PDF 预览右下角工具栏上各按钮的位置。
     pub(crate) pdf_tools: Vec<(Rect, crate::app::preview::pdf::PdfTool)>,
+    /// LaTeX 预览右上角编译状态的位置；没有错误时为空矩形。
+    pub(crate) latex_status: Rect,
     /// 当前帧绘制出的「安装方法…」链接的位置，以及链接所属的设置项。
     ///
     /// 文字宽度要到绘制时才知道，悬停和点击使用这里记录的位置。
@@ -124,6 +140,9 @@ pub struct Hits {
     pub(crate) diagnostic_popup: Option<DiagnosticPopupHit>,
     /// 当前诊断浮窗中各个可执行的 LSP code action。
     pub(crate) lsp_code_actions: Vec<LspCodeActionHit>,
+    /// 当前帧「快捷键」页中绘制出的按钮、链接和键帽上的 ×；位置随文字宽度而定，悬停和点击用
+    /// 这里的。
+    pub(crate) keys_parts: Vec<(Rect, crate::layout::SettingsPart)>,
 }
 
 impl Hits {
@@ -157,6 +176,8 @@ impl Hits {
             notice_card,
             notice_button,
             markdown_links,
+            markdown_images,
+            markdown_pictures,
             markdown_codes,
             sticky,
             markdown_copy,
@@ -164,15 +185,26 @@ impl Hits {
             markdown_table_bar,
             markdown_toc,
             markdown_toc_tops,
+            markdown_toc_blocks,
+            suggest_card,
+            suggest,
+            selection_card,
+            selection_tools,
             pdf_thumbs,
             pdf_tools,
+            latex_status,
             install_links,
             diagnostics,
             problems,
             diagnostic_popup: _,
             lsp_code_actions,
+            keys_parts,
         } = self;
         start.clear();
+        *suggest_card = None;
+        *selection_card = None;
+        selection_tools.clear();
+        suggest.clear();
         placeholder.clear();
         folded.clear();
         long_lines.clear();
@@ -197,6 +229,8 @@ impl Hits {
         *notice_card = None;
         *notice_button = None;
         markdown_links.clear();
+        markdown_images.clear();
+        markdown_pictures.clear();
         markdown_codes.clear();
         sticky.clear();
         *markdown_copy = None;
@@ -204,11 +238,14 @@ impl Hits {
         *markdown_table_bar = None;
         markdown_toc.clear();
         markdown_toc_tops.clear();
+        markdown_toc_blocks.clear();
         pdf_thumbs.clear();
         pdf_tools.clear();
+        *latex_status = Rect::default();
         install_links.clear();
         diagnostics.clear();
         problems.clear();
         lsp_code_actions.clear();
+        keys_parts.clear();
     }
 }

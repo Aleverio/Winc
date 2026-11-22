@@ -6,6 +6,8 @@ mod editor;
 mod find;
 mod input;
 mod run;
+mod shortcuts;
+mod tabs;
 
 use super::editor::navigation::press;
 use super::*;
@@ -235,19 +237,43 @@ fn clicks_move_the_focus_and_the_gap_resizes_the_panel() {
     assert_eq!(app.layout.terminal.h, card.h + 50.0);
     assert_eq!(app.terminal.height, card.h + 50.0);
 
-    // 拖过头时停在给编辑区留的最小高度上，记下的也是这个高度。
+    // 拖过头不到编辑区最小高度的一半：停在最小高度上，记下的也是这个高度。
+    let column_bottom = app.layout.terminal.bottom();
+    let top = app.layout.editor.y;
+    let near = top + terminal::EDITOR_MIN - terminal::EDITOR_MIN / 4.0;
     app.on_mouse_move(x, y - 50.0);
     app.on_mouse_down(MouseButton::Left);
-    app.on_mouse_move(x, 0.0);
+    app.on_mouse_move(x, near);
     app.on_mouse_up(MouseButton::Left);
+    assert!(!app.terminal.maximized);
     assert_eq!(app.layout.editor.h, terminal::EDITOR_MIN);
     assert_eq!(app.terminal.height, app.layout.terminal.h);
+
+    // 再拖过一半：吸附为最大化，面板铺满编辑区一栏；记下的仍是最大的平常高度。
+    let gap = app.layout.terminal_divider;
+    let (x, y) = (gap.x + 200.0, gap.y + gap.h / 2.0);
+    app.on_mouse_move(x, y);
+    app.on_mouse_down(MouseButton::Left);
+    app.on_mouse_move(x, 0.0);
+    assert!(app.terminal.maximized);
+    assert_eq!(app.layout.editor.w, 0.0);
+    assert_eq!(
+        app.layout.terminal.y,
+        app.layout.window.y + crate::theme::ISLAND_MARGIN
+    );
+    assert_eq!(app.layout.terminal.bottom(), column_bottom);
+    // 同一次拖动中往回拖：松开吸附，从最小高度接着拖。
+    app.on_mouse_move(x, y + 100.0);
+    app.on_mouse_up(MouseButton::Left);
+    assert!(!app.terminal.maximized);
+    assert_eq!(app.layout.editor.h, terminal::EDITOR_MIN + 100.0);
 
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
 fn only_command_shortcuts_reach_past_the_terminal() {
+    crate::app::snapshot::use_vscode_keys();
     let dir = sample_folder("terminal-keys");
     let mut app = app_with(&dir.join("short.rs"), false);
     show_terminal(&mut app, "$ ");
@@ -302,19 +328,10 @@ fn tabs_switch_close_and_take_the_panel_with_the_last_one() {
     let _ = add_tab(&mut app, "vim", "three");
     assert_eq!(app.terminal.active, 2);
 
-    // ⌘⇧] 和 ⌘⇧[（其他系统 Ctrl+PageDown、Ctrl+PageUp）在终端里切终端的标签，到头绕回去；
+    // ⌘⇧] 和 ⌘⇧[（其他系统 Ctrl+Shift+]、Ctrl+Shift+[）在终端里切终端的标签，到头绕回去；
     // 编辑区的标签不动。
     let step = |app: &mut App, next: bool| {
-        if cfg!(target_os = "macos") {
-            press(app, &["cmd", "shift"], Char(if next { ']' } else { '[' }))
-        } else {
-            let key = if next {
-                crate::keymap::KeyCode::PageDown
-            } else {
-                crate::keymap::KeyCode::PageUp
-            };
-            press(app, &["ctrl"], key)
-        }
+        press(app, &["cmd", "shift"], Char(if next { ']' } else { '[' }))
     };
     let doc = app.editor.active;
     assert!(step(&mut app, true));
@@ -602,16 +619,18 @@ fn the_tab_bar_keeps_even_gaps_around_tabs_and_buttons() {
     assert_eq!(tab.y - card.y, app.terminal_view().y - tab.bottom());
     assert_eq!(tab.y - card.y, 5.0);
 
-    // 「+」、运行、切换位置、收起四个按钮间距相同，尺寸和间距与编辑区标签栏一致。
+    // 「+」、运行、最大化、切换位置、收起五个按钮间距相同，尺寸和间距与编辑区标签栏一致。
     let new = hit(&app, terminal::HeaderHit::New);
     let run = hit(
         &app,
         terminal::HeaderHit::Run(terminal::run::RunButton::Start),
     );
+    let maximize = hit(&app, terminal::HeaderHit::Maximize);
     let position = hit(&app, terminal::HeaderHit::Position);
     let hide = hit(&app, terminal::HeaderHit::Hide);
     assert_eq!(run.x - new.right(), crate::theme::TAB_GAP);
-    assert_eq!(position.x - run.right(), crate::theme::TAB_GAP);
+    assert_eq!(maximize.x - run.right(), crate::theme::TAB_GAP);
+    assert_eq!(position.x - maximize.right(), crate::theme::TAB_GAP);
     assert_eq!(hide.x - position.right(), crate::theme::TAB_GAP);
     assert_eq!(new.w, crate::theme::BUTTON);
     assert_eq!(card.right() - hide.right(), 8.0);
@@ -630,7 +649,9 @@ fn snapshot_terminal() {
         "\x1b[38;5;208m256 色\x1b[0m \x1b[38;2;120;200;255m真彩色\x1b[0m \x1b[7m 反色 \x1b[0m ",
         "\x1b[2m淡色\x1b[0m \x1b[3m斜体\x1b[0m \x1b[9m删除线\x1b[0m \x1b[4:3;58;5;1m波浪线\x1b[0m\r\n",
         "\x1b[42;30m 全部通过 \x1b[0m 731 passed\r\n",
-        "\x1b[1;32m➜\x1b[0m  \x1b[36mwinc\x1b[0m echo 中文和 emoji 😀",
+        "\x1b[1;32m➜\x1b[0m  \x1b[36mwinc\x1b[0m echo 中文和 emoji 😀 ",
+        // emoji 序列各占两格：变体选择符、肤色、连接符连起来的组合、国旗。
+        "❤\u{fe0f} 👍\u{1f3fd} 👨\u{200d}👩\u{200d}👧 🇨🇳|",
     );
     for dark in [false, true] {
         let mut app = app_with(&dir.join("short.rs"), dark);
@@ -1081,9 +1102,9 @@ fn the_shell_menu_starts_the_chosen_shell_and_remembers_it() {
     let session = app.terminal_session().unwrap();
     assert_eq!(session.shells, ["", "/bin/bash"]);
 
-    // 退出后重新启动：还是这个 shell。
+    // 异常退出的标签留着，重新启动后还是这个 shell（正常退出的标签直接关闭）。
     let id = app.terminal.tab().unwrap().id;
-    app.terminal_message(FromHelper::Exited { tab: id, code: 0 });
+    app.terminal_message(FromHelper::Exited { tab: id, code: 1 });
     app.restart_terminal_tab();
     app.relayout();
     assert_eq!(started(&app, &log, b"/bin/bash"), 2);
@@ -1135,7 +1156,7 @@ fn the_new_button_stays_put_once_the_tabs_narrow() {
     for _ in 0..30 {
         let _ = add_tab(&mut app, "cargo", "");
         paint(&mut app);
-        let widths = &app.terminal.strip.widths;
+        let widths = &app.terminal.strip.sizes;
         if widths.iter().any(|&w| w < TAB_MIN) {
             narrowed += 1;
             let at = *pinned.get_or_insert(new(&app));
@@ -1143,7 +1164,7 @@ fn the_new_button_stays_put_once_the_tabs_narrow() {
         }
     }
     assert!(narrowed > 5, "覆盖了变窄的整个过程：{narrowed}");
-    let widths = &app.terminal.strip.widths;
+    let widths = &app.terminal.strip.sizes;
     assert!(widths.iter().all(|&w| w == TAB_SQUEEZED));
 }
 
@@ -1280,4 +1301,40 @@ fn combining_marks_and_underline_styles_are_drawn() {
         let styled = image(&format!("\x1b[4:{style}mtext\x1b[0m"));
         assert_ne!(styled, single, "下划线样式 {style}");
     }
+}
+
+/// 面板在右边、最大化且侧栏收起时铺到窗口左边：标签让开侧栏开关，开关仍画在上面、点得到；
+/// ⌘P 面板浮在面板上。
+#[test]
+fn a_maximized_terminal_on_the_right_leaves_the_sidebar_toggle_usable() {
+    let dir = sample_folder("term-max-right");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    show_terminal(&mut app, "$ ");
+    app.config.terminal_right = Some(true);
+    app.toggle_sidebar();
+    app.panels.sidebar.motion = None;
+    app.terminal.maximized = true;
+    app.relayout();
+    let (l, toggle) = (app.layout, app.layout.sidebar_button);
+    assert_eq!(l.editor.w, 0.0);
+    assert_eq!(l.terminal.x, l.editor.x);
+    assert!(l.terminal.x < toggle.x, "面板伸到开关下面");
+    paint(&mut app);
+    let tab = (app.hits.terminal.iter())
+        .find(|(_, hit)| matches!(hit, terminal::HeaderHit::Tab(..)))
+        .map(|(rect, _)| *rect)
+        .unwrap();
+    assert!(tab.x >= toggle.right(), "标签让开开关");
+    click(
+        &mut app,
+        (toggle.x + toggle.w / 2.0, toggle.y + toggle.h / 2.0),
+    );
+    assert!(app.panels.sidebar.visible, "点开关展开侧栏");
+
+    // ⌘P 面板没有编辑区可放，浮在整栏中间。
+    app.run_action(crate::keymap::Action::QuickOpen);
+    let (picker, terminal) = (app.layout.picker, app.layout.terminal);
+    assert!(picker.w > 0.0);
+    assert!(picker.x > terminal.x && picker.right() < terminal.right());
+    let _ = std::fs::remove_dir_all(&dir);
 }

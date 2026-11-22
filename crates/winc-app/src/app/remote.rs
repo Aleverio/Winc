@@ -7,6 +7,7 @@
 //!
 //! 模块关闭时命令不可用，不启动 `ssh`；关闭模块会断开已有的连接。
 
+pub(crate) mod mounts;
 pub(crate) mod picker;
 
 use std::path::{Path, PathBuf};
@@ -19,10 +20,12 @@ use winc_backend::remote::{self, ConnectError, Connection, Deploy, Exec, Program
 use winc_editor::git::ASKPASS_ENDPOINT;
 use winc_i18n::t;
 
+use crate::app::NoticeKind;
 use crate::app::animation::Card;
 use crate::app::git::form::{FormDialog, FormKind, FormPlan};
 use crate::app::git::question::Asker;
 use crate::app::lifecycle::notice::NoticeAction;
+use crate::app::terminal::shells::ShellChoice;
 use crate::app::{App, TextField, UserEvent};
 use crate::askpass::{Listener, Question};
 use crate::layout::DialogPart;
@@ -45,6 +48,47 @@ const INSTALL_SHELL: &str = concat!(
 /// 集成脚本已经写好的主机：在这些主机上开的终端注入 shell 集成。
 static SHELL_READY: Mutex<Vec<Target>> = Mutex::new(Vec::new());
 
+/// 各台主机上检测到的 shell，供终端的 shell 菜单列出。
+static SHELLS: Mutex<Vec<(Target, Vec<ShellChoice>)>> = Mutex::new(Vec::new());
+
+/// 列出主机上的 shell 最长等待的时间：5 秒，与查询远端环境的时限相同，超时按没有检测到处理。
+const SHELLS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// 返回 `target` 上检测到的 shell，登录 shell 排在最前；尚未检测完或检测失败时为空。
+pub(crate) fn shells(target: &Target) -> Vec<ShellChoice> {
+    let known = SHELLS.lock().unwrap_or_else(PoisonError::into_inner);
+    let found = known.iter().find(|(host, _)| host == target);
+    found.map(|(_, shells)| shells.clone()).unwrap_or_default()
+}
+
+/// 测试中直接记下 `target` 上的 shell，代替经连接检测；用到它的测试只在 Unix 上编译。
+#[cfg(all(test, unix))]
+pub(crate) fn set_shells(target: &Target, shells: Vec<ShellChoice>) {
+    let mut known = SHELLS.lock().unwrap_or_else(PoisonError::into_inner);
+    known.retain(|(host, _)| host != target);
+    known.push((target.clone(), shells));
+}
+
+/// 列出 `target` 上的 shell 并记下来，一次往返；每次连接都重新检测。
+fn detect_shells(target: &Target) {
+    let mut exec = Exec::new("sh")
+        .arg("-c")
+        .arg(crate::app::terminal::shells::REMOTE_DETECT)
+        .arg("winc");
+    for path in crate::app::terminal::shells::remote_candidates() {
+        exec = exec.arg(path);
+    }
+    let home = winc_backend::virtual_path(target, b"/");
+    let deadline = std::time::Instant::now() + SHELLS_TIMEOUT;
+    let output = remote::exec(&home, &exec, &|| std::time::Instant::now() >= deadline);
+    let found = output.ok().map_or_else(Vec::new, |output| {
+        crate::app::terminal::shells::remote_shells(&String::from_utf8_lossy(&output.stdout))
+    });
+    let mut known = SHELLS.lock().unwrap_or_else(PoisonError::into_inner);
+    known.retain(|(host, _)| host != target);
+    known.push((target.clone(), found));
+}
+
 /// 是否 `target` 上的 shell 集成脚本已经写好。
 pub(crate) fn shell_ready(target: &Target) -> bool {
     let ready = SHELL_READY.lock().unwrap_or_else(PoisonError::into_inner);
@@ -60,7 +104,7 @@ fn install_shell_scripts(target: &Target) {
         .arg("winc")
         .arg(winc_pty::scripts::REMOTE_DIR);
     for (name, content) in winc_pty::scripts::remote() {
-        exec = exec.arg(name).arg(content);
+        exec = exec.arg(name).arg(content.as_ref());
     }
     let home = winc_backend::virtual_path(target, b"/");
     let written = remote::exec(&home, &exec, &|| false).is_ok_and(|output| output.code == Some(0));
@@ -74,11 +118,32 @@ fn install_shell_scripts(target: &Target) {
 /// 取得目录在远端的真实路径的脚本，参数是用户输入的目录。
 ///
 /// 相对路径和以 `~/` 开头的路径相对于主目录，空的输入表示主目录；`pwd -P` 给出不经过符号
-/// 链接的路径。
+/// 链接的路径。目录不存在时依次给出主目录、该目录的绝对路径和仍然存在的最近一级上级目录
+/// （进不去时为主目录），各占一行，退出码为 [`MISSING`]。
 const RESOLVE: &str = concat!(
     r#"p=$1; case $p in ""|"~") p=. ;; "~/"*) p=${p#"~/"} ;; esac; "#,
-    r#"cd && cd -- "$p" && pwd -P"#,
+    r#"cd || exit 1; if [ -e "$p" ]; then cd -- "$p" && pwd -P; exit; fi; h=$(pwd -P); "#,
+    r#"case $p in /*) w=$p ;; *) w=$h/$p ;; esac; printf '%s\n%s\n' "$h" "$w"; "#,
+    r#"while [ ! -d "$p" ]; do p=$(dirname -- "$p"); done; "#,
+    r#"cd -- "$p" 2>/dev/null || cd; pwd -P; exit 3"#,
 );
+
+/// [`RESOLVE`] 在目录不存在时的退出码。
+const MISSING: i32 = 3;
+
+/// 在远端找到的目录（虚拟路径）。
+#[derive(Debug)]
+enum Reached {
+    /// 要打开的目录。
+    Folder(PathBuf),
+    /// 要打开的目录 `wanted` 已不存在：`home` 是主目录，`nearest` 是仍然存在的最近一级上级
+    /// 目录。
+    Missing {
+        wanted: PathBuf,
+        home: PathBuf,
+        nearest: PathBuf,
+    },
+}
 
 /// 连接成功之后做什么。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,8 +156,17 @@ pub(in crate::app) enum After {
     Restore,
 }
 
-/// 一次连接的结果：要打开的目录，或失败的原因（已是界面语言的文字）。
-type Outcome = Result<PathBuf, String>;
+impl Reached {
+    /// 返回找到的目录；要打开的目录已不存在时返回它本身，按打开的目录被删除处理。
+    fn into_folder(self) -> PathBuf {
+        match self {
+            Reached::Folder(folder) | Reached::Missing { wanted: folder, .. } => folder,
+        }
+    }
+}
+
+/// 一次连接的结果：找到的目录，或失败的原因（已是界面语言的文字）。
+type Outcome = Result<Reached, String>;
 
 /// 远程模块的状态。
 pub(crate) struct RemoteState {
@@ -123,6 +197,9 @@ pub(crate) struct RemoteState {
     pub(in crate::app) listed: picker::Listings,
     /// 后台启动好的对远端目录的监视，由 `App::poll_remote_watcher` 取走。
     pub(in crate::app) watching: Arc<Mutex<Option<winc_editor::Watcher>>>,
+    /// 正在进行的连接成功、打开目录之后要打开的文件，及参数中写的目录（见
+    /// [`App::open_remote`]）；没有时为 `None`。
+    files: Option<(PathBuf, Vec<crate::cli::Target>)>,
 }
 
 impl Default for RemoteState {
@@ -141,6 +218,7 @@ impl Default for RemoteState {
             stepping: false,
             listed: picker::Listings::default(),
             watching: Arc::default(),
+            files: None,
         }
     }
 }
@@ -529,16 +607,16 @@ fn connect(
     remote::register(target.clone(), connection);
     // 写集成脚本不耽误打开目录：在另一个线程上进行，写好之后开的终端才带集成。
     let host = target.clone();
-    std::thread::spawn(move || install_shell_scripts(&host));
+    std::thread::spawn(move || {
+        install_shell_scripts(&host);
+        detect_shells(&host);
+    });
     Ok(())
 }
 
-/// 返回 `folder` 在 `target` 上的真实路径所对应的虚拟路径；不是目录或无法进入时返回原因。
-fn resolve(
-    target: &Target,
-    folder: &str,
-    abort: &remote::Abort,
-) -> std::io::Result<Result<PathBuf, String>> {
+/// 返回 `folder` 在 `target` 上的真实路径所对应的虚拟路径；不存在时给出最近一级上级目录，
+/// 不是目录或无法进入时返回原因。
+fn resolve(target: &Target, folder: &str, abort: &remote::Abort) -> std::io::Result<Outcome> {
     let home = winc_backend::virtual_path(target, b"/");
     let exec = Exec::new("sh")
         .arg("-c")
@@ -546,12 +624,38 @@ fn resolve(
         .arg("winc")
         .arg(folder);
     let output = remote::exec(&home, &exec, &|| abort.is_aborted())?;
-    if output.code != Some(0) {
-        let reason = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-        return Ok(Err(reason));
-    }
-    let path = output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout);
-    Ok(Ok(winc_backend::virtual_path(target, path)))
+    let text = output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout);
+    let path = |bytes| winc_backend::virtual_path(target, bytes);
+    Ok(match output.code {
+        Some(0) => Ok(Reached::Folder(path(text))),
+        Some(MISSING) => {
+            let mut lines = text.splitn(3, |&b| b == b'\n');
+            let mut next = || path(lines.next().unwrap_or_default());
+            let (home, wanted, nearest) = (next(), next(), next());
+            Ok(Reached::Missing {
+                wanted,
+                home,
+                nearest,
+            })
+        }
+        _ => Err(String::from_utf8_lossy(&output.stderr).trim().to_owned()),
+    })
+}
+
+/// 把 `files` 中位于参数中写的目录 `wanted` 之下的路径换到远端取得的目录 `folder` 之下：
+/// `folder` 是不经过符号链接的真实路径，可能与参数的写法不同。
+fn rebase(files: &[crate::cli::Target], wanted: &Path, folder: &Path) -> Vec<crate::cli::Target> {
+    let moved = |file: &crate::cli::Target| {
+        let rest = file.path.strip_prefix(wanted).ok()?;
+        Some(crate::cli::Target {
+            path: folder.join(rest),
+            ..file.clone()
+        })
+    };
+    files
+        .iter()
+        .map(|f| moved(f).unwrap_or_else(|| f.clone()))
+        .collect()
 }
 
 /// 连接 `target`（已有连接时沿用）并取得 `folder` 的虚拟路径。
@@ -684,10 +788,10 @@ impl App {
         };
         match ensure_config(&path) {
             Ok(()) => self.open_path(&path),
-            Err(error) => self.notify(t!(
-                "workspace-remote-config-failed",
-                error = error.to_string()
-            )),
+            Err(error) => self.notify(
+                NoticeKind::Error,
+                t!("workspace-remote-config-failed", error = error.to_string()),
+            ),
         }
     }
 
@@ -754,9 +858,32 @@ impl App {
             let path = String::from_utf8_lossy(&location.path).into_owned();
             self.remote_open(location.target, path, After::Open);
         } else {
-            self.notify(t!("workspace-remote-disabled"));
+            self.notify(NoticeKind::Warning, t!("workspace-remote-disabled"));
         }
         true
+    }
+
+    /// 打开 `ssh://` 参数指定的远端项目 `open` 并切到前台：本窗口开着该目录时直接打开其中的
+    /// 文件；否则在后台连接（已有连接时沿用），打开目录之后再打开文件，带行号的跳到该位置。
+    pub(crate) fn open_remote(&mut self, open: crate::cli::RemoteOpen) {
+        self.raise();
+        if self.editor.root() == Some(open.folder.as_path()) {
+            self.open_files(&open.files);
+            return;
+        }
+        if !self.remote_enabled() {
+            self.notify(NoticeKind::Warning, t!("workspace-remote-disabled"));
+            return;
+        }
+        let Some(at) = winc_backend::locate(&open.folder) else {
+            return;
+        };
+        // 已有连接在进行时 `remote_open` 只提示，这次的文件不记下。
+        if self.remote.connecting.is_none() {
+            self.remote.files = Some((open.folder, open.files));
+        }
+        let path = String::from_utf8_lossy(&at.path).into_owned();
+        self.remote_open(at.target, path, After::Open);
     }
 
     /// 启动时调用：上次退出时开着的目录在远端主机上时，重新连接并打开它，标签按那个目录的
@@ -815,7 +942,7 @@ impl App {
                 Arc::new(notify) as Closed
             });
             let listener = wake.filter(|_| !quiet).and_then(|proxy| {
-                Listener::bind(move |question| {
+                Listener::bind(false, move |question| {
                     let _ = questions.send(question);
                     let _ = proxy.send_event(UserEvent::RemoteQuestion);
                 })
@@ -865,6 +992,7 @@ impl App {
         let (Some(outcome), Some(target)) = (outcome, self.remote.connecting.take()) else {
             return;
         };
+        let files = self.remote.files.take();
         self.end_remote_questions();
         // 取消与完成同时发生时以取消为准：不打开用户已经放弃的目录。
         let aborted = (self.remote.abort.take()).is_some_and(|abort| abort.is_aborted());
@@ -886,7 +1014,28 @@ impl App {
             return;
         }
         match outcome {
-            Ok(folder) if self.remote_enabled() && self.remote.after == After::Browse => {
+            Ok(Reached::Missing {
+                wanted,
+                home,
+                nearest,
+            }) if self.remote_enabled() && self.remote.after == After::Open => {
+                // 与本机最近列表中找不到的目录相同：移出最近列表；连接保留，从最近一级上级目录
+                // 开始选择别的目录。
+                self.remote.lost = false;
+                if self.state.recent.contains(&wanted) {
+                    self.forget_missing_recent(&wanted);
+                } else {
+                    let path = winc_editor::display_path(&wanted, None);
+                    self.notify(
+                        NoticeKind::Error,
+                        t!("workspace-folder-missing", path = path),
+                    );
+                }
+                let native = |path: &Path| winc_backend::native_lossy(path).into_owned();
+                self.browse_remote_folder(target, native(&home), native(&nearest));
+            }
+            Ok(reached) if self.remote_enabled() && self.remote.after == After::Browse => {
+                let folder = reached.into_folder();
                 // 下一步：关闭连接对话框，在面板中选择目录。
                 self.remote.form = None;
                 self.connect_dialog_steps_aside();
@@ -896,13 +1045,17 @@ impl App {
                 let home = winc_backend::native_lossy(&folder).into_owned();
                 self.open_remote_browser(target, home);
             }
-            Ok(folder) if self.remote_enabled() => {
+            Ok(reached) if self.remote_enabled() => {
+                let folder = reached.into_folder();
                 self.remote.lost = false;
                 if self.editor.root() == Some(folder.as_path()) {
                     // 重新连接到已打开的目录：按窗口重新获得焦点处理，重读文件树和文档。
                     self.check_disk();
                 } else {
                     self.open_folder(&folder);
+                }
+                if let Some((wanted, files)) = files {
+                    self.open_files(&rebase(&files, &wanted, &folder));
                 }
             }
             // 连接期间模块被关闭：关闭时这条连接尚未登记，在这里断开。
@@ -918,6 +1071,7 @@ impl App {
                 if let Some(root) = root.filter(|_| !self.remote.lost) {
                     self.remote.lost = true;
                     self.notify_with(
+                        NoticeKind::Error,
                         t!("workspace-remote-lost", host = target.as_str()),
                         NoticeAction::Reconnect(root),
                     );
@@ -926,11 +1080,14 @@ impl App {
             Err(error) => {
                 // 重新连接失败后仍是断开的状态：下次获得焦点时再次提示。
                 self.remote.lost = false;
-                self.notify(t!(
-                    "workspace-remote-failed",
-                    host = target.as_str(),
-                    error = error
-                ));
+                self.notify(
+                    NoticeKind::Error,
+                    t!(
+                        "workspace-remote-failed",
+                        host = target.as_str(),
+                        error = error
+                    ),
+                );
             }
         }
     }
@@ -1181,7 +1338,9 @@ Host -oProxyCommand=x a;b
     #[ignore = "需要一台可以免输入登录的主机"]
     fn over_ssh() {
         let target = Target::new(&std::env::var("WINC_TEST_SSH_TARGET").unwrap()).unwrap();
-        let home = open(&target, "~", None, None, &remote::Abort::default(), &|_| {}).unwrap();
+        let home = open(&target, "~", None, None, &remote::Abort::default(), &|_| {})
+            .unwrap()
+            .into_folder();
         assert!(winc_backend::fs::is_dir(&home), "{}", home.display());
         let sub = open(
             &target,
@@ -1191,8 +1350,10 @@ Host -oProxyCommand=x a;b
             &remote::Abort::default(),
             &|_| {},
         )
-        .unwrap();
+        .unwrap()
+        .into_folder();
         assert_eq!(sub, home.join(".ssh"));
+        // 不存在的目录：给出主目录和仍然存在的最近一级上级目录。
         let missing = open(
             &target,
             "/winc/no/such/folder",
@@ -1200,9 +1361,36 @@ Host -oProxyCommand=x a;b
             None,
             &remote::Abort::default(),
             &|_| {},
-        )
-        .unwrap_err();
-        assert!(missing.contains("/winc/no/such/folder"), "{missing}");
+        );
+        let Ok(Reached::Missing {
+            wanted,
+            home: found,
+            nearest,
+        }) = missing
+        else {
+            panic!("{missing:?}");
+        };
+        let root = winc_backend::virtual_path(&target, b"/");
+        assert_eq!(
+            wanted,
+            winc_backend::virtual_path(&target, b"/winc/no/such/folder")
+        );
+        assert_eq!((found, nearest), (home.clone(), root));
+        let gone = home.join(".ssh/winc-no-such-folder/inner");
+        let gone = winc_backend::locate(&gone).unwrap().path;
+        let gone = String::from_utf8_lossy(&gone).into_owned();
+        let missing = open(
+            &target,
+            &gone,
+            None,
+            None,
+            &remote::Abort::default(),
+            &|_| {},
+        );
+        assert!(
+            matches!(&missing, Ok(Reached::Missing { nearest, .. }) if *nearest == sub),
+            "{missing:?}"
+        );
 
         // 那台主机上登录 shell 的 `PATH` 和按名字查找程序：格式化工具由此找到。
         let path = winc_editor::remote_env::login_path(&home).unwrap();
@@ -1220,6 +1408,13 @@ Host -oProxyCommand=x a;b
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
         assert!(shell_ready(&target));
+        // 那台主机上的 shell 随后列出，供终端的 shell 菜单使用。
+        while shells(&target).is_empty() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        let found = shells(&target);
+        assert!(found.iter().all(|shell| shell.command.starts_with('/')));
+        assert!(!found.is_empty());
         for (name, content) in winc_pty::scripts::remote() {
             let file = home.join(winc_pty::scripts::REMOTE_DIR).join(name);
             assert_eq!(

@@ -49,8 +49,8 @@ pub enum FileGlyph {
     Table,
     /// 数据库和 SQL：一个圆柱。
     Database,
-    /// 编程语言的缩写，用线条画的两三个字母（TS、ETS、JS、PY、GO、RS、C、C++、C#、KT、RB、SW），
-    /// 扫描一列文件时可直接分辨语言；没有缩写的语言画 `Code`。
+    /// 编程语言的缩写，用线条画的两三个字母（TS、ETS、JS、PY、GO、RS、C、C++、C#、KT、RB、SW、
+    /// TEX），扫描一列文件时可直接分辨语言；没有缩写的语言画 `Code`。
     Letters(&'static str),
     /// Java：一杯冒着热气的咖啡。
     Java,
@@ -62,7 +62,7 @@ impl FileGlyph {
     /// 全部记号（包括 `file_kind` 用到的每一个缩写）：目录菜单按它预先画好每种图标，漏掉的记号
     /// 在菜单里没有图标。
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-    pub const ALL: [FileGlyph; 36] = [
+    pub const ALL: [FileGlyph; 37] = [
         FileGlyph::Code,
         FileGlyph::Text,
         FileGlyph::Data,
@@ -97,6 +97,7 @@ impl FileGlyph {
         FileGlyph::Letters("KT"),
         FileGlyph::Letters("RB"),
         FileGlyph::Letters("SW"),
+        FileGlyph::Letters("TEX"),
         FileGlyph::Java,
         FileGlyph::Plain,
     ];
@@ -148,6 +149,39 @@ pub fn folder(frame: &mut Frame<'_>, (x, y): (f32, f32), open: bool, color: Colo
     frame.stroke(shapes.as_slice(), STROKE, color, clip);
 }
 
+/// 绘制一组目录的图标，15×12，左上角在 `(x, y)`：下面一个圆角矩形，上面两道逐渐变短的横线，
+/// 表示叠在一起的多个目录。
+pub fn folders(frame: &mut Frame<'_>, (x, y): (f32, f32), color: Color, clip: Rect) {
+    let h = STROKE / 2.0;
+    // 矩形高 7.5，贴着下沿；两道横线各比下面一层每侧短 2，相隔 2。
+    let front = rounded_outline(x + h, y + 4.5 + h, 15.0 - STROKE, 7.5 - STROKE, 2.0);
+    let layers = [
+        Stroke::Line(x + 2.0 + h, y + 2.0 + h, x + 13.0 - h, y + 2.0 + h),
+        Stroke::Line(x + 4.0 + h, y + h, x + 11.0 - h, y + h),
+    ];
+    frame.stroke(&front, STROKE, color, clip);
+    frame.stroke(&layers, STROKE, color, clip);
+}
+
+/// 绘制符号链接的角标，以 `(cx, cy)` 为中心：底色 `bg` 的圆片上一个指向右上的箭头。
+pub fn link_badge(
+    frame: &mut Frame<'_>,
+    (cx, cy): (f32, f32),
+    bg: Color,
+    color: Color,
+    clip: Rect,
+) {
+    let r = 4.5;
+    frame.rect_clipped(Rect::new(cx - r, cy - r, r * 2.0, r * 2.0), bg, r, clip);
+    let (a, head) = (2.0, 2.75);
+    let shapes = [
+        Stroke::Line(cx - a, cy + a, cx + a, cy - a),
+        Stroke::Line(cx + a, cy - a, cx + a - head, cy - a),
+        Stroke::Line(cx + a, cy - a, cx + a, cy - a + head),
+    ];
+    frame.stroke(&shapes, STROKE, color, clip);
+}
+
 /// 绘制小号目录图标，12×10，以 `(cx, cy)` 为中心：形状和合上的 [`folder`] 相同，线条和小号分支
 /// 图标一样细，用于侧栏小号文字旁。
 pub fn folder_small(frame: &mut Frame<'_>, (cx, cy): (f32, f32), color: Color, clip: Rect) {
@@ -170,6 +204,27 @@ pub fn folder_small(frame: &mut Frame<'_>, (cx, cy): (f32, f32), color: Color, c
         Stroke::Arc(l + c, b - c, c, FRAC_PI_2, PI),
     ];
     frame.stroke(&shapes, WIDTH, color, clip);
+}
+
+/// 绘制小号工作树图标，12×12，以 `(cx, cy)` 为中心：左上、右下各一个圆角方框，由一道折线
+/// 相连，表示从同一个仓库另外签出的目录。线条和小号分支图标一样细。
+pub fn worktree_small(frame: &mut Frame<'_>, (cx, cy): (f32, f32), color: Color, clip: Rect) {
+    const WIDTH: f32 = 1.25;
+    // 方框 5 见方，圆角 1.5；两个方框横竖各隔 0.75。
+    let (side, h) = (5.0, WIDTH / 2.0);
+    let (near, far) = (-6.0 + h, 6.0 - h - side);
+    let first = rounded_outline(cx + near, cy + near, side, side, 1.5);
+    let second = rounded_outline(cx + far, cy + far, side, side, 1.5);
+    // 折线：从第一个方框底边的中点往下，拐一个圆角，接到第二个方框左边的中点。
+    let (x, y, c) = (cx + near + side / 2.0, cy + far + side / 2.0, 1.5);
+    let link = [
+        Stroke::Line(x, cy + near + side, x, y - c),
+        Stroke::Arc(x + c, y - c, c, FRAC_PI_2, PI),
+        Stroke::Line(x + c, y, cx + far, y),
+    ];
+    frame.stroke(&first, WIDTH, color, clip);
+    frame.stroke(&second, WIDTH, color, clip);
+    frame.stroke(&link, WIDTH, color, clip);
 }
 
 /// 绘制「新建文件」图标，占 12×15 的位置（左上角 `(x, y)`）：和文件树工具栏的 [`add_file`] 是
@@ -614,6 +669,7 @@ fn monogram(text: &str, (cx, cy): (f32, f32)) -> Strokes<MONOGRAM_STROKES> {
                 &[(4.0, 0.0), (0.0, 0.0), (0.0, 6.0), (4.0, 6.0)],
                 &[(0.0, 3.0), (3.0, 3.0)],
             ],
+            'X' => &[&[(0.0, 0.0), (4.0, 6.0)], &[(4.0, 0.0), (0.0, 6.0)]],
             '+' => &[&[(0.0, 3.0), (2.5, 3.0)], &[(1.25, 1.75), (1.25, 4.25)]],
             '#' => &[
                 &[(1.0, 1.25), (0.6, 5.25)],
@@ -635,7 +691,7 @@ fn monogram(text: &str, (cx, cy): (f32, f32)) -> Strokes<MONOGRAM_STROKES> {
     let count = text.chars().count();
     let width: f32 =
         text.chars().map(|c| glyph(c).1).sum::<f32>() + GAP * count.saturating_sub(1) as f32;
-    // 两个字母时放大到约 11 像素宽；三个（C++、ETS）时宽度一样，字小一点。
+    // 两个字母时放大到约 11 像素宽；三个（C++、ETS、TEX）时宽度一样，字小一点。
     let scale = (11.0 / width).min(1.3);
     let (left, top) = (cx - width * scale / 2.0, cy - 3.0 * scale);
     let mut x = 0.0;

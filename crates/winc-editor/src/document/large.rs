@@ -20,6 +20,7 @@ use winc_core::text::{EditBuffer, Line, Lines};
 use winc_i18n::t;
 
 use crate::document::encoding::UTF8_BOM;
+use crate::document::progress::ReadProgress;
 
 /// 一行最多能访问的字节数（字节，16 MiB）。
 ///
@@ -118,15 +119,25 @@ impl LargeText {
     ///
     /// 读取文件失败时返回对应的 `std::io::Error`。
     pub fn open(file: impl Into<Handle>) -> io::Result<Self> {
-        Self::open_with(file.into(), LINE_CAP)
+        Self::open_with(file.into(), LINE_CAP, None)
     }
 
-    fn open_with(file: Handle, line_cap: usize) -> io::Result<Self> {
+    /// 与 [`LargeText::open`] 相同，扫描过的字节计入 `progress`。
+    pub(crate) fn open_counting(file: Handle, progress: Option<&ReadProgress>) -> io::Result<Self> {
+        Self::open_with(file, LINE_CAP, progress)
+    }
+
+    fn open_with(
+        file: Handle,
+        line_cap: usize,
+        progress: Option<&ReadProgress>,
+    ) -> io::Result<Self> {
         let size = file.metadata()?.len;
         let cores = std::thread::available_parallelism()
             .map_or(1, |n| n.get())
             .min(MAX_WORKERS);
-        let original = Original::open(file, (size / SEGMENT_MIN).clamp(1, cores as u64))?;
+        let workers = (size / SEGMENT_MIN).clamp(1, cores as u64);
+        let original = Original::open(file, workers, progress)?;
 
         let pieces = if original.len > 0 {
             vec![Piece {
@@ -240,7 +251,7 @@ impl LargeText {
             byte: line_byte,
             char: line_char,
         };
-        let mut segment = scan_segment(&o.file, o.base, line_byte, new_len).ok()?;
+        let mut segment = scan_segment(&o.file, o.base, line_byte, new_len, None).ok()?;
         if !segment.utf8 || segment.end < new_len {
             return None;
         }
@@ -553,8 +564,13 @@ impl LargeText {
 
     /// 对 `a` 到 `b` 覆盖的每个片段调用 `f(片段, 起始字节, 结束字节)`，偏移相对于片段起点。
     fn for_each_range(&self, a: Loc, b: Loc, mut f: impl FnMut(&Piece, u64, u64)) {
-        for i in a.piece..(b.piece + 1).min(self.pieces.len()) {
-            let p = &self.pieces[i];
+        for (i, p) in self
+            .pieces
+            .iter()
+            .enumerate()
+            .take((b.piece + 1).min(self.pieces.len()))
+            .skip(a.piece)
+        {
             let start = if i == a.piece { a.offset } else { 0 };
             let end = if i == b.piece { b.offset } else { p.bytes };
 

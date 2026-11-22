@@ -137,11 +137,15 @@ fn utf16_column_to_char(text: &str, column: u32) -> usize {
     text.chars().count()
 }
 
-/// 绘制名字旁的提示气泡；没有气泡、它挂的文档不是当前文档，或名字不在屏幕上时不绘制。
+/// 绘制名字旁的提示气泡；没有气泡、它挂的文档不是当前文档，或名字不在屏幕上（包括编辑区被
+/// 铺满的终端面板盖住）时不绘制。
 pub(in crate::view) fn draw_name_hint(app: &App, frame: &mut Frame<'_>) {
     let Some(hint) = &app.jumps.name_hint else {
         return;
     };
+    if app.overlay_area() != app.layout.editor {
+        return;
+    }
     if app.editor.active().map(|d| d.id) != Some(hint.doc) {
         return;
     }
@@ -180,7 +184,7 @@ pub(in crate::view) fn draw_name_hint(app: &App, frame: &mut Frame<'_>) {
     let toward_name = if above { 1.0 } else { -1.0 };
     let card = Rect::new(x, (y + toward_name * SLIDE * away).round(), w, HEIGHT);
     let tip_x = (name_x + 6.0)
-        .clamp(card.x + 16.0, card.right() - 16.0)
+        .clamp(card.x + 16.0, (card.right() - 16.0).max(card.x + 16.0))
         .round();
 
     frame.with_opacity(opacity, |frame| {

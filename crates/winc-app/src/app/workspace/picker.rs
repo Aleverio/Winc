@@ -132,6 +132,7 @@ impl App {
         self.overlays.picker.branch_rows = None;
         self.overlays.picker.location_rows = None;
         self.overlays.picker.folders = false;
+        self.overlays.picker.languages = false;
         self.overlays.picker.vim_list = None;
         self.overlays.picker.remote = None;
         self.overlays.picker.open = true;
@@ -156,6 +157,7 @@ impl App {
         self.overlays.picker.branch_rows = None;
         self.overlays.picker.location_rows = None;
         self.overlays.picker.folders = false;
+        self.overlays.picker.languages = false;
         self.overlays.picker.vim_list = None;
         self.overlays.picker.remote = None;
         self.hits.picker_parts.clear();
@@ -330,6 +332,12 @@ impl App {
             self.folder_picker_refresh();
             return;
         }
+        if self.overlays.picker.languages {
+            self.overlays.picker.goto = None;
+            self.drop_symbols();
+            self.language_picker_refresh();
+            return;
+        }
         if self.overlays.picker.remote.is_some() {
             self.overlays.picker.goto = None;
             self.drop_symbols();
@@ -372,7 +380,20 @@ impl App {
             return;
         }
 
-        self.overlays.picker.hits = self.overlays.picker.index.search(query);
+        // 最近打开过、文件表中没有的文件（被忽略或已删除）要看磁盘上是否还在，只看这几个；打开的
+        // 标签照常列出。远端的路径按 `may_be_file` 的规则，不阻塞界面。
+        let index = &self.overlays.picker.index;
+        let visited: Vec<&Path> = (self.history.files.iter())
+            .map(PathBuf::as_path)
+            .filter(|path| match index.indexed(path) {
+                Some(true) => true,
+                Some(false) => self.may_be_file(path),
+                None => false,
+            })
+            .collect();
+        let tabs = (self.editor.documents.iter()).filter_map(|doc| doc.path.as_deref());
+        let opened = visited.into_iter().chain(tabs);
+        self.overlays.picker.hits = self.overlays.picker.index.search_with_opened(query, opened);
 
         // 没有输入时，最近打开的文件排在最前面；第一条是上一个文件，因此 `⌘P` 加回车即可切回。
         if query.trim().is_empty() {
@@ -400,7 +421,7 @@ impl App {
     /// 重新遍历目录时旧表仍然存在，继续列出旧表中的结果（面板高度也按这些结果计算），
     /// 避免只显示一行文字而下方留出大片空白。
     pub(crate) fn picker_indexing(&self) -> bool {
-        !self.overlays.picker.index.is_ready() && self.overlays.picker.index.is_empty()
+        !self.overlays.picker.index.is_ready() && self.overlays.picker.index.quick_open_len() == 0
     }
 
     /// 打开目录之后，在后台建立 `⌘P` 面板的文件表，使第一次按 `⌘P` 时即可列出文件。
@@ -418,7 +439,7 @@ impl App {
     ///
     /// 打开的目录还没有文件表，或窗口失去过焦点（文件可能被增删，`Picker::stale`）时，
     /// 在后台建立新表。
-    pub(super) fn prepare_index(&mut self) {
+    pub(in crate::app) fn prepare_index(&mut self) {
         let Some(root) = self.editor.root().map(Path::to_path_buf) else {
             return;
         };
@@ -427,7 +448,12 @@ impl App {
             self.picker_invalidate();
         }
 
-        if self.overlays.picker.index.root() != Some(root.as_path()) {
+        if !self
+            .overlays
+            .picker
+            .index
+            .covers(&root, &self.extra_folders())
+        {
             self.overlays.picker.index.cancel();
             self.build_index(&root);
         }
@@ -455,6 +481,7 @@ impl App {
             && !self.picker_lists_branches()
             && !self.picker_lists_locations()
             && !self.overlays.picker.folders
+            && !self.overlays.picker.languages
             && self.overlays.picker.remote.is_none()
             && self.overlays.picker.vim_list.is_none();
         if self.overlays.picker.open && files && self.overlays.picker.places.is_none() {
@@ -550,6 +577,10 @@ impl App {
             self.folder_picker_accept();
             return;
         }
+        if self.overlays.picker.languages {
+            self.language_picker_accept();
+            return;
+        }
         if self.overlays.picker.remote.is_some() {
             self.remote_picker_accept();
             return;
@@ -626,14 +657,15 @@ impl App {
     ///
     /// 已有旧表时保留旧表，新表建好之前面板仍可使用，不会变空。测试中没有事件循环，同步建立。
     fn build_index(&mut self, root: &Path) {
+        let extra = self.extra_folders();
         let Some(proxy) = self.link.proxy.clone() else {
-            self.overlays.picker.index = FileIndex::collect_now(root);
+            self.overlays.picker.index = FileIndex::collect_now_with(root, &extra);
             return;
         };
-        if self.overlays.picker.index.root() == Some(root) {
+        if self.overlays.picker.index.covers(root, &extra) {
             self.overlays.picker.index.refresh();
         } else {
-            self.overlays.picker.index = FileIndex::spawn(root, move || {
+            self.overlays.picker.index = FileIndex::spawn_with(root, &extra, move || {
                 let _ = proxy.send_event(UserEvent::Indexed);
             });
         }
@@ -703,9 +735,12 @@ pub struct Picker {
     /// 面板列出分支（分支选择器）时的各行。
     pub(crate) branch_rows: Option<Vec<crate::app::git::branch::picker::BranchRow>>,
     /// 面板列出位置（位置选择器）时的各行。
-    pub(crate) location_rows: Option<Vec<crate::app::git::location_picker::LocationRow>>,
+    pub(crate) location_rows: Option<Vec<crate::app::git::location_picker::Place>>,
     /// 面板是否列出最近打开的目录（`⌃R`）；为真时 `Picker::hits` 是最近列表中的下标。
     pub(crate) folders: bool,
+    /// 面板是否列出语言（更改文件的语言）；为真时 `Picker::hits` 的含义见
+    /// `status::language_picker::LanguageRow::of`。
+    pub(crate) languages: bool,
     /// 面板用于连接远端主机（选主机、浏览目录）时的内容；`Picker::hits` 是其各行的下标。
     pub(crate) remote: Option<crate::app::remote::picker::RemoteList>,
     /// 面板列出 Vim 模式的寄存器、标记或文档时的各行；`Picker::hits` 是其中的下标。
@@ -750,6 +785,7 @@ impl Default for Picker {
             branch_rows: None,
             location_rows: None,
             folders: false,
+            languages: false,
             remote: None,
             vim_list: None,
             anchor: GitAnchor::Branch,

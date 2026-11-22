@@ -1,11 +1,12 @@
-//! 新建终端时可选的 shell：「+」右侧的下拉菜单，只列出本机存在的 shell，默认 shell 排在最前。
+//! 新建终端时可选的 shell：「+」右侧的下拉菜单，列出终端所在主机上存在的 shell，默认 shell
+//! 排在最前。打开的目录在远端主机上时列出那台主机的 shell（[`remote_shells`]），否则是本机的。
 //!
 //! 首次启动终端时在后台线程检测：Windows 上列出 WSL 发行版需要启动 `wsl.exe`，不能占用界面线程。
 //! 启动命令按空白分词，双引号括起的部分不拆开（[`command_words`]），含空白的路径加上双引号。
 
 #![allow(
     clippy::disallowed_methods,
-    reason = "只访问本机：列出本机安装的 shell"
+    reason = "只访问本机：列出本机安装的 shell；远端的由连接上的命令列出"
 )]
 
 use super::HeaderHit;
@@ -15,11 +16,9 @@ use crate::app::{App, UserEvent};
 /// 列出的 Unix shell，按这个顺序排在默认 shell 后面。
 ///
 /// `sh`、`csh` 等虽然登记在 `/etc/shells`，但很少用作交互 shell，需要时在 `terminal.shell` 中设置。
-#[cfg(any(not(windows), test))]
 const UNIX_SHELLS: &[&str] = &["zsh", "bash", "fish", "nu", "pwsh"];
 
 /// `/etc/shells` 之外还要找的目录：用包管理器安装的 shell 不一定登记在那里。
-#[cfg(any(not(windows), test))]
 const UNIX_DIRS: &[&str] = &["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"];
 
 /// 菜单里的一个 shell。
@@ -81,7 +80,6 @@ fn program_name(command: &str) -> String {
 }
 
 /// 返回 Unix 上的 shell：`login` 是默认 shell，`list` 是 `/etc/shells` 的内容。
-#[cfg(any(not(windows), test))]
 fn unix_shells(list: &str, login: Option<&str>, exists: impl Fn(&str) -> bool) -> Vec<ShellChoice> {
     let listed = list
         .lines()
@@ -115,8 +113,36 @@ fn unix_shells(list: &str, login: Option<&str>, exists: impl Fn(&str) -> bool) -
     shells
 }
 
+/// 在远端主机上列出 shell 的脚本，由 `sh -c` 运行，参数是 `/etc/shells` 之外要查看的路径
+/// （[`remote_candidates`]）。输出登录 shell（`winc-login:`）和其中可以执行的路径
+/// （`winc-shell:`），每行一个。
+pub(crate) const REMOTE_DETECT: &str = concat!(
+    r#"l=$(cat /etc/shells 2>/dev/null); "#,
+    r#"s=${SHELL:-$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7)}; "#,
+    r#"printf 'winc-login:%s\n' "$s"; "#,
+    r#"for p in "$s" $(printf '%s\n' "$l" | grep '^/') "$@"; do "#,
+    r#"[ -x "$p" ] && printf 'winc-shell:%s\n' "$p"; done; exit 0"#,
+);
+
+/// 返回 [`REMOTE_DETECT`] 的参数：`/etc/shells` 之外各个目录中可能有的 shell。
+pub(crate) fn remote_candidates() -> Vec<String> {
+    let paths = UNIX_DIRS
+        .iter()
+        .flat_map(|dir| UNIX_SHELLS.iter().map(move |name| format!("{dir}/{name}")));
+    paths.collect()
+}
+
+/// 把 [`REMOTE_DETECT`] 的输出整理成菜单里的 shell，规则与本机相同（[`unix_shells`]）。
+pub(crate) fn remote_shells(output: &str) -> Vec<ShellChoice> {
+    let login = output.lines().find_map(|l| l.strip_prefix("winc-login:"));
+    let found = output.lines().filter_map(|l| l.strip_prefix("winc-shell:"));
+    let found: Vec<&str> = found.map(str::trim).collect();
+    let login = login.map(str::trim).filter(|login| !login.is_empty());
+    unix_shells(&found.join("\n"), login, |path| found.contains(&path))
+}
+
 /// 返回 Windows 上的 shell：`has` 判断程序是否在 `PATH` 中，`git_bash` 是 Git Bash 的路径，
-/// `distros` 是 WSL 发行版。
+/// `msys2` 是 MSYS2 中装了的 shell（[`msys2_shells`]），`distros` 是 WSL 发行版。
 ///
 /// 前三个的顺序与辅助进程选默认 shell 的顺序相同：`pwsh`、`powershell`、`cmd`。Git Bash 以登录、
 /// 交互方式启动（`--login -i`），读取 `/etc/profile` 和用户的配置。
@@ -124,6 +150,7 @@ fn unix_shells(list: &str, login: Option<&str>, exists: impl Fn(&str) -> bool) -
 fn windows_shells(
     has: impl Fn(&str) -> bool,
     git_bash: Option<&str>,
+    msys2: Vec<ShellChoice>,
     distros: &[String],
 ) -> Vec<ShellChoice> {
     let programs = ["pwsh", "powershell", "cmd"].into_iter();
@@ -140,7 +167,51 @@ fn windows_shells(
         name: format!("{distro} (WSL)"),
         command: format!("wsl.exe -d {}", quoted(distro)),
     });
-    programs.chain(git_bash).chain(distros).collect()
+    programs
+        .chain(git_bash)
+        .chain(msys2)
+        .chain(distros)
+        .collect()
+}
+
+/// MSYS2 的默认安装目录：（环境变量，其下的相对路径）。
+#[cfg(any(windows, test))]
+const MSYS2_DIRS: [(&str, &str); 3] = [
+    ("SystemDrive", "msys64"),
+    ("SystemDrive", r"tools\msys64"),
+    ("UserProfile", r"scoop\apps\msys2\current"),
+];
+
+/// MSYS2 中可以列出的 shell：（名称，`/usr/bin` 下的程序名）。
+#[cfg(any(windows, test))]
+const MSYS2_SHELLS: [(&str, &str); 3] = [
+    ("MSYS2", "bash"),
+    ("MSYS2 zsh", "zsh"),
+    ("MSYS2 fish", "fish"),
+];
+
+/// 返回 MSYS2 中装了的 shell，以 UCRT64 环境在当前目录启动登录 shell。
+#[cfg(any(windows, test))]
+fn msys2_shells(
+    var: impl Fn(&str) -> Option<String>,
+    exists: impl Fn(&str) -> bool,
+) -> Vec<ShellChoice> {
+    let root = MSYS2_DIRS
+        .into_iter()
+        .filter_map(|(key, dir)| Some(format!(r"{}\{dir}", var(key)?.trim_end_matches('\\'))))
+        .find(|root| exists(&format!(r"{root}\usr\bin\env.exe")));
+    let Some(root) = root else {
+        return Vec::new();
+    };
+    let env = quoted(&format!(r"{root}\usr\bin\env.exe"));
+    MSYS2_SHELLS
+        .into_iter()
+        .filter(|(_, program)| exists(&format!(r"{root}\usr\bin\{program}.exe")))
+        .map(|(name, program)| ShellChoice {
+            name: name.to_owned(),
+            command: format!("{env} MSYSTEM=UCRT64 CHERE_INVOKING=1 /usr/bin/{program} --login -i"),
+        })
+        .collect()
 }
 
 /// Git for Windows 的默认安装目录，每项为（环境变量，其下的相对路径）：全局安装（64 位、
@@ -221,6 +292,7 @@ fn detect() -> Vec<ShellChoice> {
         .collect();
     let exists = |path: &str| std::path::Path::new(path).is_file();
     let git_bash = git_bash(&dirs, |key| std::env::var(key).ok(), exists);
+    let msys2 = msys2_shells(|key| std::env::var(key).ok(), exists);
     let output = std::process::Command::new("wsl.exe")
         .args(["-l", "-q"])
         .creation_flags(CREATE_NO_WINDOW)
@@ -229,7 +301,12 @@ fn detect() -> Vec<ShellChoice> {
         Ok(output) if output.status.success() => parse_wsl_list(&output.stdout),
         _ => Vec::new(),
     };
-    windows_shells(has, git_bash.as_deref(), &distros)
+    windows_shells(has, git_bash.as_deref(), msys2, &distros)
+}
+
+/// 返回启动命令 `command` 中的程序路径，供在远端启动时使用。
+pub(super) fn program_path(command: &str) -> Option<String> {
+    command_words(command).into_iter().next()
 }
 
 /// 记录的 shell 是否仍然可用：绝对路径的程序已卸载时，恢复现场改用默认 shell，避免启动失败。
@@ -275,7 +352,13 @@ impl App {
     }
 
     /// 菜单里的 shell：设置了 `terminal.shell` 时它是默认的，排在最前面。
+    ///
+    /// 打开的目录在远端主机上时列出那台主机的 shell，登录 shell 排在最前；`terminal.shell` 是
+    /// 本机的命令，对远端不适用。检测完成之前为空。
     pub(crate) fn terminal_shell_list(&self) -> Vec<ShellChoice> {
+        if let Some(at) = self.editor.root().and_then(winc_backend::locate) {
+            return crate::app::remote::shells(&at.target);
+        }
         let first = self.configured_shell();
         let name = first.as_ref().map(|shell| shell.name.clone());
         let others = (self.terminal.shells.iter())

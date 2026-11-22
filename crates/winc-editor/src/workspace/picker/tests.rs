@@ -859,3 +859,87 @@ fn files_on_a_remote_host_are_listed_by_one_command_there() {
     }
     winc_backend::remote::disconnect(&target);
 }
+
+#[test]
+fn opened_paths_share_the_picker_ranking_but_not_the_workspace_scan() {
+    let base = crate::test_util::scratch("picker-opened-extra");
+    let root = base.join("main");
+    let other = base.join("api");
+    write(&root, "environment.md");
+    write(&other, ".env");
+    std::fs::write(other.join(".gitignore"), ".env\n").unwrap();
+    let env = other.join(".env");
+    let tracked = root.join("environment.md");
+    let outside = base.join(".env");
+    let opened = [
+        env.as_path(),
+        env.as_path(),
+        tracked.as_path(),
+        outside.as_path(),
+    ];
+    let mut idx = FileIndex::collect_now_with(&root, &[other]);
+    assert_eq!(idx.search_with_opened("env", opened.into_iter()).len(), 2);
+    assert_eq!(idx.matches(), Some(2));
+    assert_eq!(idx.quick_open_len(), idx.len() + 1);
+    assert!(idx.position_of(&outside).is_none());
+
+    let hits = idx.search_with_opened("api/.env", opened.into_iter());
+    assert_eq!(hits.len(), 1);
+    assert_eq!(idx.file(hits[0]).unwrap().path, "api/.env");
+    assert_eq!(idx.absolute(hits[0]).as_deref(), Some(env.as_path()));
+    assert_eq!(idx.position_of(&env), Some(hits[0]));
+    assert_eq!(idx.indexed(&tracked), Some(true));
+    assert_eq!(idx.indexed(&env), Some(false));
+    assert_eq!(idx.indexed(&outside), None);
+    // 普通的查找不列入访问过的文件，下标、文件数也不再算上它们。
+    assert!(idx.search("api/.env").is_empty());
+    assert_eq!(idx.matches(), Some(0));
+    assert_eq!(idx.quick_open_len(), idx.len());
+    assert!(idx.position_of(&env).is_none());
+    assert_eq!(idx.search_with_opened("api/.env", opened.into_iter()), hits);
+    std::fs::remove_dir_all(base).unwrap();
+}
+
+/// 附加的目录一并收录：路径以目录名开头，按绝对路径查找和还原都对应到所在的目录。
+#[test]
+fn extra_folders_are_indexed_under_their_name() {
+    let base = crate::test_util::scratch("index-extra");
+    let (main, other) = (base.join("main"), base.join("other"));
+    for (dir, file) in [
+        (&main, "src/a.rs"),
+        (&main, "readme.md"),
+        (&other, "lib/b.rs"),
+    ] {
+        let path = dir.join(file);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "").unwrap();
+    }
+    let idx = FileIndex::collect_now_with(&main, std::slice::from_ref(&other));
+    let mut listed = paths(&idx);
+    listed.sort_unstable();
+    assert_eq!(listed, ["other/lib/b.rs", "readme.md", "src/a.rs"]);
+    assert!(idx.covers(&main, std::slice::from_ref(&other)) && !idx.covers(&main, &[]));
+
+    let at = idx.position_of(&other.join("lib/b.rs")).unwrap();
+    assert_eq!(idx.file(at).unwrap().path, "other/lib/b.rs");
+    assert_eq!(idx.absolute(at).unwrap(), other.join("lib").join("b.rs"));
+    let at = idx.position_of(&main.join("src/a.rs")).unwrap();
+    assert_eq!(idx.absolute(at).unwrap(), main.join("src").join("a.rs"));
+    assert_eq!(idx.position_of(&base.join("elsewhere.rs")), None);
+
+    // 根目录下已有同名的项：前缀加上上级目录的名字，两者不混淆。
+    std::fs::create_dir_all(main.join("other")).unwrap();
+    std::fs::write(main.join("other/c.rs"), "").unwrap();
+    let idx = FileIndex::collect_now_with(&main, std::slice::from_ref(&other));
+    let inner = idx.position_of(&main.join("other/c.rs")).unwrap();
+    let outer = idx.position_of(&other.join("lib/b.rs")).unwrap();
+    assert_eq!(idx.file(inner).unwrap().path, "other/c.rs");
+    let parent = base.file_name().unwrap().to_string_lossy();
+    let labelled = format!("other ({parent})/lib/b.rs");
+    assert_eq!(idx.file(outer).unwrap().path, labelled);
+    assert_eq!(idx.absolute(outer).unwrap(), other.join("lib").join("b.rs"));
+    assert_eq!(
+        idx.absolute(inner).unwrap(),
+        main.join("other").join("c.rs")
+    );
+}

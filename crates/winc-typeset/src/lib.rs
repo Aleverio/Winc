@@ -25,6 +25,8 @@ pub enum ImageSlot {
         width: u32,
         /// 原图的高度（像素）。
         height: u32,
+        /// 每个逻辑像素对应的像素数（见 `winc_preview::image::density`）。
+        density: u32,
         /// 解码后的图片；不再需要绘制时释放，为 `None`，需要绘制时重新读取。
         picture: Option<Arc<Picture>>,
         /// 按显示大小绘制的像素。
@@ -75,6 +77,19 @@ pub struct LaidBlock {
     pub preedit: bool,
     /// 比正文宽、可以横向滚动的表格，按项的先后排列。
     pub scrolls: Vec<Scroller>,
+    /// 显示原文的块中渲染结果的第一项和上边缘（见 [`Out::preview`]）。
+    pub preview: Option<(u32, f32)>,
+    /// 要画的项已经释放时留下的内容（见 [`LaidBlock::shed`]）；项都在时为 `None`。
+    shed: Option<Box<Shed>>,
+}
+
+/// 释放了要画的项的块留下的内容：重排时判断是否受影响，以及按链接定位。
+#[derive(Default)]
+struct Shed {
+    /// 块里用到的图片。
+    images: Box<[PathBuf]>,
+    /// 块里各个链接的地址和范围的上边缘、高度（块里的坐标，逻辑像素）。
+    links: Box<[(Arc<str>, f32, f32)]>,
 }
 
 /// 比正文宽的表格：表格的各项按自然宽度排版，绘制时横向平移、裁剪到正文一栏内。
@@ -158,7 +173,52 @@ impl LaidBlock {
             memo,
             preedit: false,
             scrolls: Vec::new(),
+            preview: None,
+            shed: None,
         }
+    }
+
+    /// 返回释放了要画的项的同一块：高度、锚点、文字不变，另记下用到的图片和链接。
+    ///
+    /// 很长的文档中离视口远的块以这种形式保留，占用的内存只与文字的长度有关；回到视口附近时
+    /// 重新排版。
+    pub fn shed(&self) -> LaidBlock {
+        let images = self.items.iter().filter_map(|item| match item {
+            Item::Image { path, .. } => Some(path.clone()),
+            _ => None,
+        });
+        let links = self.items.iter().filter_map(|item| match item {
+            Item::Link { rect, url } => Some((Arc::clone(url), rect.y, rect.h)),
+            _ => None,
+        });
+        LaidBlock {
+            height: self.height,
+            anchors: self.anchors.clone(),
+            text: self.text.clone(),
+            chars: self.chars,
+            shed: Some(Box::new(Shed {
+                images: images.collect(),
+                links: links.collect(),
+            })),
+            ..LaidBlock::default()
+        }
+    }
+
+    /// 要画的项是否已经释放。
+    pub fn is_shed(&self) -> bool {
+        self.shed.is_some()
+    }
+
+    /// 返回块里第一个指向 `url` 的链接的上边缘和高度（块里的坐标，逻辑像素）。
+    pub fn link_box(&self, url: &str) -> Option<(f32, f32)> {
+        let kept = self.shed.iter().flat_map(|shed| shed.links.iter());
+        let kept = kept.map(|(u, y, h)| (&**u, *y, *h));
+        let drawn = self.items.iter().filter_map(|item| match item {
+            Item::Link { rect, url } => Some((&**url, rect.y, rect.h)),
+            _ => None,
+        });
+        let mut links = kept.chain(drawn);
+        links.find(|(u, ..)| *u == url).map(|(_, y, h)| (y, h))
     }
 
     /// 第 `item` 项所在的可横向滚动的表格的序号（[`LaidBlock::scrolls`]）；不在其中时为 `None`。
@@ -169,18 +229,17 @@ impl LaidBlock {
 
     /// 块里有没有用到 `paths` 里的图片（排版时还在读的也算）。
     pub fn uses_any(&self, paths: &[PathBuf]) -> bool {
-        !paths.is_empty()
-            && self
-                .items
-                .iter()
-                .any(|item| matches!(item, Item::Image { path, .. } if paths.contains(path)))
+        let kept = self.shed.iter().flat_map(|shed| shed.images.iter());
+        let drawn = self.items.iter().filter_map(|item| match item {
+            Item::Image { path, .. } => Some(path),
+            _ => None,
+        });
+        !paths.is_empty() && kept.chain(drawn).any(|path| paths.contains(path))
     }
 
     /// 块里有没有指向 `url` 的链接。
     pub fn links_to(&self, url: &str) -> bool {
-        self.items
-            .iter()
-            .any(|item| matches!(item, Item::Link { url: u, .. } if &**u == url))
+        self.link_box(url).is_some()
     }
 
     /// 和 `y0..y1`（块里的坐标）有交集的项的序号，按原来的先后（先画的底色在下面）。
@@ -582,6 +641,14 @@ pub struct Cx<'a, 'f> {
     pub cell: Option<LiveCell>,
     /// 这一块中是否排入了输入法组字（[`Raw::preedit`]）；为真时，绘制光标时不再重复绘制组字文字。
     pub preedit: bool,
+    /// 代码块是否在左侧显示从 1 起的行号。
+    pub line_numbers: bool,
+    /// mermaid 图的高度上限（逻辑像素），不限时为无穷大。
+    pub tall: f32,
+    /// 当前顶层块是文中第几个内容相同的块（从 0 起），见 `Cx::toggle_id`。
+    pub repeat: u32,
+    /// 当前顶层块中各开合标识出现的次数，见 `Cx::toggle_id`。
+    pub toggles: HashMap<u64, u32>,
 }
 
 /// 可编辑的预览中光标所在的叶子块：不排版，显示原文。
@@ -716,7 +783,9 @@ fn blanks(raw: &Raw) -> Vec<usize> {
 fn reveal(raw: &Raw) -> (Block, Vec<usize>, bool) {
     let text = raw.block.get(raw.leaf.clone()).unwrap_or_default();
     let caret = raw.caret.saturating_sub(raw.leaf.start).min(text.len());
-    let content = text.trim_end().len();
+    // 内容含最后一行末尾的空格，不含其后的空行。
+    let end = text.trim_end().len();
+    let content = end + text[end..].find(['\n', '\r']).unwrap_or(text.len() - end);
     let blanks = blanks(raw);
     let at = (caret <= content).then_some(caret);
     let preedit = raw.preedit.as_deref().filter(|_| at.is_some());
@@ -838,6 +907,10 @@ impl Cx<'_, '_> {
             RawState::Rule => return self.raw_rule(x, y, width, out),
         }
         let para = self.body_para(env);
+        if let Block::Paragraph(inline) | Block::Heading(_, inline) = block {
+            out.anchors
+                .extend(inline.ids.iter().map(|id| (id.clone(), y)));
+        }
         match block {
             Block::Paragraph(inline) => self.flow(inline, x, y, width, para, &mut out.items),
             Block::Heading(level, inline) => self.heading(*level, inline, x, y, width, env, out),
@@ -905,17 +978,10 @@ impl Cx<'_, '_> {
                 open,
                 summary,
                 blocks,
-            } => self.details(
-                details_id(block),
-                *open,
-                summary,
-                blocks,
-                x,
-                y,
-                width,
-                env,
-                out,
-            ),
+            } => {
+                let id = self.toggle_id(details_id(block));
+                self.details(id, *open, summary, blocks, x, y, width, env, out)
+            }
         }
     }
 
@@ -1101,10 +1167,12 @@ impl Cx<'_, '_> {
 pub struct Out {
     /// 要画的项，按绘制先后排列。
     pub items: Vec<Item>,
-    /// 标题锚点和所在高度（逻辑像素，相对块的左上角）。
+    /// 锚点（标题、脚注和 HTML 写的锚点）和所在高度（逻辑像素，相对块的左上角）。
     pub anchors: Vec<(String, f32)>,
     /// 比正文宽、可以横向滚动的表格。
     pub scrolls: Vec<Scroller>,
+    /// 显示原文的块中渲染结果的第一项和上边缘（相对块的左上角）。
+    pub preview: Option<(u32, f32)>,
 }
 
 /// 列表相邻两项之间的间距与正文字号之比。
@@ -1133,11 +1201,20 @@ pub fn margins(block: &Block, base: f32, tight: bool) -> (f32, f32) {
 /// 折叠块标题的「链接」地址的开头，后面接 `details_id`：点了不是打开链接，是展开、收起。
 pub const DETAILS: &str = "\u{1}details:";
 
-/// 折叠块的标识：内容的哈希。
-///
-/// 内容相同的两个折叠块会一起开合；这种情况少见，未单独处理。
+/// 返回折叠块的内容哈希（见 [`Cx::toggle_id`]）。
 fn details_id(block: &Block) -> u64 {
     memo::key(|h| block.hash(h))
+}
+
+impl Cx<'_, '_> {
+    /// 返回折叠块、高图的开合标识：由内容哈希 `base`、顶层块的重复序号和块中的出现次数得出。
+    pub(crate) fn toggle_id(&mut self, base: u64) -> u64 {
+        let repeat = self.repeat;
+        let n = self.toggles.entry(base).or_default();
+        let id = memo::key(|h| (base, repeat, *n).hash(h));
+        *n += 1;
+        id
+    }
 }
 
 pub(crate) use winc_preview::markdown::slug;

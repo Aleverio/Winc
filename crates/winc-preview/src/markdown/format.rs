@@ -1,4 +1,4 @@
-//! 可编辑的预览中行内格式的切换：为选中的文字添加或移除粗体、斜体、行内代码、删除线的标记。
+//! 可编辑的预览中行内格式的切换：为选中的文字添加或移除粗体、斜体、行内代码、删除线、高亮的标记。
 //!
 //! 只读取光标所在的一行，不依赖解析结果。
 
@@ -20,9 +20,18 @@ pub struct Toggle {
     pub select: Range<usize>,
 }
 
+/// `line` 中的选区 `selection` 是否已有标记 `mark`，即 [`toggle`] 会移除标记。
+pub fn active(line: &str, selection: Range<usize>, mark: &str) -> bool {
+    if selection.is_empty() {
+        return false;
+    }
+    let t = toggle(line, selection, mark);
+    t.text.len() < t.range.len()
+}
+
 /// 返回在 `line`（不含换行符）中对选区 `selection` 切换标记 `mark` 要做的修改。
 ///
-/// `mark` 是 `**`、`*`、`` ` `` 或 `~~`。选中的文字两侧或内部两端已有该标记时移除，否则添加；
+/// `mark` 是 `**`、`*`、`` ` ``、`~~` 或 `==`。选中的文字两侧或内部两端已有该标记时移除，否则添加；
 /// 添加时标记紧贴文字，选区两端的空格留在标记之外。没有选区时：光标在一对空标记中间则移除
 /// 这对标记，光标之后紧跟标记则移到标记之后，否则插入一对标记并将光标放在中间。
 ///

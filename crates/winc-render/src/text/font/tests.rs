@@ -154,7 +154,7 @@ fn italics_are_found_next_to_the_regular_face() {
 fn ascii_comments_take_the_fast_path_without_an_italic() {
     // Monaco 没有斜体：注释里的 ASCII 字符落到正体上，查 ASCII 表即可，不进哈希表。
     let monaco = FontSpec::Path("/System/Library/Fonts/Monaco.ttf".into());
-    let mut fonts = Fonts::load(Some(&monaco), None, None, 400).expect("Monaco 是 macOS 自带字体");
+    let mut fonts = Fonts::load(&[monaco], &[], &[], 400).expect("Monaco 是 macOS 自带字体");
     let regular = fonts.resolve(FontKind::Mono, 'a');
     assert_eq!(fonts.resolve(FontKind::MonoItalic, 'a'), regular);
     assert!(matches!(fonts.slots[MONO_ITALIC as usize], Slot::Missing));
@@ -169,7 +169,7 @@ fn ascii_comments_take_the_fast_path_without_an_italic() {
 #[test]
 fn the_terminal_uses_its_own_font_or_the_editor_font() {
     // 没有单独的终端字体：终端的正体、斜体与编辑区的相同。
-    let mut fonts = Fonts::load(None, None, None, 400).expect("系统里有等宽字体");
+    let mut fonts = Fonts::load(&[], &[], &[], 400).expect("系统里有等宽字体");
     assert_eq!(
         fonts.resolve(FontKind::Terminal, 'a'),
         fonts.resolve(FontKind::Mono, 'a')
@@ -179,7 +179,7 @@ fn the_terminal_uses_its_own_font_or_the_editor_font() {
 
     // 单独设置了终端字体：用终端自己的槽位。Monaco 没有斜体，终端的斜体落到终端的正体上。
     let monaco = FontSpec::Path("/System/Library/Fonts/Monaco.ttf".into());
-    let mut fonts = Fonts::load(None, None, Some(&monaco), 400).expect("Monaco 是 macOS 自带字体");
+    let mut fonts = Fonts::load(&[], &[], &[monaco], 400).expect("Monaco 是 macOS 自带字体");
     let (slot, glyph) = fonts.resolve(FontKind::Terminal, 'a');
     assert_eq!(slot, TERMINAL);
     assert_ne!(glyph, 0);
@@ -188,13 +188,37 @@ fn the_terminal_uses_its_own_font_or_the_editor_font() {
 
     // 指定的终端字体打不开时用编辑区的字体，不报错。
     let missing = FontSpec::Path("/nonexistent/font.ttf".into());
-    let mut fonts = Fonts::load(None, None, Some(&missing), 400).expect("系统里有等宽字体");
+    let mut fonts = Fonts::load(&[], &[], &[missing], 400).expect("系统里有等宽字体");
     assert_eq!(fonts.resolve(FontKind::Terminal, 'a').0, MONO);
 }
 
 #[test]
+fn a_separate_terminal_weight_uses_its_own_fallback_faces() {
+    // 终端字重与全局不同：终端有自己的槽位，后备字体也另开一份；汉字缺字时用终端的那一份。
+    let mut fonts = Fonts::load_with(&[], &[], &[], 400, 300).expect("系统里有等宽字体");
+    assert_eq!(fonts.resolve(FontKind::Terminal, 'a').0, TERMINAL);
+    assert_ne!(fonts.resolve(FontKind::Mono, 'a').0, TERMINAL);
+    assert_eq!(fonts.terminal_fallbacks.len(), fonts.fallbacks.len());
+    let (cjk, _) = fonts.resolve(FontKind::Terminal, '中');
+    assert!(!fonts.fallbacks.contains(&cjk), "{cjk}");
+    // 缺字时的顺序同字重相同时：终端没有单独的字体列表时只多出界面字体一项，不列平台的其他
+    // 候选字体。
+    assert!(fonts.listed[2].len() <= 1, "{:?}", fonts.listed[2]);
+    // 彩色 emoji 没有字重，终端与其余文字共用一个槽位。
+    assert!(fonts.terminal_fallbacks.contains(&fonts.emoji));
+    let (slot, _) = fonts.resolve(FontKind::Terminal, '😀');
+    let (shared, _) = fonts.resolve(FontKind::Mono, '😀');
+    assert_eq!(slot, shared);
+
+    // 与全局字重相同：和编辑区共用字体，不重复加载后备字体。
+    let mut fonts = Fonts::load_with(&[], &[], &[], 400, 400).expect("系统里有等宽字体");
+    assert_eq!(fonts.resolve(FontKind::Terminal, 'a').0, MONO);
+    assert!(fonts.terminal_fallbacks.is_empty());
+}
+
+#[test]
 fn italic_comments_fall_back_to_the_regular_face() {
-    let mut fonts = Fonts::load(None, None, None, 400).expect("系统里有等宽字体");
+    let mut fonts = Fonts::load(&[], &[], &[], 400).expect("系统里有等宽字体");
     // 有斜体时用斜体槽位，没有时用正体；两种情况下注释里的字符都画得出来。
     let (slot, glyph) = fonts.resolve(FontKind::MonoItalic, 'a');
     assert!(slot == MONO_ITALIC || slot == MONO);
@@ -285,7 +309,7 @@ fn faces_of_one_file_share_its_content() {
 /// 基线，整体偏上。
 #[test]
 fn fonts_without_stated_heights_measure_their_letters() {
-    let fonts = Fonts::load(None, None, None, 400).expect("系统中有等宽字体");
+    let fonts = Fonts::load(&[], &[], &[], 400).expect("系统中有等宽字体");
     let face = fonts.primary_face(FontKind::Mono).unwrap();
     let font = face.font();
     let stated = crate::text::glyphs::heights(font, &face.coords, 100.0);
@@ -398,7 +422,7 @@ fn chinese_text_finds_a_font_on_linux() {
     if !has_chinese {
         return;
     }
-    let mut fonts = Fonts::load(None, None, None, 400).expect("系统里有等宽字体");
+    let mut fonts = Fonts::load(&[], &[], &[], 400).expect("系统里有等宽字体");
     for kind in [FontKind::Ui, FontKind::Mono] {
         let (_, glyph) = fonts.resolve(kind, '中');
         assert_ne!(glyph, 0, "{kind:?}");
@@ -496,4 +520,58 @@ fn weight_follows_the_axis_and_the_rest_is_emboldened() {
         crate::BOLD_RATIO
     );
     assert_eq!(Face::open_at(&monaco, -100).unwrap().embolden, 0.0);
+}
+
+/// 字体列表：第一个字体缺的字依次用列表中后面的字体，排在界面字体和平台后备字体之前；打不开的
+/// 字体略过。界面字体缺的字同样先用等宽字体的列表。
+#[cfg(target_os = "macos")]
+#[test]
+fn font_lists_fall_back_in_order() {
+    let path = |p: &str| FontSpec::Path(p.into());
+    let mono = [
+        path("/System/Library/Fonts/Monaco.ttf"),
+        path("/nonexistent/font.ttf"),
+        path("/System/Library/Fonts/Hiragino Sans GB.ttc"),
+    ];
+    let mut fonts = Fonts::load(&mono, &[], &[], 400).expect("Monaco 是 macOS 自带字体");
+    assert_eq!(fonts.resolve(FontKind::Mono, 'a').0, MONO);
+    let (slot, glyph) = fonts.resolve(FontKind::Mono, '中');
+    assert!(fonts.listed[0].contains(&slot), "{slot} {:?}", fonts.listed);
+    assert_ne!(glyph, 0);
+    assert!(fonts.listed[0].start >= fonts.fallbacks.end);
+    assert_eq!(fonts.resolve(FontKind::MonoItalic, '中').0, slot);
+    assert_eq!(fonts.resolve(FontKind::Terminal, '中').0, slot);
+    assert_eq!(fonts.resolve(FontKind::Ui, '中').0, slot);
+
+    // 第一个字体打不开时，第一个能打开的字体成为主字体。
+    let mut fonts = Fonts::load(&mono[1..], &[], &[], 400).expect("冬青黑体是 macOS 自带字体");
+    assert_eq!(fonts.resolve(FontKind::Mono, '中').0, MONO);
+}
+
+#[test]
+fn emoji_use_the_color_font_before_symbol_fonts() {
+    let mut fonts = Fonts::load(&[], &[], &[], 400).expect("系统里有等宽字体");
+    let emoji = fonts.emoji;
+    assert!(fonts.fallbacks.contains(&emoji));
+    fonts.ensure_loaded(emoji);
+    // 系统中没有彩色 emoji 字体时不做比较。
+    let Some(face) = fonts.face(emoji) else {
+        return;
+    };
+    let covered: Vec<(char, u16)> = ['😀', '⭐', '✅', '❌', '⚡', '☕', '✔', 'a']
+        .into_iter()
+        .map(|c| (c, face.font().charmap().map(c)))
+        .filter(|&(_, glyph)| glyph != 0)
+        .collect();
+    for (c, glyph) in covered {
+        for kind in [FontKind::Mono, FontKind::Ui, FontKind::Terminal] {
+            let found = fonts.resolve(kind, c);
+            if winc_emoji::presentation(c) {
+                // 排在前面的符号字体、中文字体也有该字符时仍然用彩色字体。
+                assert_eq!(found, (emoji, glyph), "{c}");
+            } else if c == 'a' {
+                assert_ne!(found.0, emoji);
+            }
+        }
+    }
 }

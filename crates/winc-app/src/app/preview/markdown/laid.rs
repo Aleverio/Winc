@@ -4,7 +4,7 @@
 //! 宽度、字号、配色或图片大小变化时整篇重排。位置查询在预览坐标与原文位置之间换算，
 //! 供点击、选择、滚动同步和可编辑的预览使用。绘制在 `view::preview::markdown` 中。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use winc_render::{Color, Frame, Rect};
@@ -16,8 +16,12 @@ use crate::app::{App, Focus};
 
 /// 正文字号与编辑器字号之比：编辑器字号 13 逻辑像素时，正文为 16 逻辑像素。
 pub(crate) const BASE_RATIO: f32 = 16.0 / 13.0;
-/// 正文最大宽度（逻辑像素，经验值）：更宽时居中、两侧留白。
+/// 正文宽度为「标准」（`markdown.textWidth`）时正文的最大宽度（逻辑像素，经验值）：更宽时居中、
+/// 两侧留白。
 pub(crate) const MAX_WIDTH: f32 = 880.0;
+/// 正文宽度为「较宽」时正文的最大宽度（逻辑像素）：约为标准的 1.4 倍，1440 逻辑像素宽的屏幕上
+/// 隐藏侧栏后两侧仍各留约 100。
+pub(crate) const WIDE_WIDTH: f32 = 1240.0;
 /// 区域不窄于 600 逻辑像素时文档四周的留白（逻辑像素，经验值）。
 pub(crate) const PAD: f32 = 32.0;
 /// 窄的时候（分栏，区域宽不足 600 逻辑像素）两边的留白（逻辑像素，经验值）。
@@ -59,7 +63,64 @@ pub(crate) struct Laid {
     pub(crate) hscroll: HashMap<(usize, usize), f32>,
     /// 上一次横向滚动使其可见的光标位置（原文字节偏移），见 [`Laid::follow_caret`]。
     pub(crate) followed: Option<usize>,
+    /// 各顶层块是否仍沿用旧条件下的排版结果（见 [`Later`]）；全部按当前条件排好时为空。
+    pub(crate) stale: Vec<bool>,
+    /// 排版时保留了排版结果的范围（见 [`Near`]）；文档不长、全部保留时为 `None`。
+    pub(crate) near: Option<Near>,
+    /// 各顶层块作为标题时下面可以收起的一节（见 `Markdown::sections`）。
+    pub(crate) sections: Vec<Option<winc_preview::markdown::Section>>,
 }
+
+/// 分帧排版的依据：排版条件变化而文字未变时，视口内的块立即重排，其余的块在超过时限后沿用
+/// 旧结果，由之后的各帧继续重排。
+pub(crate) struct Later<'a> {
+    /// 旧的各顶层块，与本次排版的各块一一对应。
+    pub(crate) old: &'a [(u64, Arc<LaidBlock>)],
+    /// 必须按当前条件重排的块，即视口内的块。
+    pub(crate) window: std::ops::Range<usize>,
+    /// 截止时刻：此后 `window` 之外的块沿用旧结果。
+    pub(crate) deadline: std::time::Instant,
+}
+
+/// 顶层块超过该数量（块）的文档只保留 [`Near`] 范围内的块的排版结果，其余的块释放要画的项
+/// （见 [`LaidBlock::shed`]），排版缓存也只保留这些块用到的条目。
+///
+/// 取自调参：512 块以内的文档全部保留时，排版结果与缓存合计不超过几 MB。在 Apple M 系列芯片上
+/// 实测，2 万段、4 MB 的文档全部保留时二者占用 91 MB 堆内存。
+pub(crate) const SHED_BLOCKS: usize = 512;
+
+/// 需要保留排版结果的块：内容坐标在 `rows` 范围内的块，以及序号在 `blocks` 范围内的块（光标和
+/// 选区所在的块及其前后）。
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Near {
+    pub(crate) rows: (f32, f32),
+    pub(crate) blocks: Vec<std::ops::Range<usize>>,
+}
+
+/// 光标所在的块前后各保留排版结果的块数。取自调参：32 块超过一屏能显示的段数，光标上下移动、
+/// 翻页时落到的块都已排好。
+pub(crate) const NEAR_BLOCKS: usize = 32;
+
+impl Near {
+    /// 按本范围保留的排版结果是否够 `wanted` 使用：`wanted` 的各块都在其中，视口（高 `view`）
+    /// 前后各有半屏以上。
+    pub(crate) fn covers(&self, wanted: &Near, view: f32) -> bool {
+        let rows = (wanted.rows.0 + view * 1.5, wanted.rows.1 - view * 1.5);
+        let inside = |want: &std::ops::Range<usize>| {
+            (self.blocks.iter()).any(|kept| kept.start <= want.start && want.end <= kept.end)
+        };
+        self.rows.0 <= rows.0 && rows.1 <= self.rows.1 && wanted.blocks.iter().all(inside)
+    }
+
+    /// 上边缘在 `top`、高 `height` 的第 `i` 块是否在范围内。
+    fn holds(&self, i: usize, top: f32, height: f32) -> bool {
+        (top < self.rows.1 && top + height > self.rows.0)
+            || self.blocks.iter().any(|blocks| blocks.contains(&i))
+    }
+}
+
+/// 一帧中排版 [`Later::window`] 之外的块的时限：4 毫秒，约为 60 Hz 下一帧间隔的四分之一。
+pub(crate) const LAYOUT_BUDGET: std::time::Duration = std::time::Duration::from_millis(4);
 
 /// 预览上的一个位置：左边缘（相对内容左边）、所在那一行铺底色的上边缘（和滚动位置同一个
 /// 量法）和高度，均为逻辑像素；见 [`point_of`]。
@@ -78,6 +139,10 @@ pub(crate) struct Key {
     pub(crate) background: Color,
     /// 图片的版本号，有图片读好后就加一。
     pub(crate) images: u64,
+    /// 代码块是否显示从 1 起的行号（见 `Cx::line_numbers`）。
+    pub(crate) numbers: bool,
+    /// mermaid 图的高度上限（逻辑像素，见 `Cx::tall`）。
+    pub(crate) tall: f32,
 }
 
 /// 重排之前各顶层块的排版和绘制位置，重排后据此计算过渡动画（见 `BlockMotion`）。
@@ -102,9 +167,11 @@ impl Before {
                 (*hash, Arc::clone(block), top + offset - scroll)
             })
             .collect();
+        // 排版中没有光标时（未在预览中编辑）取文档当前的版本号。
+        let current = app.editor.active().map(|d| d.revision);
         Before {
             blocks,
-            revision: laid.live.as_ref().map(|k| k.2),
+            revision: laid.live.as_ref().map(|k| k.2).or(current),
         }
     }
 
@@ -122,7 +189,7 @@ impl Before {
         scroll: f32,
         muted: Color,
         slide: bool,
-    ) -> (Vec<f32>, crate::app::preview::markdown::Fading) {
+    ) -> crate::app::preview::markdown::Moves {
         let (old, new) = (&self.blocks, &laid.blocks);
         let matched: Vec<Option<usize>> = if old.len() == new.len() {
             (0..new.len()).map(Some).collect()
@@ -156,6 +223,29 @@ impl Before {
         let moved = laid.live.as_ref().map(|k| k.2) == self.revision && self.revision.is_some();
         if !moved && !slide {
             from.fill(0.0);
+        }
+        // 原文与排版互换的块：渲染结果随下方的块一起滑动。
+        let (mut inner, mut leaving) = (Vec::new(), Vec::new());
+        for (i, j) in matched.iter().enumerate() {
+            let Some(j) = *j else { continue };
+            if !moved && !slide {
+                break;
+            }
+            match (old[j].1.preview, new[i].1.preview) {
+                // 显示原文：渲染结果从原位置下移。
+                (None, Some((first, top))) => inner.push((i, first, -top)),
+                // 恢复排版：排版从原来渲染结果的位置上移，原文淡出。
+                (Some((first, top)), None) => {
+                    leaving.push(Leaving {
+                        block: i,
+                        old: Arc::clone(&old[j].1),
+                        items: first,
+                        offset: from[i],
+                    });
+                    from[i] += top;
+                }
+                _ => {}
+            }
         }
         let mut fading = Vec::new();
         for (i, j) in matched.iter().enumerate() {
@@ -197,8 +287,25 @@ impl Before {
                 fading.push((i, fresh));
             }
         }
-        (from, fading)
+        crate::app::preview::markdown::Moves {
+            from,
+            fading,
+            inner,
+            leaving,
+        }
     }
+}
+
+/// 刚恢复排版的块原来显示的原文。
+pub(crate) struct Leaving {
+    /// 块序号（新排版中）。
+    pub(crate) block: usize,
+    /// 原来的排版。
+    pub(crate) old: Arc<LaidBlock>,
+    /// 原文所占的项数（其后为渲染结果）。
+    pub(crate) items: u32,
+    /// 起始时相对新位置向下的偏移（逻辑像素）。
+    pub(crate) offset: f32,
 }
 
 /// 可编辑的预览中显示原文的块的缓存键；各字段均不变时沿用上一次的排版。
@@ -223,16 +330,15 @@ pub(crate) fn live_key(live: &crate::app::preview::markdown::LiveLeaf, preedit: 
     )
 }
 
-/// 可编辑的预览重排之前，光标（原文位置）在旧排版里的高度（不含上方留白）。
+/// 重排之前光标所在的那一行的高度（相对内容顶部，不含留白），重排后据此保持它在屏幕上不动。
 ///
-/// 文字已修改（版本或解析结果不同）时返回 `None`：修改文字只影响光标所在块及其以下的块，
-/// 上方的块位置不变；此时按光标补偿反而会使页面随光标上下跳动（插入或删除表格行时光标换行，
-/// 解析结果返回前后各排版一次）。
+/// `clicked` 是刚单击放下的光标，与现在的光标相同时返回 `None`。
 pub(crate) fn old_caret(
     app: &App,
     old: Option<&Laid>,
     source: usize,
     live: Option<&LiveKey>,
+    clicked: Option<usize>,
 ) -> Option<(usize, f32)> {
     let old = old.filter(|old| {
         old.source == source && old.live.as_ref().map(|k| k.2) == live.map(|k| k.2)
@@ -241,6 +347,9 @@ pub(crate) fn old_caret(
         .markdown_live()
         .then(|| app.live_caret_source())
         .flatten()?;
+    if clicked == Some(source) && !app.scroll.keyed {
+        return None;
+    }
     old.caret_point(source)
         .map(|(_, y, _)| (source, y - old.pad))
 }
@@ -261,6 +370,29 @@ pub(crate) fn keep_caret_still(app: &mut App, still: Option<(usize, f32)>, laid:
     }
 }
 
+/// 收起的标题下面不显示的顶层块：`folded` 是收起的标题，光标在 `caret` 块时它所在的一节
+/// 始终显示。
+pub(crate) fn hidden_blocks(
+    sections: &[Option<winc_preview::markdown::Section>],
+    folded: Option<&HashSet<String>>,
+    caret: Option<usize>,
+) -> Vec<bool> {
+    let mut hidden = vec![false; sections.len()];
+    let Some(folded) = folded.filter(|f| !f.is_empty()) else {
+        return hidden;
+    };
+    for (i, section) in sections.iter().enumerate() {
+        let Some(section) = section.as_ref().filter(|s| folded.contains(&s.key)) else {
+            continue;
+        };
+        if caret.is_some_and(|c| c > i && c < section.end) {
+            continue;
+        }
+        hidden[i + 1..section.end].fill(true);
+    }
+    hidden
+}
+
 /// 按 `key` 排整份文档，`reuse` 里有同样内容的块直接沿用。
 ///
 /// 可编辑的预览中光标所在的叶子块（`live`）显示原文，这一块不沿用，排出的结果也不留给其他
@@ -274,6 +406,8 @@ pub(crate) fn lay_out(
     source: usize,
     live: Option<&crate::app::preview::markdown::LiveLeaf>,
     reuse: Vec<(u64, Arc<LaidBlock>)>,
+    later: Option<Later<'_>>,
+    near: Option<Near>,
 ) -> Laid {
     let reuse: HashMap<u64, Arc<LaidBlock>> = reuse.into_iter().collect();
     // 光标所在顶层块现在的原文，和叶子块在其中的范围。
@@ -299,13 +433,14 @@ pub(crate) fn lay_out(
         .memo
         .prepare(winc_typeset::memo_key(|h| {
             use std::hash::Hash;
-            for v in [key.width, key.base] {
+            for v in [key.width, key.base, key.tall] {
                 v.to_bits().hash(h);
             }
             for c in [key.text, key.background] {
                 [c.r, c.g, c.b, c.a].map(f32::to_bits).hash(h);
             }
             key.images.hash(h);
+            key.numbers.hash(h);
         }));
     let doc = app.editor.active().and_then(|d| d.path.clone());
     let remote = app.config.markdown_remote_images != Some(false);
@@ -330,16 +465,43 @@ pub(crate) fn lay_out(
         raw: None,
         cell: None,
         preedit: false,
+        line_numbers: key.numbers,
+        tall: key.tall,
+        repeat: 0,
+        toggles: HashMap::new(),
     };
     let env = Env {
         color: cx.colors.text,
         depth: 0,
     };
+    let sections = parsed.sections();
+    let folded = (app.editor.active()).and_then(|d| app.preview.markdown.folds.get(&d.id));
+    let hidden = hidden_blocks(&sections, folded, live.map(|l| l.block));
     let mut blocks = Vec::with_capacity(parsed.blocks.len());
     let mut tops = Vec::with_capacity(parsed.blocks.len());
     let mut starts = Vec::with_capacity(parsed.blocks.len());
     let (mut y, mut below, mut chars) = (0.0, None, 0);
+    let mut stale = Vec::new();
+    let near = near.filter(|_| parsed.blocks.len() > SHED_BLOCKS);
+    let mut fresh = 0usize;
+    // 内容相同的块从第二个起使用不同的键，并带上序号，各自记录开合状态。
+    let mut repeats: HashMap<u64, u32> = HashMap::new();
     for (i, (block, &hash)) in parsed.blocks.iter().zip(&parsed.hashes).enumerate() {
+        let repeat = *repeats.entry(hash).and_modify(|n| *n += 1).or_insert(0);
+        let hash = match repeat {
+            0 => hash,
+            n => winc_typeset::memo_key(|h| std::hash::Hash::hash(&(hash, n), h)),
+        };
+        cx.repeat = repeat;
+        cx.toggles.clear();
+        // 收起的一节里的块不排版，占一个高度为 0 的空块，换一个键存：展开时重新排。
+        if hidden[i] {
+            starts.push(chars);
+            tops.push(y);
+            let empty = LaidBlock::new(0.0, Vec::new(), Vec::new(), "".into(), 0, Box::default());
+            blocks.push((!hash, Arc::new(empty)));
+            continue;
+        }
         let raw = raw.as_ref().filter(|r| r.0 == i);
         // 显示原文的块换一个键存：光标离开后同样内容的块要重新按排版显示。
         let hash = match raw {
@@ -351,7 +513,35 @@ pub(crate) fn lay_out(
             }
             None => hash,
         };
-        let laid = reuse.get(&hash).cloned().unwrap_or_else(|| {
+        let kept = later.as_ref().and_then(|later| {
+            let (old, block) = later.old.get(i)?;
+            let keep = *old == hash
+                && !later.window.contains(&i)
+                && !reuse.contains_key(&hash)
+                && std::time::Instant::now() >= later.deadline;
+            keep.then(|| Arc::clone(block))
+        });
+        if kept.is_some() {
+            stale.resize(parsed.blocks.len(), false);
+            stale[i] = true;
+        }
+        // 沿用的结果已经释放了要画的项，而这一块在需要保留的范围内：重新排版。
+        let (margin, _) = margins(block, key.base, false);
+        let top = y + below.map_or(0.0, |below: f32| below.max(margin));
+        let wanted = |laid: &LaidBlock| {
+            let needed = near
+                .as_ref()
+                .is_none_or(|near| near.holds(i, top, laid.height));
+            !(needed && laid.is_shed())
+        };
+        let reused = reuse.get(&hash).filter(|laid| wanted(laid)).cloned();
+        let kept = kept.filter(|laid| wanted(laid));
+        let laid = reused.or(kept).unwrap_or_else(|| {
+            // 很长的文档每排完 [`SHED_BLOCKS`] 块清空一次排版缓存，排版期间缓存不随文档增长。
+            fresh += 1;
+            if near.is_some() && fresh.is_multiple_of(SHED_BLOCKS) {
+                cx.memo.keep_only(std::iter::empty());
+            }
             let mut out = Out::default();
             cx.text.clear();
             cx.chars = 0;
@@ -391,8 +581,18 @@ pub(crate) fn lay_out(
             );
             laid.preedit = cx.preedit;
             laid.scrolls = out.scrolls;
+            laid.preview = out.preview;
             Arc::new(laid)
         });
+        // 不在需要保留的范围内的块释放要画的项；显示原文的块（光标所在）总是保留。
+        let far = near
+            .as_ref()
+            .is_some_and(|near| !near.holds(i, top, laid.height));
+        let laid = if far && raw.is_none() && !laid.is_shed() {
+            Arc::new(laid.shed())
+        } else {
+            laid
+        };
         starts.push(chars);
         chars += laid.chars;
         let (margin_top, margin_bottom) = margins(block, key.base, false);
@@ -446,6 +646,9 @@ pub(crate) fn lay_out(
         pad: 0.0,
         hscroll: HashMap::new(),
         followed: None,
+        stale,
+        near,
+        sections,
     }
 }
 
@@ -458,6 +661,30 @@ pub(crate) fn line_box(baseline: f32, size: f32) -> (f32, f32) {
 }
 
 impl Laid {
+    /// 是否仍有沿用旧结果的块。
+    pub(crate) fn pending(&self) -> bool {
+        !self.stale.is_empty()
+    }
+
+    /// 返回内容坐标 `y` 所在的顶层块，以及 `y` 到该块上边缘的距离（逻辑像素）。
+    pub(crate) fn place_at(&self, y: f32) -> Option<(usize, f32)> {
+        let i = self.tops.partition_point(|&t| t <= y).checked_sub(1)?;
+        Some((i, y - self.tops[i]))
+    }
+
+    /// 返回与内容坐标 `from` 到 `to` 相交的顶层块。
+    pub(crate) fn blocks_in(&self, from: f32, to: f32) -> std::ops::Range<usize> {
+        let first = self.tops.partition_point(|&t| t <= from).saturating_sub(1);
+        first..self.tops.partition_point(|&t| t < to).max(first)
+    }
+
+    /// 返回已按当前条件排好的块。
+    pub(crate) fn fresh(&self) -> Vec<(u64, Arc<LaidBlock>)> {
+        let fresh = |i: &usize| !self.stale.get(*i).copied().unwrap_or(false);
+        let blocks = (0..self.blocks.len()).filter(fresh);
+        blocks.map(|i| self.blocks[i].clone()).collect()
+    }
+
     /// `blocks` 范围里的各顶层块中能选中的文字，逐段返回：所在块的上边缘（相对内容顶部）、在
     /// 整份文字里的起点、横坐标、基线、字号、各字宽度和原文位置，以及所在的块和文字本身。
     pub(crate) fn spans(
@@ -844,6 +1071,55 @@ pub(crate) fn hit(app: &App, x: f32, y: f32) -> Option<Hit> {
     best.map(|(_, hit)| hit)
 }
 
+/// 可编辑的预览左侧写行号的各显示行：原文行号（从 0 起）和显示行的基线（相对内容顶部）。
+///
+/// 只看上下范围与 `view`（相对内容顶部）相交的顶层块。显示行从原文一行的开头排起（之前只有
+/// `#`、`>`、列表记号、`|` 这类标记）时才写行号：段落里几行原文连成一段文字，折行和连上的
+/// 各行不对应显示行，只写段落第一行的行号。`rope` 是排版所依据的原文。
+pub(crate) fn source_lines(
+    laid: &Laid,
+    rope: &ropey::Rope,
+    view: std::ops::Range<f32>,
+) -> Vec<(usize, f32)> {
+    let first = laid
+        .tops
+        .partition_point(|&t| t <= view.start)
+        .saturating_sub(1);
+    let last = laid.tops.partition_point(|&t| t < view.end);
+    // 每个显示行最左边的一段：（基线，横坐标，在原文中的位置）。
+    let mut rows: Vec<(f32, f32, usize)> = Vec::new();
+    for (top, _, x, baseline, _, span, block, _) in laid.spans(first..last) {
+        let (Some(start), Some(range)) = (span.source, laid.ranges.get(block)) else {
+            continue;
+        };
+        let y = top + baseline;
+        if (view.start..=view.end).contains(&y) {
+            rows.push((y, x, (range.start + start as usize).min(rope.len_bytes())));
+        }
+    }
+    rows.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    rows.dedup_by(|b, a| (a.0 - b.0).abs() < 0.5);
+    rows.into_iter()
+        .filter_map(|(y, _, from)| {
+            // 解析之后又输入了文字时，记下的位置可能落在多字节字符中间：先对齐到字符边界。
+            let from = rope.char_to_byte(rope.byte_to_char(from));
+            let line = rope.byte_to_line(from);
+            let prefix = rope.byte_slice(rope.line_to_byte(line)..from);
+            prefix.chars().all(is_markup).then_some((line, y))
+        })
+        .collect()
+}
+
+/// `c` 是否可以出现在一行原文开头、正文之前的标记中：缩进、标题的 `#`、引用的 `>`、列表的
+/// 记号和序号、任务框、表格的 `|`。
+fn is_markup(c: char) -> bool {
+    c.is_ascii_digit()
+        || matches!(
+            c,
+            ' ' | '\t' | '#' | '>' | '-' | '*' | '+' | '.' | ')' | '|' | '[' | ']' | 'x' | 'X'
+        )
+}
+
 /// 原文第 `source` 个字节在预览上的位置：左边缘（相对内容左边）、所在那一行铺底色的上边缘
 /// （和滚动位置同一个量法）和高度；落在没有文字的块（分隔线、图）里时为 `None`。
 ///
@@ -923,6 +1199,12 @@ pub(crate) fn offset_top(app: &App, offset: usize) -> Option<f32> {
         .starts
         .partition_point(|&s| s <= offset)
         .saturating_sub(1);
+    let (_, block) = laid.blocks.get(i)?;
+    // 要画的项已经释放的块按字符在块中的比例估计，滚动到附近后重新排版。
+    if block.is_shed() {
+        let part = (offset - laid.starts[i]) as f32 / block.chars.max(1) as f32;
+        return Some(laid.pad + laid.tops[i] + block.height * part.min(1.0));
+    }
     laid.spans(i..i + 1)
         .find(|(_, start, _, _, _, span, _, _)| offset < start + span.advances.len())
         .map(|(top, _, _, baseline, size, ..)| laid.pad + line_box(top + baseline, size).0)
@@ -944,6 +1226,8 @@ pub(crate) const EXPAND: &str = "\u{1}expand";
 
 /// 勾选框链接的地址前缀，其后为 `[ ]` 在原文中的位置（字节偏移）；点击时切换勾选状态。
 pub(crate) const TASK: &str = "\u{1}task:";
+/// 标题折叠箭头的地址前缀，其后为标题的键（`Section::key`）；点击时收起或展开这一节。
+pub(crate) const FOLD: &str = "\u{1}fold:";
 /// 表格工具栏按钮链接的地址前缀，其后为操作名（见 [`table_tools`]）。
 pub(crate) const TABLE: &str = "\u{1}table:";
 
@@ -967,10 +1251,7 @@ pub(crate) fn anchor_box(app: &App, anchor: &str) -> Option<(f32, f32)> {
         .zip(&laid.tops)
         .find_map(|((_, block), top)| {
             let (y, h) = match &reference {
-                Some(url) => block.items.iter().find_map(|item| match item {
-                    Item::Link { rect, url: u } if **u == **url => Some((rect.y, rect.h)),
-                    _ => None,
-                }),
+                Some(url) => block.link_box(url),
                 None => block
                     .anchors
                     .iter()

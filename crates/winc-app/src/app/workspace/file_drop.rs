@@ -24,8 +24,18 @@ pub enum DropZone {
     Tree(PathBuf),
     /// 终端：输入转义过的路径。
     Terminal,
-    /// 其他位置：文件在编辑区打开，目录切换为工作区。
-    Open,
+    /// 其他位置：文件在编辑区打开，目录切换为工作区。落在编辑区里时记着落点所在的窗格，
+    /// 以及贴近的那条边（文件在那一侧拆出的新窗格里打开）。
+    Open(Option<PaneDrop>),
+}
+
+/// 拖进来的文件落在编辑区的哪个窗格、贴近它的哪条边（拆分的方向，新窗格是否在前）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PaneDrop {
+    /// 落点所在的窗格。
+    pub pane: winc_editor::panes::PaneId,
+    /// 贴近的边；在窗格中部或标签栏那一行时为 `None`。
+    pub edge: Option<(winc_editor::panes::Axis, bool)>,
 }
 
 impl App {
@@ -40,7 +50,10 @@ impl App {
             self.panels.sidebar.view == SidebarView::Files && self.layout.sidebar.right() > 0.0;
         match on_tree.then(|| self.tree_dir_at(x, y)).flatten() {
             Some(dir) => DropZone::Tree(dir),
-            None => DropZone::Open,
+            None => DropZone::Open((self.pane_drop_at((x, y))).map(|(pane, edge)| PaneDrop {
+                pane: pane.id,
+                edge,
+            })),
         }
     }
 
@@ -51,6 +64,12 @@ impl App {
 
     /// 文件或目录拖入了窗口（`HoveredFile`；同时拖动多项时每项触发一次）：开始跟踪落点。
     pub(in crate::app) fn hover_file(&mut self) {
+        self.panes.dropped_into = None;
+        // 从 Winc 拖出的文件不放回 Winc 的窗口，不标出落点。
+        #[cfg(target_os = "macos")]
+        if crate::macos::dragging_out() {
+            return;
+        }
         self.update_file_hover();
     }
 
@@ -81,16 +100,17 @@ impl App {
 
     /// 返回拖入中的文件此刻的位置（逻辑像素）。
     ///
-    /// 系统在拖动期间不发送鼠标移动事件，需要向系统查询；查不到时（测试中没有窗口，或平台不
-    /// 支持）使用最后一次鼠标移动的位置。
+    /// 系统在拖动期间不发送鼠标移动事件，需要向系统查询；查不到时（测试中没有窗口）使用最后一次
+    /// 鼠标移动的位置。Wayland 上 winit 不传递拖入的文件，不会走到这里。
     fn drop_point(&self) -> (f32, f32) {
         #[cfg(target_os = "macos")]
-        if let Some((x, y)) = self
-            .window
-            .handle
-            .as_ref()
-            .and_then(|w| crate::macos::mouse_location(w))
-        {
+        let query = crate::macos::mouse_location;
+        #[cfg(windows)]
+        let query = crate::windows::mouse_location;
+        #[cfg(all(unix, not(target_os = "macos")))]
+        let query = crate::x11::mouse_location;
+        #[cfg(any(unix, windows))]
+        if let Some((x, y)) = self.window.handle.as_ref().and_then(|w| query(w)) {
             return (x / self.zoom(), y / self.zoom());
         }
         self.pointer.mouse
@@ -105,18 +125,41 @@ impl App {
 
     /// 处理在 (`x`, `y`) 处放下的外部文件或目录 `path`，按 [`Self::drop_zone`] 的结果选择处理方式。
     ///
-    /// 落在文件树上时，`path` 已在目标目录中时不复制，只在树中选中它。
+    /// 可以加为附加目录的目录先按设置询问或添加（见 [`App::drop_folder`]）。
     pub(in crate::app) fn drop_file_at(&mut self, path: &Path, x: f32, y: f32) {
-        let dir = match self.drop_zone(x, y) {
-            DropZone::Tree(dir) => dir,
+        let into = match self.drop_zone(x, y) {
+            DropZone::Tree(dir) => Some(dir),
             DropZone::Terminal => {
                 self.drop_path_on_terminal(path);
                 return;
             }
-            DropZone::Open => {
-                self.open_path(path);
+            DropZone::Open(Some(PaneDrop {
+                pane,
+                edge: Some(edge),
+            })) if winc_backend::fs::is_file(path) => {
+                self.open_dropped_in_split(path, pane, edge);
+                self.note_opened_file(path);
                 return;
             }
+            DropZone::Open(drop) => {
+                if let Some(drop) = drop {
+                    self.focus_pane(drop.pane);
+                }
+                None
+            }
+        };
+        self.drop_folder(path, into);
+    }
+
+    /// 按落点处理放下的 `path`：`into` 是文件树上的目标目录，为 `None` 时落在编辑区。
+    ///
+    /// 落在编辑区时打开它。落在文件树上时复制进目标目录；已在目标目录中时不复制，只在树中
+    /// 选中它。
+    pub(in crate::app) fn drop_plain(&mut self, path: &Path, into: Option<PathBuf>) {
+        let Some(dir) = into else {
+            self.open_path(path);
+            self.note_opened_file(path);
+            return;
         };
         // 文件树里的路径是规范化的（例如 `/private/var` 而不是 `/var`），比较之前先规范化。
         let path = &winc_config::files::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());

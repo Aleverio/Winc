@@ -53,90 +53,15 @@ pub(in crate::view) fn draw_sidebar(app: &mut App, frame: &mut Frame<'_>) {
     outline::draw_outline(app, frame);
 }
 
-/// 绘制提交视图：工作区改动，或从日志打开的差异的文件列表（见 `App::with_log_list`）。
-///
-/// 两者切换时列表直接替换，只有标题行右端过渡（[`App::log_tree_share`]）：前一半时间里离开
-/// 一方的按钮（或提交号）淡出，后一半时间里目标一方的淡入，两者位置重叠，不同时显示；左侧
-/// 项目栏的右端随之伸缩。
+/// 绘制提交视图：标题行左边是上下文栏，右端是工具按钮，下面是工作区的改动。
 fn draw_commit_view(app: &mut App, frame: &mut Frame<'_>) {
-    let share = app.log_tree_share();
-    let version = (2.0 * share - 1.0).clamp(0.0, 1.0);
-    let tools = (1.0 - 2.0 * share).clamp(0.0, 1.0);
-    // 项目栏的右端：提交视图在工具按钮（或位置按钮）之前，文件列表在提交号之前；上下文栏
-    // 自己会在右边留出 4 的间距。
-    let commit_right = app.with_log_tree_shown(false, |app| {
-        let tools = app.commit_parts().tools[0].0.x - 4.0;
-        git::commit::location_span(app, frame).map_or(tools, |(left, _)| left)
-    });
-    let right = match log_version_left(app, frame) {
-        Some(left) => commit_right + (left - 4.0 - commit_right) * share,
-        None => commit_right,
-    };
+    // 项目栏的右端在工具按钮之前；上下文栏自己会在右边留出 4 的间距。
+    let right = app.commit_parts().tools[0].0.x - 4.0;
     let bar = ContextBar::new(app, frame);
     draw_context_bar(app, frame, &bar, right);
-
-    if app.log_diff_tree().is_some() {
-        if tools > 0.0 {
-            app.with_log_tree_shown(false, |app| {
-                git::commit::draw_commit_tools(app, frame, tools);
-            });
-        }
-        app.with_log_list(|app| git::commit::draw_commit_browse(app, frame));
-        frame.with_opacity(version, |frame| draw_log_diff_version(app, frame, version));
-    } else {
-        if version > 0.0 {
-            app.with_log_tree_shown(true, |app| {
-                frame.with_opacity(version, |frame| draw_log_diff_version(app, frame, version));
-            });
-        }
-        if let Some(caret) = git::commit::draw_commit(app, frame, tools) {
-            app.ime.cursor = Some(caret);
-        }
+    if let Some(caret) = git::commit::draw_commit(app, frame) {
+        app.ime.cursor = Some(caret);
     }
-}
-
-/// 返回文件列表标题行中版本（提交号）的左边；没有文件列表时返回 `None`。与
-/// [`draw_log_diff_version`] 使用同一套排法。
-fn log_version_left(app: &App, frame: &mut Frame<'_>) -> Option<f32> {
-    let version = app.log_tree_version()?;
-    let header = app.layout.sidebar_header;
-    let right = app.log_diff_layout_button().x - 4.0;
-    let version = truncate_end(
-        frame,
-        version,
-        app.fonts.ui_small,
-        (header.w / 2.0).max(0.0),
-    );
-    Some(right - frame.measure(FontKind::Ui, app.fonts.ui_small, &version))
-}
-
-/// 在侧栏标题行右端、提交视图工具按钮的位置绘制切换树形与列表的按钮和文件列表的版本
-/// （提交号），返回版本的左边。
-///
-/// 按钮显示切换后的显示方式。`reveal` 是文件列表的露出比例：切换过程中版本从右侧滑入。
-fn draw_log_diff_version(app: &mut App, frame: &mut Frame<'_>, reveal: f32) -> f32 {
-    let Some(version) = app.log_tree_version().map(str::to_owned) else {
-        return app.layout.sidebar_header.right();
-    };
-    let p = app.palette;
-    let header = app.layout.sidebar_header;
-    let button = app.log_diff_layout_button();
-    let hovered = app.pointer.hover == Hover::LogDiffLayout;
-    draw_button(frame, p, button, header, hovered, false);
-    let color = if hovered { p.text } else { p.text_muted };
-    if app.log_list().flat() {
-        icons::tree_view(frame, center(button), color, header);
-    } else {
-        icons::list_view(frame, center(button), color, header);
-    }
-    let right = button.x - 4.0;
-    let room = (header.w / 2.0).max(0.0);
-    let version = truncate_end(frame, &version, app.fonts.ui_small, room);
-    let width = frame.measure(FontKind::Ui, app.fonts.ui_small, &version);
-    let left = right - width;
-    let x = left + (1.0 - reveal) * 8.0;
-    ui_text_small(frame, app, x, header, &version, p.text_dim, header);
-    left
 }
 
 /// 绘制文件视图的第二行：左边是上下文栏（项目、当前分支），右端是文件树工具栏。
@@ -216,11 +141,6 @@ impl ContextBar {
         if self.opened { BADGE_ROOM } else { 6.0 }
     }
 
-    /// 项目按钮的左边。
-    pub(in crate::view) fn left(&self) -> f32 {
-        self.left
-    }
-
     /// 项目按钮完整显示时的宽度。
     pub(in crate::view) fn project_full(&self) -> f32 {
         self.name_offset() + self.project_w + 18.0
@@ -278,7 +198,8 @@ pub(super) fn draw_context_bar(app: &mut App, frame: &mut Frame<'_>, bar: &Conte
     app.hits.project = hit.intersect(clip);
 }
 
-/// 绘制项目名前面的徽章：圆角方块内是 [`crate::theme::ProjectBadge::initials`]。
+/// 绘制项目名前面的徽章：圆角方块内是 [`crate::theme::ProjectBadge::initials`]；窗口中有附加的
+/// 目录时是一组目录的图标。
 ///
 /// 打开的是附属工作树时，徽章用主工作树的颜色（同一个仓库的工作树颜色相同），右下角加一个工作树
 /// 记号。
@@ -294,16 +215,26 @@ fn draw_badge(app: &App, frame: &mut Frame<'_>, rect: Rect, project: &str, heade
     let badge = app.palette.project_badge(project, color);
     frame.rect_clipped(rect, badge.background, 6.0, header);
 
-    let w = frame.measure(FontKind::Ui, app.fonts.initials, &badge.initials);
-    caps_label(
-        frame,
-        app,
-        app.fonts.initials,
-        (rect.x + (rect.w - w) / 2.0, rect),
-        &badge.initials,
-        badge.text,
-        header,
-    );
+    let group = (app.editor.workspace.as_ref()).is_some_and(|ws| !ws.extra_folders().is_empty());
+    if group {
+        // 图标 15×12，在徽章中居中。
+        let at = (
+            (rect.x + (rect.w - 15.0) / 2.0).round(),
+            (rect.y + (rect.h - 12.0) / 2.0).round(),
+        );
+        icons::folders(frame, at, badge.text, header);
+    } else {
+        let w = frame.measure(FontKind::Ui, app.fonts.initials, &badge.initials);
+        caps_label(
+            frame,
+            app,
+            app.fonts.initials,
+            (rect.x + (rect.w - w) / 2.0, rect),
+            &badge.initials,
+            badge.text,
+            header,
+        );
+    }
     if main.is_some() {
         let colors = (app.palette.sidebar_bg, badge.background, badge.text);
         icons::worktree_mark(
@@ -450,6 +381,7 @@ fn draw_tree(app: &mut App, frame: &mut Frame<'_>) {
         .clamp(0.0, (content - tree.h).max(0.0));
     // 固定在顶部的目录按该滚动位置计算，因此先写回 `app.panels.tree.scroll`。
     app.panels.tree.scroll = scroll;
+    let scroll = drawn_scroll(scroll);
 
     // 返回按展开后的行序数的第 `v` 行对应的条目，以及该条目在文件树数据中的行号；正在收起的子行
     // 已不在文件树数据中，行号为 `None`。
@@ -668,6 +600,10 @@ fn draw_tree_entry(
         icons::folder(frame, (x, top), entry.expanded, p.folder, clip);
     } else {
         draw_file_icon(frame, p, (x + 1.5, cy), &entry.name, clip);
+    }
+    if entry.symlink {
+        let bg = background.map_or(p.sidebar_bg, |c| panel::over(p.sidebar_bg, c));
+        icons::link_badge(frame, (x + 2.5, cy + 4.0), bg, p.text_muted, clip);
     }
 
     // 右端的 Git 状态与提交视图相同：文件显示带颜色的字母（M、U、A……），目录中有改动时
@@ -973,7 +909,7 @@ pub(in crate::view) fn tree_overflow(app: &App, frame: &mut Frame<'_>) -> Option
         None => {
             tree_row_slot(
                 tree,
-                app.panels.tree.scroll,
+                drawn_scroll(app.panels.tree.scroll),
                 app.tree_slot_of(index),
                 None,
                 0.0,
@@ -1039,7 +975,7 @@ fn overflow_row(app: &App, index: usize) -> Rect {
         None => {
             tree_row_slot(
                 tree,
-                app.panels.tree.scroll,
+                drawn_scroll(app.panels.tree.scroll),
                 app.tree_slot_of(index),
                 None,
                 0.0,

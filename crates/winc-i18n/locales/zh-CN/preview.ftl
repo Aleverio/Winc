@@ -55,8 +55,13 @@ preview-svg-missing-text-path = 沿路径排列的文字
 ## Markdown 预览
 
 preview-markdown-image-alt = 图片
+preview-markdown-diagram-expand = 展开全部
+preview-markdown-diagram-collapse = 收起
 preview-markdown-code-copied = 已复制代码
+preview-markdown-link-hint = { $key } 单击打开
 preview-markdown-heading-not-found = 未在文档中找到此标题
+preview-markdown-toc-pin = 钉住标题列表
+preview-markdown-toc-unpin = 取消钉住标题列表
 preview-markdown-link-file-not-found = 未找到链接指向的文件
 preview-markdown-link-open-failed = 无法打开链接：{ $error }
 preview-markdown-cache-folder-invalid = 缓存目录无效
@@ -97,13 +102,66 @@ preview-docx-chart-series = { $count } 组数据：{ $names }
 preview-docx-chart-category = 类别
 preview-docx-image-unsupported = 图片「{ $name }」为 { $format } 格式，无法预览
 
+## EPUB 电子书预览
+
+preview-epub-invalid = 不是有效的 EPUB 文件
+preview-epub-unsupported = 不支持加密或 zip64 格式的 EPUB 文件
+preview-epub-drm = 无法预览受数字版权保护（DRM）的电子书
+preview-epub-too-large = 文件过大
+preview-epub-chapter-damaged = 无法读取「{ $name }」：文件已损坏
+
 ## PDF 预览
 
 preview-pdf-unsupported = 当前系统不支持预览 PDF
 preview-pdf-invalid = 不是有效的 PDF 文件
 preview-pdf-zoom = PDF 缩放 { $zoom }%
+preview-pdf-page = 第 { $page } / { $total } 页
 preview-picture-zoom = 图片缩放 { $zoom }%
 preview-pdf-encrypted = 不支持预览加密的 PDF
 preview-pdf-empty = PDF 中无页面
 preview-pdf-render-failed = 无法渲染此页
 preview-pdf-render-failed-code = 无法渲染此页（错误代码 { $code }）
+latex-compiling = 正在编译…
+latex-progress-download = 正在编译 · 下载宏包 { $name }
+latex-progress-pass = 正在编译 · 第 { $pass } 遍
+latex-progress-page = 正在编译 · 排到第 { $page } 页
+latex-failed = 编译失败
+latex-problems = { $count } 个错误
+latex-problems-tip = 点击查看各处错误
+
+## 输入 / 呼出的写作命令
+
+preview-slash-heading-1 = 一级标题
+preview-slash-heading-2 = 二级标题
+preview-slash-heading-3 = 三级标题
+preview-slash-bullet = 无序列表
+preview-slash-ordered = 有序列表
+preview-slash-task = 任务列表
+preview-slash-quote = 引用
+preview-slash-details = 折叠块
+preview-slash-code = 代码块
+preview-slash-math = 公式块
+preview-slash-table = 表格
+preview-slash-divider = 分隔线
+preview-slash-image = 图片
+preview-slash-link = 链接
+preview-slash-callout-note = 提示块：说明
+preview-slash-callout-tip = 提示块：技巧
+preview-slash-callout-important = 提示块：重要
+preview-slash-callout-warning = 提示块：警告
+preview-slash-callout-caution = 提示块：注意
+preview-slash-inline-math = 行内公式
+preview-slash-flowchart = 流程图
+preview-slash-sequence = 时序图
+preview-slash-gantt = 甘特图
+preview-slash-contents = 目录
+preview-slash-date = 今天的日期
+
+## 选中文字后的格式工具栏
+
+preview-tool-bold = 粗体
+preview-tool-italic = 斜体
+preview-tool-strike = 删除线
+preview-tool-code = 行内代码
+preview-tool-highlight = 高亮
+preview-tool-link = 链接

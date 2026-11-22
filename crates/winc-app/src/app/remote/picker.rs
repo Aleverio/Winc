@@ -207,6 +207,16 @@ impl App {
     /// 打开面板的目录阶段：浏览 `target` 上的目录，从主目录 `home` 开始。
     pub(in crate::app) fn open_remote_browser(&mut self, target: Target, home: String) {
         let dir = home.clone();
+        self.browse_remote_folder(target, home, dir);
+    }
+
+    /// 打开面板的目录阶段：浏览 `target` 上的目录，从 `dir` 开始；`home` 是主目录。
+    pub(in crate::app) fn browse_remote_folder(
+        &mut self,
+        target: Target,
+        home: String,
+        dir: String,
+    ) {
         self.show_remote_picker(Stage::Browse { target, home, dir });
     }
 
@@ -216,6 +226,7 @@ impl App {
         self.overlays.picker.branch_rows = None;
         self.overlays.picker.location_rows = None;
         self.overlays.picker.folders = false;
+        self.overlays.picker.languages = false;
         self.overlays.picker.vim_list = None;
         // 面板开着换阶段（从目录回到主机）：按换页过渡。
         if self.overlays.picker.open && self.overlays.picker.remote.is_some() {

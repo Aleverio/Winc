@@ -14,6 +14,7 @@ use winc_pty::protocol::{Block, Line, Modes};
 use super::locate::locations;
 use super::tab::{Point, Selection, Unit};
 use super::{App, Focus, Request};
+use crate::app::NoticeKind;
 
 /// 运行超过该时长的命令结束时提醒（毫秒，经验值）：更短的命令提醒过于频繁，反而打断操作。
 const LONG_COMMAND: u32 = 10_000;
@@ -190,7 +191,7 @@ impl App {
         }
         if self.window.focused {
             if let Some(message) = message {
-                self.notify(message);
+                self.notify(NoticeKind::Info, message);
             }
         } else {
             if message.is_some() {
@@ -207,7 +208,7 @@ impl App {
     /// 窗口回到前台：把不在时结束的长命令的结果提示出来。
     pub(crate) fn terminal_window_focused(&mut self) {
         if let Some(message) = self.terminal.pending_notice.take() {
-            self.notify(message);
+            self.notify(NoticeKind::Info, message);
         }
         let t = &mut self.terminal;
         if t.open
@@ -339,7 +340,7 @@ impl App {
         };
         if tab.select_output(index) {
             self.fetch_terminal_history();
-            self.terminal_copy();
+            self.terminal_copy(false);
             self.request_redraw();
         }
     }
@@ -456,9 +457,9 @@ impl App {
             t.errors = None;
             return;
         };
-        // 打开的目录位于 WSL 发行版中时，命令报告的绝对路径属于同一发行版。
+        // 打开的目录在远端主机上或位于 WSL 发行版中时，命令报告的绝对路径属于那里。
         let local = |path| match &root {
-            Some(root) => winc_editor::wsl::from_terminal(root, path),
+            Some(root) => super::helper::terminal_path(root, path),
             None => path,
         };
         let cwd = if block.cwd.is_empty() {
@@ -495,7 +496,6 @@ impl App {
                 if spots
                     .iter()
                     .any(|s| s.path == path && s.line + 1 == line_no)
-                    || !winc_backend::fs::is_file(&path)
                 {
                     continue;
                 }
@@ -509,6 +509,9 @@ impl App {
                 });
             }
         }
+        // 不是文件的位置不算（见 [`App::terminal_target`]）。
+        spots.retain(|spot| self.terminal_target(&spot.path, true) && !self.is_folder(&spot.path));
+        let t = &mut self.terminal;
         if spots.is_empty() {
             t.errors = None;
             self.flash(t!("terminal-no-error-location"));

@@ -487,8 +487,9 @@ fn reads_files_exactly_like_opening_them() {
     near_end.push(0);
     let mut past_end = vec![b'a'; 8192];
     past_end.extend_from_slice(b"\0x\n");
-    let samples: [(&str, Vec<u8>); 8] = [
+    let samples: [(&str, Vec<u8>); 9] = [
         ("plain", b"one\ntwo\n".to_vec()),
+        ("utf16-no-bom", b"o\0n\0e\0\n\0t\0w\0o\0\n\0".to_vec()),
         ("bom-crlf", b"\xEF\xBB\xBFone\r\ntwo\r\n".to_vec()),
         ("lone-cr", b"one\rtwo\rthree".to_vec()),
         ("lossy", b"caf\xE9\nok\n".to_vec()),
@@ -911,7 +912,9 @@ fn required_text_does_not_change_the_results() {
             .collect()
     };
 
-    for (name, ignore_case, hits) in [("load", false, 5), ("LOAD", true, 7), ("valid?", false, 1)] {
+    // 搜索只逐行匹配正则，单独一个名字的一行（`load`、`valid?`）和 `select load;` 也在其中，
+    // 之后由 `Filter::definitions` 剔除。
+    for (name, ignore_case, hits) in [("load", false, 7), ("LOAD", true, 9), ("valid?", false, 2)] {
         let fast = crate::definition::query(name, ignore_case);
         assert_eq!(fast.required, name);
         let plain = Query {
@@ -1021,4 +1024,72 @@ fn folders_on_a_remote_host_are_searched_through_the_connection() {
     }
     remote::disconnect(&target);
     let _ = std::fs::remove_dir_all(&local);
+}
+
+/// 附加的目录一并搜索：其中的文件的相对路径以目录名开头，各自按所在目录的忽略规则。
+#[test]
+fn extra_folders_are_searched_with_their_name_in_front() {
+    let base = scratch("search-extra");
+    let (main, other) = (base.join("main"), base.join("other"));
+    write(&main, "src/a.rs", b"needle\n");
+    write(&other, "lib/b.rs", b"needle\n");
+    write(&other, ".gitignore", b"out/\n");
+    write(&other, "out/c.js", b"needle\n");
+    fs::create_dir_all(other.join(".git")).unwrap();
+
+    assert_eq!(files(&search(&main, &query("needle"))), ["src/a.rs"]);
+
+    let mut both = ProjectSearch::default();
+    both.set_extra_folders(vec![other.clone()]);
+    both.start(&main, &query("needle"), Vec::new(), || {});
+    both.wait();
+    let mut found = files(&both);
+    found.sort_unstable();
+    assert_eq!(found, ["other/lib/b.rs", "src/a.rs"]);
+    let extra = both
+        .results
+        .iter()
+        .find(|f| f.relative.starts_with("other/"));
+    assert_eq!(extra.unwrap().path, other.join("lib/b.rs"));
+
+    // 根目录下有同名的项时前缀加上上级目录的名字，与快速打开的文件表一致。
+    write(&main, "other/d.rs", b"needle\n");
+    both.start(&main, &query("needle"), Vec::new(), || {});
+    both.wait();
+    let parent = base.file_name().unwrap().to_string_lossy();
+    let labelled = format!("other ({parent})/lib/b.rs");
+    assert!(
+        files(&both).contains(&labelled.as_str()),
+        "{:?}",
+        files(&both)
+    );
+    assert!(files(&both).contains(&"other/d.rs"));
+    fs::remove_dir_all(main.join("other")).unwrap();
+    both.start(&main, &query("needle"), Vec::new(), || {});
+    both.wait();
+
+    // 重新搜索单个文件时相对路径不变。
+    both.refresh_file(&other.join("lib/b.rs"), None);
+    assert!(files(&both).contains(&"other/lib/b.rs"));
+}
+
+/// 依赖目录往下找两层，更深的不找；隐藏目录和依赖目录里面不再找。
+#[test]
+fn dependency_folders_are_found_two_levels_down() {
+    let dir = winc_config::files::canonicalize(scratch("dependency-folders")).unwrap();
+    for sub in [
+        "node_modules/react/node_modules",
+        "packages/app/node_modules",
+        "packages/app/src",
+        ".venv/lib",
+        ".git/node_modules",
+        "a/b/node_modules",
+    ] {
+        fs::create_dir_all(dir.join(sub)).unwrap();
+    }
+    let found = walk::dependency_folders(&dir);
+    assert_eq!(found, [dir.join(".venv"), dir.join("node_modules")]);
+    let nested = walk::dependency_folders(&dir.join("packages"));
+    assert_eq!(nested, [dir.join("packages/app/node_modules")]);
+    let _ = fs::remove_dir_all(&dir);
 }

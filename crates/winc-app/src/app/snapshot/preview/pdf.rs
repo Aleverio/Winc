@@ -346,6 +346,110 @@ fn the_pdf_preview_lists_page_thumbnails() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// PDF 预览的工具栏在打开文档时显示，空闲后隐藏；指针移到工具栏附近时重新显示，停在附近期间
+/// 不隐藏。当前页和总页数显示在状态栏上，切换到其他标签后不再显示。
+#[cfg(any(target_os = "macos", windows))]
+#[test]
+fn the_pdf_toolbar_hides_when_idle_and_the_page_shows_in_the_status_bar() {
+    use crate::app::StatusKey;
+    use crate::app::preview::pdf::PdfTool;
+    use std::time::{Duration, Instant};
+
+    let dir = sample_folder("pdf-tools");
+    let path = dir.join("文档.pdf");
+    std::fs::write(&path, sample_pdf(3)).unwrap();
+    let mut app = open_pdf(&path, false);
+    app.pointer.cursor_inside = true;
+    assert!(app.preview.pdf.tools.shown);
+    let bar = app.preview.pdf.tools.rect;
+    let (zoom_in, _) = *app
+        .hits
+        .pdf_tools
+        .iter()
+        .find(|(_, t)| *t == PdfTool::ZoomIn)
+        .unwrap();
+    let zoom_in = (zoom_in.x + zoom_in.w / 2.0, zoom_in.y + zoom_in.h / 2.0);
+    let area = app.preview.pdf.area;
+    let middle = (area.x + area.w / 2.0, area.y + area.h / 2.0);
+    let later = || Instant::now() + Duration::from_secs(3);
+
+    // 指针在正文中间，到时隐藏：不画工具栏，没有可点击的按钮。
+    app.on_mouse_move(middle.0, middle.1);
+    assert!(app.pdf_tools_tick(Instant::now()).is_some());
+    assert_eq!(app.pdf_tools_tick(later()), None);
+    paint(&mut app);
+    assert!(!app.preview.pdf.tools.shown && app.hits.pdf_tools.is_empty());
+    assert_eq!(app.preview.pdf.tools.rect, bar);
+
+    // 指针移到工具栏左上方附近即显示，停在附近期间到时不隐藏，按钮可以点击。
+    app.on_mouse_move(bar.x - 40.0, bar.y - 40.0);
+    assert!(app.preview.pdf.tools.shown);
+    assert!(app.pdf_tools_tick(later()).is_some());
+    paint(&mut app);
+    assert!(app.preview.pdf.tools.shown && !app.hits.pdf_tools.is_empty());
+    click(&mut app, zoom_in);
+    assert_eq!(app.preview.pdf.zoom, 1.25);
+
+    // 离得更远时不显示；离开后到时隐藏。
+    app.on_mouse_move(bar.x - 120.0, bar.y - 120.0);
+    assert_eq!(app.pdf_tools_tick(later()), None);
+    app.on_mouse_move(bar.x - 120.0, bar.bottom());
+    assert!(!app.preview.pdf.tools.shown);
+
+    // 状态栏显示视口中线所在的页，滚到结尾后是最后一页。
+    let page = |app: &App| {
+        app.status
+            .motion
+            .text(StatusKey::PdfPage)
+            .map(str::to_owned)
+    };
+    assert_eq!(page(&app).as_deref(), Some("第 1 / 3 页"));
+    app.scroll_pdf(-f32::MAX);
+    for _ in 0..3 {
+        paint(&mut app);
+        app.wait_for_pdf();
+    }
+    assert_eq!(page(&app).as_deref(), Some("第 3 / 3 页"));
+    let text = dir.join("a.txt");
+    app.open_path(&text);
+    paint(&mut app);
+    assert_eq!(page(&app), None);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 深色主题下浮在白色页面上的工具栏，细边框与卡片底色相近，不透出下方的白色。
+#[cfg(any(target_os = "macos", windows))]
+#[test]
+fn the_pdf_toolbar_border_does_not_show_the_page_through() {
+    let dir = sample_folder("pdf-tools-dark");
+    let path = dir.join("文档.pdf");
+    std::fs::write(&path, sample_pdf(3)).unwrap();
+    let mut app = open_pdf(&path, true);
+    let mut scale = 1.0;
+    let renderer = app.frame.renderer.as_mut().unwrap();
+    renderer.draw(|frame| scale = frame.scale());
+    paint(&mut app);
+    let bar = app.preview.pdf.tools.rect;
+    let image = app.frame.renderer.as_ref().unwrap().image().unwrap();
+    let pixel = |x: f32| {
+        let (x, y) = (
+            (x * scale) as usize,
+            ((bar.y + bar.h / 2.0) * scale) as usize,
+        );
+        image.pixels[y * image.width as usize + x].to_be_bytes()
+    };
+    // 工具栏左侧是白色页面（落有阴影）。
+    assert!(pixel(bar.x - 8.0)[1..].iter().all(|&c| c >= 0xe0));
+    let (edge, inside) = (pixel(bar.x), pixel(bar.x + 4.0));
+    for channel in 1..4 {
+        let gap = i32::from(edge[channel]) - i32::from(inside[channel]);
+        assert!(gap.abs() <= 24, "边框 {edge:?}，卡片 {inside:?}");
+    }
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// PDF 可以缩放：快捷键和主修饰键加滚轮各缩放一档，鼠标处的内容保持在原位；放大后可以横向
 /// 滚动，位图过大的倍数不可选。
 #[cfg(any(target_os = "macos", windows))]
@@ -532,6 +636,104 @@ fn a_page_that_fails_to_render_shows_why_instead_of_staying_blank() {
         .any(|y| (left..left + width as usize - 4).any(|x| image.pixels[y * row + x] != white));
     assert!(drawn, "失败的页仍然是空白");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 第 1 页上有三条书签（一章和它的两节，各在页内不同高度），第 9 页一条（页从 0 起）。
+#[cfg(any(target_os = "macos", windows))]
+const BOOKMARKS: [(&str, usize, usize, u32); 4] = [
+    ("Introduction", 0, 1, 792),
+    ("Background", 1, 1, 500),
+    ("Method", 1, 1, 200),
+    ("Results", 0, 9, 792),
+];
+
+/// 大纲列出 PDF 的书签：层级与目录相同；点击一条滚到它指向的位置（同一页上的几条各到各处），
+/// 读到的书签高亮；行尾写出页码。没有书签的 PDF 给出说明。
+#[cfg(any(target_os = "macos", windows))]
+#[test]
+fn the_outline_lists_pdf_bookmarks_and_turns_to_their_pages() {
+    use crate::app::{OutlineEmpty, OutlineTarget};
+    use crate::keymap::Action;
+
+    let dir = sample_folder("pdf-outline");
+    let path = dir.join("论文.pdf");
+    std::fs::write(&path, outlined_pdf(12, &BOOKMARKS)).unwrap();
+    let mut app = open_pdf(&path, false);
+    app.run_action(Action::ShowOutline);
+    paint(&mut app);
+    let outline = &app.panels.outline;
+    assert!(matches!(outline.kind, crate::app::OutlineKind::Pages(_)));
+    assert_eq!(outline.empty, None);
+    let tree: Vec<(&str, usize, usize)> = (outline.items.iter())
+        .map(|s| (s.name.as_str(), s.depth, s.line))
+        .collect();
+    let want: Vec<(&str, usize, usize)> = BOOKMARKS.iter().map(|b| (b.0, b.1, b.2)).collect();
+    assert_eq!(tree, want);
+    // 第 0 页在第一条书签之前：没有高亮。
+    assert_eq!(app.outline_current(&app.outline_rows()), None);
+
+    let row = |app: &App, i| {
+        let (rect, _) = *(app.hits.outline.iter())
+            .find(|(_, t)| *t == OutlineTarget::Row(i))
+            .unwrap();
+        (rect.x + rect.w / 2.0, rect.y + rect.h / 2.0)
+    };
+    let mut last = -1.0;
+    for i in 0..3 {
+        let at = row(&app, i);
+        click(&mut app, at);
+        paint(&mut app);
+        let scroll = app.preview.pdf.scroll;
+        assert!(scroll > last, "第 {i} 条：{scroll} 应在 {last} 之下");
+        last = scroll;
+        assert_eq!(app.outline_current(&app.outline_rows()), Some(i));
+    }
+    assert_eq!(app.focus, crate::app::Focus::Editor);
+    // 往回点同一页上靠前的一条，也滚回去。
+    let at = row(&app, 0);
+    click(&mut app, at);
+    paint(&mut app);
+    assert!(app.preview.pdf.scroll < last);
+    assert_eq!(app.outline_current(&app.outline_rows()), Some(0));
+    let at = row(&app, 3);
+    click(&mut app, at);
+    paint(&mut app);
+    assert_eq!(app.preview.pdf.current, 9);
+    assert_eq!(app.outline_current(&app.outline_rows()), Some(3));
+
+    let plain = dir.join("plain.pdf");
+    std::fs::write(&plain, sample_pdf(2)).unwrap();
+    app.open_path(&plain);
+    for _ in 0..3 {
+        paint(&mut app);
+        app.wait_for_pdf();
+    }
+    paint(&mut app);
+    assert_eq!(app.panels.outline.empty, Some(OutlineEmpty::NoBookmarks));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 截图：大纲列出 PDF 的书签，当前页的书签高亮。深浅两套配色。
+#[cfg(any(target_os = "macos", windows))]
+#[test]
+#[ignore = "截图，手动运行"]
+fn shoot_pdf_outline() {
+    for dark in [false, true] {
+        let dir = sample_folder("pdf-outline-shot");
+        let path = dir.join("论文.pdf");
+        std::fs::write(&path, outlined_pdf(12, &BOOKMARKS)).unwrap();
+        let mut app = open_pdf(&path, dark);
+        app.run_action(crate::keymap::Action::ShowOutline);
+        paint(&mut app);
+        app.scroll_pdf_to_place(1, 0.37);
+        for _ in 0..3 {
+            paint(&mut app);
+            app.wait_for_pdf();
+        }
+        let theme = if dark { "dark" } else { "light" };
+        shoot(&mut app, &format!("pdf-outline-{theme}"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg(any(target_os = "macos", windows))]

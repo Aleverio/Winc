@@ -42,11 +42,11 @@ pub(super) fn draw(app: &mut App, frame: &mut Frame<'_>) {
         return;
     }
 
-    // 遮罩颜色很淡，只略微压暗下层内容，卡片自身靠阴影浮起；卡片覆盖的区域不需要再铺遮罩。
+    // 遮罩颜色很淡，只略微压暗下层内容，卡片自身靠阴影浮起。遮罩铺满整个窗口（与动画途中相同），
+    // 卡片移到哪里，下方都已压暗。
     let p = app.palette;
-    let covered = frame.covered(layout.card, RADIUS_CARD);
-    frame.rect_except(app.layout.window, p.scrim, 0.0, covered);
-    // 开始滚动时保存已绘制的窗口和遮罩，滚动期间不再重绘（`draw_scrolling`）。
+    frame.rect(app.layout.window, p.scrim);
+    // 开始滚动或拖动时保存已绘制的窗口和遮罩，期间不再重绘（`draw_scrolling`）。
     if app.settings.scrolled_at.is_some() && app.settings.scroll_base.is_none() {
         app.settings.scroll_base = Some(frame.snapshot(frame.bounds()));
     }
@@ -54,7 +54,7 @@ pub(super) fn draw(app: &mut App, frame: &mut Frame<'_>) {
     draw_dialog(app, frame, &layout);
 }
 
-/// 绘制设置页滚动期间的一帧：恢复保存的窗口画面（含遮罩），只重绘卡片，返回 `true`。
+/// 绘制设置页滚动或拖动期间的一帧：恢复保存的窗口画面（含遮罩），只重绘卡片，返回 `true`。
 ///
 /// 没有快照，或窗口尺寸、缩放比例已变化时返回 `false`，由调用方完整绘制并重新保存快照。
 pub(crate) fn draw_scrolling(app: &mut App, frame: &mut Frame<'_>) -> bool {
@@ -124,9 +124,9 @@ fn draw_dialog(app: &mut App, frame: &mut Frame<'_>, layout: &SettingsLayout) {
     draw_header(app, frame, layout);
 
     // 滚动内容被限制在标题下方的区域内：滚到上方的行不会压在标题上，滚到下方的行不会绘制到
-    // 卡片之外。
+    // 卡片之外。「快捷键」页的搜索框在标题行中，由该页自行裁剪。
     let caret = if layout.page == SettingsPage::Keys && !layout.searching {
-        frame.within(layout.body, |frame| keys::draw(app, frame))
+        keys::draw(app, frame, layout.body)
     } else {
         frame.within(layout.body, |frame| draw_body(app, frame, layout))
     };
@@ -440,8 +440,13 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
 
     match row.setting.control() {
         SettingControl::Font => draw_field(app, frame, row, clip),
-        SettingControl::Command if editing => draw_field(app, frame, row, clip),
         SettingControl::Stepper if editing => draw_field(app, frame, row, clip),
+        // 「Git 程序」「LaTeX 程序」是填写的路径，没有可选的菜单：始终画成输入框。
+        SettingControl::Command
+            if editing || matches!(row.setting, Setting::GitPath | Setting::LatexPath) =>
+        {
+            draw_field(app, frame, row, clip)
+        }
         SettingControl::Command => {
             let (text, dim) = match row.setting {
                 Setting::LspServer(id) => app
@@ -470,11 +475,26 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
             } else if row.setting == Setting::RenderWhitespace {
                 let choice = app.config.render_whitespace.unwrap_or_default();
                 (crate::layout::whitespace_label(choice).to_owned(), false)
+            } else if row.setting == Setting::AutoSave {
+                let choice = app.config.auto_save.unwrap_or_default();
+                (crate::layout::auto_save_label(choice).to_owned(), false)
+            } else if row.setting == Setting::DropFolder {
+                let choice = app.config.drop_folder.unwrap_or_default();
+                (crate::layout::drop_folder_label(choice).to_owned(), false)
+            } else if row.setting == Setting::GitOpenWorktree {
+                let choice = app.config.git_open_worktree.unwrap_or_default();
+                (crate::layout::open_worktree_label(choice).to_owned(), false)
+            } else if row.setting == Setting::GitPullMode {
+                let choice = app.config.git_pull.unwrap_or_default();
+                (crate::layout::pull_mode_label(choice).to_owned(), false)
             } else if row.setting == Setting::VimClipboard {
                 let choice = app.config.vim_clipboard.unwrap_or_default();
                 (crate::layout::vim_clipboard_label(choice).to_owned(), false)
             } else if row.setting == Setting::Zoom {
                 (format!("{}%", app.config.ui_zoom.unwrap_or(100)), false)
+            } else if row.setting == Setting::TextWidth {
+                let choice = app.config.markdown_text_width.unwrap_or_default();
+                (crate::layout::text_width_label(choice).to_owned(), false)
             } else if row.setting == Setting::BackgroundFit {
                 let choice = app.config.ui_background_fit.unwrap_or_default();
                 (
@@ -494,6 +514,13 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
                     t!("settings-terminal-position-right")
                 } else {
                     t!("settings-terminal-position-bottom")
+                };
+                (text.to_owned(), false)
+            } else if row.setting == Setting::TerminalTabPosition {
+                let text = if app.config.terminal_vertical_tabs == Some(true) {
+                    t!("settings-terminal-tab-position-right")
+                } else {
+                    t!("settings-terminal-tab-position-top")
                 };
                 (text.to_owned(), false)
             } else if row.setting == Setting::TerminalOptionAsMeta {
@@ -605,6 +632,24 @@ fn draw_product(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Re
     ui_text(frame, app, x, area, &text, p.text_muted, clip);
 }
 
+/// 找到新版本 `version` 时的说明：不由应用自己更新的安装写明从哪里取得。
+fn found_text(version: &str) -> String {
+    #[cfg(not(target_os = "macos"))]
+    {
+        use crate::updates::Delivery;
+        match crate::updates::delivery() {
+            Some(Delivery::Download) => {
+                return t!("settings-updates-found-download", version = version);
+            }
+            Some(Delivery::Pacman) => {
+                return t!("settings-updates-found-pacman", version = version);
+            }
+            _ => {}
+        }
+    }
+    t!("settings-updates-found", version = version)
+}
+
 /// 「关于」页「更新」一行下方的状态文字和颜色；也是状态栏更新按钮的悬停提示（见
 /// `status::update_tooltip`）。
 pub(in crate::view) fn update_status(app: &App) -> (String, Color) {
@@ -615,11 +660,15 @@ pub(in crate::view) fn update_status(app: &App) -> (String, Color) {
         UpdateState::Idle => (t!("settings-updates-idle").to_owned(), p.text_muted),
         UpdateState::Checking => (t!("settings-updates-checking").to_owned(), p.text_muted),
         UpdateState::Latest => (t!("settings-updates-latest").to_owned(), p.text_muted),
-        UpdateState::Found(version) => (
-            t!("settings-updates-found", version = version.as_str()),
-            p.accent,
+        UpdateState::Found(version) => (found_text(version), p.accent),
+        UpdateState::Failed(None) => (t!("settings-updates-failed").to_owned(), p.text_muted),
+        UpdateState::Failed(Some(failure)) => (
+            t!(
+                "settings-updates-failed-because",
+                reason = failure.message()
+            ),
+            p.text_muted,
         ),
-        UpdateState::Failed => (t!("settings-updates-failed").to_owned(), p.text_muted),
         UpdateState::Downloading(version, percent) => (
             t!(
                 "settings-updates-downloading",
@@ -703,6 +752,7 @@ fn draw_field(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect
     let font = row.setting.control() == SettingControl::Font;
     let on_menu = font && app.settings.hover == Some(SettingsPart::FontMenu(row.setting));
     let hovered = hovered || on_menu;
+    let latex_auto = app.latex_tool_label();
     let (configured, placeholder) = match row.setting {
         Setting::UiFont => (app.config.ui_font.clone(), t!("settings-font-default")),
         Setting::TerminalFont => (
@@ -714,6 +764,8 @@ fn draw_field(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect
         }
         Setting::LspServer(_) => (None, t!("settings-lsp-command-placeholder")),
         Setting::TerminalShell => (None, t!("settings-terminal-shell-placeholder")),
+        Setting::GitPath => (app.config.git_path.clone(), t!("settings-git-path-auto")),
+        Setting::LatexPath => (app.config.latex_path.clone(), latex_auto.as_str()),
         _ => (app.config.editor_font.clone(), t!("settings-font-default")),
     };
     // 字体输入框的文字不进入右端的下拉按钮。
@@ -766,9 +818,39 @@ fn draw_field(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect
     // 未设置时显示的「系统默认」「跟随编辑器」是菜单中的一项，与其他取值同色。
     let text = configured.map_or(Cow::Borrowed(placeholder), Cow::Owned);
     let color = p.text_muted;
-    let text = ellipsize(frame, &text, app.fonts.ui, area.w);
-    let w = frame.measure(FontKind::Ui, app.fonts.ui, &text);
-    ui_text(frame, app, area.right() - w, area, &text, color, area);
+    let size = app.fonts.ui;
+    // 字体列表只写第一个字体，其后的后备字体以淡色的「+N」计数；字体名放不下时截去末尾，文件
+    // 路径从中间截短以保留文件名。
+    let list = if font {
+        winc_config::font_list(Some(&text))
+    } else {
+        Vec::new()
+    };
+    let (main, more) = match list.split_first() {
+        Some((first, rest)) if !rest.is_empty() => (*first, format!(" +{}", rest.len())),
+        Some((first, _)) => (*first, String::new()),
+        None => (text.as_ref(), String::new()),
+    };
+    let more_w = frame.measure(FontKind::Ui, size, &more);
+    let room = (area.w - more_w).max(0.0);
+    let path = main.contains(['/', '\\']);
+    let main = if font && !path {
+        truncate_end(frame, main, size, room)
+    } else {
+        ellipsize(frame, main, size, room)
+    };
+    let w = frame.measure(FontKind::Ui, size, &main) + more_w;
+    // 没有下拉按钮时文字的右缘与组内分隔线的右端对齐。
+    let (right, area) = if font {
+        (area.right(), area)
+    } else {
+        (rect.right() - SETTINGS_GLYPH_PAD, rect)
+    };
+    let x = right - w;
+    let end = ui_text(frame, app, x, area, &main, color, area);
+    if !more.is_empty() {
+        ui_text(frame, app, end, area, &more, p.text_dim, area);
+    }
     draw_arrows(app, frame);
     None
 }

@@ -2,6 +2,7 @@
 
 use super::*;
 
+mod measure;
 mod menu;
 
 /// 在列表中无法完整显示的长说明，用于检查截短与悬停提示。
@@ -55,7 +56,7 @@ fn a_new_log_shows_only_the_current_branch() {
     app.run_action(Action::GitShowLog);
     paint(&mut app);
     let log = app.editor.active().unwrap().log.as_deref().unwrap();
-    assert_eq!(log.query.branch.as_deref(), Some("main"));
+    assert_eq!(log.query.branches, ["main"]);
     // 仅在 `dev` 上领先的提交不在列表中，最上方是 `main` 上最新的提交。
     assert_eq!(log.commits[0].subject, "启动日志写到文件里");
     assert!(
@@ -186,26 +187,28 @@ fn stepping_past_the_last_change_opens_the_commits_next_file() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// 返回历史差异文件列表当前的各行（借用提交视图的列表排出）。
-fn log_rows(app: &mut App) -> std::rc::Rc<crate::app::git::commit::CommitRows> {
-    app.with_log_list(|app| app.commit_rows()).unwrap()
+/// 点击当前差异中 `target` 的位置（按上一帧画出的位置找）。
+fn click_diff(app: &mut App, target: crate::app::DiffTarget) {
+    paint(app);
+    let rect = (app.hits.diff.iter())
+        .find(|(_, t)| *t == target)
+        .unwrap()
+        .0;
+    click(app, (rect.x + rect.w / 2.0, rect.y + rect.h / 2.0));
+    app.poll_log();
+    paint(app);
 }
 
-/// 点击历史差异文件列表的第 `row` 行（列表没有滚动）。
-fn click_log_row(app: &mut App, row: usize) {
-    let list = app.commit_parts().list;
-    let y = list.y + (row as f32 + 0.5) * crate::app::git::commit::COMMIT_ROW;
-    click(app, (list.x + 40.0, y));
-}
-
-/// 历史差异的侧栏借用提交视图的改动列表，只列出该提交改动的文件：目录可以收起、展开，
-/// 日志改选其他提交后仍对应原提交，点击文件在同一个差异标签中打开。
+/// 从日志打开的差异：侧栏仍是工作区的改动；差异上方写明提交，左侧文件栏只列出这个提交改动的
+/// 文件，点击在同一个标签里切换；日志改选其他提交后仍对应原提交；「返回日志」和 Esc 回到日志，
+/// 关掉差异标签后文件列表作废。
 #[test]
-fn commit_diff_sidebar_lists_only_that_commits_changed_files() {
-    use crate::app::git::commit::CommitRow;
+fn a_history_diff_lists_its_files_beside_the_diff_and_keeps_the_sidebar() {
+    use crate::app::DiffTarget;
     use crate::app::git::log::LogTarget;
+    use crate::layout::SidebarView;
 
-    let Some((mut app, root)) = git_app("git-log-file-tree", false) else {
+    let Some((mut app, root)) = git_app("git-log-file-panel", false) else {
         return;
     };
     std::fs::create_dir_all(root.join("src/nested")).unwrap();
@@ -217,54 +220,68 @@ fn commit_diff_sidebar_lists_only_that_commits_changed_files() {
     app.git_refresh();
     show_all_log(&mut app);
     let log_index = app.editor.active.unwrap();
-    app.set_sidebar(false);
-    // 显示方式与提交视图共用，默认平铺；该测试检查树形。
-    app.git.commit.set_flat(false);
+    app.set_sidebar_view(SidebarView::Commit);
     app.press_log(LogTarget::File(0));
+    app.poll_log();
     paint(&mut app);
 
-    let diff_index = app.editor.active.unwrap();
-    let doc = app.editor.active().unwrap().id;
-    let tabs = app.editor.documents.len();
-    assert!(app.sidebar_open() && app.log_diff_tree().is_some());
-    assert!(!app.commit_shown());
-    // 组标题、`src`、`src/nested`、`one.txt`、`two.txt`：工作区里未跟踪的文件不在其中。
-    let rows = log_rows(&mut app);
-    assert_eq!(rows.len(), 5);
-    assert!(matches!(&rows[1], CommitRow::Dir { label, .. } if label == "src"));
-    assert!(matches!(&rows[2], CommitRow::Dir { label, .. } if label == "nested"));
-    click_log_row(&mut app, 2);
-    assert_eq!(log_rows(&mut app).len(), 4);
-    click_log_row(&mut app, 2);
-    assert_eq!(log_rows(&mut app).len(), 5);
+    // 侧栏没换：仍是提交视图里工作区的改动（未跟踪的文件在其中）。
+    assert_eq!(app.panels.sidebar.view, SidebarView::Commit);
+    assert!(app.commit_shown());
+    let entries = app.git.status.as_ref().unwrap().entries.iter();
+    assert!(
+        entries
+            .map(|e| &e.path)
+            .any(|p| p.ends_with("untracked.txt"))
+    );
+    // 差异上方写明提交；两个文件，文件栏默认展开。
+    let view = app.editor.active().unwrap().diff.as_deref().unwrap();
+    let banner = view.banner.as_ref().unwrap();
+    assert_eq!(banner.subject, "Add nested files");
+    assert!(view.panel > 0.0);
+    let title = |app: &App| app.editor.active().unwrap().title.clone().unwrap();
+    assert!(title(&app).starts_with("one.txt · "));
 
-    // 日志标签改选另一个提交后，原差异的侧栏仍然可以打开原提交的其他文件。
+    let (diff_index, doc, tabs) = (
+        app.editor.active.unwrap(),
+        app.editor.active().unwrap().id,
+        app.editor.documents.len(),
+    );
+    click_diff(&mut app, DiffTarget::File(1));
+    assert!(title(&app).starts_with("two.txt · "));
+    assert_eq!(app.editor.active().unwrap().id, doc);
+    assert_eq!(app.editor.documents.len(), tabs);
+
+    // 日志标签改选另一个提交后，差异的文件栏仍是原提交的文件。
     app.activate_tab(log_index);
     app.select_log_row(1);
-    assert!(app.log_diff_tree().is_none());
     app.activate_tab(diff_index);
-    paint(&mut app);
-    click_log_row(&mut app, 4);
-    let active = app.editor.active().unwrap();
-    assert_eq!(active.id, doc);
-    assert_eq!(app.editor.documents.len(), tabs);
-    assert!(active.title.as_deref().unwrap().starts_with("two.txt · "));
+    click_diff(&mut app, DiffTarget::File(0));
+    assert!(title(&app).starts_with("one.txt · "));
 
+    // 「返回日志」和 Esc 都回到日志。
+    click_diff(&mut app, DiffTarget::BannerBack);
+    assert!(app.log_active());
+    app.activate_tab(diff_index);
+    app.diff_key(&Key::Named(NamedKey::Escape), false);
+    assert!(app.log_active());
+
+    // 关掉差异标签后文件列表作废。
+    app.close_tab(diff_index);
+    assert!(app.next_log_file(true).is_none() && app.next_log_file(false).is_none());
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// 历史差异的文件列表：逐个切换文件按列表的显示顺序进行；收起的目录在打开其中的文件时
-/// 展开；侧栏只在新建差异标签时打开，之后保留用户的选择；提交视图可以在文件列表与工作区
-/// 改动之间切换；关闭差异标签后文件列表随之作废。
+/// 平铺与按目录分组各处分开记：提交视图按设置，日志详情、差异的文件栏切换过以后各自记住。
+/// 文件栏可以收起、拖宽，‹ › 按文件栏的顺序切换，按钮的提示写明点了以后怎样。
 #[test]
-fn commit_diff_tree_follows_its_order_and_the_users_sidebar() {
-    use crate::app::git::log::LogTarget;
-    use crate::layout::SidebarView;
+fn each_file_list_keeps_its_own_layout_and_the_panel_folds_and_resizes() {
+    use crate::app::DiffTarget;
+    use crate::app::git::log::{LogFileRow, LogTarget};
 
-    let Some((mut app, root)) = git_app("git-log-file-tree-order", false) else {
+    let Some((mut app, root)) = git_app("git-log-file-panel-layout", false) else {
         return;
     };
-    // Git 列出的顺序是 `a.txt`、`src/b.txt`；树形中目录在前，顺序是 `src/b.txt`、`a.txt`。
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("a.txt"), "a\n").unwrap();
     std::fs::write(root.join("src/b.txt"), "b\n").unwrap();
@@ -272,109 +289,106 @@ fn commit_diff_tree_follows_its_order_and_the_users_sidebar() {
     git_in(&root, &["commit", "-q", "-m", "Two files"]);
     app.git_refresh();
     show_all_log(&mut app);
-    let log_index = app.editor.active.unwrap();
-    app.git.commit.set_flat(false);
+    app.update_state(|state| {
+        state.commit_tree = false;
+        state.log_files_tree = None;
+        state.diff_files_tree = None;
+    });
     app.press_log(LogTarget::File(0));
+    app.poll_log();
     paint(&mut app);
+
+    // 没切换过时同提交视图（平铺）；切换文件栏只改它自己。
+    assert!(app.diff_files_flat() && app.log_details_flat());
+    click_diff(&mut app, DiffTarget::FilesLayout);
+    assert!(!app.diff_files_flat());
+    assert_eq!(app.state.diff_files_tree, Some(true));
+    assert!(app.log_details_flat() && !app.state.commit_tree);
+    app.toggle_log_details_layout();
+    assert!(!app.log_details_flat());
+    assert_eq!(app.state.log_files_tree, Some(true));
+    assert!(!app.diff_files_flat());
+
+    // 同文件视图先目录后文件：`src` 下的 `b.txt` 在 `a.txt` 前面。
     let title = |app: &App| app.editor.active().unwrap().title.clone().unwrap();
     assert!(title(&app).starts_with("a.txt · "));
-    assert!(
-        app.next_log_file(true).is_none(),
-        "a.txt 是列表中最后一个文件"
-    );
-    let (_, at, name, total) = app.next_log_file(false).unwrap();
-    assert_eq!((at, name.as_str(), total), (0, "b.txt", 2));
-
-    // 收起 `src` 后切换到其中的文件：目录随之展开。行依次是组标题、`src`、`b.txt`、`a.txt`。
-    assert_eq!(log_rows(&mut app).len(), 4);
-    click_log_row(&mut app, 1);
-    assert_eq!(log_rows(&mut app).len(), 3);
+    assert!(!app.step_log_file(true));
     assert!(app.step_log_file(false));
+    app.poll_log();
     assert!(title(&app).starts_with("b.txt · "));
-    assert_eq!(log_rows(&mut app).len(), 4);
 
-    // 提交视图在文件列表与工作区改动之间切换。
-    app.show_commit();
-    assert!(app.log_diff_tree().is_none() && app.commit_shown());
-    app.show_commit();
-    assert!(app.log_diff_tree().is_some() && !app.commit_shown());
-
-    // 差异标签已存在时，从日志再打开文件不改动用户选择的侧栏视图。
-    let diff_index = app.editor.active.unwrap();
-    app.set_sidebar_view(SidebarView::Files);
-    app.activate_tab(log_index);
-    app.press_log(LogTarget::File(1));
-    paint(&mut app);
-    assert_eq!(app.panels.sidebar.view, SidebarView::Files);
-
-    // 关闭差异标签后文件列表作废。
-    app.activate_tab(diff_index);
-    app.set_sidebar_view(SidebarView::Commit);
-    assert!(app.log_diff_tree().is_some());
-    app.close_tab(diff_index);
-    assert!(app.next_log_file(true).is_none() && app.next_log_file(false).is_none());
-
-    let _ = std::fs::remove_dir_all(&root);
-}
-
-/// 历史差异侧栏标题行的按钮在树形与列表之间切换文件列表，与提交视图的更改列表共用同一个
-/// 设置；树形中只有一个子目录的各级按设置「紧凑目录」合成一行（「src/nested」）。
-#[test]
-fn commit_diff_tree_switches_between_tree_and_list() {
-    use crate::app::git::commit::CommitRow;
-    use crate::app::git::log::LogTarget;
-
-    let Some((mut app, root)) = git_app("git-log-file-tree-layout", false) else {
-        return;
+    // 点目录收起，其中的文件不再列出；转到收起的目录里的文件时目录展开。
+    let files = |app: &App| {
+        app.log_files_rows()
+            .iter()
+            .filter_map(LogFileRow::file)
+            .count()
     };
-    std::fs::create_dir_all(root.join("src/nested")).unwrap();
-    std::fs::write(root.join("a.txt"), "a\n").unwrap();
-    std::fs::write(root.join("src/nested/b.txt"), "b\n").unwrap();
-    git_in(&root, &["add", "a.txt", "src/nested/b.txt"]);
-    git_in(&root, &["commit", "-q", "-m", "Two files"]);
-    app.git_refresh();
-    show_all_log(&mut app);
-    app.git.commit.set_flat(false);
-    app.press_log(LogTarget::File(0));
     paint(&mut app);
-    let press = |app: &mut App| {
-        let button = app.log_diff_layout_button();
-        click(app, (button.x + 4.0, button.y + 4.0));
-    };
-    // 树形：组标题、`src/nested`、`b.txt`、`a.txt`。
-    let rows = log_rows(&mut app);
-    assert_eq!(rows.len(), 4);
-    assert!(matches!(&rows[1], CommitRow::Dir { label, .. } if label == "src/nested"));
+    click_diff(&mut app, DiffTarget::FilesDir(0));
+    assert_eq!(files(&app), 1);
+    assert!(app.step_log_file(true));
+    app.poll_log();
+    assert_eq!(files(&app), 1);
+    assert!(app.step_log_file(false));
+    app.poll_log();
+    assert_eq!(files(&app), 2);
 
-    // 关闭设置「紧凑目录」后逐级显示：组标题、`src`、`nested`、`b.txt`、`a.txt`。
-    app.config.compact_folders = Some(false);
-    app.apply_compact_folders();
-    let rows = log_rows(&mut app);
-    assert_eq!(rows.len(), 5);
-    assert!(matches!(&rows[1], CommitRow::Dir { label, .. } if label == "src"));
-    app.config.compact_folders = Some(true);
-    app.apply_compact_folders();
-
-    press(&mut app);
-    assert!(app.git.commit.flat());
-    assert_eq!(log_rows(&mut app).len(), 3);
-
-    // 悬停按钮时提示点击后切换成哪一种显示方式。
-    let button = app.log_diff_layout_button();
-    app.on_mouse_move(button.x + 4.0, button.y + 4.0);
+    // 提示写明点了以后怎样。
+    let rect = (app.hits.diff.iter())
+        .find(|(_, t)| *t == DiffTarget::FilesLayout)
+        .unwrap()
+        .0;
+    app.on_mouse_move(rect.x + 4.0, rect.y + 4.0);
     paint(&mut app);
-    assert!(app.pointer.hover.has_tooltip(), "停留满提示延迟后显示提示");
     let tip = crate::view::tests::tooltip(&app).map(|(_, text)| text);
     assert_eq!(
         tip.as_deref(),
-        Some(winc_i18n::t!("workspace-tip-show-as-tree"))
+        Some(winc_i18n::t!("workspace-tip-show-as-list"))
     );
 
-    // 在提交视图中切换显示方式，文件列表随之重排。
-    app.toggle_commit_layout();
-    assert!(!app.git.commit.flat());
-    assert_eq!(log_rows(&mut app).len(), 4);
+    // 收起、展开文件栏；拖宽以后双击右边缘恢复默认宽度。
+    let width = |app: &App| app.log_files_width();
+    let open = width(&app);
+    click_diff(&mut app, DiffTarget::FilesToggle);
+    assert_eq!(width(&app), 0.0);
+    click_diff(&mut app, DiffTarget::FilesToggle);
+    assert_eq!(width(&app), open);
+    app.drag_log_files_edge(500.0, (400.0, open));
+    assert_eq!(width(&app), open + 100.0);
+    app.reset_log_files_width();
+    assert_eq!(width(&app), open);
 
+    // 地方不够时文件栏先变窄，比最窄的宽度还窄时才不显示。
+    let view = app.editor.active().unwrap().diff.as_deref().unwrap();
+    let parts = |w: f32| crate::app::diff_parts(Rect::new(0.0, 0.0, w, 600.0), view, 8.0);
+    assert_eq!(parts(2000.0).files.w, open);
+    assert_eq!(parts(720.0).files.w, 240.0);
+    assert_eq!(parts(600.0).files.w, 0.0);
+    // 展开、收起途中只露出一部分，各行仍按展开时的宽度排。
+    let shown = |app: &mut App, f: f32| {
+        let view = app
+            .editor
+            .active_mut()
+            .unwrap()
+            .diff
+            .as_deref_mut()
+            .unwrap();
+        view.panel_shown = f;
+        crate::app::diff_parts(Rect::new(0.0, 0.0, 2000.0, 600.0), view, 8.0)
+    };
+    let sliding = shown(&mut app, 0.5);
+    assert_eq!(sliding.files.w, (open / 2.0).round());
+    assert_eq!(sliding.files_w, open);
+    shown(&mut app, 1.0);
+
+    // 详情里的目录与文件栏各收各的；收起的目录里的文件不能用键盘选，回车仍打开最前面的文件。
+    app.git_show_log();
+    paint(&mut app);
+    assert_eq!(app.log_file_order(), [1, 0]);
+    app.press_log(LogTarget::FilesDir(0));
+    assert_eq!(app.log_file_order(), [0]);
+    assert_eq!(app.log_first_file(), Some(1));
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -486,7 +500,7 @@ fn shoot_git_log() {
         // 末尾是「清除筛选」。
         app.press_log(crate::app::git::log::LogTarget::Search);
         app.edit_field(|f| f.insert("登录"));
-        app.change_log_query(|q| q.author = Some("Alice Chen".into()));
+        app.change_log_query(|q| q.authors = vec!["Alice Chen".into()]);
         app.select_log_row(0);
         shoot(&mut app, &format!("log-filter-{theme}"));
 
@@ -499,7 +513,7 @@ fn shoot_git_log() {
         app.git.log.filter.set_text("");
         app.change_log_query(|q| {
             q.text.clear();
-            q.author = None;
+            q.authors.clear();
         });
         std::fs::write(root.join("README.md"), "changed\n").unwrap();
         app.git_refresh();
@@ -535,6 +549,19 @@ fn log_spills_long_subjects_on_hover_and_drags_the_divider() {
             .any(|(_, t)| *t == LogTarget::Avatar(long))
     );
     assert!(Hover::Log(LogTarget::Row(long)).has_tooltip());
+    // 提示从开始悬停时鼠标的位置开始，在这一行下方；之后鼠标在同一行里移动，提示不跟着动。
+    {
+        use crate::app::animation::TipPlace;
+        let since = std::time::Instant::now() - std::time::Duration::from_secs(1);
+        app.overlays.tooltip.since = Some(since);
+        let (x, y) = app.mouse();
+        app.on_mouse_move(x + 30.0, y);
+        app.overlays.tooltip.since = Some(since);
+        paint(&mut app);
+        let last = app.overlays.tooltip.last.borrow().clone();
+        let (anchor, _, place) = last.unwrap();
+        assert_eq!((place, anchor.x), (TipPlace::Pointer, x));
+    }
     // 能完整显示的行不提示。
     hover_log_row(&mut app, long + 1);
     assert_eq!(app.git.log.clipped, None);
@@ -595,7 +622,11 @@ fn shoot_log_graph() {
         history_repo(&root, 40);
         let long = long_subject_row(&mut app, &root);
         hover_log_row(&mut app, long);
-        app.overlays.tooltip.since = Some(std::time::Instant::now() - crate::theme::TOOLTIP_DELAY);
+        app.overlays.tooltip.since = Some(
+            std::time::Instant::now()
+                - crate::theme::TOOLTIP_DELAY
+                - crate::app::animation::TOOLTIP_FADE,
+        );
         shoot(&mut app, &format!("log-graph-{theme}"));
         app.overlays.tooltip.since = None;
 
@@ -618,7 +649,11 @@ fn shoot_log_graph() {
             .unwrap();
         app.on_mouse_move(rect.x + rect.w / 2.0, rect.y + rect.h / 2.0);
         paint(&mut app);
-        app.overlays.tooltip.since = Some(std::time::Instant::now() - crate::theme::TOOLTIP_DELAY);
+        app.overlays.tooltip.since = Some(
+            std::time::Instant::now()
+                - crate::theme::TOOLTIP_DELAY
+                - crate::app::animation::TOOLTIP_FADE,
+        );
         shoot(&mut app, &format!("log-line-{theme}"));
         app.overlays.tooltip.since = None;
         app.set_hover(Hover::Log(LogTarget::Divider));
@@ -630,7 +665,7 @@ fn shoot_log_graph() {
 
 #[test]
 fn log_filters_by_text_branch_and_author_and_shows_a_files_history() {
-    use crate::app::git::branch::picker::{BranchRow, BranchSection};
+    use crate::app::git::branch::picker::BranchRow;
     use crate::app::git::log::LogTarget;
     use crate::app::input::context_menu::{MenuCommand, MenuTarget};
 
@@ -695,29 +730,22 @@ fn log_filters_by_text_branch_and_author_and_shows_a_files_history() {
         f.set_text("LOGIN");
         true
     });
-    // 只有一个远程：远程分支一组的标题为「远程分支」，各行省去远程名。
-    let label = |name: &str| BranchRow::Branch {
-        index: app
-            .git
-            .branches
-            .iter()
-            .position(|b| b.name == name)
-            .unwrap(),
-        depth: 0,
-        label: "feature/login".to_owned(),
+    // 与分支选择器同样分组：本地、远程各一组，搜索时目录都展开；筛选不新建分支。
+    let rows = app.overlays.picker.branch_rows.clone().unwrap();
+    let at = |name: &str| {
+        rows.iter().position(|r| {
+            matches!(r, BranchRow::Branch { index, .. } if app.git.branches[*index].name == name)
+        })
     };
-    assert_eq!(
-        app.overlays.picker.branch_rows.as_deref().unwrap(),
-        [
-            BranchRow::Heading(BranchSection::Local),
-            label("feature/login"),
-            BranchRow::Heading(BranchSection::Remote(None)),
-            label("origin/feature/login"),
-        ]
+    assert!(at("feature/login").is_some());
+    assert!(matches!(rows[0], BranchRow::Locals { recent: false, .. }));
+    assert!(
+        rows.iter()
+            .any(|r| matches!(r, BranchRow::Remotes { open: true, .. }))
     );
+    assert!(!rows.iter().any(|r| matches!(r, BranchRow::Create(_))));
+    app.overlays.picker.selected = at("origin/feature/login").unwrap();
     paint(&mut app);
-    assert!(app.hits.picker_parts.is_empty());
-    app.picker_move(true);
     app.picker_accept();
     assert!(!app.overlays.picker.open);
     assert_eq!(app.log_branch_filter(), Some("origin/feature/login"));
@@ -787,7 +815,7 @@ fn log_filters_by_text_branch_and_author_and_shows_a_files_history() {
 /// 已应用的筛选，查询只有空白字符时视为没有查询；筛选的分支已不在列表中时选中「全部」。
 #[test]
 fn log_branch_filter_selects_the_applied_branch_or_all() {
-    use crate::app::git::branch::picker::{BranchRow, BranchSection};
+    use crate::app::git::branch::picker::BranchRow;
     use crate::app::git::log::LogTarget;
 
     let Some((mut app, root)) = git_app("git-log-branch-filter", false) else {
@@ -806,7 +834,7 @@ fn log_branch_filter_selects_the_applied_branch_or_all() {
         other => panic!("{other:?}"),
     };
 
-    // 有多个远程时按远程分组，组标题写远程名。
+    // 有多个远程时远程一组里按远程名分出目录，与分支选择器相同。
     for remote in ["fork", "origin"] {
         let name = format!("refs/remotes/{remote}/feature/login");
         git_in(&root, &["update-ref", &name, "feature/login"]);
@@ -814,36 +842,33 @@ fn log_branch_filter_selects_the_applied_branch_or_all() {
     app.git_refresh();
     app.press_log(LogTarget::Branch);
     app.edit_field(|f| f.insert("login"));
-    let headings: Vec<_> = (app.overlays.picker.branch_rows.as_deref().unwrap().iter())
-        .filter_map(|row| match row {
-            BranchRow::Heading(section) => Some(section.clone()),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(
-        headings,
-        [
-            BranchSection::Local,
-            BranchSection::Remote(Some("fork".to_owned())),
-            BranchSection::Remote(Some("origin".to_owned())),
-        ]
-    );
+    let rows = app.overlays.picker.branch_rows.as_deref().unwrap();
+    for remote in ["fork", "origin"] {
+        // 只有一层子目录的目录合成一行写（`fork/feature`）。
+        let folder = |r: &BranchRow| match r {
+            BranchRow::Folder { label, .. } => label.starts_with(remote),
+            _ => false,
+        };
+        assert!(rows.iter().any(folder));
+    }
     app.close_picker();
     paint(&mut app);
 
     // 字符分散命中：`ftlg` 按顺序出现在 feature/login 中。
     app.press_log(LogTarget::Branch);
     app.edit_field(|f| f.insert("ftlg"));
-    assert_eq!(label(selected(&app)), "feature/login");
+    // 分支写在 `feature` 目录下，行里只写 `login`。
+    assert_eq!(label(selected(&app)), "login");
     app.picker_accept();
     assert_eq!(app.log_branch_filter(), Some("feature/login"));
 
-    // 重新打开时选中已应用的筛选，只输入空白字符时同样如此。
+    // 重新打开时：筛选的分支在收起的目录里看不见（默认只展开当前分支所在的目录），选中「全部」；
+    // 只输入空白字符时视为没有查询，同样如此。
     paint(&mut app);
     app.press_log(LogTarget::Branch);
-    assert_eq!(label(selected(&app)), "feature/login");
+    assert_eq!(selected(&app), BranchRow::All);
     app.edit_field(|f| f.insert(" "));
-    assert_eq!(label(selected(&app)), "feature/login");
+    assert_eq!(selected(&app), BranchRow::All);
 
     // 「全部」清除筛选。
     app.edit_field(|f| {
@@ -858,7 +883,7 @@ fn log_branch_filter_selects_the_applied_branch_or_all() {
     assert_eq!(app.log_branch_filter(), None);
 
     // 筛选的分支已删除：选中「全部」，回车清除筛选。
-    app.change_log_query(|q| q.branch = Some("deleted/branch".to_owned()));
+    app.change_log_query(|q| q.branches = vec!["deleted/branch".to_owned()]);
     paint(&mut app);
     app.press_log(LogTarget::Branch);
     assert_eq!(selected(&app), BranchRow::All);
@@ -916,7 +941,17 @@ fn a_tag_can_be_created_on_a_commit_from_the_log() {
         .oid
         .clone();
     // 右键菜单里有「新建标签…」和「复制短提交号」。
-    let menu = crate::app::input::context_menu::log_commit_menu(true, "main", &[]);
+    use crate::app::input::context_menu::{CommitActions, log_commit_menu};
+    let actions = CommitActions {
+        enabled: true,
+        undo: false,
+        push: false,
+        on_head: None,
+        child: false,
+        parent: true,
+        changes: true,
+    };
+    let menu = log_commit_menu(actions, "main", Vec::new(), &[]);
     for command in [MenuCommand::LogNewTag, MenuCommand::LogCopyShortOid] {
         assert!(
             menu.contains(&MenuEntry::Item(command, true)),
@@ -940,6 +975,14 @@ fn a_tag_can_be_created_on_a_commit_from_the_log() {
         .output()
         .unwrap();
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), oid);
+    // 打开着的日志随之重新读取：该提交上出现这个标签。
+    let mut logs = app.editor.documents.iter().filter_map(|d| d.log.as_deref());
+    let commit = logs.next().unwrap().commits.iter().find(|c| c.oid == oid);
+    let refs = &commit.unwrap().refs;
+    assert!(
+        refs.contains(&winc_editor::git::Ref::Tag("v9.0".into())),
+        "{refs:?}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -1253,5 +1296,115 @@ fn going_to_an_amended_away_commit_pins_it_for_comparison() {
     let view = log(&app);
     assert_eq!(view.query.pin, None);
     assert_eq!(view.commits[view.selected.unwrap()].oid, new);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn log_compares_with_a_revision_missing_from_the_list() {
+    use crate::app::git::log::LogTarget;
+    use crate::app::input::context_menu::{MenuCommand, MenuEntry, MenuTarget};
+
+    let Some((mut app, root)) = git_app("git-compare-revision", false) else {
+        return;
+    };
+    let head = || {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        String::from_utf8(output.stdout).unwrap().trim().to_owned()
+    };
+    let file = root.join("src/main.rs");
+    let before = "fn main() { before(); }\n";
+    let after = "fn main() { after(); }\n";
+    std::fs::write(&file, before).unwrap();
+    git_in(&root, &["add", "src/main.rs"]);
+    git_in(&root, &["commit", "-m", "before amend"]);
+    let old = head();
+    std::fs::write(&file, after).unwrap();
+    git_in(&root, &["commit", "--amend", "-am", "after amend"]);
+    let new = head();
+    git_in(&root, &["commit", "--amend", "-m", "amended again"]);
+    let tip = head();
+
+    app.git_refresh();
+    app.run_action(Action::GitShowLog);
+    paint(&mut app);
+    fn log(app: &App) -> &winc_editor::git::log::LogView {
+        app.editor.active().unwrap().log.as_deref().unwrap()
+    }
+    assert!(
+        log(&app)
+            .commits
+            .iter()
+            .all(|c| c.oid != old && c.oid != new)
+    );
+    let enter = |app: &mut App| assert!(app.dialog_key(&Key::Named(NamedKey::Enter), "", false));
+    app.run_action(Action::GitGoToRevision);
+    app.edit_field(|f| f.insert(&old[..12]));
+    enter(&mut app);
+    paint(&mut app);
+    assert_eq!(log(&app).query.pin.as_deref(), Some(old.as_str()));
+
+    let open_compare = |app: &mut App| {
+        let command = MenuCommand::LogCompareRevision;
+        app.open_context_menu(MenuTarget::LogCommit(old.clone()), (0.0, 0.0));
+        assert!(
+            app.overlays
+                .context_menu
+                .as_ref()
+                .unwrap()
+                .entries
+                .iter()
+                .any(|entry| matches!(entry, MenuEntry::Item(item, true) if *item == command))
+        );
+        app.run_menu_command(command);
+        assert_eq!(app.focus, Focus::Dialog);
+    };
+    open_compare(&mut app);
+    app.edit_field(|f| f.insert(&"0".repeat(12)));
+    enter(&mut app);
+    // 无法解析的版本：只提示原因，不进入比较。
+    paint(&mut app);
+    assert!(log(&app).compare.is_none());
+    let notice = app.notice.text.as_deref().unwrap_or_default();
+    assert!(notice.contains(&"0".repeat(12)), "{notice}");
+
+    open_compare(&mut app);
+    app.edit_field(|f| f.insert(&new[..12]));
+    enter(&mut app);
+    paint(&mut app);
+    let view = log(&app);
+    assert_eq!(view.query.pin.as_deref(), Some(old.as_str()));
+    assert!(view.commits.iter().all(|c| c.oid != new));
+    let compare = view.compare.as_ref().unwrap();
+    assert_eq!((&compare.from, &compare.to), (&old, &new));
+    let files = compare.files.as_ref().unwrap();
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].path, file);
+    app.press_log(LogTarget::File(0));
+    let diff = app.editor.active().unwrap().diff.as_deref().unwrap();
+    assert_eq!(diff.old.text, before);
+    assert_eq!(diff.new.text, after);
+    assert_eq!(head(), tip);
+
+    // 输入的标签是所选提交的祖先：排在旧的一侧，显示标签名，取数据用解析出的提交号。
+    git_in(&root, &["tag", "base", "HEAD~1"]);
+    git_in(&root, &["checkout", "--quiet", "HEAD~1"]);
+    let base = head();
+    git_in(&root, &["checkout", "--quiet", "-"]);
+    app.run_action(Action::GitShowLog);
+    open_compare(&mut app);
+    app.edit_field(|f| f.insert("base"));
+    enter(&mut app);
+    paint(&mut app);
+    let compare = log(&app).compare.as_ref().unwrap();
+    assert_eq!((&compare.from, &compare.to), (&base, &old));
+    assert_eq!(compare.from_name.as_deref(), Some("base"));
+    assert_eq!(compare.to_name, None);
+    assert_eq!(compare.files.as_ref().unwrap().len(), 1);
     let _ = std::fs::remove_dir_all(&root);
 }

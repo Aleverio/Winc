@@ -24,8 +24,6 @@ pub(crate) enum ScrollTarget {
     Picker,
     /// 编辑区的标签栏。
     Tabs,
-    /// 日志中历史差异的文件列表（借用提交视图的列表）。
-    LogList,
     /// 提交视图的提交信息框。
     CommitMessage,
     /// 提交视图的更改列表。
@@ -38,6 +36,10 @@ pub(crate) enum ScrollTarget {
     Tree,
     /// 日志的详情一栏。
     LogDetails,
+    /// 日志左侧的分支面板。
+    LogBranches,
+    /// 从日志打开的差异左侧的文件栏。
+    LogFiles,
     /// 终端面板的标签条。
     TerminalStrip,
     /// 终端的回滚缓冲，或终端中接收滚轮的程序。
@@ -67,13 +69,13 @@ impl ScrollTarget {
             self,
             Self::Picker
                 | Self::Tabs
-                | Self::LogList
                 | Self::Commit
                 | Self::Outline
                 | Self::Problems
                 | Self::Results
                 | Self::Tree
                 | Self::TerminalStrip
+                | Self::LogFiles
         )
     }
 }
@@ -116,8 +118,6 @@ impl App {
             ScrollTarget::Picker
         } else if l.tabs.contains(x, y) {
             ScrollTarget::Tabs
-        } else if self.log_diff_tree().is_some() && in_list(self) {
-            ScrollTarget::LogList
         } else if self.commit_shown() && self.commit_parts().message.contains(x, y) {
             ScrollTarget::CommitMessage
         } else if self.commit_shown() && in_list(self) {
@@ -132,7 +132,13 @@ impl App {
             ScrollTarget::LogDetails
         } else if self.problems.open && l.terminal.contains(x, y) {
             ScrollTarget::Problems
-        } else if l.terminal.contains(x, y) && y < terminal_header {
+        } else if self.log_active() && self.log_parts().branches.contains(x, y) {
+            ScrollTarget::LogBranches
+        } else if self
+            .terminal_tab_list()
+            .is_some_and(|list| list.contains(x, y))
+            || (l.terminal.contains(x, y) && y < terminal_header)
+        {
             ScrollTarget::TerminalStrip
         } else if l.terminal.contains(x, y) {
             ScrollTarget::Terminal
@@ -146,6 +152,8 @@ impl App {
             ScrollTarget::Picture
         } else if self.table_at(x, y) {
             ScrollTarget::Table
+        } else if self.in_log_files(x, y) {
+            ScrollTarget::LogFiles
         } else if l.editor.contains(x, y)
             && let Some(doc) = self.editor.active()
         {
@@ -168,6 +176,10 @@ impl App {
         (dx, dy): (f32, f32),
     ) {
         let (x, y) = origin;
+        // 补全列表浮在编辑区之上，滚轮落在列表上时滚动列表。
+        if self.scroll_suggest(origin, dy) {
+            return;
+        }
         // 可以横向滚动的区域按住 `Shift` 时改为横向滚动；列表仍按竖直方向滚动。
         let (sx, sy) = if shift { (dy, 0.0) } else { (dx, dy) };
         // 竖直滚动同样用于横向排列的标签栏、标签条和输入框。
@@ -191,9 +203,6 @@ impl App {
             }
             ScrollTarget::Picker if self.overlays.picker.places.is_some() => self.step_places(dy),
             ScrollTarget::Tabs => self.scroll_pane_by(target, along),
-            ScrollTarget::LogList => {
-                self.with_log_list(|app| app.scroll_pane_by(ScrollTarget::Commit, dy));
-            }
             ScrollTarget::CommitMessage => {
                 // 上限在绘制时按文字的行数收紧。
                 let view = &mut self.git.commit.message.view;
@@ -207,14 +216,21 @@ impl App {
                     self.panels.tree.scroll_x = (self.panels.tree.scroll_x - sx).clamp(0.0, max_x);
                 }
             }
-            ScrollTarget::TerminalStrip => self.terminal.strip.wheel(along),
+            ScrollTarget::TerminalStrip => {
+                let delta = if self.terminal_tab_list().is_some() {
+                    dy
+                } else {
+                    along
+                };
+                self.terminal.strip.wheel(delta);
+            }
             ScrollTarget::Terminal => self.terminal_wheel(dy),
             ScrollTarget::Problems => self.scroll_problems(dy),
             ScrollTarget::Markdown => {
                 // 横向滚动落在比正文宽的表格上时滚动该表格，其余按竖直方向滚动预览。
                 let table =
                     sx != 0.0 && crate::app::preview::markdown::laid::scroll_table(self, x, y, sx);
-                if !table {
+                if !table && !self.scroll_toc((x, y), dy) {
                     self.scroll_pane_by(target, dy);
                 }
             }
@@ -240,7 +256,9 @@ impl App {
             | ScrollTarget::Commit
             | ScrollTarget::Outline
             | ScrollTarget::Results
-            | ScrollTarget::LogDetails => self.scroll_pane_by(target, dy),
+            | ScrollTarget::LogDetails
+            | ScrollTarget::LogBranches
+            | ScrollTarget::LogFiles => self.scroll_pane_by(target, dy),
         }
         if target.moves_rows() {
             self.set_hover(self.hover_at(self.pointer.mouse.0, self.pointer.mouse.1));
@@ -281,6 +299,8 @@ impl App {
                 let view = self.editor.active().and_then(|d| d.log.as_deref());
                 view.map(|view| view.details_scroll)
             }
+            ScrollTarget::LogBranches => Some(self.git.log.branches_scroll),
+            ScrollTarget::LogFiles => Some(self.git.log.files.scroll),
             ScrollTarget::Markdown => self
                 .preview
                 .markdown
@@ -307,6 +327,8 @@ impl App {
                 tree_max_scroll(self.layout.tree, rows)
             }
             ScrollTarget::LogDetails => self.git.log.details_max,
+            ScrollTarget::LogBranches => self.git.log.branches_max,
+            ScrollTarget::LogFiles => self.git.log.files.max,
             ScrollTarget::Markdown => self.preview.markdown.max_scroll(),
             ScrollTarget::Pdf => self.preview.pdf.max_scroll(),
             _ => 0.0,
@@ -343,6 +365,8 @@ impl App {
                     view.details_scroll = scroll;
                 }
             }
+            ScrollTarget::LogBranches => self.git.log.branches_scroll = scroll,
+            ScrollTarget::LogFiles => self.git.log.files.scroll = scroll,
             ScrollTarget::Markdown => self.preview.markdown.set_scroll(scroll),
             ScrollTarget::Pdf => self.preview.pdf.scroll = scroll,
             _ => {}

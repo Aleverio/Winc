@@ -214,6 +214,10 @@ pub fn move_to_trash(path: &Path) -> io::Result<()> {
 
     #[cfg(windows)]
     {
+        // WSL 发行版中的路径是网络路径，没有回收站：直接删除，不交给系统再询问一次。
+        if has_no_trash(path, true) {
+            return winc_backend::fs::remove_all(path);
+        }
         crate::windows::move_to_recycle_bin(path)
     }
 
@@ -246,9 +250,13 @@ pub fn reveal_in_file_manager(path: &Path) -> io::Result<()> {
     if cfg!(target_os = "macos") {
         spawn(Command::new("open").arg("-R").arg(path))
     } else if cfg!(windows) {
-        let mut select = std::ffi::OsString::from("/select,");
-        select.push(path);
-        spawn(Command::new("explorer").arg(select))
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            spawn(Command::new("explorer").raw_arg(explorer_select(path)))
+        }
+        #[cfg(not(windows))]
+        Ok(())
     } else {
         #[cfg(all(unix, not(target_os = "macos")))]
         if !cfg!(test) {
@@ -266,6 +274,17 @@ pub fn reveal_in_file_manager(path: &Path) -> io::Result<()> {
         let folder = path.parent().unwrap_or(path);
         spawn(Command::new("xdg-open").arg(folder))
     }
+}
+
+/// 返回让资源管理器选中 `path` 的命令行参数，原样传给 `explorer`。
+///
+/// 引号只包含路径：整个参数加引号时 `explorer` 无法解析，会改为打开默认的目录。
+#[cfg_attr(not(any(windows, test)), allow(dead_code))]
+fn explorer_select(path: &Path) -> std::ffi::OsString {
+    let mut select = std::ffi::OsString::from("/select,\"");
+    select.push(path);
+    select.push("\"");
+    select
 }
 
 /// 请桌面的文件管理器打开 `path` 所在的目录并选中 `path`（接口方法 `ShowItems`）。
@@ -297,6 +316,12 @@ const TERMINALS: [&str; 6] = [
     "xterm",
 ];
 
+/// `path` 所在的位置是否没有废纸篓，删除后无法恢复：远端主机上的路径，以及 Windows
+/// （`windows`）上 WSL 发行版中的路径。
+pub fn has_no_trash(path: &Path, windows: bool) -> bool {
+    winc_backend::is_remote(path) || windows && winc_editor::wsl::locate(path).is_some()
+}
+
 /// 在外部终端中打开 `dir`。
 ///
 /// `app` 是配置中指定的终端程序。未指定时 macOS 用系统自带的终端应用，Windows 用 `cmd.exe`，
@@ -314,9 +339,12 @@ pub fn open_terminal(dir: &Path, app: Option<&str>) -> io::Result<()> {
         let app = app.unwrap_or("Terminal");
         spawn(Command::new("open").args(["-a", app]).arg(dir))
     } else if cfg!(windows) {
-        let app = app.unwrap_or("cmd.exe");
+        let (args, cwd) = windows_terminal(dir, app);
         let mut command = Command::new("cmd");
-        command.args(["/C", "start", "", app]).current_dir(dir);
+        command.args(["/C", "start", ""]).args(args);
+        if let Some(cwd) = cwd {
+            command.current_dir(cwd);
+        }
         // 只借用 `cmd` 的 `start` 启动终端：`cmd` 自身不需要窗口，打开的终端有自己的窗口。
         // `0x0800_0000` 是 `CREATE_NO_WINDOW`，即不为 `cmd` 创建控制台窗口。
         #[cfg(windows)]
@@ -338,6 +366,20 @@ pub fn open_terminal(dir: &Path, app: Option<&str>) -> io::Result<()> {
     }
 }
 
+/// 返回 Windows 上打开终端时交给 `start` 的程序和参数，以及启动时的工作目录。
+///
+/// `dir` 位于 WSL 发行版中且没有指定终端程序时，启动 `wsl.exe` 进入那个发行版和目录：`cmd.exe`
+/// 不能以发行版的网络路径作为当前目录，会退回到 Windows 的目录。其余情况在 `dir` 下启动 `app`。
+fn windows_terminal<'a>(dir: &'a Path, app: Option<&str>) -> (Vec<String>, Option<&'a Path>) {
+    match winc_editor::wsl::locate(dir).filter(|_| app.is_none()) {
+        Some(place) => {
+            let args = ["wsl.exe", "-d", &place.distro, "--cd", &place.path];
+            (args.map(str::to_owned).into(), None)
+        }
+        None => (vec![app.unwrap_or("cmd.exe").to_owned()], Some(dir)),
+    }
+}
+
 /// 启动子进程，并在后台线程中等待其结束，避免留下僵尸进程。
 ///
 /// 测试中不实际启动：测试会模拟按键和菜单操作，真实启动会弹出文件管理器、浏览器或终端的窗口。
@@ -348,6 +390,38 @@ fn spawn(command: &mut Command) -> io::Result<()> {
     let mut child = command.spawn()?;
     std::thread::spawn(move || child.wait());
     Ok(())
+}
+
+/// 返回当前本地时间：年、月、日、时、分、秒。
+#[cfg(unix)]
+#[allow(unsafe_code)] // localtime_r
+pub fn local_time() -> (i32, i32, i32, i32, i32, i32) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs()) as libc::time_t;
+    let mut tm = std::mem::MaybeUninit::<libc::tm>::zeroed();
+    // SAFETY: `localtime_r` 只读 `now`、只写传入的结构体，失败时返回空指针。
+    if unsafe { libc::localtime_r(&now, tm.as_mut_ptr()).is_null() } {
+        return (1970, 1, 1, 0, 0, 0);
+    }
+    // SAFETY: 调用成功时结构体已初始化。
+    let tm = unsafe { tm.assume_init() };
+    let (y, mo) = (tm.tm_year + 1900, tm.tm_mon + 1);
+    (y, mo, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec)
+}
+
+/// 返回当前本地时间：年、月、日、时、分、秒。
+#[cfg(windows)]
+#[allow(unsafe_code)] // GetLocalTime
+pub fn local_time() -> (i32, i32, i32, i32, i32, i32) {
+    let mut t = std::mem::MaybeUninit::zeroed();
+    // SAFETY: `GetLocalTime` 只写传入的结构体，不会失败。
+    unsafe { windows_sys::Win32::System::SystemInformation::GetLocalTime(t.as_mut_ptr()) };
+    // SAFETY: 调用后结构体已初始化。
+    let t: windows_sys::Win32::Foundation::SYSTEMTIME = unsafe { t.assume_init() };
+    let field = i32::from;
+    let (y, mo, d) = (field(t.wYear), field(t.wMonth), field(t.wDay));
+    (y, mo, d, field(t.wHour), field(t.wMinute), field(t.wSecond))
 }
 
 #[cfg(test)]

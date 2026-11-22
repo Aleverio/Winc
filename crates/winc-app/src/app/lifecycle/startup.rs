@@ -103,6 +103,7 @@ impl App {
             ime: Default::default(),
             layout: Layout::default(),
             tabs: TabBar::default(),
+            panes: Default::default(),
             diff: Default::default(),
             status: Default::default(),
             caches: crate::app::editor::EditorCaches {
@@ -125,11 +126,13 @@ impl App {
                 split: preview::images::SplitPreview::default(),
                 markdown: preview::markdown::MarkdownPreview::default(),
                 pdf: preview::pdf::PdfPreview::default(),
+                latex: preview::latex::LatexBuilds::default(),
                 split_share: None,
             },
             motion: crate::app::animation::Motions {
                 setup_intro: None,
                 setup_outro: None,
+                setup_page: None,
                 tool_fold: ToolFold::default(),
                 bar_card: Default::default(),
                 dialog_card: Default::default(),
@@ -158,6 +161,7 @@ impl App {
                 pane_glides: Vec::new(),
                 fling: None,
                 wheel: Default::default(),
+                keyed: false,
             },
             jumps: crate::app::editor::Jumps {
                 name_hint: None,
@@ -187,6 +191,9 @@ impl App {
             hits: Default::default(),
             disk: crate::app::workspace::DiskState {
                 watcher: None,
+                extra_watchers: Vec::new(),
+                solo: false,
+                open_alone: None,
                 changes_due: None,
                 rereads: Default::default(),
                 saves: Default::default(),
@@ -200,6 +207,8 @@ impl App {
                 closed: Vec::new(),
             },
             pending_chord: None,
+            taps: Default::default(),
+            setup: Default::default(),
             settings: SettingsState::default(),
             format: FormatState::new(formatter()),
             git: {
@@ -213,6 +222,7 @@ impl App {
             ask_on_quit: Arc::new(AtomicBool::new(false)),
             deleted_told: HashSet::new(),
             auto_save_pending: HashMap::new(),
+            auto_save_watch: Default::default(),
             notice: Default::default(),
             frame: crate::app::lifecycle::FrameState {
                 renderer: None,

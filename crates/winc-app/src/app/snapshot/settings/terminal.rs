@@ -105,6 +105,19 @@ fn the_terminal_font_size_and_switches_write_the_config() {
     assert_eq!((app.fonts.terminal, app.fonts.code), (code + 1.0, code));
     assert_eq!(app.config.editor_size, None);
 
+    // 字重：调整前随全局字重；调整后只改终端，调回与全局相同的值也不再随全局字重变化。
+    app.config.ui_font_weight = Some(500);
+    assert_eq!(app.setting_value(Setting::TerminalFontWeight).0, "500");
+    app.settings_adjust(Setting::TerminalFontWeight, false);
+    assert_eq!(app.config.terminal_font_weight, Some(400));
+    assert_eq!(app.config.ui_font_weight, Some(500));
+    app.settings_adjust(Setting::TerminalFontWeight, true);
+    assert_eq!(app.config.terminal_font_weight, Some(500));
+    app.settings_adjust(Setting::FontWeight, true);
+    assert_eq!(app.setting_value(Setting::TerminalFontWeight).0, "500");
+    app.config.ui_font_weight = None;
+    app.config.terminal_font_weight = None;
+
     // 字体：菜单的第一项是「跟随编辑器」，和编辑器字体一样先列出等宽字体。
     app.settings_open_menu(Setting::TerminalFont);
     assert_eq!(
@@ -129,6 +142,7 @@ fn the_terminal_font_size_and_switches_write_the_config() {
         (Setting::TerminalConfirmClose, true),
         (Setting::TerminalPrompt, true),
         (Setting::TerminalShellIntegration, true),
+        (Setting::TerminalApplicationPriority, false),
     ] {
         assert_eq!(app.switch_on(setting), on, "{setting:?}");
         app.settings_toggle(setting);
@@ -138,12 +152,17 @@ fn the_terminal_font_size_and_switches_write_the_config() {
     assert_eq!(app.config.terminal_confirm_close, Some(false));
     assert_eq!(app.config.terminal_prompt, Some(false));
     assert_eq!(app.config.terminal_shell_integration, Some(false));
+    assert_eq!(app.config.terminal_application_priority, Some(true));
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn the_position_and_meta_key_are_chosen_from_menus() {
     let (mut app, dir) = terminal_settings("settings-terminal-choices");
+    assert_eq!(
+        Setting::TerminalTabPosition.control(),
+        SettingControl::Choice
+    );
 
     app.settings_open_menu(Setting::TerminalPosition);
     assert_eq!(
@@ -153,6 +172,30 @@ fn the_position_and_meta_key_are_chosen_from_menus() {
     assert!(app.menu_checked(MenuCommand::TerminalPosition(false)));
     app.run_menu_command(MenuCommand::TerminalPosition(true));
     assert_eq!(app.config.terminal_right, Some(true));
+    assert!(app.terminal_right());
+
+    app.settings_open_menu(Setting::TerminalTabPosition);
+    assert_eq!(
+        app.overlays.context_menu.as_ref().map(|m| &m.target),
+        Some(&MenuTarget::TerminalTabPosition)
+    );
+    assert_eq!(
+        app.menu_label(MenuCommand::TerminalTabPosition(false))
+            .title,
+        "顶部"
+    );
+    assert_eq!(
+        app.menu_label(MenuCommand::TerminalTabPosition(true)).title,
+        "右侧"
+    );
+    assert!(app.menu_checked(MenuCommand::TerminalTabPosition(false)));
+    app.run_menu_command(MenuCommand::TerminalTabPosition(true));
+    assert_eq!(app.config.terminal_vertical_tabs, Some(true));
+    assert!(app.menu_checked(MenuCommand::TerminalTabPosition(true)));
+    assert!(app.terminal_right());
+    app.settings_open_menu(Setting::TerminalTabPosition);
+    app.run_menu_command(MenuCommand::TerminalTabPosition(false));
+    assert_eq!(app.config.terminal_vertical_tabs, Some(false));
     assert!(app.terminal_right());
 
     // 「Meta 键」只在 macOS 上列出。
@@ -166,6 +209,31 @@ fn the_position_and_meta_key_are_chosen_from_menus() {
             app.config.option_as_meta,
             Some(winc_config::OptionAsMeta::Both)
         );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 绘制终端标签位置菜单，覆盖顶部和右侧两种选择。
+///
+/// ```text
+/// cargo test -p winc-app snapshot_terminal_tab_position_menu -- --ignored
+/// ```
+#[test]
+#[ignore = "截图，手动运行"]
+fn snapshot_terminal_tab_position_menu() {
+    let (mut app, dir) = terminal_settings("settings-terminal-tab-position");
+    for right in [false, true] {
+        app.set_terminal_tab_position(right);
+        app.settings_open_menu(Setting::TerminalTabPosition);
+        shoot(
+            &mut app,
+            if right {
+                "settings-terminal-tabs-right"
+            } else {
+                "settings-terminal-tabs-top"
+            },
+        );
+        app.overlays.context_menu = None;
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -274,4 +342,40 @@ fn shoot_terminal_page_slide() {
         shoot(&mut app, &format!("settings-terminal-slide-out-{theme}"));
         let _ = std::fs::remove_dir_all(&dir);
     }
+}
+
+/// 配置文件里只改了字重（另一个窗口或手动修改）：重新加载字体，终端的文字按新的字重画。
+#[test]
+fn a_font_weight_edited_in_the_config_file_reloads_the_fonts() {
+    use winc_render::{Color, FontKind};
+    let (mut app, dir) = terminal_settings("settings-terminal-weight-adopt");
+    app.frame.renderer =
+        Some(Renderer::offscreen(60.0, 40.0, 1.0, Color::hex(0x000000), None, None).unwrap());
+    app.apply_fonts().unwrap();
+    let ink = |app: &mut App, kind: FontKind| {
+        let renderer = app.frame.renderer.as_mut().unwrap();
+        renderer.draw(|frame| {
+            let all = frame.bounds();
+            frame.text(kind, 30.0, 5.0, 32.0, "H", Color::hex(0xffffff), all);
+        });
+        let image = renderer.image().unwrap();
+        image.pixels.iter().map(|p| p & 0xff).sum::<u32>()
+    };
+    let (terminal, mono) = (
+        ink(&mut app, FontKind::Terminal),
+        ink(&mut app, FontKind::Mono),
+    );
+
+    let mut config = app.config.clone();
+    config.terminal_font_weight = Some(800);
+    app.adopt_config(config);
+    assert!(ink(&mut app, FontKind::Terminal) > terminal);
+    assert_eq!(ink(&mut app, FontKind::Mono), mono);
+
+    // 全局字重同样生效：终端已单独设置，不随之变化。
+    let mut config = app.config.clone();
+    config.ui_font_weight = Some(800);
+    app.adopt_config(config);
+    assert!(ink(&mut app, FontKind::Mono) > mono);
+    let _ = std::fs::remove_dir_all(&dir);
 }

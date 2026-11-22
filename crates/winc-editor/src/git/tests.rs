@@ -6,6 +6,7 @@
 use super::*;
 
 mod history;
+mod locate;
 
 fn root() -> PathBuf {
     PathBuf::from("/repo")
@@ -165,6 +166,63 @@ fn branches_list_local_first_and_skip_remote_head() {
 }
 
 #[test]
+fn a_new_repository_ignores_what_its_project_type_builds() {
+    use super::remote::starter_ignore;
+    assert_eq!(starter_ignore(&[]), ".DS_Store\nThumbs.db\n");
+    let rust = starter_ignore(&["Cargo.toml"]);
+    assert!(rust.lines().any(|line| line == "/target/"));
+    assert!(!rust.contains("node_modules"));
+    let mixed = starter_ignore(&["package.json", "requirements.txt"]);
+    for line in ["node_modules/", "__pycache__/", ".venv/"] {
+        assert!(mixed.lines().any(|l| l == line), "{line}");
+    }
+    assert!(mixed.ends_with('\n'));
+}
+
+#[test]
+fn the_git_version_is_read_from_its_first_two_numbers() {
+    use super::sync::parse_version;
+    assert_eq!(
+        parse_version("git version 2.54.0 (Apple Git-157)\n"),
+        Some((2, 54))
+    );
+    assert_eq!(
+        parse_version("git version 2.47.1.windows.2\n"),
+        Some((2, 47))
+    );
+    assert_eq!(parse_version("git version 2.30"), Some((2, 30)));
+    assert_eq!(parse_version("git version 3.0.0-rc1"), Some((3, 0)));
+    assert_eq!(parse_version("something else"), None);
+    // 版本按（主，次）比较：2.9 比 2.30 旧，读不出版本时不加新选项。
+    assert!(parse_version("git version 2.9.5") < Some((2, 30)));
+    assert!(parse_version("?") < Some((2, 30)));
+}
+
+#[test]
+fn branches_carry_how_far_they_are_from_their_upstream() {
+    let line =
+        |name: &str, track: &str| format!("refs/heads/{name}\0 \0origin/{name}\0a\00\0\0{track}\n");
+    let output = [
+        line("ahead", "ahead 3"),
+        line("behind", "behind 2"),
+        line("both", "ahead 1, behind 4"),
+        line("even", ""),
+        line("lost", "gone"),
+    ]
+    .concat();
+    let branches = parse_branches(&output);
+    let track = |name: &str| {
+        let branch = branches.iter().find(|b| b.name == name).unwrap();
+        (branch.ahead, branch.behind)
+    };
+    assert_eq!(track("ahead"), (3, 0));
+    assert_eq!(track("behind"), (0, 2));
+    assert_eq!(track("both"), (1, 4));
+    assert_eq!(track("even"), (0, 0));
+    assert_eq!(track("lost"), (0, 0));
+}
+
+#[test]
 fn an_upstream_that_no_longer_exists_counts_as_none() {
     let output = "refs/heads/gone\0 \0origin/gone\0a\nrefs/heads/kept\0 \0origin/kept\0b\n\
                   refs/heads/local\0 \0kept\0c\nrefs/heads/origin/kept\0 \0remotes/origin/kept\0d\n\
@@ -230,6 +288,11 @@ fn failures_pick_the_line_that_explains() {
 ///
 /// 找不到 `git` 时返回 `None`。
 pub(super) fn real_git() -> Option<Git> {
+    real_git_with(None)
+}
+
+/// 同 [`real_git`]，`program` 是代替 `git` 运行的程序（模拟旧版本的脚本）。
+pub(super) fn real_git_with(program: Option<&str>) -> Option<Git> {
     let mut vars: Vec<_> = std::env::vars_os().collect();
     for (k, v) in [
         ("GIT_AUTHOR_NAME", "t"),
@@ -242,6 +305,21 @@ pub(super) fn real_git() -> Option<Git> {
     ] {
         vars.push((k.into(), v.into()));
     }
+    Git::find_with(&Shell::with_vars(vars), program).ok()
+}
+
+/// 同 [`real_git`]，也不读系统和用户的 Git 配置：Git for Windows 在系统配置里写了
+/// `pull.rebase` 等设置，按「没有配置」判断的测试要用它。
+///
+/// 找不到 `git` 时返回 `None`。
+fn unconfigured_git() -> Option<Git> {
+    let ours = ["GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_GLOBAL"];
+    let mut vars: Vec<_> = std::env::vars_os()
+        .filter(|(key, _)| !ours.iter().any(|ours| key == ours))
+        .collect();
+    let missing = crate::test_util::scratch("no-global-config").join("gitconfig");
+    vars.push(("GIT_CONFIG_NOSYSTEM".into(), "1".into()));
+    vars.push(("GIT_CONFIG_GLOBAL".into(), missing.into_os_string()));
     Git::find(&Shell::with_vars(vars)).ok()
 }
 
@@ -295,48 +373,58 @@ fn runs_the_real_git() {
     let untracked = git.head_content(&root, &root.join("b.rs"), &cancel);
     assert_eq!(untracked, Ok(None));
     assert!(status.entries[1].untracked());
+    // 较早的 `git` 只说「Not a valid object name」：版本存在时才算没有该文件。
+    let old = b"fatal: Not a valid object name HEAD:tests/e2e/README.md\n";
+    assert!(unnamed(old, "HEAD") && !unnamed(old, "main"));
+    assert!(unnamed(b"fatal: Not a valid object name :b.rs\n", ""));
+    assert!(!unnamed(
+        b"fatal: path 'b.rs' does not exist in 'HEAD'\n",
+        "HEAD"
+    ));
+    assert!(git.has_version(&root, "HEAD", &cancel) && git.has_version(&root, "", &cancel));
+    assert!(git.has_version(&root, "main", &cancel));
+    assert!(!git.has_version(&root, "no-such-branch", &cancel));
+    assert!(!git.has_version(&root, "--all", &cancel));
 
-    // 另一个文件已在暂存区：只提交 a.rs 时该文件的暂存状态保持不变。
-    std::fs::write(dir.join("c.rs"), "staged\n").unwrap();
-    sh(&["add", "c.rs"]);
+    // 提交暂存区的内容：只暂存 a.rs，未暂存的文件留在工作区。
     let a = root.join("src/a.rs");
-    let oid = git.commit(
-        &root,
-        "second\n\n正文",
-        std::slice::from_ref(&a),
-        &[],
-        &[],
-        false,
-    );
+    git.stage(&root, std::slice::from_ref(&a)).unwrap();
+    let oid = git.commit(&root, "second\n\n正文", false, false);
     assert!(oid.as_ref().is_ok_and(|o| o.len() >= 7), "{oid:?}");
     let status = git.status(&root, &cancel).unwrap();
     let left: Vec<_> = status.entries.iter().map(|e| e.path.clone()).collect();
-    assert_eq!(left, [root.join("c.rs"), root.join("b.rs")]);
+    assert_eq!(left, [root.join("b.rs")]);
     assert_eq!(git.last_message(&root), "second\n\n正文");
 
     // 提交未跟踪的文件：先加入暂存区再提交；修改上一次提交时只改提交说明。
     let b = root.join("b.rs");
-    git.commit(
-        &root,
-        "third",
-        std::slice::from_ref(&b),
-        std::slice::from_ref(&b),
-        &[],
-        false,
-    )
-    .unwrap();
-    git.commit(&root, "third, amended", &[], &[], &[], true)
-        .unwrap();
+    git.stage(&root, std::slice::from_ref(&b)).unwrap();
+    git.commit(&root, "third", false, false).unwrap();
+    git.commit(&root, "third, amended", false, true).unwrap();
     assert_eq!(git.last_message(&root), "third, amended");
     // 以 `#` 开头的行属于提交说明的正文，不能当作注释删除。
-    git.commit(&root, "#42 修复登录\n\n# 不是注释", &[], &[], &[], true)
+    git.commit(&root, "#42 修复登录\n\n# 不是注释", false, true)
         .unwrap();
     assert_eq!(git.last_message(&root), "#42 修复登录\n\n# 不是注释");
     // 没有可提交的内容时返回错误，原因取自 `git` 的输出。
-    assert!(
-        git.commit(&root, "nothing", std::slice::from_ref(&a), &[], &[], false)
-            .is_err()
+    assert!(git.commit(&root, "nothing", false, false).is_err());
+    assert!(git.commit(&root, "nothing", true, false).is_err());
+
+    // 取消暂存：新加入暂存区的文件恢复为未跟踪，改过的文件恢复为未暂存；工作区的内容不变。
+    let c = root.join("c.rs");
+    std::fs::write(&c, "staged\n").unwrap();
+    std::fs::write(&a, "changed\n").unwrap();
+    git.stage(&root, &[a.clone(), c.clone()]).unwrap();
+    git.unstage(&root, &[a.clone(), c.clone()]).unwrap();
+    let status = git.status(&root, &cancel).unwrap();
+    let of = |path: &Path| status.entries.iter().find(|e| e.path == path).unwrap();
+    assert!(of(&c).untracked());
+    assert_eq!(
+        (of(&a).staged, of(&a).unstaged),
+        (None, Some(Change::Modified))
     );
+    assert_eq!(std::fs::read_to_string(&a).unwrap(), "changed\n");
+    git.stage(&root, std::slice::from_ref(&c)).unwrap();
 
     // 回滚：改过的文件恢复为 `HEAD` 的内容，新加入暂存区的文件移除出暂存区（工作区里的
     // 文件保留）。
@@ -356,8 +444,8 @@ fn runs_the_real_git() {
     let c = status.entries.iter().find(|e| e.path == root.join("c.rs"));
     assert_eq!(c.and_then(|c| c.staged), Some(Change::Added));
 
-    // 只提交一部分：`e.rs` 有两处改动，只提交第一处。提交里只含第一处，工作区保留两处
-    // 改动，暂存区里别的文件（`c.rs`）不受影响。
+    // 只暂存一部分：`e.rs` 有两处改动，暂存区中只登记第一处。提交里只含第一处，工作区保留
+    // 两处改动。
     let e = root.join("e.rs");
     std::fs::write(&e, "1\n2\n3\n4\n5\n6\n7\n8\n").unwrap();
     sh(&["add", "e.rs"]);
@@ -365,19 +453,18 @@ fn runs_the_real_git() {
     let worktree = "1\nTWO\n3\n4\n5\n6\nSEVEN\n8\n";
     std::fs::write(&e, worktree).unwrap();
     let first = "1\nTWO\n3\n4\n5\n6\n7\n8\n";
-    let part = Partial {
-        path: e.clone(),
-        content: first.as_bytes().to_vec(),
-    };
-    git.commit(
-        &root,
-        "only the first",
-        std::slice::from_ref(&e),
-        &[],
-        std::slice::from_ref(&part),
-        false,
-    )
-    .unwrap();
+    git.unstage(&root, &[root.join("c.rs")]).unwrap();
+    git.stage_content(&root, &e, first.as_bytes().to_vec())
+        .unwrap();
+    let staged = git.index_content(&root, &e, &cancel).unwrap().unwrap();
+    assert_eq!(String::from_utf8(staged).unwrap(), first);
+    let status = git.status(&root, &cancel).unwrap();
+    let e_entry = status.entries.iter().find(|x| x.path == e).unwrap();
+    assert_eq!(
+        (e_entry.staged, e_entry.unstaged),
+        (Some(Change::Modified), Some(Change::Modified))
+    );
+    git.commit(&root, "only the first", false, false).unwrap();
     let head = git.head_content(&root, &e, &cancel).unwrap().unwrap();
     assert_eq!(String::from_utf8(head).unwrap(), first);
     assert_eq!(std::fs::read_to_string(&e).unwrap(), worktree);
@@ -388,7 +475,7 @@ fn runs_the_real_git() {
         (None, Some(Change::Modified))
     );
     let c = status.entries.iter().find(|x| x.path == root.join("c.rs"));
-    assert_eq!(c.and_then(|c| c.staged), Some(Change::Added));
+    assert!(c.is_some_and(Entry::untracked));
     // `core.autocrlf`：工作区里是 CRLF、提交里是 LF；取 `HEAD` 版本时做同样的转换，两边
     // 内容一致。
     sh(&["config", "core.autocrlf", "true"]);
@@ -523,6 +610,87 @@ fn risk_fingerprints_stay_the_same_across_versions() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// 分别读出的各范围配置拼成 `--show-scope` 的格式；只有仓库的配置开启了
+/// `extensions.worktreeConfig` 时才另读工作树的配置。
+#[test]
+fn scopes_read_one_by_one_join_like_show_scope() {
+    let joined = join_scopes(&[
+        ("global", b"user.name\nt\0"),
+        ("local", b"core.fsmonitor\nsh x\0core.bare\nfalse\0"),
+        ("worktree", b""),
+    ]);
+    assert_eq!(
+        joined,
+        b"global\0user.name\nt\0local\0core.fsmonitor\nsh x\0local\0core.bare\nfalse\0"
+    );
+    assert!(worktree_config(
+        b"core.bare\nfalse\0extensions.worktreeconfig\ntrue\0"
+    ));
+    assert!(worktree_config(b"extensions.worktreeconfig\0"));
+    assert!(!worktree_config(b"extensions.worktreeconfig\nfalse\0"));
+    assert!(!worktree_config(b"core.bare\nfalse\0"));
+}
+
+/// 回归：2.26 以前的 `git` 没有 `--show-scope`，读不出仓库的配置，每个仓库都要求信任。改为
+/// 按范围分别读取，结果（含 `include` 进来的配置）和指纹与 `--show-scope` 相同。
+///
+/// 找不到 `git` 时跳过。
+#[test]
+fn reading_scopes_one_by_one_finds_the_same_risks() {
+    let shell = Shell::with_vars(std::env::vars_os().collect());
+    let Ok(git) = Git::find(&shell) else {
+        return;
+    };
+    let dir = crate::test_util::scratch("trust-scopes");
+    let root = winc_config::files::canonicalize(&dir).unwrap();
+    let sh = |args: &[&str]| {
+        let ok = Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(args)
+            .output()
+            .unwrap()
+            .status
+            .success();
+        assert!(ok, "git {args:?}");
+    };
+    sh(&["init", "-q", "-b", "main"]);
+    sh(&["config", "core.fsmonitor", "sh -c true"]);
+    sh(&["config", "core.hooksPath", "tools/hooks"]);
+    std::fs::write(root.join(".git/extra"), "[filter \"x\"]\n\tclean = cat\n").unwrap();
+    sh(&["config", "include.path", "extra"]);
+
+    let mut command = git.at(&root);
+    command.args(["config", "--list", "--show-scope", "-z"]);
+    let scoped = git
+        .run(&mut command, SHOW_TIMEOUT, &Cancel::default())
+        .unwrap();
+    let by_scope = git.config_by_scope(&root).unwrap();
+    let risks = |out: &[u8]| parse_risks(out, &root, None, None);
+    let (expected, found) = (risks(&scoped), risks(&by_scope));
+    assert!(
+        found.items.contains(&"filter.x.clean = cat".to_owned()),
+        "{found:?}"
+    );
+    assert_eq!(found, expected);
+
+    // 不认识 `--show-scope` 的 `git`（按 2.25 的样子以 129 退出）：检查照常得出同样的结果。
+    #[cfg(unix)]
+    {
+        let fake = dir.join("old-git");
+        let body = "#!/bin/sh\nfor a in \"$@\"; do\n  if [ \"$a\" = --show-scope ]; then\n    \
+                    echo \"error: unknown option \\`show-scope'\" >&2; exit 129\n  fi\ndone\n\
+                    exec git \"$@\"\n";
+        winc_backend::testing::write_script(&fake, body);
+        let old = Git::find_with(&shell, Some(&fake.to_string_lossy())).unwrap();
+        let inspected = old.inspect(&root).unwrap();
+        assert_eq!(inspected.items, expected.items);
+        assert_eq!(inspected.fingerprint, expected.fingerprint);
+    }
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// 回归：设置 `core.hooksPath` 后仍按 `.git/hooks` 判断，配置目录里的钩子内容变化时不会
 /// 要求重新确认。
 #[cfg(unix)]
@@ -626,7 +794,7 @@ fn untrusted_repository_commands_do_not_run() {
     assert!(!marker.exists(), "不可信的仓库里运行了配置中的命令");
     let risks = git.untrusted(&root).expect("应当不可信");
     assert_eq!(risks.filters, ["x"]);
-    let refused = git.commit(&root, "m", &[root.join("a.t")], &[], &[], false);
+    let refused = git.commit(&root, "m", true, false);
     assert!(refused.unwrap_err().contains("信任"));
     assert!(git.operate(&root, &["switch", "-c", "b"]).is_err());
 
@@ -700,16 +868,8 @@ fn reading_runs_no_signature_or_textconv_program() {
     let marker = root.join("ran");
     // `gpg.program` 不经由 shell 启动，直接执行该脚本；textconv 经由 shell 启动。
     let script = root.join("run.sh");
-    std::fs::write(
-        &script,
-        format!("#!/bin/sh\ntouch '{}'\ncat\n", marker.display()),
-    )
-    .unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-    }
+    let body = format!("#!/bin/sh\ntouch '{}'\ncat\n", marker.display());
+    winc_backend::testing::write_script(&script, &body);
     let script = script.to_str().unwrap();
     sh(&["config", "log.showSignature", "true"], "");
     sh(&["config", "gpg.program", script], "");
@@ -943,11 +1103,11 @@ fn undoing_a_commit_keeps_its_changes_staged() {
     let a = root.join("a.rs");
     std::fs::write(&a, "one\n").unwrap();
     let only = std::slice::from_ref(&a);
-    git.commit(&root, "first", only, only, &[], false).unwrap();
+    git.stage(&root, only).unwrap();
+    git.commit(&root, "first", false, false).unwrap();
     let first = git.last_commit(&root).unwrap();
     std::fs::write(&a, "two\n").unwrap();
-    git.commit(&root, "second\n\n正文", only, &[], &[], false)
-        .unwrap();
+    git.commit(&root, "second\n\n正文", true, false).unwrap();
     let second = git.last_commit(&root).unwrap();
     assert_eq!(second.subject, "second");
     assert_eq!(second.message, "second\n\n正文");
@@ -1054,7 +1214,6 @@ const ISOLATED_REMOTE: [&str; 4] = ["-c", "credential.helper=", "-c", "http.prox
 #[cfg(unix)]
 #[test]
 fn operations_ask_through_the_askpass_program_and_keep_their_output() {
-    use std::os::unix::fs::PermissionsExt;
     let shell = Shell::with_vars(std::env::vars_os().collect());
     let Ok(git) = Git::find(&shell) else {
         return;
@@ -1063,16 +1222,12 @@ fn operations_ask_through_the_askpass_program_and_keep_their_output() {
     let root = winc_config::files::canonicalize(&dir).unwrap();
     let asked = root.join("asked");
     let program = root.join("askpass.sh");
-    std::fs::write(
-        &program,
-        format!(
-            "#!/bin/sh\necho \"$WINC_GIT_ASKPASS|$1\" >> '{}'\n\
-             case \"$1\" in Username*) echo me;; *) echo s3cret;; esac\n",
-            asked.display()
-        ),
-    )
-    .unwrap();
-    std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let body = format!(
+        "#!/bin/sh\necho \"$WINC_GIT_ASKPASS|$1\" >> '{}'\n\
+         case \"$1\" in Username*) echo me;; *) echo s3cret;; esac\n",
+        asked.display()
+    );
+    winc_backend::testing::write_script(&program, &body);
     assert!(
         Command::new("git")
             .args(["init", "-q"])
@@ -1094,6 +1249,7 @@ fn operations_ask_through_the_askpass_program_and_keep_their_output() {
     let git = git.with_askpass(Some(Askpass {
         program,
         endpoint: "the-endpoint".into(),
+        credential_helper: false,
     }));
     assert!(git.operate(&root, &args).is_err());
     let auth = received
@@ -1274,4 +1430,49 @@ fn a_repository_on_a_remote_host_is_read_through_its_connection() {
     winc_backend::remote::disconnect(&target);
     assert!(git.status(&far, &cancel).is_err());
     std::fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn only_online_commands_follow_the_proxy() {
+    use std::ffi::OsStr;
+    let online = |args: &[&str]| super::online(args.iter().map(OsStr::new));
+    assert!(online(&["fetch", "--all"]));
+    assert!(online(&["push", "--set-upstream", "origin", "HEAD"]));
+    assert!(online(&[
+        "-c",
+        "protocol.ext.allow=never",
+        "clone",
+        "--",
+        "url",
+        "dir"
+    ]));
+    assert!(!online(&["add", "--all", "--", "a.rs"]));
+    assert!(!online(&["commit", "-m", "x"]));
+    assert!(!online(&["-c", "core.fsmonitor=false", "stash", "push"]));
+}
+
+/// 拉取的方式按 `branch.<分支>.rebase` 优先、`pull.rebase` 其次读出；都没有配置时为 `None`。
+#[test]
+fn the_pull_mode_reads_the_branch_setting_first() {
+    let Some(git) = unconfigured_git() else {
+        return;
+    };
+    let dir = crate::test_util::scratch("git-pull-mode");
+    let sh = |args: &[&str]| {
+        let ok = Command::new("git")
+            .arg("-C")
+            .arg(&dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok, "git {args:?}");
+    };
+    sh(&["init", "-q", "-b", "main"]);
+    assert_eq!(git.pull_rebases(&dir), None);
+    sh(&["config", "pull.rebase", "merges"]);
+    assert_eq!(git.pull_rebases(&dir), Some(true));
+    sh(&["config", "branch.main.rebase", "false"]);
+    assert_eq!(git.pull_rebases(&dir), Some(false));
+    let _ = std::fs::remove_dir_all(&dir);
 }

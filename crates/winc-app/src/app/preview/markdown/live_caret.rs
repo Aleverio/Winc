@@ -40,10 +40,17 @@ impl App {
                 .iter()
                 .rposition(|r| r.start <= at && at < r.end.max(r.start + 1))
         };
+        // 叶子块的终点，含同一行末尾的空格。
+        let tail = |p: &std::ops::Range<usize>| {
+            let end = shift(p.end).max(p.start);
+            let open = end > p.start && rope.byte(end - 1) != b'\n';
+            let spaces = rope.bytes_at(end).take_while(|b| matches!(b, b' ' | b'\t'));
+            end + if open { spaces.count() } else { 0 }
+        };
         let prev = i.checked_sub(1).map(|k| &parsed.leaves[k]);
         let next = parsed.leaves.get(i);
         let (found, leaf, gap) = match (prev.map(|l| &l.range), next.map(|l| &l.range)) {
-            (Some(p), _) if caret <= shift(p.end).max(p.start) => (p, p.start..shift(p.end), false),
+            (Some(p), _) if caret <= tail(p) => (p, p.start..tail(p), false),
             // 光标在块的标记上（引用的 `>`、提示块的 `[!NOTE]`、列表的序号），尚未到达其第一个
             // 叶子块：取该叶子块，从光标所在行显示原文。
             (_, Some(n)) if block_of(n.start).is_some() && block_of(n.start) == block_of(caret) => {
@@ -476,6 +483,7 @@ impl App {
         };
         let pos = rope.byte_to_char(source.min(rope.len_bytes()));
         self.preview.markdown.line_end = upstream.then_some((pos, doc.revision));
+        self.preview.markdown.clicked = Some(source);
         doc.goal_cell = None;
         doc.record_cursors();
         doc.collapse_selections();
@@ -599,9 +607,20 @@ impl App {
         let Some((_, y, h)) = laid.caret_point(source) else {
             return;
         };
+        if self.markdown_typewriter() && self.scroll.keyed {
+            // 打字机模式：平滑地滚到光标所在的行停在中间。
+            let view = self.preview.markdown.area.h;
+            let to = (y + h / 2.0 - view / 2.0).max(0.0);
+            if (to - self.preview.markdown.scroll()).abs() >= 1.0 {
+                self.glide_pane_to(ScrollTarget::Markdown, to);
+            }
+            return;
+        }
+        // 用键盘移动时离边缘留一行，点击时只在被挡住时滚动。
+        let keyed = self.scroll.keyed;
         let md = &mut self.preview.markdown;
         let (scroll, view) = (md.scroll(), md.area.h);
-        let margin = h.min(view / 4.0);
+        let margin = if keyed { h.min(view / 4.0) } else { 0.0 };
         if y - margin < scroll {
             md.scroll_to(y - margin);
         } else if y + h + margin > scroll + view {

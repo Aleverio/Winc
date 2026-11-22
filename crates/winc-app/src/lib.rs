@@ -13,6 +13,8 @@ mod askpass;
 mod bench;
 mod cli;
 mod crash;
+mod credentials;
+mod elevated;
 mod field;
 mod frame_log;
 mod icons;
@@ -25,7 +27,7 @@ mod layout;
 mod macos;
 #[cfg(all(unix, not(target_os = "macos")))]
 mod portal;
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 mod recents;
 mod release_notes;
 mod shell_command;
@@ -42,6 +44,8 @@ mod web;
 mod winc;
 #[cfg(windows)]
 mod windows;
+#[cfg(all(unix, not(target_os = "macos")))]
+mod x11;
 
 /// 大块内存释放后立即归还给系统。
 #[cfg(target_os = "macos")]
@@ -66,6 +70,10 @@ use winc::{Envelope, Winc};
 pub fn run() {
     // 作为 `git`、`ssh` 的 askpass 程序启动时不创建窗口。
     if let Some(code) = askpass::helper() {
+        std::process::exit(code);
+    }
+    // 以管理员身份启动、只写一个文件的写入进程，同样不创建窗口。
+    if let Some(code) = elevated::helper() {
         std::process::exit(code);
     }
     shell_command::enter_real_path();
@@ -112,8 +120,9 @@ pub fn run() {
 
     // 配置必须在加载字体之前读出，第一帧即使用用户指定的字体和字号。读入配置时的问题按系统语言
     // 描述（语言已在处理参数之前设定），界面语言随后按配置设定。
-    let (config, problems) = Config::load();
+    let (config, mut problems) = Config::load();
     set_locale(config.language.unwrap_or_default().resolve());
+    problems.extend(keymap::install_from(&config));
     for problem in &problems {
         eprintln!("winc: {problem}");
     }
@@ -133,6 +142,8 @@ pub fn run() {
         .as_deref()
         .map(State::load_from)
         .unwrap_or_default();
+    // 记下的显示方式要在打开任何文件之前设好。
+    editor.preview_defaults = app::preview::images::preview_defaults(&state);
 
     // 未保存内容的备份目录位于状态文件所在目录下；测量时不读也不写。
     let backup_root = state_path
@@ -218,10 +229,10 @@ pub fn run() {
     #[cfg(target_os = "macos")]
     if !silent {
         let proxy = event_loop.create_proxy();
-        macos::on_open_files(move |paths| {
+        macos::on_open_files(move |targets| {
             let _ = proxy.send_event(Envelope {
                 to: winc::Recipient::Active,
-                event: app::UserEvent::Opened(paths),
+                event: app::UserEvent::Opened(targets),
             });
         });
     }
@@ -237,12 +248,18 @@ pub fn run() {
     let mut winc = Winc::new(Some(event_loop.create_proxy()), template);
     let (key, proxy) = winc.reserve();
     let mut app = App::new(editor, proxy, bench, config);
+    app.watch_git_output();
+    winc_editor::proxy::follow_system_proxy(app.config.system_proxy != Some(false));
     app.store.config_path = config_path;
     app.git.commit.set_flat(!state.commit_tree);
+    let sort = crate::app::CommitSort::from_key(&state.commit_sort);
+    app.git.commit.set_sort(sort);
+    app.git
+        .commit
+        .set_staging(app.config.git_staging_area == Some(true));
     app.editor.diff_unified = app.config.diff_inline == Some(true);
     app.state = state;
     app.restore_panel_width();
-    app.apply_preview_state();
     // 临时打开（`--wait`、`-`）时不记录现场、不加入最近列表、不备份，下次启动的状态不受影响。
     if args.one_off() {
         app.start_one_off(&args);
@@ -256,9 +273,12 @@ pub fn run() {
         }
         // 从命令行打开的目录同样记入「最近打开」。
         app.remember_workspace();
-        // 上次开着的是远端的目录：启动时没有连接，无法像本机目录那样直接打开，在后台重新连接。
-        if args.targets.is_empty() {
-            app.restore_remote_folder();
+        // 远端的目录启动时没有连接，无法像本机目录那样直接打开，在后台连接：命令行上的
+        // `ssh://` 参数，或者上次开着的远端目录。
+        match cli::remote_open(&args.targets) {
+            Some(open) => app.open_remote(open),
+            None if args.targets.is_empty() => app.restore_remote_folder(),
+            None => {}
         }
     }
 
@@ -280,11 +300,13 @@ pub fn run() {
 /// 按命令行参数打开目录和文件，返回需要提示用户的 `Vec<String>`。
 ///
 /// 只给出文件时不打开其所在的目录；`文件:行` 形式的目标会跳到对应行（行号和列号从 0 起）。
-/// 临时打开（`--wait`、`-`）时不接受目录。
+/// 临时打开（`--wait`、`-`）时不接受目录。远端的目标（`ssh://`）跳过：连接之后才能打开，见
+/// [`cli::remote_open`]。
 pub(crate) fn open_targets(editor: &mut Editor, args: &cli::Args) -> Vec<String> {
     let mut problems = Vec::new();
     let mut first_file = None;
-    for target in &args.targets {
+    let local = args.targets.iter();
+    for target in local.filter(|t| !winc_backend::is_remote(&t.path)) {
         if winc_backend::fs::is_dir(&target.path) {
             if args.one_off() {
                 let path = target.path.display().to_string();

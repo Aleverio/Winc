@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError, mpsc};
+use std::time::{Duration, Instant};
 
 use ropey::Rope;
 use winc_core::movement;
@@ -96,6 +97,9 @@ impl Places {
     }
 }
 
+/// 在依赖目录里找定义时，过了这么久还没找完才提示正在查找，与其他「正在读取」的提示相同。
+const DEPENDENCY_HINT_DELAY: Duration = Duration::from_millis(300);
+
 /// 正在后台搜索整个项目的定义或用法。
 ///
 /// 分两个阶段：先全字或按定义写法搜索整个项目，再在后台线程中逐个文件做词法分析，剔除不算数的
@@ -119,6 +123,20 @@ pub struct DefinitionSearch {
     at_caret: bool,
     /// 找的是用法而不是定义时，光标所在的那一行（行号从 0 起）：定义本身在这一行，结果中排除。
     usages_of: Option<usize>,
+    /// 成员访问的接收者类型名和当前文件中的同名定义；
+    /// 不是成员访问或接收者的类型定义在当前文件中时为 `None`。
+    ///
+    /// 结果中有以该类型命名的文件时只取这些文件，否则一并列出当前文件中的定义。
+    receiver: Option<(String, Option<Place>)>,
+    /// 搜索的根目录和条件（由 `start_place_search` 填入）；在项目里找不到定义时用它们再到依赖
+    /// 目录里找一遍。
+    scope: Option<(PathBuf, Query)>,
+    /// 是否已经在依赖目录里找过（见 [`App::search_dependencies`]）。
+    in_dependencies: bool,
+    /// 在依赖目录里找到这一刻还没找完时，提示正在查找；提示过以后为 `None`。
+    hint_due: Option<Instant>,
+    /// 是否提示过正在依赖目录中查找：找完时收起这条提示。
+    hinted: bool,
     /// 发起查找时的文档和光标位置（由 `start_place_search` 填入）。
     ///
     /// 搜索结束时用户已经换了标签或挪了光标，就不再弹浮窗、提示或跳转：
@@ -229,12 +247,33 @@ impl App {
             .max_by_key(|(line, _)| *line)
             .or_else(|| elsewhere.first())
             .copied();
-        if let Some((line, col)) = nearest {
+        let root = self.editor.root().map(Path::to_path_buf);
+        // `service.name(…)`：接收者的类型定义在其他文件中时，
+        // 当前文件中的同名方法不是目标，改为在项目中查找。
+        let foreign = root.as_ref().and(doc.text().rope()).and_then(|text| {
+            let type_name = definition::receiver_type(text, caret_line, caret_col, &name)?;
+            let own = path
+                .as_deref()
+                .and_then(|p| definition::named_after(p, &type_name))
+                == Some(true)
+                || Finder::new(&type_name, false, false)
+                    .is_some_and(|finder| !finder.in_text(text, language).is_empty());
+            (!own).then_some((type_name, text))
+        });
+        let receiver = foreign.map(|(type_name, text)| {
+            let file = path.clone().unwrap_or_default();
+            let relative = self.relative_name();
+            let local = nearest.map(|(at, col)| local_place(&file, &relative, text, at, col, len));
+            (type_name, local)
+        });
+        if let Some((line, col)) = nearest
+            && receiver.is_none()
+        {
             self.jump_to(line, col, len);
             return;
         }
 
-        let Some(root) = self.editor.root().map(Path::to_path_buf) else {
+        let Some(root) = root else {
             return self.no_definition(&name, !here.is_empty());
         };
         let query = definition::query(&name, ignore_case);
@@ -247,7 +286,12 @@ impl App {
             from: path.unwrap_or_default(),
             at_caret: !here.is_empty(),
             usages_of: None,
+            receiver,
             origin: None,
+            scope: None,
+            in_dependencies: false,
+            hint_due: None,
+            hinted: false,
         };
         self.start_place_search(search, &root, &query);
     }
@@ -294,17 +338,13 @@ impl App {
         self.request_redraw();
     }
 
-    /// 返回当前文档相对于已打开目录的路径；没有路径或不在目录中时返回文档名。
+    /// 返回当前文档与项目搜索结果同样写法的相对路径；没有路径或没有打开目录时返回文档名。
     fn relative_name(&self) -> String {
         let Some(doc) = self.editor.active() else {
             return String::new();
         };
-        match (doc.path.as_deref(), self.editor.root()) {
-            (Some(path), Some(root)) => path
-                .strip_prefix(root)
-                .unwrap_or(path)
-                .display()
-                .to_string(),
+        match (doc.path.as_deref(), self.editor.workspace.as_ref()) {
+            (Some(path), Some(workspace)) => workspace.labelled_path(path),
             _ => doc.name().into_owned(),
         }
     }
@@ -336,15 +376,21 @@ impl App {
             from: doc.path.clone().unwrap_or_default(),
             at_caret: true,
             usages_of: Some(line),
+            receiver: None,
             origin: None,
+            scope: None,
+            in_dependencies: false,
+            hint_due: None,
+            hinted: false,
         };
         self.start_place_search(search, &root, &query);
     }
 
-    /// 在 `root` 下后台开始搜索 `query`，搜索进展由 [`Self::poll_definitions`] 处理。
+    /// 在 `root` 和附加目录下后台开始搜索 `query`，搜索进展由 [`Self::poll_definitions`] 处理。
     ///
     /// 未保存的文档按内存中的内容搜索。
     fn start_place_search(&mut self, mut search: DefinitionSearch, root: &Path, query: &Query) {
+        search.engine.set_extra_folders(self.extra_folders());
         let dirty = self.dirty_ropes();
         let proxy = self.link.proxy.clone();
         let wake = move || {
@@ -352,7 +398,13 @@ impl App {
                 let _ = proxy.send_event(UserEvent::Definitions);
             }
         };
-        search.engine.start(root, query, dirty, wake);
+        match search.in_dependencies {
+            true => search
+                .engine
+                .start_in_dependencies(root, query, dirty, wake),
+            false => search.engine.start(root, query, dirty, wake),
+        }
+        search.scope = Some((root.to_path_buf(), query.clone()));
         search.origin = self.editor.active().map(|d| (d.id, d.selection.head));
         self.jumps.definitions = Some(search);
         // 测试中没有事件循环，同步等待搜索结束。
@@ -459,22 +511,75 @@ impl App {
             if items.iter().any(|p| search.filter.is_related(&p.path)) {
                 items.retain(|p| search.filter.is_related(&p.path));
             }
+            let exact = |p: &Place, type_name: &str| definition::named_after(&p.path, type_name);
+            let type_name = search.receiver.as_ref().map(|(name, _)| name.as_str());
+            if let Some(name) = type_name
+                && items.iter().any(|p| exact(p, name).is_some())
+            {
+                items.retain(|p| exact(p, name).is_some());
+            } else if let Some((_, Some(local))) = &search.receiver {
+                // 没有以接收者类型命名的文件时类型推断可能有误，一并列出当前文件中的定义。
+                items.push(local.clone());
+            }
             items.sort_by(|a, b| {
-                let key = |p: &Place| definition::rank(&p.path, search.language, &dir);
+                let key = |p: &Place| {
+                    let named = type_name.and_then(|name| exact(p, name)) != Some(true);
+                    (
+                        named,
+                        p.path != *from,
+                        definition::rank(&p.path, search.language, &dir),
+                    )
+                };
                 key(a)
                     .cmp(&key(b))
                     .then_with(|| a.relative.cmp(&b.relative))
             });
         }
 
+        // 正在查找的提示到此为止。
+        if search.hinted {
+            self.jumps.name_hint = None;
+        }
         match (items.len(), usages) {
             (0, Some(_)) => self.hint_at_name(t!("editor-usages-not-found", name = name.as_str())),
+            (0, None) if !search.in_dependencies && !search.at_caret => {
+                return self.search_dependencies(search);
+            }
             (0, None) => self.no_definition(&name, search.at_caret),
             (1, _) => self.open_place(&items[0], &name),
             (_, Some(_)) => self.show_places(PlacesKind::Usages, name, items),
             (_, None) => self.show_places(PlacesKind::Definitions, name, items),
         }
         self.request_redraw();
+    }
+
+    /// 项目里没有找到定义：到依赖目录（`node_modules`、`.venv` 等，通常被 `.gitignore` 忽略）
+    /// 里再找一遍；找了 [`DEPENDENCY_HINT_DELAY`] 还没找完时在名字旁提示正在查找。
+    fn search_dependencies(&mut self, mut search: DefinitionSearch) {
+        let Some((root, query)) = search.scope.take() else {
+            return self.no_definition(&search.name, search.at_caret);
+        };
+        search.hint_due = Some(Instant::now() + DEPENDENCY_HINT_DELAY);
+        search.in_dependencies = true;
+        search.filtering = None;
+        search.engine.results.clear();
+        self.start_place_search(search, &root, &query);
+    }
+
+    /// 在依赖目录里找定义找到现在还没找完：在名字旁提示一次正在查找；返回下次要检查的时刻。
+    pub(in crate::app) fn definition_tick(&mut self, now: Instant) -> Option<Instant> {
+        let search = self.jumps.definitions.as_mut()?;
+        let due = search.hint_due?;
+        if now < due {
+            return Some(due);
+        }
+        (search.hint_due, search.hinted) = (None, true);
+        let name = search.name.clone();
+        self.hint_at_name(t!(
+            "editor-definition-in-dependencies",
+            name = name.as_str()
+        ));
+        None
     }
 
     /// 在状态栏提示没有找到 `name` 的定义。
@@ -538,6 +643,7 @@ impl App {
         self.overlays.picker.branch_rows = None;
         self.overlays.picker.location_rows = None;
         self.overlays.picker.folders = false;
+        self.overlays.picker.languages = false;
         self.overlays.picker.vim_list = None;
         self.overlays.picker.remote = None;
         self.overlays.picker.places = Some(Places {
@@ -661,8 +767,8 @@ fn filter_results(
 
 /// 剔除一个文件中不算数的命中。
 ///
-/// 有未保存修改的文件按 `dirty` 中的内容判断，其余从磁盘读。读不到或不是 UTF-8 的文件保留全部
-/// 命中：行列可能与搜索时的解码对不上，宁可多列也不误删。
+/// 有未保存修改的文件按 `dirty` 中的内容判断，其余从磁盘读取并识别编码，与项目搜索相同；读不到
+/// 的文件保留全部命中。
 fn filter_file(
     filter: &Filter,
     usages: bool,
@@ -671,9 +777,9 @@ fn filter_file(
 ) {
     let text = match dirty.get(&file.path) {
         Some(rope) => rope.clone(),
-        None => match winc_backend::fs::read(&file.path).map(String::from_utf8) {
-            Ok(Ok(text)) => Rope::from_str(&text),
-            _ => return,
+        None => match winc_backend::fs::read(&file.path) {
+            Ok(bytes) => Rope::from_str(&winc_editor::encoding::decode_unknown(&bytes).0),
+            Err(_) => return,
         },
     };
     let language = usages::language_of(&file.path, &text);

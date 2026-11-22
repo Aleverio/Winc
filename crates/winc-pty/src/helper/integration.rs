@@ -18,7 +18,7 @@ use std::io::Read;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
-use winc_pty::scripts::{BASH, FISH, ZSH};
+use winc_pty::scripts::{BASH, FISH, PYTHON, ZSH};
 
 /// 在 WSL 发行版内启动 shell 并注入集成脚本的脚本。
 #[cfg(any(windows, test))]
@@ -29,12 +29,13 @@ const WSL: &[(&str, &str)] = winc_pty::scripts::LAUNCH;
 /// 命令写成单行，避免换行符经 `wsl.exe` 的命令行传递时发生变化。脚本不可读时（如发行版未挂载
 /// Windows 磁盘）启动不带集成的 shell，终端仍可使用。
 #[cfg(any(windows, test))]
-const WSL_RUN: &str = r#"d=$(wslpath -u "$0" 2>/dev/null) && [ -r "$d/wsl.sh" ] && exec sh "$d/wsl.sh" "$d"; unset WINC_NONCE; exec "${SHELL:-/bin/sh}" -l"#;
+const WSL_RUN: &str = r#"d=$(wslpath -u "$0" 2>/dev/null) && [ -r "$d/wsl.sh" ] && exec sh "$d/wsl.sh" "$d"; unset WINC_NONCE WINC_PYTHON; exec "${SHELL:-/bin/sh}" -l"#;
 
 /// 通过 `WSLENV` 从 Windows 传给发行版的环境变量：集成脚本用到的变量，以及程序据此判断终端能力的
 /// 变量。
 #[cfg(any(windows, test))]
-const WSL_ENV: &[u8] = b"WINC_NONCE:WINC_PROMPT:COLORTERM:TERM_PROGRAM:TERM_PROGRAM_VERSION";
+const WSL_ENV: &[u8] =
+    b"WINC_NONCE:WINC_PROMPT:WINC_PYTHON:COLORTERM:TERM_PROGRAM:TERM_PROGRAM_VERSION";
 
 /// 环境变量表，每项是（键，值）。
 type Env = Vec<(Vec<u8>, Vec<u8>)>;
@@ -62,7 +63,7 @@ pub fn inject(
         b"fish" => FISH,
         _ => return None,
     };
-    if let Err(error) = write_scripts(dir, scripts) {
+    if let Err(error) = write_scripts(dir, scripts).and_then(|()| write_scripts(dir, PYTHON)) {
         eprintln!(
             "winc-pty: 无法写入 shell 集成脚本（{}）：{error}",
             dir.display()
@@ -154,7 +155,7 @@ pub fn inject_wsl(
     }
     let text = String::from_utf8_lossy(dir).into_owned();
     let path = Path::new(&text);
-    for scripts in [ZSH, BASH, FISH, WSL] {
+    for scripts in [ZSH, BASH, FISH, PYTHON, WSL] {
         if let Err(error) = write_scripts(path, scripts) {
             eprintln!("winc-pty: 无法写入 shell 集成脚本（{text}）：{error}");
             return None;
@@ -247,12 +248,12 @@ fn random_bytes() -> io::Result<[u8; 16]> {
 
 /// 内容不同的脚本重写一遍。
 ///
-/// 先写入同目录的临时文件再改名，同时启动的 shell 不会读到未写完的脚本。换行符统一为 LF：源码在
-/// Windows 上可能以 CRLF 检出，而这些脚本由 Linux 上的 shell 读取。
+/// 先写入同目录的临时文件再改名，同时启动的 shell 不会读到未写完的脚本。换行符统一为 LF（见
+/// [`winc_pty::scripts::unix_lines`]），与写到远端主机上的相同。
 fn write_scripts(dir: &Path, scripts: &[(&str, &str)]) -> io::Result<()> {
     for (relative, content) in scripts {
         let path = dir.join(relative);
-        let content = content.replace("\r\n", "\n");
+        let content = winc_pty::scripts::unix_lines(content);
         if fs::read(&path).is_ok_and(|old| old == content.as_bytes()) {
             continue;
         }
@@ -260,7 +261,7 @@ fn write_scripts(dir: &Path, scripts: &[(&str, &str)]) -> io::Result<()> {
             fs::create_dir_all(parent)?;
         }
         let temp = path.with_extension(format!("tmp{}", std::process::id()));
-        fs::write(&temp, content)?;
+        fs::write(&temp, content.as_bytes())?;
         fs::rename(&temp, &path)?;
     }
     Ok(())

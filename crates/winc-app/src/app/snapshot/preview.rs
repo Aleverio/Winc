@@ -5,15 +5,19 @@ use winc_editor::PreviewMode;
 
 use super::*;
 
+mod epub;
 mod images;
+mod latex;
 mod live;
 mod markdown;
 mod navigation;
+mod options;
 mod pdf;
 #[cfg(any(target_os = "macos", windows))]
 mod pdf_places;
 mod reading;
 mod tables;
+mod writing;
 
 /// 覆盖常用 Markdown 写法的 README 样本。
 const SAMPLE: &str = r#"<p align="center"><img src="logo.svg" width="64" alt="logo"></p>
@@ -78,6 +82,14 @@ fn readme(name: &str, dark: bool, mode: PreviewMode) -> (App, PathBuf) {
     app.set_preview_mode(mode);
     settle(&mut app);
     (app, dir)
+}
+
+/// 把鼠标移到标题指示条上的 `(x, y)`，并把停留时间记为已满 `TOC_HOVER_DELAY`：
+/// 标题列表在下一次绘制时展开。
+fn rest_on_toc(app: &mut App, x: f32, y: f32) {
+    app.on_mouse_move(x, y);
+    let delay = crate::theme::TOC_HOVER_DELAY;
+    app.preview.markdown.toc_rest = Some(std::time::Instant::now() - delay);
 }
 
 fn settle(app: &mut App) {
@@ -810,6 +822,7 @@ fn heap_breakdown(md: &winc_preview::markdown::Markdown) {
         s.anchors += i.map.anchors();
         s.links += i.links.iter().map(String::capacity).sum::<usize>() + i.links.capacity() * 24;
         s.other += i.images.capacity() * std::mem::size_of::<winc_preview::markdown::Image>();
+        s.other += i.ids.iter().map(String::capacity).sum::<usize>() + i.ids.capacity() * 24;
     }
     fn blocks(v: &Vec<Block>, s: &mut Sum) {
         s.blocks += v.capacity() * std::mem::size_of::<Block>();
@@ -881,17 +894,57 @@ fn the_chosen_preview_mode_applies_to_files_opened_later() {
 
     // 选择只看预览：记入状态，之后打开的 Markdown 文件同样只看预览。
     app.choose_preview_mode(PreviewMode::Preview);
-    assert_eq!(app.state.preview_mode.as_deref(), Some("preview"));
+    let saved = |app: &App| app.state.preview_modes.get("markdown").cloned();
+    assert_eq!(saved(&app).as_deref(), Some("preview"));
     app.open_path(&b);
     paint(&mut app);
     assert_eq!(mode(&app), PreviewMode::Preview);
 
     // 改回源代码：状态清空，之后打开的文件显示源代码。
     app.choose_preview_mode(PreviewMode::Source);
-    assert_eq!(app.state.preview_mode, None);
+    assert_eq!(saved(&app), None);
     app.open_path(&c);
     paint(&mut app);
     assert_eq!(mode(&app), PreviewMode::Source);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn each_kind_of_file_keeps_its_own_preview_mode() {
+    use winc_editor::PreviewMode;
+
+    let dir = sample_folder("preview-mode-per-kind");
+    let (a, b, table) = (dir.join("a.md"), dir.join("b.md"), dir.join("t.csv"));
+    std::fs::write(&a, "# 标题\n").unwrap();
+    std::fs::write(&b, "# 标题\n").unwrap();
+    std::fs::write(&table, "a,b\n1,2\n").unwrap();
+    let mut app = app_with(&a, false);
+    paint(&mut app);
+    let mode = |app: &App| app.editor.active().unwrap().preview_mode();
+
+    // Markdown 选了只看预览，表格选回源代码：各记各的。
+    app.choose_preview_mode(PreviewMode::Preview);
+    app.open_path(&table);
+    paint(&mut app);
+    assert_eq!(mode(&app), PreviewMode::Source);
+    app.choose_preview_mode(PreviewMode::Split);
+    app.choose_preview_mode(PreviewMode::Source);
+    app.open_path(&b);
+    paint(&mut app);
+    assert_eq!(mode(&app), PreviewMode::Preview);
+
+    // 新窗口按状态恢复各类的方式。
+    app.editor.preview_defaults = [PreviewMode::Source; winc_editor::PreviewKind::ALL.len()];
+    app.apply_preview_state();
+    assert_eq!(
+        app.editor.preview_defaults,
+        [
+            PreviewMode::Source,
+            PreviewMode::Preview,
+            PreviewMode::Source,
+            PreviewMode::Source
+        ]
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -978,6 +1031,13 @@ fn sample_docx() -> Vec<u8> {
 /// 下方绘制一条长度随页号变化的红色横条。交叉引用表按各对象的实际偏移写出。
 #[cfg(any(target_os = "macos", windows))]
 fn sample_pdf(count: usize) -> Vec<u8> {
+    outlined_pdf(count, &[])
+}
+
+/// 与 [`sample_pdf`] 相同，另带目录：`outline` 的各项为标题、层级（顶层为 0）、指向的页
+/// （从 0 起）和页内的高度（页面坐标，792 为上沿）。
+#[cfg(any(target_os = "macos", windows))]
+fn outlined_pdf(count: usize, outline: &[(&str, usize, usize, u32)]) -> Vec<u8> {
     let mut objects: Vec<String> = vec![
         "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
         format!(
@@ -1004,6 +1064,33 @@ fn sample_pdf(count: usize) -> Vec<u8> {
             "<< /Length {} >>\nstream\n{content}\nendstream",
             content.len()
         ));
+    }
+    if !outline.is_empty() {
+        let root = objects.len() + 1;
+        objects[0] = format!("<< /Type /Catalog /Pages 2 0 R /Outlines {root} 0 R >>");
+        let id = |k: usize| root + 1 + k;
+        let parent = |k: usize| (0..k).rev().find(|&j| outline[j].1 < outline[k].1);
+        let next = |k: usize| {
+            let level = outline[k].1;
+            let after = outline[k + 1..].iter().position(|item| item.1 <= level);
+            after.map(|j| k + 1 + j).filter(|&j| outline[j].1 == level)
+        };
+        let first = |k: usize| (outline.get(k + 1)).filter(|item| item.1 > outline[k].1);
+        objects.push(format!("<< /Type /Outlines /First {} 0 R >>", id(0)));
+        for (k, &(title, _, page, y)) in outline.iter().enumerate() {
+            let mut body = format!(
+                "<< /Title ({title}) /Parent {} 0 R /Dest [{} 0 R /XYZ 0 {y} 0]",
+                parent(k).map_or(root, id),
+                3 + page * 2
+            );
+            if let Some(n) = next(k) {
+                body.push_str(&format!(" /Next {} 0 R", id(n)));
+            }
+            if first(k).is_some() {
+                body.push_str(&format!(" /First {} 0 R", id(k + 1)));
+            }
+            objects.push(body + " >>");
+        }
     }
     let mut out = b"%PDF-1.4\n".to_vec();
     let mut offsets = Vec::new();
@@ -1121,5 +1208,26 @@ fn composing_on_a_blank_line_shows_the_text() {
     paint(&mut app);
     assert!(app.ime.cursor.is_some());
     assert!(full_text(&app).unwrap().contains("ni"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 截图：编辑区和 Markdown 预览中的 emoji 序列（变体选择符、肤色、组合、国旗、键帽）。
+#[test]
+#[ignore = "截图，手动运行"]
+fn snapshot_emoji_sequences() {
+    let dir = sample_folder("emoji-sequences");
+    let path = dir.join("emoji.md");
+    let text = "# Emoji 😀 ⭐ ✅\n\n\
+        heart ❤\u{fe0f} warn ⚠\u{fe0f} sun ☀\u{fe0f}|end\n\n\
+        skin 👍\u{1f3fd} 👋\u{1f3fb} 🧑\u{1f3ff}\u{200d}💻|end\n\n\
+        family 👨\u{200d}👩\u{200d}👧 👩\u{200d}❤\u{fe0f}\u{200d}👨 🏳\u{fe0f}\u{200d}🌈|end\n\n\
+        flags 🇨🇳 🇯🇵 🇺🇸 keycap 1\u{fe0f}\u{20e3} #\u{fe0f}\u{20e3}|end\n\n\
+        text ☺ ✔ ❤ ☺\u{fe0e} plain 中文 abc|end\n";
+    std::fs::write(&path, text).unwrap();
+    let mut app = app_with(&path, false);
+    shoot(&mut app, "emoji-sequences-editor");
+    app.set_preview_mode(PreviewMode::Preview);
+    settle(&mut app);
+    shoot(&mut app, "emoji-sequences-preview");
     let _ = std::fs::remove_dir_all(&dir);
 }

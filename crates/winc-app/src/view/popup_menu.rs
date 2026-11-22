@@ -7,7 +7,7 @@ use crate::app::{CHECK_COLUMN, ICON_COLUMN, MenuIcon, POPUP_PAD, PopupLevel, Pop
 use crate::icons::Direction;
 
 /// 一行的高度（逻辑像素）。
-const ROW: f32 = 24.0;
+pub(super) const ROW: f32 = 24.0;
 /// 标题下面还有一行小字时，一行的高度（逻辑像素）。
 const ROW_TALL: f32 = 40.0;
 /// 分隔线那一行的高度（逻辑像素）。
@@ -19,9 +19,9 @@ const RIGHT_PAD: f32 = 12.0;
 /// 菜单的最小、最大宽度（逻辑像素）。
 const WIDTH: (f32, f32) = (160.0, 420.0);
 /// 菜单离窗口边缘至少留出的距离（逻辑像素）。
-const MARGIN: f32 = 8.0;
+pub(super) const MARGIN: f32 = 8.0;
 /// 行底色左右缩进的距离（逻辑像素）。
-const ROW_INSET: f32 = 4.0;
+pub(super) const ROW_INSET: f32 = 4.0;
 /// 选中底色上的文字颜色和次要文字颜色。
 pub(super) fn band_ink(p: &Palette) -> (Color, Color) {
     let ink = p.text_on_accent;
@@ -42,6 +42,8 @@ pub(super) fn draw(app: &mut App, frame: &mut Frame<'_>) {
     for l in 0..popup.levels.len() {
         let (w, content) = measure(app, frame, &popup.levels[l].rows);
         let w = if l == 0 { w.max(popup.min_width) } else { w };
+        // 宽高不超过窗口减去两侧的边距；窗口比两侧边距还小时为 0。
+        let w = w.min(window.w - 2.0 * MARGIN).max(0.0);
         let h = content.min(window.h - 2.0 * MARGIN).max(0.0);
         let (x, y) = if l == 0 {
             let mut y = popup.at.1;
@@ -73,19 +75,15 @@ pub(super) fn draw(app: &mut App, frame: &mut Frame<'_>) {
             };
             (x, row.y - POPUP_PAD)
         };
-        let x = x.clamp(
-            window.x + MARGIN,
-            (window.right() - MARGIN - w).max(window.x),
-        );
-        let y = y.clamp(
-            window.y + MARGIN,
-            (window.bottom() - MARGIN - h).max(window.y),
-        );
+        // 上界不低于下界：窗口放不下时菜单贴着左上的边距。
+        let (left, top) = (window.x + MARGIN, window.y + MARGIN);
+        let x = x.clamp(left, (window.right() - MARGIN - w).max(left));
+        let y = y.clamp(top, (window.bottom() - MARGIN - h).max(top));
         let level = &mut popup.levels[l];
         level.rect = Rect::new(x, y, w, h);
         level.content = content;
         level.scroll = level.scroll.clamp(0.0, (content - h).max(0.0));
-        let mut top = y + POPUP_PAD - level.scroll;
+        let mut top = y + POPUP_PAD - drawn_scroll(level.scroll);
         level.row_rects = level
             .rows
             .iter()
@@ -133,6 +131,7 @@ fn measure(app: &App, frame: &mut Frame<'_>, rows: &[PopupRow]) -> (f32, f32) {
                 let arrow = if *dir { KEY_GAP } else { 0.0 };
                 frame.measure(FontKind::Ui, size, name) + arrow
             }
+            PopupRow::Query(query) => frame.measure(FontKind::Ui, size, query),
         };
         w = w.max(lead + text + RIGHT_PAD);
     }
@@ -144,7 +143,9 @@ fn icon_column(rows: &[PopupRow]) -> f32 {
     let any = rows.iter().any(|row| {
         matches!(
             row,
-            PopupRow::Item { icon: Some(_), .. } | PopupRow::Entry { .. }
+            PopupRow::Item { icon: Some(_), .. }
+                | PopupRow::Submenu { icon: Some(_), .. }
+                | PopupRow::Entry { .. }
         )
     });
     if any { ICON_COLUMN } else { 0.0 }
@@ -213,9 +214,12 @@ fn draw_level(app: &App, frame: &mut Frame<'_>, level: &PopupLevel) {
                 key.as_str(),
                 false,
             ),
-            PopupRow::Submenu { label, checked, .. } => {
-                (label.title.as_str(), None, None, *checked, true, "", true)
-            }
+            PopupRow::Submenu {
+                label,
+                icon,
+                checked,
+                ..
+            } => (label.title.as_str(), None, *icon, *checked, true, "", true),
             PopupRow::Entry {
                 name, dir, checked, ..
             } => {
@@ -226,6 +230,22 @@ fn draw_level(app: &App, frame: &mut Frame<'_>, level: &PopupLevel) {
                     MenuIcon::File(glyph, colors)
                 };
                 (name.as_str(), None, Some(icon), *checked, true, "", *dir)
+            }
+            // 键入的文字：搜索图标放在打勾的一列，文字与各行的名称对齐，下面一条分隔线。
+            PopupRow::Query(query) => {
+                let title_row = Rect::new(rect.x, rect.y, rect.w, ROW);
+                let cy = icon_center_y(app, title_row, app.fonts.ui);
+                icons::search(frame, (rect.x + 13.0, cy), 0.75, p.text_muted, clip);
+                let text_x = rect.x + CHECK_COLUMN + icons;
+                ui_text(frame, app, text_x, title_row, query, p.text, clip);
+                let line = Rect::new(
+                    rect.x + ROW_INSET + 6.0,
+                    rect.bottom() - 1.0,
+                    rect.w - 2.0 * ROW_INSET - 12.0,
+                    1.0,
+                );
+                frame.rect_clipped(line, p.separator, 0.0, clip);
+                continue;
             }
         };
         let hovered = level.hover == Some(i);

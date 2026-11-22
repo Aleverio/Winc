@@ -5,7 +5,7 @@
 
 use winc_core::{Indent, LineEnding};
 use winc_editor::encoding::CHOICES;
-use winc_editor::{DocumentId, Encoding, EncodingRead};
+use winc_editor::{DocumentId, Encoding, EncodingRead, PreviewMode};
 use winc_i18n::t;
 
 use super::*;
@@ -40,6 +40,8 @@ pub enum StatusItem {
     Lsp,
     /// Current document diagnostics; clicking shows the first message.
     Diagnostics,
+    /// 只读开关：菜单中可把当前文件或全部文件设为只读，或恢复为可以编辑。
+    ReadOnly,
 }
 
 /// 返回状态栏上显示的缩进文案，例如「空格: 4」「制表符长度: 4」。
@@ -112,6 +114,7 @@ impl App {
             (StatusItem::LineEnding, Some(id)) => MenuTarget::LineEnding(id),
             (StatusItem::Encoding, Some(id)) => MenuTarget::Encoding(id),
             (StatusItem::Language, Some(id)) => MenuTarget::Language(id),
+            (StatusItem::ReadOnly, Some(id)) => MenuTarget::ReadOnly(id),
             (
                 StatusItem::Branch
                 | StatusItem::Terminal
@@ -136,6 +139,8 @@ impl App {
             return;
         }
         match command {
+            MenuCommand::ReadOnly(on) => self.set_read_only(id, on),
+            MenuCommand::ReadOnlyAll(on) => self.set_read_only_all(on),
             MenuCommand::IndentUsingSpaces => self.use_indent(false),
             MenuCommand::IndentUsingTabs => self.use_indent(true),
             MenuCommand::IndentSize(size) => {
@@ -148,11 +153,12 @@ impl App {
             MenuCommand::ConvertToTabs => self.convert_indentation(true),
             MenuCommand::DetectIndentation => self.detect_indentation(),
             MenuCommand::LineEnding(eol) => self.change_line_ending(eol),
-            MenuCommand::ReopenEncoding(i) => {
-                if let Some(&(encoding, _)) = CHOICES.get(i) {
-                    self.ask_reopen_with_encoding(id, encoding);
-                }
-            }
+            MenuCommand::ReopenEncoding(i) => match CHOICES.get(i) {
+                Some(&(encoding, _)) if self.hex_active() => self.show_hex_as_text(encoding),
+                Some(&(encoding, _)) => self.ask_reopen_with_encoding(id, encoding),
+                None => {}
+            },
+            MenuCommand::ReopenHex => self.show_hex(),
             MenuCommand::SaveEncoding(i) => {
                 if let Some(&(encoding, _)) = CHOICES.get(i) {
                     self.save_with_encoding(encoding);
@@ -218,7 +224,10 @@ impl App {
                 });
             }
             Err(reason) => {
-                self.notify(t!("workspace-reopen-failed", error = reason.to_string()));
+                self.notify(
+                    NoticeKind::Error,
+                    t!("workspace-reopen-failed", error = reason.to_string()),
+                );
                 self.request_redraw();
             }
         }
@@ -251,7 +260,10 @@ impl App {
                 }
             }
             Ok(false) => {}
-            Err(reason) => self.notify(t!("workspace-reopen-failed", error = reason.to_string())),
+            Err(reason) => self.notify(
+                NoticeKind::Error,
+                t!("workspace-reopen-failed", error = reason.to_string()),
+            ),
         }
         self.request_redraw();
     }
@@ -315,21 +327,19 @@ impl App {
     ///
     /// 文件之后改名、另存为时按新的文件名重新识别。
     pub(in crate::app) fn use_language(&mut self, language: &'static winc_syntax::Language) {
+        // 预览或分栏中换成预览方式不同的语言时，先回到源代码。
+        let leaves = self.editor.active().is_some_and(|doc| {
+            doc.preview_mode() != PreviewMode::Source
+                && winc_editor::PreviewKind::of(language) != doc.preview_kind()
+        });
+        if leaves {
+            self.set_preview_mode(PreviewMode::Source);
+        }
         if let Some(doc) = self.editor.active_mut() {
             doc.choose_language(language);
         }
         self.relayout();
         self.request_redraw();
-    }
-
-    /// 执行命令面板中的「更改文件的语言」：弹出状态栏上的语言菜单。
-    ///
-    /// 输出标签（格式化的结果）没有这一项，不弹出该菜单。
-    pub(in crate::app) fn open_language_menu(&mut self) {
-        if self.editor.active().is_none_or(|d| d.title.is_some()) {
-            return;
-        }
-        self.open_status_menu(StatusItem::Language);
     }
 
     /// 执行命令面板中的「更改行尾序列」：弹出状态栏上的行尾菜单。
@@ -346,9 +356,10 @@ impl App {
 
 impl App {
     /// 点了状态栏上的更新提示（macOS 以外的平台）：新版本已经准备好时重新启动，正在下载时不
-    /// 处理，否则开始下载安装。
+    /// 处理，否则开始下载安装。不由应用自己更新的安装改为打开下载页，Arch 包提示用 pacman 更新。
     #[cfg(not(target_os = "macos"))]
     fn click_update(&mut self) {
+        use crate::updates::Delivery;
         use crate::winc::UpdateState;
         let state = self.link.shared.update_state.borrow().clone();
         match state {
@@ -357,7 +368,19 @@ impl App {
                 self.request_quit();
             }
             UpdateState::Downloading(..) => {}
-            _ => crate::updates::install(),
+            _ => match crate::updates::delivery() {
+                Some(Delivery::Download) => {
+                    let page = crate::release_notes::downloads(winc_i18n::locale());
+                    if let Err(e) = crate::system::open_url(page) {
+                        self.flash(t!(
+                            "preview-markdown-link-open-failed",
+                            error = e.to_string()
+                        ));
+                    }
+                }
+                Some(Delivery::Pacman) => self.flash(t!("workspace-status-update-pacman")),
+                _ => crate::updates::install(),
+            },
         }
     }
 }

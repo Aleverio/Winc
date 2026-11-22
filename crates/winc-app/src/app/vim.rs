@@ -221,6 +221,13 @@ pub(crate) fn convert(
 }
 
 impl App {
+    /// 按键是否作为输入写进文字：没有开 Vim 模式，或者在插入模式中。
+    pub(in crate::app) fn vim_typing(&self) -> bool {
+        self.vim
+            .as_ref()
+            .is_none_or(|state| state.vim.mode() == Mode::Insert)
+    }
+
     /// 使 Vim 状态的有无与配置一致：开启时创建，关闭时结束未完成的撤销分组并销毁。
     pub(in crate::app) fn vim_apply_config(&mut self) {
         let enabled = self.config.vim_enabled == Some(true);
@@ -263,12 +270,13 @@ impl App {
                 .is_some_and(|(query, _)| query.regex == self.bars.search.query)
     }
 
-    /// 返回输入条的位置：Vim 模式的命令行与查找占状态栏所在的一行，其余位于编辑区顶部居中。
+    /// 返回输入条的位置：Vim 模式的命令行与查找占状态栏所在的一行，其余位于右上角浮层所在区域
+    /// （[`App::overlay_area`]）的顶部居中。
     pub(crate) fn prompt_bar(&self) -> Rect {
         if self.bars.prompt_kind.is_vim() {
             self.layout.status
         } else {
-            crate::layout::goto_bar(self.layout.editor)
+            crate::layout::goto_bar(self.overlay_area(), self.bars.prompt_kind.takes_text())
         }
     }
 

@@ -5,10 +5,25 @@ use super::*;
 use crate::app::scroll::set_scroll_line;
 
 impl App {
+    /// 记录鼠标所在的 Markdown 预览代码块和图片。
+    pub(in crate::app) fn track_code_hover(&mut self, x: f32, y: f32) {
+        let code = (self.hits.markdown_codes.iter()).position(|r| r.contains(x, y));
+        if code != self.preview.markdown.code_hover {
+            self.preview.markdown.code_hover = code;
+            self.request_redraw();
+        }
+        let image = self.image_hovered(x, y).map(|i| i.rect);
+        if image != self.preview.markdown.image_hover {
+            self.preview.markdown.image_hover = image;
+            self.request_redraw();
+        }
+    }
+
     /// 处理鼠标移动到窗口坐标 (`x`, `y`)（逻辑像素）：更新悬停、指针样式和进行中的拖动。
     pub(in crate::app) fn on_mouse_move(&mut self, x: f32, y: f32) {
         self.pointer.mouse = (x, y);
         self.update_scrollbar_hover(x, y);
+        self.track_pdf_tools(x, y);
 
         // 鼠标离开顶栏时解除关闭标签期间锁定的宽度，标签重新排布。
         if y >= TOP_BAR_END && self.tabs.width_lock.take().is_some() {
@@ -32,6 +47,10 @@ impl App {
                     grab,
                 } => {
                     self.drag_settings_scrollbar(y, grab);
+                    true
+                }
+                Drag::SettingsCard { grab } => {
+                    self.drag_settings_card(x, y, grab);
                     true
                 }
                 _ => false,
@@ -70,20 +89,12 @@ impl App {
             self.drag_tree_item(x, y);
         }
         if self.tabs.drag.is_some() {
-            self.drag_tab(x);
+            self.drag_tab((x, y));
         }
-        self.drag_terminal_tab(x);
+        self.drag_terminal_tab(self.terminal.strip.along((x, y)));
 
-        self.set_hover(self.hover_at(x, y));
-        let code = self
-            .hits
-            .markdown_codes
-            .iter()
-            .position(|r| r.contains(x, y));
-        if code != self.preview.markdown.code_hover {
-            self.preview.markdown.code_hover = code;
-            self.request_redraw();
-        }
+        let hover = self.hover_here(x, y);
+        self.set_hover(hover);
         if self.terminal.link.is_some() || self.layout.terminal.contains(x, y) {
             self.update_terminal_link();
         }
@@ -133,18 +144,50 @@ impl App {
             Drag::OutlineDivider { start, size } => self.drag_outline_divider(start, size, y),
             Drag::TerminalDivider { start, size } => {
                 // 向上（面板在右侧时向左）拖动使面板变大；按排版允许的范围限制后再记录，
-                // 使记录的尺寸等于绘制的尺寸。
-                if self.terminal_right() {
-                    self.terminal.width = size - (x - start);
-                    self.relayout();
-                    self.terminal.width = self.layout.terminal.w;
+                // 使记录的尺寸等于绘制的尺寸。拖过编辑区最小尺寸的一半时吸附为最大化，往回拖
+                // 又松开吸附，从最大的平常尺寸接着拖。
+                let right = self.terminal_right();
+                let wanted = if right {
+                    size - (x - start)
                 } else {
-                    self.terminal.height = size - (y - start);
-                    self.relayout();
-                    self.terminal.height = self.layout.terminal.h;
+                    size - (y - start)
+                };
+                let keep = if right {
+                    crate::app::terminal::EDITOR_MIN_WIDTH
+                } else {
+                    crate::app::terminal::EDITOR_MIN
+                };
+                // 按平常的大小量一次，量的时候不算正在进行的吸附过渡。
+                let was = self.terminal.maximized;
+                let grow = self.terminal.grow.take();
+                self.terminal.maximized = false;
+                if right {
+                    self.terminal.width = wanted;
+                } else {
+                    self.terminal.height = wanted;
                 }
+                self.relayout();
+                let drawn = if right {
+                    self.layout.terminal.w
+                } else {
+                    self.layout.terminal.h
+                };
+                if right {
+                    self.terminal.width = drawn;
+                } else {
+                    self.terminal.height = drawn;
+                }
+                // 吸附、松开吸附时和 ⌘⇧↩ 一样过渡；状态不变时接着原来的过渡。
+                let snap = drawn > 0.0 && wanted - drawn > keep / 2.0;
+                self.terminal.maximized = snap;
+                self.terminal.grow = grow;
+                if snap != was {
+                    self.start_terminal_grow();
+                }
+                self.relayout();
                 self.request_redraw();
             }
+            Drag::PaneDivider { index } => self.drag_pane_divider(index, (x, y)),
             Drag::SplitDivider {
                 start_x,
                 start_left,
@@ -158,6 +201,10 @@ impl App {
                     self.request_redraw();
                 }
             }
+            Drag::LogColumn {
+                start_x,
+                start_width,
+            } => self.drag_log_author_edge(x, (start_x, start_width)),
             Drag::LogDivider {
                 start_x,
                 start_width,
@@ -165,6 +212,20 @@ impl App {
                 // 向左拖动使详情变宽；按排版允许的范围限制后再保存，使保存的宽度等于绘制的宽度。
                 self.git.log.details_w = Some(start_width - (x - start_x));
                 self.git.log.details_w = Some(self.log_parts().details.w);
+                self.request_redraw();
+            }
+            Drag::DiffFiles {
+                start_x,
+                start_width,
+            } => self.drag_log_files_edge(x, (start_x, start_width)),
+            Drag::LogBranches {
+                start_x,
+                start_width,
+            } => {
+                // 按排版允许的范围限制后再保存，使保存的宽度等于绘制的宽度。
+                self.git.log.branches_w = Some(start_width + (x - start_x));
+                let drawn = self.log_parts().branches_w;
+                self.git.log.branches_w = (drawn > 0.0).then_some(drawn);
                 self.request_redraw();
             }
             Drag::Scrollbar {
@@ -224,17 +285,25 @@ impl App {
                 bar: Scrollbar::Commit,
                 grab,
             } => {
-                // 历史提交的文件列表借用提交视图的列表，滚动方式相同。
-                let drag = |app: &mut App| {
-                    let list = app.commit_parts().list;
-                    let max = app.commit_max_scroll();
-                    if let Some(thumb) = scrollbar_thumb(list, 0.0, max + list.h) {
-                        app.git.commit.scroll =
-                            scroll_for_thumb(list.y, list.h, thumb.h, y, grab, max);
-                    }
-                };
-                if self.with_log_list(drag).is_none() && self.commit_shown() {
-                    drag(self);
+                let list = self.commit_parts().list;
+                let max = self.commit_max_scroll();
+                if self.commit_shown()
+                    && let Some(thumb) = scrollbar_thumb(list, 0.0, max + list.h)
+                {
+                    self.git.commit.scroll =
+                        scroll_for_thumb(list.y, list.h, thumb.h, y, grab, max);
+                }
+                self.request_redraw();
+            }
+            Drag::Scrollbar {
+                bar: Scrollbar::LogBranches,
+                grab,
+            } => {
+                let list = self.log_parts().branches;
+                let max = self.git.log.branches_max;
+                if let Some(thumb) = scrollbar_thumb(list, 0.0, max + list.h) {
+                    self.git.log.branches_scroll =
+                        scroll_for_thumb(list.y, list.h, thumb.h, y, grab, max);
                 }
                 self.request_redraw();
             }
@@ -270,6 +339,14 @@ impl App {
                 bar: Scrollbar::MarkdownTable,
                 grab,
             } => self.drag_markdown_table_scrollbar(x, grab),
+            Drag::Scrollbar {
+                bar: Scrollbar::MarkdownToc,
+                grab,
+            } => self.drag_toc_scrollbar(y, grab),
+            Drag::Scrollbar {
+                bar: bar @ (Scrollbar::Table | Scrollbar::TableHorizontal),
+                grab,
+            } => self.drag_table_scrollbar(bar == Scrollbar::TableHorizontal, (x, y), grab),
             Drag::Scrollbar {
                 bar: Scrollbar::PdfStrip,
                 grab,
@@ -344,7 +421,9 @@ impl App {
             } => {}
             Drag::Minimap { from, scroll } => self.drag_minimap(y, from, scroll),
             Drag::LogText => self.drag_log_text(x, y),
+            Drag::Hex => self.drag_hex(x, y),
             Drag::MarkdownText => self.drag_markdown(x, y),
+            Drag::ImageResize => self.drag_image_resize(x),
             Drag::TableCells => self.drag_table(x, y),
             Drag::Field => {
                 if let Some(field) = self.focused_field() {
@@ -354,7 +433,8 @@ impl App {
 
                 self.request_redraw();
             }
-            Drag::None => {}
+            // 设置卡片在上面设置浮层打开时的分支中拖动；浮层已关闭时不再处理。
+            Drag::None | Drag::SettingsCard { .. } => {}
         }
     }
 
@@ -365,8 +445,10 @@ impl App {
         let t = self.layout.text;
         let scrolled = self.scroll_while_dragging(Some(x), y);
 
-        if let Some(pos) = self.pos_at(x.clamp(t.x, t.right()), y.clamp(t.y, t.bottom() - 1.0))
-            && let Some(doc) = self.editor.active_mut()
+        if let Some(pos) = self.pos_at(
+            x.clamp(t.x, t.right()),
+            y.clamp(t.y, (t.bottom() - 1.0).max(t.y)),
+        ) && let Some(doc) = self.editor.active_mut()
         {
             doc.selection = if !by_word {
                 Selection::new(origin.0, pos)
@@ -485,7 +567,7 @@ impl App {
         let t = self.layout.text;
         let scrolled = self.scroll_while_dragging(None, y);
 
-        if let Some(pos) = self.pos_at(x, y.clamp(t.y, t.bottom() - 1.0))
+        if let Some(pos) = self.pos_at(x, y.clamp(t.y, (t.bottom() - 1.0).max(t.y)))
             && let Some(doc) = self.editor.active_mut()
         {
             let line = doc.text().pos_to_line_col(pos).0;

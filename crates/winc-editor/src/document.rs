@@ -30,7 +30,7 @@ use crate::editing::scopes::{self, FoldRange, Scope, ScopeMemo};
 use crate::navigation::bookmarks::Bookmarks;
 use content::Content;
 use editorconfig::FileConfig;
-use encoding::{self as charset, Encoding, UTF8_BOM, utf16_bom};
+use encoding::{self as charset, Encoding, UTF8_BOM, utf16_text, utf16_unmarked};
 use large::LargeText;
 use winc_preview::image::Picture;
 use winc_preview::table::Table;
@@ -40,8 +40,11 @@ pub(crate) mod disk;
 pub mod editorconfig;
 pub mod encoding;
 mod indentation;
+mod parked;
+pub(crate) use parked::Parked;
 pub(crate) mod large;
 mod preview;
+pub(crate) mod progress;
 #[cfg(test)]
 mod tests;
 
@@ -114,8 +117,9 @@ pub struct TableView {
     pub revision: u64,
     /// 显示的是第几张工作表（从 0 起）。
     pub sheet: usize,
-    /// 横向、纵向的滚动位置（逻辑像素）。
-    pub scroll: (f32, f32),
+    /// 横向、纵向的滚动位置（逻辑像素）。纵向用 `f64`：行数很多时总高度超出 `f32` 能精确
+    /// 表示的范围。
+    pub scroll: (f32, f64),
     /// 选中的单元格：起点（按下处，或按住 `⇧` 之前所在的单元格）和当前格，均为（行号，列号）。
     ///
     /// 选区是以两者为对角的区域，打开时选中 A1。
@@ -169,6 +173,34 @@ pub enum PreviewKind {
     Markdown,
     /// csv、tsv：预览为表格（`Document::table`）。
     Table,
+    /// LaTeX：预览只读。
+    Latex,
+}
+
+impl PreviewKind {
+    /// 全部种类。
+    pub const ALL: [PreviewKind; 4] = [
+        PreviewKind::Svg,
+        PreviewKind::Markdown,
+        PreviewKind::Table,
+        PreviewKind::Latex,
+    ];
+
+    /// 是否按 Markdown 预览排版（Markdown，以及转换成 Markdown 的 LaTeX）。
+    pub fn typeset(self) -> bool {
+        matches!(self, PreviewKind::Markdown | PreviewKind::Latex)
+    }
+
+    /// 返回语言 `language` 的文本可以预览成哪一种；不能预览的语言返回 `None`。
+    pub fn of(language: &winc_syntax::Language) -> Option<PreviewKind> {
+        match language.id {
+            "svg" => Some(PreviewKind::Svg),
+            "markdown" => Some(PreviewKind::Markdown),
+            "csv" | "tsv" => Some(PreviewKind::Table),
+            "latex" => Some(PreviewKind::Latex),
+            _ => None,
+        }
+    }
 }
 
 /// 可预览文件（SVG、Markdown）的显示方式。
@@ -193,6 +225,8 @@ pub enum Unsupported {
     Workbook,
     /// docx 文字文档：编辑区显示转换成 Markdown 后排版的阅读视图，由界面读取和转换。
     Docx,
+    /// EPUB 电子书：与 [`Unsupported::Docx`] 相同，显示转换成 Markdown 后排版的阅读视图。
+    Epub,
     /// PDF（只在能预览 PDF 的平台上，见 `winc_preview::pdf::supported`）：
     /// 编辑区逐页显示，由界面读取和渲染。
     Pdf,
@@ -202,6 +236,13 @@ pub enum Unsupported {
     TooLarge(u64),
     /// 无法读取，例如没有权限或文件不存在；内容是显示给用户的原因。
     Unreadable(String),
+}
+
+impl Unsupported {
+    /// 是否显示转换成 Markdown 后排版的阅读视图（docx、EPUB）。
+    pub fn reads_as_markdown(&self) -> bool {
+        matches!(self, Unsupported::Docx | Unsupported::Epub)
+    }
 }
 
 impl From<OpenError> for Unsupported {
@@ -224,6 +265,7 @@ impl std::fmt::Display for Unsupported {
             Unsupported::Image => f.write_str(t!("editor-unsupported-image")),
             Unsupported::Workbook => f.write_str(t!("editor-unsupported-workbook")),
             Unsupported::Docx => f.write_str(t!("editor-unsupported-docx")),
+            Unsupported::Epub => f.write_str(t!("editor-unsupported-epub")),
             Unsupported::Pdf => f.write_str(t!("editor-unsupported-pdf")),
             Unsupported::Binary(size) => {
                 f.write_str(&t!("editor-unsupported-binary", size = size_text(*size)))
@@ -241,7 +283,7 @@ impl std::fmt::Display for Unsupported {
 }
 
 /// 把文件大小格式化为「2.4 MB」形式的文字：不足 1 KB 时写字节数，否则按 1000 进位并保留一位小数。
-fn size_text(bytes: u64) -> String {
+pub fn size_text(bytes: u64) -> String {
     const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
     if bytes < 1000 {
         return t!("editor-size-bytes", count = bytes);
@@ -404,10 +446,10 @@ pub(crate) const BINARY_SNIFF: usize = 8 << 10;
 
 /// 是否为二进制文件：开头 `BINARY_SNIFF` 字节内含 NUL。
 ///
-/// UTF-16 文件含大量 NUL，因此开头有 BOM 时不算二进制。`bytes` 应从文件开头起，超出
-/// `BINARY_SNIFF` 的部分不检查。
+/// UTF-16 文件含大量 NUL，因此是 UTF-16 的文字（带 BOM，或认得出的不带 BOM 的）时不算
+/// 二进制。`bytes` 应从文件开头起，超出 `BINARY_SNIFF` 的部分不检查。
 pub fn looks_binary(bytes: &[u8]) -> bool {
-    !utf16_bom(bytes) && memchr::memchr(0, &bytes[..bytes.len().min(BINARY_SNIFF)]).is_some()
+    !utf16_text(bytes) && memchr::memchr(0, &bytes[..bytes.len().min(BINARY_SNIFF)]).is_some()
 }
 
 /// 一个打开的文档：文本、选区、撤销历史、高亮状态，以及对应的磁盘文件。
@@ -445,6 +487,10 @@ pub struct Document {
     pub tab_width_override: Option<usize>,
     /// 是否只读：预览图、二进制文件、含无法解码字节的文件都是只读。
     pub readonly: bool,
+    /// 用户是否把文档设为只读：不接受编辑，已有的修改仍可保存。
+    locked: bool,
+    /// 所在的窗口是否把全部文档设为只读（见 [`Editor::set_all_locked`](crate::Editor)）。
+    all_locked: bool,
     /// 无法显示的文件：标签中只显示原因。
     ///
     /// 此时文本为空，文档只读。
@@ -461,6 +507,8 @@ pub struct Document {
     ///
     /// 只读、没有对应的文件。
     pub log: Option<Box<crate::git::log::LogView>>,
+    /// 编辑区按十六进制显示文件的字节，而不是文本；只读，文本为空。
+    pub hex: Option<Box<crate::hex::HexView>>,
     /// 切换到预览之前的 `readonly`：SVG 的预览期间强制只读，切回源代码时恢复该值。
     readonly_before_preview: bool,
     /// 分栏预览（`PreviewMode::Split`）：文本仍然显示，右侧的预览由界面管理。
@@ -491,6 +539,8 @@ pub struct Document {
     pub(crate) bookmarks: Bookmarks,
     /// 模态编辑层的标记与修改列表；文本变化时随之移动。
     pub(crate) marks: Marks,
+    /// 其他窗格里这个文档的视图状态；文本变化时随之移动。
+    pub(crate) parked: Parked,
     /// CSV、TSV 按列对齐时每一列的起始位置，按（版本、Tab 宽度）缓存。
     columns: Option<ColumnsCache>,
     /// 上一次测量列宽时的文字和各列宽度；文字变化时只重新测量改动的行。
@@ -525,6 +575,11 @@ pub struct Document {
     pending: bool,
     /// 尚未读取的文档在读取时是否把二进制内容也按文本读入（「以文本方式打开」）。
     pending_as_text: bool,
+    /// 尚未读取的文档读取时是否打开成十六进制视图。
+    pending_hex: bool,
+    /// 用户通过「通过编码重新打开」选的编码：之后从磁盘重新读取时按它解码，不再识别编码，也不
+    /// 再判断是否二进制。
+    chosen: Option<Encoding>,
 }
 
 /// 从磁盘读出的内容。
@@ -567,11 +622,14 @@ impl Document {
             indent_override: None,
             tab_width_override: None,
             readonly: false,
+            locked: false,
+            all_locked: false,
             unsupported: None,
             picture: None,
             table: None,
             diff: None,
             log: None,
+            hex: None,
             readonly_before_preview: false,
             split: false,
             rendered: false,
@@ -586,6 +644,7 @@ impl Document {
             folds: Folds::default(),
             bookmarks: Bookmarks::default(),
             marks: Marks::default(),
+            parked: Parked::default(),
             columns: None,
             column_widths: None,
             fold_cache: None,
@@ -601,6 +660,8 @@ impl Document {
             conflict: false,
             pending: false,
             pending_as_text: false,
+            pending_hex: false,
+            chosen: None,
         }
     }
 
@@ -877,14 +938,57 @@ impl Document {
         self.text.is_large()
     }
 
-    /// 返回文档只读的原因（显示给用户）；可以编辑时返回 `None`。
+    /// 用户是否把文档设为只读。
+    pub fn is_locked(&self) -> bool {
+        self.locked
+    }
+
+    /// 用户能否切换文档的只读状态：因自身的状态而只读的文档不能。
+    pub fn can_lock(&self) -> bool {
+        !self.readonly
+    }
+
+    /// 由用户把文档设为只读或恢复为可以编辑。
+    pub fn set_locked(&mut self, locked: bool) {
+        self.locked = locked;
+    }
+
+    /// 所在的窗口是否把全部文档设为只读。
+    pub(crate) fn all_locked(&self) -> bool {
+        self.all_locked
+    }
+
+    /// 随窗口把文档设为只读或恢复；与文档自己的只读（[`set_locked`](Self::set_locked)）各自独立。
+    pub(crate) fn set_all_locked(&mut self, locked: bool) {
+        self.all_locked = locked;
+    }
+
+    /// 返回文档不能编辑的原因（显示给用户）；可以编辑时返回 `None`。
     pub fn readonly_reason(&self) -> Option<&'static str> {
+        let locked = || self.locked.then(|| t!("editor-readonly-locked"));
+        let all = || self.all_locked.then(|| t!("editor-readonly-all"));
+        self.unwritable_reason().or_else(locked).or_else(all)
+    }
+
+    /// 应用不由用户发起的事务（磁盘上的新内容、备份中的内容），不受用户设置的只读限制。
+    pub(crate) fn apply_unlocked(&mut self, transaction: Transaction) {
+        let held = (self.locked, self.all_locked);
+        (self.locked, self.all_locked) = (false, false);
+        self.apply(transaction);
+        (self.locked, self.all_locked) = held;
+    }
+
+    /// 返回文档因自身的状态而只读的原因（显示给用户），此时也不能保存。
+    ///
+    /// 不包括用户设置的只读。
+    pub fn unwritable_reason(&self) -> Option<&'static str> {
         match &self.text {
             _ if !self.readonly => None,
             _ if self.pending => Some(t!("editor-readonly-pending")),
             _ if self.unsupported.is_some() => Some(t!("editor-readonly-unsupported")),
             _ if self.previewing() => Some(t!("editor-readonly-previewing")),
             _ if self.title.is_some() => Some(t!("editor-readonly-tab")),
+            _ if self.hex.is_some() => Some(t!("editor-readonly-hex")),
             _ if self.encoding == Encoding::Binary => Some(t!("editor-readonly-binary")),
             Content::Large(large) if large.has_overlong_lines() => {
                 Some(t!("editor-readonly-long-lines"))
@@ -1054,8 +1158,14 @@ impl Document {
     /// 改用状态栏中选择的语言 `language`：重建高亮状态，并使按内容缓存的结果失效，见
     /// [`Document::set_language`]。
     ///
-    /// 文件之后重命名或另存为时，按新的文件名重新识别。
+    /// 文件重命名或另存为之后按新文件名重新识别。
+    /// 预览或分栏中的文档换成预览方式不同的语言时先回到源代码。
     pub fn choose_language(&mut self, language: &'static winc_syntax::Language) {
+        if self.preview_mode() != PreviewMode::Source
+            && PreviewKind::of(language) != self.preview_kind()
+        {
+            self.set_preview_mode(PreviewMode::Source);
+        }
         self.highlighter = Highlighter::new(language);
         // 列对齐、折叠、粘滞滚动的结果取决于语言，而缓存的键只有（版本、Tab 宽度）。重命名改变
         // 扩展名（`a.txt` → `a.csv`）时文本不变，因此递增 `revision` 使缓存失效。
@@ -1108,7 +1218,7 @@ impl Document {
         if old != text {
             let changes = diff::line_changes(&old, text);
             let before = self.selection;
-            self.apply(Transaction::new(changes, before, before, EditKind::Other));
+            self.apply_unlocked(Transaction::new(changes, before, before, EditKind::Other));
         }
         self.selection = selection.clamped(self.text.end_pos());
 
@@ -1123,7 +1233,7 @@ impl Document {
     ///
     /// 只读文档忽略。
     pub fn apply(&mut self, transaction: Transaction) {
-        if self.readonly {
+        if self.readonly || self.locked || self.all_locked {
             return;
         }
 
@@ -1133,6 +1243,7 @@ impl Document {
             bookmarks: &mut self.bookmarks,
             whole: &mut self.whole,
             marks: &mut self.marks,
+            parked: &mut self.parked,
         });
         self.selection = transaction.after.clamped(self.text.end_pos());
         let extra = transaction.extra_after.clone();

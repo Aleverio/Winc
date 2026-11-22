@@ -141,3 +141,47 @@ fn pending_input_releases_the_memory_of_a_large_paste() {
     input.advance(1 << 20);
     assert!(input.buf.capacity() <= winc_pty::protocol::IDLE_BUFFER);
 }
+
+/// 外层终端和复用器的会话变量不传给 shell，用户自己的变量保留；缺少区域设置时只声明编码。
+#[test]
+fn the_shell_environment_drops_the_outer_session_and_declares_utf8() {
+    let pair = |k: &str, v: &str| (k.as_bytes().to_vec(), v.as_bytes().to_vec());
+    let env = environment(vec![
+        pair("PATH", "/bin"),
+        pair("TMUX", "/tmp/tmux-1/default,1,0"),
+        pair("TMUX_PANE", "%1"),
+        pair("COLUMNS", "80"),
+        pair("VSCODE_INJECTION", "1"),
+        pair("KITTY_WINDOW_ID", "3"),
+        pair("TERM", "screen"),
+        pair("WINC_NONCE", "x"),
+        pair("WINC_PROMPT", "0"),
+        pair("SSH_AUTH_SOCK", "/tmp/agent"),
+    ]);
+    let get = |key: &str| lookup(&env, key.as_bytes());
+    for gone in [
+        "TMUX",
+        "TMUX_PANE",
+        "COLUMNS",
+        "VSCODE_INJECTION",
+        "KITTY_WINDOW_ID",
+        "WINC_NONCE",
+    ] {
+        assert_eq!(get(gone), None, "{gone}");
+    }
+    assert_eq!(get("PATH"), Some(&b"/bin"[..]));
+    assert_eq!(get("SSH_AUTH_SOCK"), Some(&b"/tmp/agent"[..]));
+    assert_eq!(get("WINC_PROMPT"), Some(&b"0"[..]));
+    assert_eq!(get("TERM"), Some(&b"xterm-256color"[..]));
+    // Windows 上也补。
+    let utf8: &[u8] = if cfg!(target_os = "macos") {
+        b"UTF-8"
+    } else {
+        b"C.UTF-8"
+    };
+    assert_eq!(get("LC_CTYPE"), Some(utf8));
+
+    // 已有区域设置时不改。
+    let env = environment(vec![pair("LANG", "zh_CN.UTF-8")]);
+    assert_eq!(lookup(&env, b"LC_CTYPE"), None);
+}

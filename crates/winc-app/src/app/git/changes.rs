@@ -276,7 +276,7 @@ impl App {
         if fresh || self.git.changes.computing.contains_key(&id) {
             return;
         }
-        let Some(rope) = doc.text().rope().cloned() else {
+        let Some(rope) = doc.text().rope().filter(|_| doc.holds_file_text()).cloned() else {
             return;
         };
         self.git.changes.computing.insert(id, revision);
@@ -365,7 +365,7 @@ impl App {
     }
 
     /// 在回滚、跳转或打开卡片之前确保当前文档的改动是最新的，必要时当场计算，以保证行号准确。
-    fn fresh_line_changes(&mut self) {
+    pub(in crate::app) fn fresh_line_changes(&mut self) {
         let Some(index) = self.editor.active else {
             return;
         };
@@ -386,7 +386,7 @@ impl App {
         {
             return;
         }
-        let Some(rope) = doc.text().rope() else {
+        let Some(rope) = doc.text().rope().filter(|_| doc.holds_file_text()) else {
             return;
         };
         let hunks = compare(&base, rope);

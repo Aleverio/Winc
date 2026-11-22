@@ -5,6 +5,8 @@
 mod gutter;
 mod line;
 
+pub(in crate::view) use gutter::{blame_ages, draw_blame_cell};
+
 use winc_core::diff::LineHunk;
 use winc_core::text::Columns;
 use winc_core::wrap::Breaks;
@@ -42,8 +44,10 @@ pub(super) fn draw_text_area(app: &mut App, frame: &mut Frame<'_>, index: usize)
     let hidden = motion_ref.map_or(0.0, |m| m.hidden(app.fonts.line_height));
 
     // `scroll_line` 以显示行计；折叠隐藏的行不显示，因此屏幕上显示的是文件中若干段连续的行。
+    let lh = app.fonts.line_height;
     let doc = &mut app.editor.documents[index];
-    let first_row = doc.scroll_line.floor().max(0.0) as usize;
+    let scroll = drawn_scroll_line(doc.scroll_line, lh);
+    let first_row = scroll.floor().max(0.0) as usize;
     // 动画中变化的行仅收起了一部分，因此下方额外绘制与这些行数量相同的行。
     let rows = (layout.text.h / app.fonts.line_height).ceil() as usize
         + 1
@@ -94,13 +98,12 @@ pub(super) fn draw_text_area(app: &mut App, frame: &mut Frame<'_>, index: usize)
     let blame_w = app.blame_width();
     let blame = (blame_w > 0.0).then(|| app.blame_of(id)).flatten();
     // 提交时间的范围：最旧的提交色条最淡，最新的最深。
-    let ages = blame.as_ref().map(|b| {
-        let times = b.commits.iter().filter(|c| !c.uncommitted).map(|c| c.time);
-        (times.clone().min().unwrap_or(0), times.max().unwrap_or(0))
-    });
+    let ages = blame.as_deref().map(gutter::blame_ages);
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64);
+    // 当前行追溯：光标所在行的末尾写一行说明。
+    let line_blame = app.inline_blame(now);
     let blame_hover = match app.pointer.hover {
         Hover::Blame(line) => blame.as_ref().and_then(|b| b.lines.get(line).copied()),
         _ => None,
@@ -160,7 +163,7 @@ pub(super) fn draw_text_area(app: &mut App, frame: &mut Frame<'_>, index: usize)
             segments: &segments,
             visible: visible.clone(),
             first_row,
-            offset: (doc.scroll_line - first_row as f64) as f32 * lh,
+            offset: (scroll - first_row as f64) as f32 * lh,
             motion: motion_ref,
             hidden,
             turning: motion_ref.map(|m| (doc.line_of_row(m.rows.start - 1), m.reveal())),
@@ -207,6 +210,8 @@ pub(super) fn draw_text_area(app: &mut App, frame: &mut Frame<'_>, index: usize)
             ages,
             now,
             blame_hover,
+            line_blame,
+            problems: app.latex_problem_lines(id),
         };
 
         screen.draw_conflict_tints(frame, &conflicts);
@@ -221,6 +226,11 @@ pub(super) fn draw_text_area(app: &mut App, frame: &mut Frame<'_>, index: usize)
             let h = m.rows.len() as f32 * lh - hidden;
             Rect::new(layout.editor.x, top, layout.editor.w, h.max(0.0))
         });
+        // 专注模式：光标所在段落以外的行画得淡一些。
+        let focus = (app.markdown_focus() && app.focus == Focus::Editor)
+            .then(|| text.rope())
+            .flatten()
+            .map(|rope| crate::app::preview::markdown::paragraph_lines(rope, doc.selection.head));
         // 每一段都从行首的高亮状态开始绘制：精确状态，或尚未推算到时的近似状态。
         for (range, start) in segments.iter().zip(&states) {
             let mut state = start.unwrap_or(LineState::Normal);
@@ -234,10 +244,16 @@ pub(super) fn draw_text_area(app: &mut App, frame: &mut Frame<'_>, index: usize)
                 let mut draw = |frame: &mut Frame<'_>| {
                     screen.draw_line(frame, &mut scratch, line, line_start, content, &mut state)
                 };
-                match curtain.filter(|_| screen.in_curtain(line)) {
-                    Some(curtain) => frame.within(curtain, draw),
-                    None => draw(frame),
-                }
+                let opacity = match focus {
+                    Some((first, last)) if line < first || line > last => FOCUS_DIM,
+                    _ => 1.0,
+                };
+                frame.with_opacity(opacity, |frame| {
+                    match curtain.filter(|_| screen.in_curtain(line)) {
+                        Some(curtain) => frame.within(curtain, draw),
+                        None => draw(frame),
+                    }
+                });
                 ControlFlow::Continue(())
             });
         }
@@ -330,6 +346,10 @@ struct Screen<'a> {
     ages: Option<(i64, i64)>,
     now: i64,
     blame_hover: Option<u32>,
+    /// 当前行追溯：光标所在的行和要写在行尾的说明。
+    line_blame: Option<(usize, String)>,
+    /// LaTeX 编译出错的行（从 0 起，从小到大）。
+    problems: Vec<usize>,
 }
 
 /// 行尾可点击的区域及其所在的行。

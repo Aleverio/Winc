@@ -6,6 +6,8 @@
 //! 刷新仓库状态，并重新读被改动过的文件。
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use winc_editor::git::{Branch, BranchDeleted, Carried, Git, Operation, Remote, Stash};
@@ -15,6 +17,7 @@ use super::commit::{COMMITTED_SHOWN, PushIntent};
 use super::question;
 use super::unusable;
 use super::worktree::RemoveCheck;
+use crate::app::NoticeKind;
 use crate::app::animation::{Clock, TREE_ANIMATION};
 use crate::app::input::context_menu::{MenuCommand, MenuEntry};
 use crate::app::{App, UserEvent};
@@ -68,6 +71,10 @@ impl BranchOp {
 /// 对日志里一个标签做的事。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TagOp {
+    /// 从该标签新建分支（输入名字）。
+    NewBranch,
+    /// 把该标签指向的提交合并到当前分支。
+    Merge,
     /// 推送到远程仓库。
     Push,
     /// 删除本地标签（先确认）。
@@ -78,11 +85,19 @@ pub enum TagOp {
 
 impl TagOp {
     /// 全部操作，顺序就是子菜单里的顺序。
-    pub const ALL: [TagOp; 3] = [TagOp::Push, TagOp::Delete, TagOp::DeleteRemote];
+    pub const ALL: [TagOp; 5] = [
+        TagOp::NewBranch,
+        TagOp::Merge,
+        TagOp::Push,
+        TagOp::Delete,
+        TagOp::DeleteRemote,
+    ];
 
     /// 子菜单里的文字。
     pub fn label(self) -> &'static str {
         match self {
+            TagOp::NewBranch => t!("git-tag-new-branch"),
+            TagOp::Merge => t!("git-branch-merge-into-current"),
             TagOp::Push => t!("git-tag-push"),
             TagOp::Delete => t!("git-tag-delete"),
             TagOp::DeleteRemote => t!("git-tag-delete-remote"),
@@ -146,6 +161,8 @@ pub(super) enum Then {
     Rescan,
     /// 读取好了交互式变基的范围：打开对话框，不说做完了。
     RebasePlan(Box<winc_editor::git::RebasePlan>),
+    /// 读取好了改写历史要用的内容：打开对话框或确认（[`App::history_loaded`]），不说做完了。
+    History(Box<super::rewrite::Loaded>),
     /// 检查完要移除的工作树：确认以后移除（[`App::confirm_remove_worktree`]），不说做完了。
     ConfirmRemove(RemoveCheck),
     /// 同步需要强制推送：确认以后推送（[`App::confirm_force_push`]），不说做完了；内容是上游将被
@@ -185,6 +202,8 @@ pub(crate) struct BranchState {
     pub(super) questions: QuestionChannel,
     /// 对话框正在处理的请求：所属操作的编号和答复通道；丢弃通道表示取消。
     pub(in crate::app) asking: Option<(super::question::Asker, Sender<String>)>,
+    /// 正在询问的登录请求的「记住密码」标记；该请求不提供此选项时为 `None`。
+    pub(in crate::app) remember: Option<Arc<AtomicBool>>,
     /// 用户是否取消了当前操作的输入请求；为真时该操作的失败不按错误提示。
     pub(in crate::app) declined: bool,
     /// 登录对话框中填写的密码及其远程地址，用于答复随后的密码请求，操作结束时清除。
@@ -200,13 +219,15 @@ impl Default for BranchState {
             results: channel(),
             questions: channel(),
             asking: None,
+            remember: None,
             declined: false,
             password: None,
         }
     }
 }
 
-/// 提交视图「⋯」里的 Git 操作：进行中的合并、变基的继续和中止，储藏更改，远程仓库。
+/// 提交视图「⋯」里的 Git 操作：进行中的合并、变基的继续、跳过和中止，储藏更改，远程仓库
+/// （`transfer` 为真时其中的拉取自…、推送到…可用）。
 ///
 /// 拉取、推送、获取和新建分支、工作树都在分支选择器里，各条储藏在改动列表下面的储藏一组里，回滚
 /// 勾选的文件在组标题上，这里不再列出。
@@ -214,33 +235,63 @@ pub(crate) fn branch_menu(
     remotes: &[Remote],
     operation: Option<Operation>,
     busy: bool,
+    transfer: bool,
 ) -> Vec<MenuEntry> {
     use MenuCommand::*;
     let mut entries = Vec::new();
     // 合并、变基停下来等着处理冲突：最上面是继续和中止。
-    if operation.is_some() {
+    if let Some(operation) = operation {
         entries.push(MenuEntry::Item(GitContinue, !busy));
+        // 合并只有一个提交，没有可以跳过的。
+        if operation != Operation::Merge {
+            entries.push(MenuEntry::Item(GitSkip, !busy));
+        }
         entries.push(MenuEntry::Item(GitAbort, !busy));
         entries.push(MenuEntry::Separator);
     }
     entries.push(MenuEntry::Item(GitStash, !busy));
     entries.push(MenuEntry::Separator);
-    // 远程仓库：每个一个子菜单（修改地址、移除），最后是添加。
-    let mut items: Vec<MenuEntry> = (remotes.iter().enumerate())
-        .map(|(i, remote)| {
-            let ops = [RemoteOp::Edit, RemoteOp::Remove]
-                .into_iter()
-                .map(|op| MenuEntry::Item(GitRemote(op, i), !busy))
-                .collect();
-            MenuEntry::Submenu(remote.name.clone(), ops)
-        })
-        .collect();
-    if !items.is_empty() {
+    // 远程仓库：有远程时先是拉取自…、推送到…，然后每个远程一个子菜单（修改地址、移除），最后
+    // 是添加。
+    let mut items = Vec::new();
+    if !remotes.is_empty() {
+        let item = |action| MenuEntry::Item(GitAction(action), transfer);
+        items.extend([
+            item(crate::keymap::Action::GitPullFrom),
+            item(crate::keymap::Action::GitPushTo),
+            MenuEntry::Separator,
+        ]);
+    }
+    items.extend((remotes.iter().enumerate()).map(|(i, remote)| {
+        let ops = [RemoteOp::Edit, RemoteOp::Remove]
+            .into_iter()
+            .map(|op| MenuEntry::Item(GitRemote(op, i), !busy))
+            .collect();
+        MenuEntry::Submenu(remote.name.clone(), ops)
+    }));
+    if !remotes.is_empty() {
         items.push(MenuEntry::Separator);
     }
     items.push(MenuEntry::Item(GitAddRemote, !busy));
     entries.push(MenuEntry::Submenu(t!("git-remotes-menu").to_owned(), items));
     entries
+}
+
+/// 分支选择器里第 `index` 个标签的操作菜单，和分支的菜单同样分组：签出和新建、合并到当前
+/// 分支、推送、删除，组之间有分隔线。
+pub(crate) fn tag_ops(index: usize, busy: bool) -> Vec<MenuEntry> {
+    let item = |op: Option<TagOp>| MenuEntry::Item(MenuCommand::PickerTag(op, index), !busy);
+    vec![
+        item(None),
+        item(Some(TagOp::NewBranch)),
+        MenuEntry::Separator,
+        item(Some(TagOp::Merge)),
+        MenuEntry::Separator,
+        item(Some(TagOp::Push)),
+        MenuEntry::Separator,
+        item(Some(TagOp::Delete)),
+        item(Some(TagOp::DeleteRemote)),
+    ]
 }
 
 /// 第 `index` 条储藏的菜单：应用、应用并删除，分隔线，删除（删除先确认）。
@@ -261,8 +312,8 @@ pub(crate) fn stash_menu(stashes: &[Stash], busy: bool) -> Vec<MenuEntry> {
 
 /// 分支选择器里第 `index` 个分支的操作菜单：按 `BranchOp::GROUPS` 分组，组之间有分隔线。
 ///
-/// `branches` 是本地分支在前、远程分支在后的列表，当前分支只能重命名：从当前分支新建分支、工作树
-/// 在分支选择器的底部；`held` 是被别的工作树
+/// `branches` 是本地分支在前、远程分支在后的列表，当前分支只能从它新建分支和重命名；`held` 是
+/// 被别的工作树
 /// 签出的本地分支，它们的「签出」是切到那个工作树，不能删除；`stale` 是被目录已经不在的工作树
 /// 占着的分支，git 仍然不允许签出、删除，要先清理。
 pub(crate) fn branch_ops(
@@ -283,7 +334,7 @@ pub(crate) fn branch_ops(
             .copied()
             .filter(|op| match op {
                 // 当前分支不能签出、合并、变基、删除自己。
-                _ if branch.current => matches!(op, BranchOp::Rename),
+                _ if branch.current => matches!(op, BranchOp::NewFrom | BranchOp::Rename),
                 // 已经在其他工作树里签出着、又是当前分支（`origin/main` 在 `main` 上）：
                 // 不能再签出该分支。
                 BranchOp::NewWorktree => {
@@ -359,9 +410,19 @@ impl App {
             .or(self.git.remotes.first());
         let remote = self.git.publish_remote.clone().or(fallback.cloned());
         if remote.is_none() {
-            self.notify(t!("git-push-no-remote"));
+            self.notify(NoticeKind::Warning, t!("git-push-no-remote"));
         }
         remote.map(PushIntent::Publish)
+    }
+
+    /// 拉取、同步时是否变基（设置 `git.pull`）；按 Git 的配置时为 `None`。
+    pub(in crate::app) fn pull_mode(&self) -> Option<bool> {
+        self.config.git_pull.unwrap_or_default().rebase()
+    }
+
+    /// 拉取当前分支时实际是否变基：设置指明了方式时按设置，否则按 Git 的配置。
+    pub(in crate::app) fn pulls_with_rebase(&self) -> bool {
+        self.pull_mode().unwrap_or(self.git.pull_rebase)
     }
 
     pub(in crate::app) fn has_upstream(&self) -> bool {
@@ -378,14 +439,16 @@ impl App {
             GitFetch => self.git_operate(t!("git-op-fetch").into(), |git, root| {
                 git.operate(root, &["fetch", "--all", "--prune"])
             }),
-            GitPull => self.git_operate_then(t!("git-op-pull").into(), |git, root| {
-                keep_changes(git, root, t!("git-op-pull"), |git| git.pull(root))
-            }),
-            GitPullRebase => self.git_operate_then(t!("git-op-pull-rebase").into(), |git, root| {
-                keep_changes(git, root, t!("git-op-pull-rebase"), |git| {
-                    git.pull_rebase(root)
-                })
-            }),
+            GitPull | GitPullRebase | GitPullMerge => {
+                let (what, rebase) = match command {
+                    GitPullRebase => (t!("git-op-pull-rebase"), Some(true)),
+                    GitPullMerge => (t!("git-op-pull-merge"), Some(false)),
+                    _ => (t!("git-op-pull"), self.pull_mode()),
+                };
+                self.git_operate_then(what.into(), move |git, root| {
+                    keep_changes(git, root, what, |git| git.pull(root, rebase))
+                });
+            }
             GitAddRemote => self.open_remote_dialog(None),
             GitRemote(op, i) => {
                 let Some(remote) = self.git.remote_list.get(i).cloned() else {
@@ -403,11 +466,14 @@ impl App {
                 }
             }
             GitStash => self.open_stash_prompt(),
-            GitContinue | GitAbort => {
+            GitContinue | GitSkip | GitAbort => {
                 let Some(operation) = self.git.status.as_ref().and_then(|s| s.operation) else {
                     return;
                 };
                 match command {
+                    GitSkip => self.git_operate(t!("git-op-skip").into(), move |git, root| {
+                        git.skip_operation(root, operation)
+                    }),
                     // 合并在提交视图里完成：写好（已经填上的）提交信息再提交。
                     GitContinue if operation == Operation::Merge => self.show_commit(),
                     GitContinue => self
@@ -441,13 +507,21 @@ impl App {
         }
     }
 
+    /// 把分支 `name` 合并到当前分支。
+    pub(in crate::app) fn git_merge_branch(&mut self, name: String) {
+        self.git_operate(
+            t!("git-op-merge", name = name.as_str()),
+            move |git, root| git.operate(root, &["merge", "--no-edit", "--end-of-options", &name]),
+        );
+    }
+
     /// 对分支 `branch` 执行操作菜单中的 `op`。
     pub(in crate::app) fn run_branch_op(&mut self, op: BranchOp, branch: Branch) {
         let name = branch.name.clone();
         match op {
             // 分支已经在其他工作树里签出：git 不允许重复签出，改为切到该工作树。
             BranchOp::Checkout if let Some(i) = self.git.worktree_holding(local_name(&branch)) => {
-                self.open_worktree(i, false);
+                self.open_worktree_asking(i);
             }
             BranchOp::NewWorktree => self.new_worktree_for(&branch),
             BranchOp::Checkout if branch.remote => {
@@ -477,12 +551,7 @@ impl App {
             BranchOp::NewFrom => {
                 self.open_branch_dialog(Some(name), None);
             }
-            BranchOp::Merge => self.git_operate(
-                t!("git-op-merge", name = name.as_str()),
-                move |git, root| {
-                    git.operate(root, &["merge", "--no-edit", "--end-of-options", &name])
-                },
-            ),
+            BranchOp::Merge => self.git_merge_branch(name),
             BranchOp::Rebase => self.git_operate(
                 t!("git-op-rebase-onto", name = name.as_str()),
                 move |git, root| git.operate(root, &["rebase", "--end-of-options", &name]),
@@ -722,11 +791,15 @@ impl App {
         let id = self.git.branch.started;
         let wake = self.link.proxy.clone();
         let questions = self.git.branch.questions.0.clone();
+        // 凭据只为本机运行的 `git` 保存：远端主机和发行版中的 `git` 访问不到本机的凭据存储。
+        let remember = self.config.git_remember_credentials != Some(false)
+            && winc_editor::git::runs_here(&dir);
         self.spawn_git(UserEvent::GitOperated, move |tool| {
             let result = match tool {
                 Ok(git) => {
                     // 端点只在操作期间存在，`listener` 在本分支结束时被丢弃。
-                    let listener = wake.and_then(|proxy| question::listen(proxy, questions, id));
+                    let listener =
+                        wake.and_then(|proxy| question::listen(proxy, questions, id, remember));
                     let askpass = listener.as_ref().and_then(Listener::askpass);
                     work(&git.with_askpass(askpass), &dir)
                 }
@@ -767,9 +840,10 @@ impl App {
                         Then::ConfirmRemove(_)
                         | Then::ConfirmForcePush(_)
                         | Then::ConfirmForceDelete(_)
-                        | Then::RebasePlan(_),
+                        | Then::RebasePlan(_)
+                        | Then::History(_),
                     )) => {}
-                    Ok((_, Then::Warn(warning))) => self.notify(warning),
+                    Ok((_, Then::Warn(warning))) => self.notify(NoticeKind::Warning, warning),
                     Ok((_, then)) => {
                         self.flash(t!("git-op-done-in", name = name, what = done.what));
                         // 已经换了目录：当前窗口不再换过去，在新窗口打开。
@@ -786,6 +860,9 @@ impl App {
                 continue;
             }
             self.git.branch.running = None;
+            // 只读出范围、要推送的提交时仓库没有变化，日志不必重读。
+            let read = matches!(done.result, Ok((_, Then::RebasePlan(_) | Then::History(_))));
+            self.git.logs_outdated |= done.result.is_ok() && !read;
             // 操作由表单对话框发起时：成功则关闭对话框，失败则在对话框中显示原因。
             let error = done.result.as_ref().err().map(String::as_str);
             if self.form_operation_done(done.id, error) && error.is_some() {
@@ -794,8 +871,9 @@ impl App {
             match done.result {
                 Ok((_, Then::ConfirmRemove(check))) => self.confirm_remove_worktree(check),
                 Ok((_, Then::ConfirmForcePush(count))) => self.confirm_force_push(count),
-                Ok((_, Then::Warn(warning))) => self.notify(warning),
+                Ok((_, Then::Warn(warning))) => self.notify(NoticeKind::Warning, warning),
                 Ok((_, Then::RebasePlan(plan))) => self.open_rebase_dialog(*plan),
+                Ok((_, Then::History(loaded))) => self.history_loaded(*loaded),
                 Ok((_, Then::ConfirmForceDelete(name))) => self.confirm_force_delete_branch(name),
                 Ok((summary, then)) => {
                     if summary.is_empty() {

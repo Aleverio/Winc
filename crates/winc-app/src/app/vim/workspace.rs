@@ -84,15 +84,7 @@ impl App {
             Focus::Tree => self.on_key_tree(&key),
             Focus::Results => self.results_key(&key),
             Focus::Outline => self.outline_key(&key),
-            // 历史提交的文件列表借用提交视图的列表。
-            _ => {
-                if self
-                    .with_log_list(|app| app.commit_list_key(&key))
-                    .is_none()
-                {
-                    self.commit_list_key(&key);
-                }
-            }
+            _ => self.commit_list_key(&key),
         }
         self.request_redraw();
         true
@@ -260,7 +252,7 @@ impl App {
         let open = (self.editor.documents.iter()).position(|doc| doc.path.as_ref() == Some(&path));
         match open {
             Some(index) => self.activate_tab(index),
-            None if winc_backend::fs::is_file(&path) => self.open_path(&path),
+            None if self.may_be_file(&path) => self.open_path(&path),
             None => return self.flash(t!("editor-vim-no-file")),
         }
         self.jumps.navigation.mark_jump();

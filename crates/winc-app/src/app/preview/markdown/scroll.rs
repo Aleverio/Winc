@@ -2,7 +2,108 @@
 
 use super::*;
 
+/// 标题列表中列出的范围：标题超过可显示的行数时只列出连续的一段，可按行滚动。
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TocList {
+    /// 上一帧卡片的矩形；列表收起时为空。
+    pub card: winc_render::Rect,
+    /// 上一帧各行所占的矩形，即滚动条的轨道。
+    pub track: winc_render::Rect,
+    /// 列出的第一行、行数和标题的总数。
+    pub first: usize,
+    pub rows: usize,
+    pub total: usize,
+    /// 一行的高度（逻辑像素）。
+    pub row: f32,
+    /// 列出的第一行相对默认位置的偏移（行）；默认位置使当前所在的一节居中。
+    pub shift: isize,
+    /// 设置 `shift` 时当前所在的一节；该值变化时 `shift` 归零。
+    pub at: Option<usize>,
+    /// 滚轮位移中不足一行的部分（逻辑像素）。
+    pub wheel: f32,
+}
+
+/// 分帧排版的状态，见 [`Later`](super::laid::Later)。
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CatchUp {
+    /// 一帧中排版视口之外的块的时限；`None` 时取
+    /// [`LAYOUT_BUDGET`](super::laid::LAYOUT_BUDGET)，测试中不设时限。
+    pub budget: Option<std::time::Duration>,
+    /// 本帧绘制后是否仍有沿用旧结果的块；为真时逐帧重绘，直到全部排完。
+    pub pending: bool,
+}
+
+impl CatchUp {
+    /// 返回本帧排版视口之外的块的截止时刻。
+    pub fn deadline(&self) -> std::time::Instant {
+        let default = if cfg!(test) {
+            std::time::Duration::from_secs(3600)
+        } else {
+            super::laid::LAYOUT_BUDGET
+        };
+        std::time::Instant::now() + self.budget.unwrap_or(default)
+    }
+}
+
+impl TocList {
+    /// 返回本帧列出的第一行：默认位置 `natural` 加上偏移，并使 `rows` 行不超出 `total`。
+    pub fn start(
+        &mut self,
+        natural: usize,
+        current: Option<usize>,
+        (rows, total): (usize, usize),
+    ) -> usize {
+        if self.at != current {
+            (self.at, self.shift, self.wheel) = (current, 0, 0.0);
+        }
+        let start = natural.saturating_add_signed(self.shift).min(total - rows);
+        self.shift = start as isize - natural as isize;
+        (self.first, self.rows, self.total) = (start, rows, total);
+        start
+    }
+}
+
+impl TocList {
+    /// 返回滚动条的（滚动位置，内容高度），逻辑像素；全部标题都已列出时为 `None`。
+    pub fn scrollbar(&self) -> Option<(f32, f32)> {
+        (self.rows < self.total)
+            .then_some((self.first as f32 * self.row, self.total as f32 * self.row))
+    }
+}
+
 impl App {
+    /// 拖动标题列表的滚动条：鼠标的纵坐标为 `y`，按下处距滑块上边 `grab`（逻辑像素）。
+    pub(crate) fn drag_toc_scrollbar(&mut self, y: f32, grab: f32) {
+        let list = &mut self.preview.markdown.toc_list;
+        let Some((_, content)) = list.scrollbar() else {
+            return;
+        };
+        let track = list.track;
+        if let Some(thumb) = crate::layout::scrollbar_thumb(track, 0.0, content) {
+            let max = content - track.h;
+            let to = crate::layout::scroll_for_thumb(track.y, track.h, thumb.h, y, grab, max);
+            let first = (to / list.row).round() as isize;
+            list.shift += first - list.first as isize;
+            self.request_redraw();
+        }
+    }
+
+    /// 按滚轮位移 `dy` 滚动标题列表，返回是否已处理。
+    ///
+    /// 鼠标 (`x`, `y`) 不在列表上，或全部标题都已列出时不处理。
+    pub(crate) fn scroll_toc(&mut self, (x, y): (f32, f32), dy: f32) -> bool {
+        let list = &mut self.preview.markdown.toc_list;
+        if list.rows >= list.total || list.row <= 0.0 || !list.card.contains(x, y) {
+            return false;
+        }
+        list.wheel -= dy;
+        let steps = (list.wheel / list.row).trunc();
+        list.wheel -= steps * list.row;
+        list.shift += steps as isize;
+        self.request_redraw();
+        true
+    }
+
     /// 排版完成后，若有属于该文档的待跳转标题（见 [`App::open_markdown_file`]），滚动到该标题。
     pub(crate) fn scroll_to_pending_anchor(&mut self) {
         let md = &mut self.preview.markdown;
@@ -49,9 +150,29 @@ impl App {
     /// 滚动后将其记为当前所在的一节（见 `MarkdownPreview::toc_picked`），并在正文中为其添加
     /// 逐渐淡出的底色，标示跳转的目标。
     pub(in crate::app) fn press_toc(&mut self, target: TocTarget) {
+        if target == TocTarget::Pin {
+            self.update_state(|state| state.markdown_toc_pinned = !state.markdown_toc_pinned);
+            let pinned = self.state.markdown_toc_pinned;
+            let clock = self.clock(crate::app::animation::TOC_PIN);
+            self.preview.markdown.toc_pin = clock.map(|clock| (pinned, clock));
+            // 钉住状态变化使正文左边缘移动时，从当前位置过渡到新位置。
+            let left = self.preview.markdown.layout.as_ref().map(|laid| laid.left);
+            self.preview.markdown.toc_slide = left.filter(|_| clock.is_some());
+            self.request_redraw();
+            return;
+        }
         let TocTarget::Heading(i) = target else {
             return;
         };
+        // 收起的一节中的标题：展开后跳到该标题。
+        let key = (self.hits.markdown_toc_blocks.get(i))
+            .zip(self.preview.markdown.parsed.as_ref())
+            .and_then(|(&block, parsed)| parsed.heading_keys().into_iter().nth(block).flatten());
+        if let Some(key) = key
+            && self.unfold_to_anchor(&key)
+        {
+            return;
+        }
         let Some(&top) = self.hits.markdown_toc_tops.get(i) else {
             return;
         };
@@ -69,11 +190,19 @@ impl App {
     pub(in crate::app) fn jump_to_anchor(&mut self, anchor: &str) {
         let Some((top, height)) = crate::app::preview::markdown::laid::anchor_box(self, anchor)
         else {
-            self.flash(t!("preview-markdown-heading-not-found"));
+            if !self.unfold_to_anchor(anchor) {
+                self.flash(t!("preview-markdown-heading-not-found"));
+            }
             return;
         };
         let lower = anchor.to_lowercase();
         if !(lower.starts_with("fn-") || lower.starts_with("fnref-")) {
+            // 书中不用过渡：过渡中的滚动会被当成用户滚动，不再对齐。
+            if self.hold_book_at(top) {
+                self.settle_glide_of(ScrollTarget::Markdown);
+                self.scroll_markdown_to(top);
+                return;
+            }
             self.glide_pane_to(ScrollTarget::Markdown, top);
             return;
         }
@@ -127,7 +256,8 @@ impl App {
             return;
         }
         self.preview.markdown.align = None;
-        let y = laid.y_of_line(text_line(doc), doc.text().line_count());
+        let (line, total) = preview_line(doc, self.preview.markdown.lines.as_deref());
+        let y = laid.y_of_line(line, total);
         self.preview.markdown.scroll_to(y);
     }
 
@@ -143,7 +273,8 @@ impl App {
         if self.preview.markdown.synced == Some(now) {
             return;
         }
-        let y = laid.y_of_line(text_line(doc), doc.text().line_count());
+        let (line, total) = preview_line(doc, self.preview.markdown.lines.as_deref());
+        let y = laid.y_of_line(line, total);
         self.preview.markdown.scroll_to(y);
         self.preview.markdown.synced = Some(now);
     }

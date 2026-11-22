@@ -69,10 +69,7 @@ fn stashes_are_listed_below_the_changes_and_open_their_files() {
     // 收着时只有标题一行，在列表下面。
     let parts = app.commit_parts();
     let section = parts.stashes.unwrap();
-    assert_eq!(
-        section.h,
-        COMMIT_ROW + 2.0 * crate::app::git::commit::STASH_GAP
-    );
+    assert_eq!(section.h, crate::app::git::commit::DRAWER_CLOSED);
     assert!(parts.list.bottom() <= section.y);
     assert!(!(app.hits.commit.iter()).any(|(_, t)| *t == CommitTarget::Stash(0)));
     app.press_commit(CommitTarget::Stashes);
@@ -106,7 +103,7 @@ fn stashes_are_listed_below_the_changes_and_open_their_files() {
     let section = app.commit_parts().stashes.unwrap();
     assert_eq!(
         section.h,
-        4.0 * COMMIT_ROW + 2.0 * crate::app::git::commit::STASH_GAP
+        3.0 * COMMIT_ROW + crate::app::git::commit::DRAWER_CLOSED
     );
     assert!((app.hits.commit.iter()).any(|(_, t)| *t == CommitTarget::StashFile(1)));
     app.press_commit(CommitTarget::StashFile(0));
@@ -152,7 +149,7 @@ fn the_stash_group_opens_like_a_drawer() {
     let open = app.commit_parts().stashes.unwrap();
     assert_eq!(open.h, closed.h + COMMIT_ROW);
 
-    app.git.commit.stash_motion =
+    app.git.commit.stashes.motion =
         Some((closed.h, Clock::frozen(TREE_ANIMATION / 2, TREE_ANIMATION)));
     let parts = app.commit_parts();
     let half = parts.stashes.unwrap();
@@ -166,9 +163,9 @@ fn the_stash_group_opens_like_a_drawer() {
     assert!(has(&app, CommitTarget::Stashes));
     assert!(!has(&app, CommitTarget::Stash(0)));
 
-    app.git.commit.stash_motion = Some((closed.h, Clock::frozen(TREE_ANIMATION, TREE_ANIMATION)));
+    app.git.commit.stashes.motion = Some((closed.h, Clock::frozen(TREE_ANIMATION, TREE_ANIMATION)));
     app.settle_animations();
-    assert!(app.git.commit.stash_motion.is_none());
+    assert!(app.git.commit.stashes.motion.is_none());
     paint(&mut app);
     assert!(has(&app, CommitTarget::Stash(0)));
     assert_eq!(app.stash_chevron(), 1.0);
