@@ -102,7 +102,7 @@ foreach ($kind in @('nsis', 'msi')) {
             if ($process.ExitCode -ne 0) { throw "nsis installation over an earlier version failed: $($process.ExitCode)" }
             if ((& $listed 'json') -or -not (& $inMenu)) { throw 'nsis: an earlier installation did not keep its context menu and listing' }
         } else {
-            $process = Start-Process msiexec.exe -ArgumentList "/i `"$setup`" /qn /norestart ADDLOCAL=ContextMenu" -Wait -PassThru
+            $process = Start-Process msiexec.exe -ArgumentList "/i `"$setup`" /qn /norestart ADDLOCAL=ContextMenu INSTALLFOLDER=`"$directory`"" -Wait -PassThru
             if ($process.ExitCode -notin @(0, 1641, 3010)) { throw "msi: adding the context menu failed: $($process.ExitCode)" }
         }
         # Explorer context menu, once chosen: one entry for every file opens the file, folders and

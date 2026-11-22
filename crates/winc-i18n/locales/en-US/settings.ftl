@@ -241,6 +241,7 @@ settings-updates-latest = Winc is up to date
 settings-updates-found = A new version is available: { $version }
 settings-updates-found-download = Version { $version } is available. Click Update in the status bar to open the downloads page
 settings-updates-found-pacman = Version { $version } is available. Run sudo pacman -Syu to update
+settings-updates-found-scoop = Version { $version } is available. Run scoop update winc to update
 settings-updates-failed = Couldn’t check for updates. Try again later.
 settings-updates-failed-because = Couldn’t check for updates: { $reason }
 settings-updates-downloading = Downloading { $version }: { $percent }%
