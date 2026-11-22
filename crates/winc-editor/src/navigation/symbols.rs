@@ -345,12 +345,14 @@ pub fn symbols(text: &Rope, language: &Language) -> Vec<Symbol> {
     found
 }
 
-/// 逐行跟踪注释和多行字符串的状态，用于跳过其中的行：块注释、Python 的三引号字符串、
-/// Markdown 的围栏代码块。
+/// 逐行跟踪注释和多行字符串的状态，用于跳过其中的行：块注释、长括号（Lua 的 `[[…]]`、
+/// `--[[…]]`）、Python 的三引号字符串、Markdown 的围栏代码块。
 #[derive(Default)]
 struct Skip {
-    /// 位于块注释内。
-    block_comment: bool,
+    /// 位于块注释内时，结束它的写法。
+    block_comment: Option<&'static str>,
+    /// 位于长括号内时，结束它的写法（`]`、若干个 `=`、`]`）。
+    long_bracket: Option<String>,
     /// 位于三引号字符串内。
     docstring: bool,
     /// 位于 Markdown 的围栏代码块内。
@@ -370,16 +372,26 @@ impl Skip {
             return self.fence;
         }
 
-        // 只跟踪语言的第一种块注释写法，其余写法很少出现在符号所在的行附近。
-        if let Some(&(open, close)) = language.block_comments.first() {
-            if self.block_comment {
-                self.block_comment = !content.contains(close);
-                return true;
-            }
+        if let Some(close) = self.block_comment {
+            self.block_comment = (!content.contains(close)).then_some(close);
+            return true;
+        }
+        for &(open, close) in language.block_comments {
             if let Some(rest) = trimmed.strip_prefix(open) {
-                self.block_comment = !rest.contains(close);
+                self.block_comment = (!rest.contains(close)).then_some(close);
                 return true;
             }
+        }
+
+        if language.long_brackets.is_some() {
+            if let Some(close) = &self.long_bracket {
+                if content.contains(close.as_str()) {
+                    self.long_bracket = None;
+                }
+                return true;
+            }
+            // 开头所在的行按其余规则处理：`local text = [[` 是定义，`--[[` 是注释。
+            self.long_bracket = long_bracket_left_open(content);
         }
 
         if language.triple_quotes {
@@ -398,6 +410,26 @@ impl Skip {
             .iter()
             .any(|comment| trimmed.starts_with(comment) && !trimmed.starts_with("#define"))
     }
+}
+
+/// `content` 中有长括号的开头（`[`、若干个 `=`、`[`）而没有在本行结束时，返回结束它的写法。
+fn long_bracket_left_open(content: &str) -> Option<String> {
+    let mut rest = content;
+    while let Some(at) = rest.find('[') {
+        let after = &rest[at + 1..];
+        let level = after.bytes().take_while(|&b| b == b'=').count();
+        if !after[level..].starts_with('[') {
+            rest = after;
+            continue;
+        }
+        let close = format!("]{}]", "=".repeat(level));
+        let body = &after[level + 1..];
+        match body.find(&close) {
+            Some(end) => rest = &body[end + close.len()..],
+            None => return Some(close),
+        }
+    }
+    None
 }
 
 /// 是否是 C 系语言（C、C++、Objective-C）。
