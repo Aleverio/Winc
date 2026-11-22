@@ -1034,5 +1034,67 @@ pub fn size_label(bytes: u64) -> String {
     }
 }
 
+/// 用水平、竖直两次盒式模糊柔化位图；`radius` 是每边取样的像素数，0 时原样返回。
+///
+/// 四个通道各自平均，alpha 也参与平均，因此透明边缘不会被抹成黑边。窗口边缘按最近的像素延伸。
+/// 用于壁纸时先缩放再模糊，成本只和图层大小有关，与原图大小无关。
+pub fn blur(src: &Pixels, radius: u8) -> Pixels {
+    if radius == 0 {
+        return src.clone();
+    }
+    let (w, h) = (src.width as usize, src.height as usize);
+    if w == 0 || h == 0 || src.rgba.len() < w * h * 4 {
+        return src.clone();
+    }
+    let r = usize::from(radius);
+    let mut horizontal = vec![0u8; src.rgba.len()];
+    blur_pass(&src.rgba, w, h, r, true, &mut horizontal);
+    let mut rgba = vec![0u8; src.rgba.len()];
+    blur_pass(&horizontal, w, h, r, false, &mut rgba);
+    Pixels {
+        width: src.width,
+        height: src.height,
+        rgba,
+    }
+}
+
+/// 沿一个方向做滑动窗口平均；`horizontal` 为 `true` 时按行、`false` 时按列。
+fn blur_pass(src: &[u8], w: usize, h: usize, r: usize, horizontal: bool, out: &mut [u8]) {
+    let count = if horizontal { h } else { w };
+    let len = if horizontal { w } else { h };
+    if len == 0 {
+        return;
+    }
+    let at = |fixed: usize, var: usize| -> usize {
+        let (x, y) = if horizontal {
+            (var, fixed)
+        } else {
+            (fixed, var)
+        };
+        (y * w + x) * 4
+    };
+    // 每行（列）的前缀和：窗口两端按最近的像素延伸，边缘不会被抹黑。
+    let mut prefix = vec![[0u64; 4]; len + 1];
+    for fixed in 0..count {
+        prefix[0] = [0; 4];
+        for var in 0..len {
+            prefix[var + 1] = prefix[var];
+            let index = at(fixed, var);
+            for (channel, value) in prefix[var + 1].iter_mut().enumerate() {
+                *value += u64::from(src[index + channel]);
+            }
+        }
+        for var in 0..len {
+            let from = var.saturating_sub(r);
+            let to = (var + r).min(len - 1);
+            let divide = (to - from + 1) as u64;
+            let index = at(fixed, var);
+            for (channel, value) in out[index..index + 4].iter_mut().enumerate() {
+                *value = ((prefix[to + 1][channel] - prefix[from][channel]) / divide) as u8;
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;

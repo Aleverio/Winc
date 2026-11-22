@@ -29,15 +29,20 @@ impl App {
             self.flash("Completion requires an open text file".to_owned());
             return;
         };
-        let command = if self.config.lsp_auto.iter().any(|id| id == &language) {
-            auto_server_command(&language)
-        } else {
-            self.config.lsp_servers.get(&language).cloned()
-        };
-        let Some(command) = command else {
+        let resolve_root = self
+            .editor
+            .root()
+            .filter(|root| path.starts_with(root))
+            .or_else(|| path.parent())
+            .unwrap_or(&path)
+            .to_path_buf();
+        let Some(server) = self.lsp_resolve_server(&language, &resolve_root) else {
             self.flash(format!("No LSP server is configured for {language}"));
             return;
         };
+        let command = server.command;
+        let env = server.env;
+        let cwd = server.cwd;
         let root = self
             .editor
             .root()
@@ -53,6 +58,8 @@ impl App {
         if let Err(error) = bridge.completion(CompletionRequest {
             language,
             command,
+            env,
+            cwd,
             root,
             path,
             line,
@@ -202,15 +209,13 @@ impl App {
             return true;
         }
         if let Some(command) = item.command {
-            let server_command = if self.config.lsp_auto.iter().any(|id| id == &language) {
-                auto_server_command(&language)
-            } else {
-                self.config.lsp_servers.get(&language).cloned()
-            };
-            let Some(server_command) = server_command else {
+            let Some(server) = self.lsp_resolve_server(&language, &root) else {
                 self.flash(format!("No LSP server is configured for {language}"));
                 return true;
             };
+            let server_command = server.command;
+            let env = server.env;
+            let cwd = server.cwd;
             let Some(bridge) = self.lsp.clone() else {
                 self.flash("LSP worker is unavailable".to_owned());
                 return true;
@@ -218,6 +223,8 @@ impl App {
             if let Err(error) = bridge.execute_command(ExecuteCommandRequest {
                 language,
                 command: server_command,
+                env,
+                cwd,
                 root,
                 command_name: command.command,
                 arguments: command.arguments.unwrap_or_default(),

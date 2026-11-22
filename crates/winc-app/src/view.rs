@@ -63,11 +63,15 @@ use workspace::top_bar::{draw_top_bar, draw_window_controls};
 /// 侧栏收起时其矩形位于窗口之外。
 pub(crate) fn base(app: &App) -> [(Rect, Color); 3] {
     let (l, p) = (&app.layout, app.palette);
+    // 面板不透明度低于 100% 时让渲染器把底色矩形混合在背景图上，而不是直接盖住。
     [
-        (l.sidebar, p.sidebar_bg),
-        (l.top_bar, p.editor_bg),
+        (l.sidebar, app.panel_color(p.sidebar_bg)),
+        (l.top_bar, app.panel_color(p.editor_bg)),
         // 拆分后编辑区只是前台窗格的那一块：底色铺满整个卡片。
-        (app.panes.card.unwrap_or(l.editor), p.editor_bg),
+        (
+            app.panes.card.unwrap_or(l.editor),
+            app.panel_color(p.editor_bg),
+        ),
     ]
 }
 

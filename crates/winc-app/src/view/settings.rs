@@ -213,6 +213,7 @@ fn draw_nav_row(
         SettingsPage::Format => icons::format(frame, icon, p.text_muted, layout.nav),
         SettingsPage::Git => icons::git(frame, icon, 1.0, p.text_muted, layout.nav),
         SettingsPage::Lsp => icons::code(frame, icon, p.text_muted, layout.nav),
+        SettingsPage::Plugins => icons::modules(frame, icon, p.text_muted, layout.nav),
         SettingsPage::Terminal => icons::console(frame, icon, p.text_muted, layout.nav),
         SettingsPage::Modules => icons::modules(frame, icon, p.text_muted, layout.nav),
         SettingsPage::Keys => icons::keyboard(frame, icon, p.text_muted, layout.nav),
@@ -379,12 +380,16 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
                     draw_tool_detail(app, frame, row.setting, bottom)
                 }
                 Setting::LspServer(id) => {
-                    let command = app
-                        .config
-                        .lsp_servers
-                        .get(id)
-                        .map(|args| crate::app::lsp::display_lsp_command(args))
+                    let command = crate::app::display_configured_lsp_command(&app.config, id)
                         .filter(|command| !command.is_empty())
+                        .or_else(|| {
+                            app.lsp_detected
+                                .borrow()
+                                .iter()
+                                .find(|((language, _), _)| language == id)
+                                .and_then(|(_, servers)| servers.first())
+                                .map(|server| crate::app::lsp::display_lsp_command(&server.command))
+                        })
                         .unwrap_or_else(|| t!("settings-lsp-not-configured").to_owned());
                     let command = ellipsize(frame, &command, app.fonts.ui_small, room);
                     ui_text_small(frame, app, x, bottom, &command, p.text_muted, clip);
@@ -449,12 +454,61 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
         }
         SettingControl::Command => {
             let (text, dim) = match row.setting {
-                Setting::LspServer(id) => app
-                    .config
-                    .lsp_servers
-                    .get(id)
-                    .map(|_| (t!("settings-lsp-edit").to_owned(), false))
-                    .unwrap_or_else(|| (t!("settings-lsp-set").to_owned(), true)),
+                Setting::LspServer(id) => {
+                    if crate::app::display_configured_lsp_command(&app.config, id).is_some() {
+                        (t!("settings-lsp-edit").to_owned(), false)
+                    } else {
+                        (t!("settings-lsp-set").to_owned(), true)
+                    }
+                }
+                Setting::AccentColor => {
+                    let text = app.config.ui_accent.clone().unwrap_or_default();
+                    let empty = text.is_empty();
+                    (text, empty)
+                }
+                Setting::LspDetectDirs => (
+                    app.config.lsp_detect_dirs.join(", "),
+                    app.config.lsp_detect_dirs.is_empty(),
+                ),
+                Setting::LspDetectNames(id) => {
+                    let text = app
+                        .config
+                        .lsp_detect_names
+                        .get(id)
+                        .map(|names| names.join(", "))
+                        .unwrap_or_default();
+                    let empty = text.is_empty();
+                    (text, empty)
+                }
+                Setting::LspServerEnv(id) => {
+                    let text = app
+                        .config
+                        .lsp_server_entries
+                        .get(id)
+                        .and_then(|entries| entries.first())
+                        .map(|entry| {
+                            entry
+                                .env
+                                .iter()
+                                .map(|(key, value)| format!("{key}={value}"))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        })
+                        .unwrap_or_default();
+                    let empty = text.is_empty();
+                    (text, empty)
+                }
+                Setting::LspServerCwd(id) => {
+                    let text = app
+                        .config
+                        .lsp_server_entries
+                        .get(id)
+                        .and_then(|entries| entries.first())
+                        .and_then(|entry| entry.cwd.clone())
+                        .unwrap_or_default();
+                    let empty = text.is_empty();
+                    (text, empty)
+                }
                 _ => match app.settings.tool_row(row.setting) {
                     Some(r) => (r.tool.clone(), r.unset),
                     None if row.setting == Setting::TerminalShell => match app.configured_shell() {
@@ -766,6 +820,11 @@ fn draw_field(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect
             (None, t!("settings-command-placeholder"))
         }
         Setting::LspServer(_) => (None, t!("settings-lsp-command-placeholder")),
+        Setting::AccentColor => (None, t!("settings-accent-color-placeholder")),
+        Setting::LspDetectDirs => (None, t!("settings-lsp-detect-dirs-placeholder")),
+        Setting::LspDetectNames(_) => (None, t!("settings-lsp-detect-names-placeholder")),
+        Setting::LspServerEnv(_) => (None, t!("settings-lsp-server-env-placeholder")),
+        Setting::LspServerCwd(_) => (None, t!("settings-lsp-server-cwd-placeholder")),
         Setting::TerminalShell => (None, t!("settings-terminal-shell-placeholder")),
         Setting::GitPath => (app.config.git_path.clone(), t!("settings-git-path-auto")),
         Setting::LatexPath => (app.config.latex_path.clone(), latex_auto.as_str()),

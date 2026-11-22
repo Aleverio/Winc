@@ -30,7 +30,17 @@ impl SettingsPage {
                         Setting::BackgroundImage,
                         Setting::BackgroundFit,
                         Setting::BackgroundOpacity,
+                        Setting::BackgroundBlur,
                     ]),
+                    Section {
+                        title: Some(t!("settings-appearance-custom")),
+                        items: vec![
+                            Setting::PanelOpacity,
+                            Setting::AccentColor,
+                            Setting::CornerScale,
+                            Setting::AnimationSpeed,
+                        ],
+                    },
                     Section {
                         title: Some(t!("settings-light-theme")),
                         items: vec![Setting::LightTheme],
@@ -119,15 +129,50 @@ impl SettingsPage {
                     Setting::GitAutoFetch,
                 ]),
             ],
-            SettingsPage::Lsp => vec![Section {
-                title: Some(t!("settings-lsp-servers")),
-                items: languages
-                    .lsp
-                    .iter()
-                    .flat_map(|&id| [Setting::LspServer(id), Setting::LspAuto(id)])
-                    .chain([Setting::AddLspLanguage])
-                    .collect(),
-            }],
+            SettingsPage::Lsp => vec![
+                Section {
+                    title: Some(t!("settings-lsp-detection")),
+                    items: vec![Setting::LspDetect, Setting::LspDetectDirs],
+                },
+                Section {
+                    title: Some(t!("settings-lsp-servers")),
+                    items: languages
+                        .lsp
+                        .iter()
+                        .flat_map(|&id| {
+                            [
+                                Setting::LspServer(id),
+                                Setting::LspAuto(id),
+                                Setting::LspServerEnabled(id),
+                                Setting::LspServerEnv(id),
+                                Setting::LspServerCwd(id),
+                                Setting::LspDetectNames(id),
+                            ]
+                        })
+                        .chain([Setting::AddLspLanguage])
+                        .collect(),
+                },
+            ],
+            SettingsPage::Plugins => {
+                let mut items = vec![Setting::PluginPaths];
+                for plugin in &languages.plugins {
+                    items.push(Setting::PluginEnabled(plugin.name));
+                    for &(command, title) in &plugin.commands {
+                        items.push(Setting::PluginCommand(command, title));
+                    }
+                    for &(key, title, kind) in &plugin.settings {
+                        items.push(match kind {
+                            winc_config::PluginSettingKind::Bool => {
+                                Setting::PluginBool(plugin.id, key, title)
+                            }
+                            winc_config::PluginSettingKind::String => {
+                                Setting::PluginValue(plugin.id, key, title)
+                            }
+                        });
+                    }
+                }
+                vec![plain(items)]
+            }
             SettingsPage::Modules => vec![plain(vec![
                 Setting::GitModule,
                 Setting::TerminalModule,

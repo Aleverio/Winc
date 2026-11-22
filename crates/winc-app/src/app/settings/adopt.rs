@@ -9,6 +9,9 @@ impl App {
     /// 字号、Tab 宽度、主题和各开关，效果与在本窗口的设置页中修改相同，只是不再写文件。
     pub(crate) fn adopt_config(&mut self, config: Config) {
         let old = std::mem::replace(&mut self.config, config);
+        let accent_changed = old.ui_accent != self.config.ui_accent;
+        let corner_changed = old.ui_corner_scale != self.config.ui_corner_scale;
+        let plugins_changed = old.plugin_paths != self.config.plugin_paths;
         let new = &self.config;
         if old.keymap != new.keymap || old.shortcuts != new.shortcuts {
             for problem in crate::keymap::install_from(new) {
@@ -67,8 +70,16 @@ impl App {
         }
         if theme {
             self.apply_theme(self.config.theme.unwrap_or(ThemeChoice::Auto));
-        } else if terminal {
-            self.terminal_theme_changed();
+        } else if accent_changed || terminal {
+            if accent_changed {
+                self.apply_accent();
+            }
+            if terminal {
+                self.terminal_theme_changed();
+            }
+        }
+        if corner_changed {
+            self.apply_corner_scale();
         }
         if sticky {
             self.caches.sticky_cache = None;
@@ -112,6 +123,9 @@ impl App {
             self.settings_show_page(SettingsPage::Modules);
         }
         self.reload_run_configs();
+        if plugins_changed {
+            self.refresh_plugins();
+        }
         if title_bar {
             self.sync_title_bar();
         }

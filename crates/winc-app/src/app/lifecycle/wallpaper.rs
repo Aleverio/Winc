@@ -35,12 +35,13 @@ const GROW_AT: f32 = 1.25;
 /// 窗口所需的图层比现有的小到该倍数以下时重新生成，释放多占的内存。
 const SHRINK_AT: f32 = 0.6;
 
-/// 一张背景图层由什么生成：图片的路径、不透明度（百分比）和显示方式。
+/// 一张背景图层由什么生成：图片的路径、不透明度（百分比）、显示方式和模糊半径。
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Source {
     path: PathBuf,
     opacity: u8,
     fit: BackgroundFit,
+    blur: u8,
 }
 
 /// 窗口的宽、高（逻辑像素）和缩放系数。
@@ -170,6 +171,7 @@ impl App {
             path: PathBuf::from(path.trim()),
             opacity: opacity.round() as u8,
             fit: self.config.ui_background_fit.unwrap_or_default(),
+            blur: self.config.ui_background_blur.unwrap_or(0),
         })
     }
 
@@ -209,7 +211,8 @@ impl App {
         }
         let state = &mut self.wallpaper;
         let failed = state.failed.as_ref() == Some(&wanted.path);
-        if state.loading.is_some() || failed {
+        // 模糊半径等参数变了时，旧任务的结果会作废，立刻按新参数重新生成。
+        if state.loading.as_ref() == Some(&wanted) || failed {
             return;
         }
         state.failed = None;
@@ -232,7 +235,12 @@ impl App {
     pub(in crate::app) fn sync_wallpaper(&mut self, renderer: &mut Renderer) {
         self.accept_wallpapers();
         let p = self.palette;
-        let surfaces = [p.frame_bg, p.sidebar_bg, p.editor_bg];
+        // 与 `view::base` 中的面板底色保持一致：混合后的颜色才会在渲染器里匹配到图层。
+        let surfaces = [
+            p.frame_bg,
+            self.panel_color(p.sidebar_bg),
+            self.panel_color(p.editor_bg),
+        ];
         if self.wallpaper_source().is_none() {
             self.wallpaper.shown = None;
             self.wallpaper.failed = None;
@@ -343,7 +351,17 @@ fn make(source: &Source, window: Window, cache: Option<&Path>) -> Made {
     let fit = fit_of(source.fit);
     let cached = cache.and_then(|file| cache::read(file, &stamp));
     if let Some(layer) = cached.filter(|layer| usable(source, layer.size, layer.full, window)) {
-        let wallpaper = Wallpaper::new(layer.size, &layer.rgba, opacity, fit).ok_or_else(empty)?;
+        let wallpaper = if source.blur == 0 {
+            Wallpaper::new(layer.size, &layer.rgba, opacity, fit).ok_or_else(empty)?
+        } else {
+            let pixels = winc_preview::image::Pixels {
+                width: layer.size.0,
+                height: layer.size.1,
+                rgba: layer.rgba,
+            };
+            let blurred = winc_preview::image::blur(&pixels, source.blur);
+            Wallpaper::new(layer.size, &blurred.rgba, opacity, fit).ok_or_else(empty)?
+        };
         return Ok((wallpaper, layer.full));
     }
     let bytes = std::fs::read(&source.path).map_err(|e| e.to_string())?;
@@ -356,9 +374,32 @@ fn make(source: &Source, window: Window, cache: Option<&Path>) -> Made {
     } else {
         winc_preview::image::resize(&image, size.0, size.1).rgba
     };
-    let wallpaper = Wallpaper::new(size, &rgba, opacity, fit).ok_or_else(empty)?;
+    // 缓存里保存未模糊的图层；模糊在创建壁纸前进行，这样改半径无需另换缓存格式。
+    let (wallpaper, cache_rgba) = if source.blur == 0 {
+        (
+            Wallpaper::new(size, &rgba, opacity, fit).ok_or_else(empty)?,
+            rgba,
+        )
+    } else {
+        let pixels = winc_preview::image::Pixels {
+            width: size.0,
+            height: size.1,
+            rgba,
+        };
+        let blurred = winc_preview::image::blur(&pixels, source.blur);
+        let wallpaper = Wallpaper::new(size, &blurred.rgba, opacity, fit).ok_or_else(empty)?;
+        (wallpaper, pixels.rgba)
+    };
     if let Some(file) = cache {
-        cache::write(file, &stamp, &cache::Cached { size, full, rgba });
+        cache::write(
+            file,
+            &stamp,
+            &cache::Cached {
+                size,
+                full,
+                rgba: cache_rgba,
+            },
+        );
     }
     Ok((wallpaper, full))
 }

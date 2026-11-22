@@ -338,7 +338,9 @@ impl App {
         }
 
         self.frame.frame_interval = frame_interval(window);
-        Some(Clock::new(duration))
+        // 速度越高，时长越短；默认 100% 时与原来的时长完全一致。
+        let scaled = duration.mul_f32(1.0 / self.animation_speed());
+        Some(Clock::new(scaled))
     }
 
     /// 是否播放过渡动画：以设置（`ui.animations`）为准，没有设置时跟随系统的「减弱动态效果」。

@@ -128,7 +128,7 @@ impl ApplicationHandler<UserEvent> for App {
             Some(theme) => theme == Theme::Dark,
             None => window.theme() != Some(Theme::Light),
         };
-        self.palette = self.theme_palette(dark);
+        self.palette = self.build_palette(dark);
 
         let [mono, ui, terminal] = self.font_specs();
 
@@ -707,6 +707,10 @@ impl App {
             UserEvent::GitTrust(root, fingerprint, trusted) => {
                 self.answer_git_trust(&root, fingerprint, trusted);
             }
+            UserEvent::PluginApproved(target, fingerprint) => {
+                self.plugin_approved(&target, &fingerprint);
+            }
+            UserEvent::PluginDone(target, outcome) => self.plugin_done(&target, *outcome),
             UserEvent::FormatterReady => self.formatter_ready(),
             UserEvent::StdinRead => self.poll_stdin(),
             UserEvent::ReopenEncoding(id, encoding) => self.reopen_with_encoding(id, encoding),

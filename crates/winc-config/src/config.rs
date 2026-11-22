@@ -12,6 +12,24 @@ use crate::json::{self, Json};
 use fields::*;
 use winc_i18n::{LocaleChoice, t};
 
+/// 一个语言服务器的详细配置。
+///
+/// `id` 是稳定标识，用来在设置界面和状态栏里区分同一语言的多个服务器；`command` 的第一项
+/// 是可执行文件，其余是参数。`env` 会传给服务器进程，`cwd` 是启动时的工作目录。
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct LspServerEntry {
+    /// 稳定标识。
+    pub id: String,
+    /// 启动命令：`[可执行文件, 参数…]`。
+    pub command: Vec<String>,
+    /// 额外环境变量。
+    pub env: BTreeMap<String, String>,
+    /// 工作目录。
+    pub cwd: Option<String>,
+    /// 是否启用。
+    pub enabled: bool,
+}
+
 /// 用户配置。
 ///
 /// 每一项都是可选的，`None`（集合类型为空）表示用户没写过，使用默认值。
@@ -44,6 +62,16 @@ pub struct Config {
     pub ui_background_opacity: Option<f32>,
     /// 背景图片的显示方式，默认为填充。
     pub ui_background_fit: Option<BackgroundFit>,
+    /// 背景图片的模糊半径（像素），0 表示不模糊；范围见 [`Config::BACKGROUND_BLUR_RANGE`]。
+    pub ui_background_blur: Option<u8>,
+    /// 侧栏和编辑区卡片的不透明度（百分比），100 表示完全不透明。
+    pub ui_panel_opacity: Option<u8>,
+    /// 强调色，六位十六进制颜色（如 `#4f8cff`）；没写时使用主题自带的强调色。
+    pub ui_accent: Option<String>,
+    /// 圆角缩放（百分比），100 为主题默认；范围见 [`Config::CORNER_SCALE_RANGE`]。
+    pub ui_corner_scale: Option<u16>,
+    /// 动画速度（百分比），100 为原速；范围见 [`Config::ANIMATION_SPEED_RANGE`]。
+    pub ui_animation_speed: Option<u16>,
     /// 是否用系统的标题栏（配置中的 `"titleBarStyle": "native"`）。
     ///
     /// 写成 `"custom"` 或没写时，窗口按钮在 winc 的顶栏中绘制。只影响 macOS 以外的平台。
@@ -286,9 +314,29 @@ pub struct Config {
     /// 没写的语言自动选择工具。
     pub fix_commands: BTreeMap<String, String>,
     /// 各语言的 LSP 服务命令：数组第一项是可执行文件，后续各项是参数。
+    ///
+    /// 这是兼容旧配置的简写；新配置用 [`Config::lsp_server_entries`] 描述多个服务器和环境变量。
     pub lsp_servers: BTreeMap<String, Vec<String>>,
     /// 自动选择内置默认语言服务器的语言 id。
     pub lsp_auto: Vec<String>,
+    /// 各语言的详细 LSP 服务器配置；键是语言的 id。
+    pub lsp_server_entries: BTreeMap<String, Vec<LspServerEntry>>,
+    /// 是否自动在文件系统里查找语言服务器；没写时是。
+    pub lsp_detect: Option<bool>,
+    /// 自动查找语言服务器时额外搜索的目录。
+    pub lsp_detect_dirs: Vec<String>,
+    /// 各语言额外尝试的可执行文件名；键是语言的 id。
+    pub lsp_detect_names: BTreeMap<String, Vec<String>>,
+
+    // 插件（声明式外部命令）
+    /// 插件清单文件或包含清单的目录；支持 `~`。
+    pub plugin_paths: Vec<String>,
+    /// 已显式启用的插件 id；没列出的插件不显示命令。
+    pub plugin_enabled: Vec<String>,
+    /// 已信任的命令指纹，格式为十六进制；用户确认一次后写入。
+    pub plugin_trusted: Vec<String>,
+    /// 插件设置值：插件 id → 键 → 值。
+    pub plugin_values: BTreeMap<String, BTreeMap<String, String>>,
 }
 
 /// 终端里哪一边的 ⌥ 当 Meta 用；另一边仍然输入 `å`、`∑` 这类字符。
@@ -566,6 +614,16 @@ impl Config {
     pub const BACKGROUND_OPACITY_RANGE: std::ops::RangeInclusive<f32> = 0.0..=100.0;
     /// 背景图片不透明度的默认值（百分比）。
     pub const BACKGROUND_OPACITY: f32 = 15.0;
+    /// 背景图片模糊半径的合法范围（像素）。
+    pub const BACKGROUND_BLUR_RANGE: std::ops::RangeInclusive<f32> = 0.0..=24.0;
+    /// 侧栏和编辑区卡片不透明度的合法范围（百分比）。
+    ///
+    /// 低于 100 时卡片会透出壁纸；最低 25% 以保证文字仍可读。
+    pub const PANEL_OPACITY_RANGE: std::ops::RangeInclusive<f32> = 25.0..=100.0;
+    /// 圆角缩放的合法范围（百分比）。
+    pub const CORNER_SCALE_RANGE: std::ops::RangeInclusive<f32> = 50.0..=200.0;
+    /// 动画速度的合法范围（百分比）。
+    pub const ANIMATION_SPEED_RANGE: std::ops::RangeInclusive<f32> = 25.0..=400.0;
     /// 制表符长度的合法范围（空格数）。
     ///
     /// 超出范围的值在读入时忽略并报告；上下限为经验值。

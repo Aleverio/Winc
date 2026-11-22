@@ -11,8 +11,10 @@ impl App {
     /// 把界面缩放倍数交给渲染器和红绿灯；新窗口建好时与缩放改变时调用。
     pub(in crate::app) fn sync_zoom(&mut self) {
         let zoom = self.zoom();
+        let corner = self.corner_scale();
         if let Some(renderer) = &mut self.frame.renderer {
             renderer.set_zoom(zoom);
+            renderer.set_corner_scale(corner);
         }
         #[cfg(target_os = "macos")]
         if let Some(lights) = &self.link.traffic_lights {
@@ -125,9 +127,89 @@ impl App {
         crate::theme::themes(dark)[self.theme_slot(dark)].palette
     }
 
+    /// 解析 `#RRGGBB` 或 `RRGGBB` 为用户强调色。
+    fn parse_hex_color(value: &str) -> Option<winc_render::Color> {
+        let digits = value.strip_prefix('#').unwrap_or(value);
+        if digits.len() != 6 || !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return None;
+        }
+        let channel = |i: usize| {
+            u8::from_str_radix(&digits[i..i + 2], 16)
+                .ok()
+                .map(|v| f32::from(v) / 255.0)
+        };
+        Some(winc_render::Color {
+            r: channel(0)?,
+            g: channel(2)?,
+            b: channel(4)?,
+            a: 1.0,
+        })
+    }
+
+    /// 按当前主题和用户强调色生成配色。
+    pub(crate) fn build_palette(&self, dark: bool) -> &'static Palette {
+        let base = self.theme_palette(dark);
+        let Some(accent) = self.config.ui_accent.as_deref() else {
+            return base;
+        };
+        let Some(color) = Self::parse_hex_color(accent) else {
+            return base;
+        };
+        static CACHE: std::sync::OnceLock<
+            std::sync::Mutex<std::collections::HashMap<(bool, String), &'static Palette>>,
+        > = std::sync::OnceLock::new();
+        let key = (dark, accent.to_owned());
+        let cache = CACHE.get_or_init(Default::default);
+        let mut cache = cache.lock().unwrap_or_else(|err| err.into_inner());
+        if let Some(palette) = cache.get(&key) {
+            return palette;
+        }
+        // 配色在进程存续期间不变；缓存同一组主题和强调色，避免反复输入颜色时一直泄漏。
+        let palette: &'static Palette = Box::leak(Box::new(base.with_accent(color)));
+        cache.insert(key, palette);
+        palette
+    }
+
+    /// 应用用户强调色；主题其他部分不变。
+    pub(in crate::app) fn apply_accent(&mut self) {
+        let dark = self.palette.dark;
+        self.palette = self.build_palette(dark);
+        self.request_redraw();
+    }
+
+    /// 侧栏和编辑区卡片的透明度（0–1）；100% 时保持原来的不透明绘制。
+    pub(crate) fn panel_opacity(&self) -> f32 {
+        f32::from(self.config.ui_panel_opacity.unwrap_or(100)) / 100.0
+    }
+
+    /// 给面板底色加上用户设置的不透明度。
+    pub(crate) fn panel_color(&self, color: winc_render::Color) -> winc_render::Color {
+        color.alpha(self.panel_opacity())
+    }
+
+    /// 圆角缩放倍数（1 为原大小）。
+    pub(crate) fn corner_scale(&self) -> f32 {
+        f32::from(self.config.ui_corner_scale.unwrap_or(100)) / 100.0
+    }
+
+    /// 把圆角缩放交给渲染器，并立即重画。
+    pub(in crate::app) fn apply_corner_scale(&mut self) {
+        let scale = self.corner_scale();
+        if let Some(renderer) = &mut self.frame.renderer {
+            renderer.set_corner_scale(scale);
+        }
+        self.relayout();
+        self.request_redraw();
+    }
+
+    /// 动画速度倍数（1 为原速）。
+    pub(crate) fn animation_speed(&self) -> f32 {
+        (f32::from(self.config.ui_animation_speed.unwrap_or(100)) / 100.0).max(0.01)
+    }
+
     /// 切到 `theme`：换成对应的主题，终端跟着换配色，并重新摆放标题栏按钮。
     pub(in crate::app) fn set_theme(&mut self, theme: Theme) {
-        self.palette = self.theme_palette(theme == Theme::Dark);
+        self.palette = self.build_palette(theme == Theme::Dark);
         self.terminal_theme_changed();
 
         if let Some(renderer) = &mut self.frame.renderer {

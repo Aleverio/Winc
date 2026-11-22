@@ -26,6 +26,7 @@ use crate::icons::FileGlyph;
 /// 一套配色，深色（[`DARK`]）和浅色（[`LIGHT`]）各有一个实例。
 ///
 /// 颜色字段按用途分组：底色、线条与阴影、文字、交互状态、编辑区、语法高亮。
+#[derive(Clone)]
 pub struct Palette {
     /// 是否为深色配色。
     pub dark: bool,
@@ -479,6 +480,40 @@ impl Palette {
             syntax_property: t.syntax[8],
             ansi: t.ansi,
         }
+    }
+
+    /// 返回把强调色换成 `accent` 的配色；由主题的强调色派生出的选中、标签等颜色一并重算。
+    pub(crate) fn with_accent(&self, accent: Color) -> Self {
+        let mut palette = self.clone();
+        let card = self.editor_bg;
+        let fill = if self.dark {
+            mix(accent, card, 0.25)
+        } else {
+            accent
+        };
+        palette.accent = accent;
+        palette.accent_fill = fill;
+        palette.text_on_accent = readable(WHITE, fill, 4.5);
+        let (tab, tab_fill, tab_edge) = if self.dark {
+            (fill, 0.24, 0.6)
+        } else {
+            (fill, 0.1, 0.45)
+        };
+        palette.tab_fill = mix(tab, card, tab_fill);
+        palette.tab_edge = mix(tab, card, tab_edge);
+        palette.selected = if self.dark {
+            mix(fill, card, 0.32)
+        } else {
+            mix(fill, card, 0.16)
+        };
+        palette.selected_unfocused = if self.dark {
+            mix(fill, card, 0.16)
+        } else {
+            mix(fill, card, 0.08)
+        };
+        palette.occurrence = accent.alpha(if self.dark { 0.14 } else { 0.1 });
+        palette.drop_target = accent.alpha(if self.dark { 0.14 } else { 0.1 });
+        palette
     }
 }
 

@@ -1,5 +1,6 @@
 use lsp_types::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -105,6 +106,8 @@ pub struct LspClient {
     language_id: String,
     server_command: String,
     server_args: Vec<String>,
+    server_env: BTreeMap<String, String>,
+    server_cwd: Option<PathBuf>,
 }
 
 impl LspClient {
@@ -127,7 +130,21 @@ impl LspClient {
             language_id,
             server_command,
             server_args,
+            server_env: BTreeMap::new(),
+            server_cwd: None,
         }
+    }
+
+    /// Sets extra environment variables for the server process.
+    pub fn with_env(mut self, env: BTreeMap<String, String>) -> Self {
+        self.server_env = env;
+        self
+    }
+
+    /// Sets the working directory for the server process.
+    pub fn with_cwd(mut self, cwd: PathBuf) -> Self {
+        self.server_cwd = Some(cwd);
+        self
     }
 
     /// Subscribe to notifications sent by the language server.
@@ -143,6 +160,19 @@ impl LspClient {
     /// Returns whether this client was created with the given executable and arguments.
     pub fn matches_command(&self, command: &str, args: &[String]) -> bool {
         self.server_command == command && self.server_args == args
+    }
+
+    /// Returns whether this client matches a full server configuration.
+    pub fn matches_config(
+        &self,
+        command: &str,
+        args: &[String],
+        env: &BTreeMap<String, String>,
+        cwd: Option<&PathBuf>,
+    ) -> bool {
+        self.matches_command(command, args)
+            && &self.server_env == env
+            && self.server_cwd.as_ref() == cwd
     }
 
     /// Returns whether the server has received `textDocument/didOpen` for this URI.
@@ -207,9 +237,13 @@ impl LspClient {
 
         let mut cmd = TokioCommand::new(&self.server_command);
         cmd.args(&self.server_args)
+            .envs(&self.server_env)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        if let Some(cwd) = &self.server_cwd {
+            cmd.current_dir(cwd);
+        }
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;

@@ -182,6 +182,116 @@ fn duplicate_lsp_language_ids_are_reported() {
 }
 
 #[test]
+fn detailed_lsp_servers_and_detection_round_trip() {
+    let (config, problems) = Config::parse(
+        r#"{
+            "lsp": {
+                "detect": false,
+                "detectDirs": ["/opt/lsp", ""],
+                "detectNames": {"TypeScript": ["ts-lsp", "custom-lsp"]},
+                "serverEntries": {
+                    "rust": [
+                        {
+                            "id": "rust-analyzer",
+                            "command": ["/opt/bin/rust-analyzer"],
+                            "env": {"RUSTUP_TOOLCHAIN": "stable"},
+                            "cwd": "/workspace",
+                            "enabled": true
+                        },
+                        {"id": "disabled", "command": ["other"], "enabled": false}
+                    ]
+                }
+            }
+        }"#,
+    );
+    assert!(problems.is_empty(), "{problems:?}");
+    assert_eq!(config.lsp_detect, Some(false));
+    assert_eq!(config.lsp_detect_dirs, ["/opt/lsp"]);
+    assert_eq!(
+        config.lsp_detect_names["typescript"],
+        ["ts-lsp", "custom-lsp"]
+    );
+    let entries = &config.lsp_server_entries["rust"];
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].id, "rust-analyzer");
+    assert_eq!(entries[0].command, ["/opt/bin/rust-analyzer"]);
+    assert_eq!(entries[0].env["RUSTUP_TOOLCHAIN"], "stable");
+    assert_eq!(entries[0].cwd.as_deref(), Some("/workspace"));
+    assert!(entries[0].enabled);
+    assert!(!entries[1].enabled);
+    let (round_trip, problems) = Config::parse(&config.to_json());
+    assert!(problems.is_empty(), "{problems:?}");
+    assert_eq!(round_trip.lsp_server_entries, config.lsp_server_entries);
+    assert_eq!(round_trip.lsp_detect, config.lsp_detect);
+    assert_eq!(round_trip.lsp_detect_dirs, config.lsp_detect_dirs);
+    assert_eq!(round_trip.lsp_detect_names, config.lsp_detect_names);
+}
+
+#[test]
+fn plugin_settings_read_and_round_trip() {
+    let (config, problems) = Config::parse(
+        r#"{"plugins": {
+            "paths": ["~/plugins", "/opt/plugins"],
+            "enabled": ["demo"],
+            "trusted": ["abc123"],
+            "values": {"demo": {"name": "Ada"}}
+        }}"#,
+    );
+    assert!(problems.is_empty(), "{problems:?}");
+    assert_eq!(config.plugin_paths, ["~/plugins", "/opt/plugins"]);
+    assert_eq!(config.plugin_enabled, ["demo"]);
+    assert_eq!(config.plugin_trusted, ["abc123"]);
+    assert_eq!(config.plugin_values["demo"]["name"], "Ada");
+    assert_eq!(Config::parse(&config.to_json()).0, config);
+}
+
+#[test]
+fn ui_customization_settings_read_and_round_trip() {
+    let (config, problems) = Config::parse(
+        r##"{"ui": {
+            "backgroundBlur": 8,
+            "panelOpacity": 80,
+            "accentColor": "#4f8cff",
+            "cornerScale": 125,
+            "animationSpeed": 150
+        }}"##,
+    );
+    assert!(problems.is_empty(), "{problems:?}");
+    assert_eq!(config.ui_background_blur, Some(8));
+    assert_eq!(config.ui_panel_opacity, Some(80));
+    assert_eq!(config.ui_accent.as_deref(), Some("#4f8cff"));
+    assert_eq!(config.ui_corner_scale, Some(125));
+    assert_eq!(config.ui_animation_speed, Some(150));
+    assert_eq!(Config::parse(&config.to_json()).0, config);
+
+    let (config, problems) = Config::parse(
+        r#"{"ui": {
+            "backgroundBlur": 99,
+            "panelOpacity": 10,
+            "accentColor": "red",
+            "cornerScale": 500,
+            "animationSpeed": 10
+        }}"#,
+    );
+    assert_eq!(problems.len(), 5, "{problems:?}");
+    assert_eq!(config, Config::default());
+}
+
+#[test]
+fn invalid_lsp_server_entries_are_reported() {
+    let (config, problems) = Config::parse(
+        r#"{"lsp": {"serverEntries": {"rust": [
+            {"id": "ok", "command": ["rust-analyzer"]},
+            {"id": "ok", "command": ["other"]},
+            {"id": "missing-command"},
+            {"id": "bad-env", "command": ["x"], "env": {"A": 1}}
+        ]}}}"#,
+    );
+    assert_eq!(config.lsp_server_entries["rust"].len(), 1);
+    assert_eq!(problems.len(), 3, "{problems:?}");
+}
+
+#[test]
 fn bad_values_are_reported_and_ignored() {
     let (config, problems) = Config::parse(
         r#"{
@@ -377,6 +487,11 @@ fn round_trips_through_json() {
         ui_background_image: Some("/图片/壁纸.jpg".to_string()),
         ui_background_opacity: Some(20.0),
         ui_background_fit: Some(BackgroundFit::Tile),
+        ui_background_blur: Some(8),
+        ui_panel_opacity: Some(80),
+        ui_accent: Some("#4f8cff".to_string()),
+        ui_corner_scale: Some(125),
+        ui_animation_speed: Some(150),
         tab_width: Some(8),
         auto_save: Some(AutoSave::AfterDelay),
         auto_save_while_typing: Some(true),
@@ -484,6 +599,26 @@ fn round_trips_through_json() {
             vec!["rust-analyzer".to_string(), "--stdio".to_string()],
         )]),
         lsp_auto: vec!["python".to_string()],
+        lsp_server_entries: BTreeMap::from([(
+            "rust".to_string(),
+            vec![LspServerEntry {
+                id: "rust-custom".to_string(),
+                command: vec!["/bin/rust-analyzer".to_string()],
+                env: BTreeMap::from([("RUSTUP_TOOLCHAIN".to_string(), "stable".to_string())]),
+                cwd: Some("/workspace".to_string()),
+                enabled: true,
+            }],
+        )]),
+        lsp_detect: Some(false),
+        lsp_detect_dirs: vec!["/opt/lsp".to_string()],
+        lsp_detect_names: BTreeMap::from([("typescript".to_string(), vec!["ts-lsp".to_string()])]),
+        plugin_paths: vec!["/plugins".to_string()],
+        plugin_enabled: vec!["demo".to_string()],
+        plugin_trusted: vec!["abcdef".to_string()],
+        plugin_values: BTreeMap::from([(
+            "demo".to_string(),
+            BTreeMap::from([("name".to_string(), "Ada".to_string())]),
+        )]),
     };
 
     let (parsed, problems) = Config::parse(&config.to_json());

@@ -12,6 +12,7 @@ impl App {
         bench: Bench,
         config: Config,
     ) -> Self {
+        let plugins = winc_config::load_plugins(&config.plugin_paths);
         // 启动时打开的目录在界面创建之前读入，此处补充设置文件树的显示方式。
         let compact = config.compact_folders != Some(false);
         if let Some(ws) = &mut editor.workspace {
@@ -56,6 +57,7 @@ impl App {
             lsp_failed: HashMap::new(),
             lsp_saved: HashMap::new(),
             lsp_status: HashMap::new(),
+            lsp_detected: std::cell::RefCell::new(HashMap::new()),
             lsp_diagnostics: HashMap::new(),
             store: crate::app::settings::Store {
                 saved_config: config.clone(),
@@ -68,6 +70,7 @@ impl App {
             lsp_completion: None,
             diagnostic_scroll: (0.0, 0.0),
             config,
+            plugins,
             theme_choice,
             state: State::default(),
             backup: backup::BackupState::default(),

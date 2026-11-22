@@ -13,6 +13,7 @@ pub(crate) mod hits;
 mod input;
 mod lifecycle;
 pub(crate) mod lsp;
+mod plugins;
 pub(crate) mod preview;
 pub(crate) mod problems;
 mod release_notes;
@@ -56,7 +57,7 @@ pub(crate) use input::context_menu::{
     folder_rows,
 };
 pub use input::context_menu::{ContextMenu, MenuButton, MenuCommand};
-pub use input::palette::palette;
+pub use input::palette::{CommandRef, palette};
 pub(crate) use lifecycle::alert::{AlertButton, AlertKey, AlertPart, AlertParts, InAppAlert};
 use lifecycle::appearance::{forced_theme, unusable_font};
 pub(crate) use lifecycle::backup::{restore_at_launch, restore_tabs};
@@ -67,6 +68,7 @@ pub(crate) use lifecycle::title_bar::resize_cursor;
 pub(crate) use lifecycle::wallpaper::Layer as WallpaperLayer;
 use lifecycle::window::frame_interval;
 pub(crate) use scroll::ScrollTarget;
+pub(crate) use settings::lsp::display_configured_lsp_command;
 pub(crate) use settings::shortcuts::KeyEdit;
 pub use settings::{DialogCache, SettingsState};
 pub(crate) use status::language_picker::LanguageRow;
@@ -94,6 +96,7 @@ pub use workspace::tree::{NameInput, TreeMotion};
 pub use workspace::tree_drag::TreeDrag;
 pub use workspace::tree_label::{LabelCause, LabelView, TreeLabels};
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -115,7 +118,7 @@ use winc_core::{Lines, Selection};
 use winc_editor::{COPY_LIMIT, Command, DocumentId, Editor, Entry, EntryKind, FileIndex, Search};
 use winc_render::{FontError, FontKind, FontSpec, Metrics, Rect, Renderer};
 
-use winc_config::{Config, Session, State, ThemeChoice, resolve_font_list};
+use winc_config::{Config, PluginRegistry, Session, State, ThemeChoice, resolve_font_list};
 
 use crate::bench::{Bench, Next};
 use crate::field::{TextField, Unit};
@@ -129,6 +132,15 @@ use crate::view;
 
 /// 交给逐个执行的线程的一个任务（见 [`App::spawn_ordered_then`]）。
 type OrderedTask = Box<dyn FnOnce() + Send>;
+
+/// 一条插件命令：用插件和命令的 id 定位，清单重新读入后仍有效。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PluginTarget {
+    /// 插件 id。
+    pub plugin: String,
+    /// 插件内命令 id。
+    pub command: String,
+}
 
 /// 后台线程和系统回调（面板、菜单、提示框）送回事件循环的事件。
 #[derive(Debug)]
@@ -203,6 +215,10 @@ pub enum UserEvent {
     RunApproved(Box<winc_config::RunConfig>),
     /// 提示框中回答了是否信任 Git 仓库（第一个参数）指纹为第二个参数的配置。
     GitTrust(PathBuf, u64, bool),
+    /// 用户确认信任并运行一条插件命令：带上提示时看到的指纹，清单中途变化时不会误信。
+    PluginApproved(PluginTarget, String),
+    /// 插件命令在后台运行结束。
+    PluginDone(PluginTarget, Box<winc_editor::plugin::Outcome>),
     /// 已取得用户 shell 的环境，格式化工具在其 `PATH` 中查找。
     FormatterReady,
     /// 后台查找定义有新进展。
@@ -957,6 +973,9 @@ pub struct App {
     pub(crate) lsp_saved: HashMap<DocumentId, (PathBuf, u64)>,
     /// 已连接的语言服务状态，按语言和工作区根目录区分。
     pub(crate) lsp_status: HashMap<(String, PathBuf), Result<(), String>>,
+    /// 自动查找到的语言服务器，按语言和工作区根目录缓存。
+    pub(crate) lsp_detected:
+        RefCell<HashMap<(String, PathBuf), Vec<lsp::discovery::DetectedServer>>>,
     /// 最近收到的 LSP 诊断，按文档路径区分。
     pub(crate) lsp_diagnostics: HashMap<PathBuf, Vec<lsp_types::Diagnostic>>,
     /// 当前文档版本、诊断对应的语言服务器修复建议。
@@ -970,6 +989,8 @@ pub struct App {
     pub(crate) diagnostic_scroll: (f32, f32),
     /// 当前生效的配置。
     pub config: Config,
+    /// 从用户配置的清单中发现的插件；命令须显式启用并信任后才会运行。
+    pub(crate) plugins: PluginRegistry,
     /// 配置与状态文件的写回：文件的路径、配置文件当前的内容和配置的版本号。
     pub(crate) store: settings::Store,
     /// 配置中的主题选择；`Auto` 时跟随系统外观。

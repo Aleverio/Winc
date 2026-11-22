@@ -148,7 +148,17 @@ impl App {
                     self.focus = Focus::Setting;
                     self.click_field(x, y);
                 } else if setting.control() == SettingControl::Command
-                    && !matches!(setting, crate::layout::Setting::LspServer(_))
+                    && !matches!(
+                        setting,
+                        crate::layout::Setting::LspServer(_)
+                            | crate::layout::Setting::LspDetectDirs
+                            | crate::layout::Setting::LspServerEnv(_)
+                            | crate::layout::Setting::LspServerCwd(_)
+                            | crate::layout::Setting::LspDetectNames(_)
+                            | crate::layout::Setting::AccentColor
+                            | crate::layout::Setting::PluginPaths
+                            | crate::layout::Setting::PluginValue(_, _, _)
+                    )
                 {
                     self.settings_open_menu(setting);
                 } else {

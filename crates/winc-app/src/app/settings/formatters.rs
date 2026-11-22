@@ -348,6 +348,7 @@ impl App {
             Setting::TerminalShell => (MenuTarget::DefaultShell, row.control),
             Setting::GitPath | Setting::LatexPath => return self.settings_start_editing(setting),
             Setting::Updates => return self.settings_check_updates(),
+            Setting::PluginCommand(id, _) => return self.run_plugin_command_id(id),
             _ => return,
         };
         self.settings.selected = setting;

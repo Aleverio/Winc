@@ -21,6 +21,18 @@ pub fn palette() -> &'static [Action] {
     })
 }
 
+/// 命令面板里的一项：内置动作，或插件清单中一条已启用的命令。
+///
+/// 插件命令的下标在内置命令之后，由 [`App::command`] 按当前注册表即时解析；这样无需给每条插件
+/// 命令加一个 `Action` 变体，清单改了也不影响键位表。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandRef {
+    /// 键位表中的内置动作。
+    Builtin(Action),
+    /// 插件命令：`App.plugins` 中的插件下标和该插件 `commands` 中的下标。
+    Plugin { plugin: usize, command: usize },
+}
+
 /// 按 `query` 搜索命令，返回 [`palette()`] 中的下标，匹配度高的在前。
 ///
 /// 在标题或英文名中连续出现的匹配优于分散出现的匹配，位置越靠前越好。匹配不区分大小写，
@@ -114,6 +126,43 @@ pub(in crate::app) fn matched(needle: &[char], text: &str) -> Vec<usize> {
 }
 
 impl App {
+    /// 把命令面板的下标解析成内置动作或插件命令。
+    pub(crate) fn command(&self, index: usize) -> Option<CommandRef> {
+        let builtin = palette();
+        if index < builtin.len() {
+            return Some(CommandRef::Builtin(builtin[index]));
+        }
+        let mut wanted = index - builtin.len();
+        for (plugin, manifest) in self.plugins.plugins.iter().enumerate() {
+            if !self
+                .config
+                .plugin_enabled
+                .iter()
+                .any(|id| id == &manifest.id)
+            {
+                continue;
+            }
+            for (command, _) in manifest.commands.iter().enumerate() {
+                if wanted == 0 {
+                    return Some(CommandRef::Plugin { plugin, command });
+                }
+                wanted -= 1;
+            }
+        }
+        None
+    }
+
+    /// 命令面板中插件命令的标题和英文名；内置命令没有这一项。
+    pub(crate) fn plugin_command_titles(
+        &self,
+        plugin: usize,
+        command: usize,
+    ) -> Option<(&str, &str)> {
+        let manifest = self.plugins.plugins.get(plugin)?;
+        let command = manifest.commands.get(command)?;
+        Some((command.title.as_str(), manifest.name.as_str()))
+    }
+
     /// 命令面板里查询（去掉开头的 `>`）在命令名 `text` 里命中的字符下标：画的时候标出来。
     pub(crate) fn palette_matched(&self, text: &str) -> Vec<usize> {
         matched(
@@ -181,6 +230,34 @@ impl App {
         let mut hits = search_palette(&query);
         // 关着的模块的命令不列出来。
         hits.retain(|&i| self.action_available(palette()[i]));
+        // 插件命令排在内置命令之后；只列已启用插件的命令。
+        let plugin_start = palette().len();
+        let plugin_needle = needle(&query);
+        let mut plugin_hits: Vec<(u32, usize)> = Vec::new();
+        let mut index = plugin_start;
+        for manifest in &self.plugins.plugins {
+            if !self
+                .config
+                .plugin_enabled
+                .iter()
+                .any(|id| id == &manifest.id)
+            {
+                continue;
+            }
+            for command in &manifest.commands {
+                let score = if plugin_needle.is_empty() {
+                    Some(index as u32)
+                } else {
+                    rate(&plugin_needle, &command.title)
+                };
+                if let Some(score) = score {
+                    plugin_hits.push((score, index));
+                }
+                index += 1;
+            }
+        }
+        plugin_hits.sort();
+        hits.extend(plugin_hits.into_iter().map(|(_, index)| index));
         self.overlays.picker.recent = 0;
         if query.trim().is_empty() {
             let recent: Vec<usize> = self
@@ -197,22 +274,30 @@ impl App {
         self.overlays.picker.hits = hits;
     }
 
-    /// 执行选中的命令：关闭面板，并将该命令记为最近执行（最多保留 5 条）。
+    /// 执行选中的命令：关闭面板，并将内置命令记为最近执行（最多保留 5 条）。
     pub(in crate::app) fn palette_accept(&mut self) {
-        let Some(&action) = self
+        let Some(index) = self
             .overlays
             .picker
             .hits
             .get(self.overlays.picker.selected)
-            .and_then(|&i| palette().get(i))
+            .copied()
         else {
             return;
         };
+        let Some(command) = self.command(index) else {
+            return;
+        };
         self.close_picker();
-        self.history.commands.retain(|&a| a != action);
-        self.history.commands.insert(0, action);
-        self.history.commands.truncate(5);
-        self.run_action(action);
+        match command {
+            CommandRef::Builtin(action) => {
+                self.history.commands.retain(|&a| a != action);
+                self.history.commands.insert(0, action);
+                self.history.commands.truncate(5);
+                self.run_action(action);
+            }
+            CommandRef::Plugin { plugin, command } => self.run_plugin_command(plugin, command),
+        }
         self.request_redraw();
     }
 }

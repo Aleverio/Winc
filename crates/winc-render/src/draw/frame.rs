@@ -22,6 +22,8 @@ pub struct Frame<'a> {
     pub(crate) dark: bool,
     /// 屏幕缩放系数（每个逻辑像素对应的物理像素数）。
     pub(crate) scale: f32,
+    /// 用户设置的圆角缩放倍数，1 为原大小。
+    pub(crate) corner_scale: f32,
     /// 本帧画布的范围（逻辑像素）。
     pub(crate) bounds: Rect,
     /// 裁剪上限：不论各个调用传入的裁剪框是什么，绘制都不会超出该范围。
@@ -310,7 +312,7 @@ impl Frame<'_> {
 
         let tint = self.tint(color.argb());
         if radii.iter().any(|&r| r > 0.0) {
-            let radii = radii.map(|r| r * self.scale);
+            let radii = radii.map(|r| r * self.scale * self.corner_scale);
             self.canvas
                 .rounded_rect(area, radii, color.argb(), clip, None, tint);
         } else {
@@ -322,7 +324,10 @@ impl Frame<'_> {
     ///
     /// 绘制位于该矩形下方的阴影、边框和遮罩时传入该值，可跳过这些随后会被覆盖的像素。
     pub fn covered(&self, rect: Rect, radius: f32) -> Covered {
-        Covered::new(rect.to_pixels(self.scale), radius * self.scale)
+        Covered::new(
+            rect.to_pixels(self.scale),
+            radius * self.scale * self.corner_scale,
+        )
     }
 
     /// 绘制圆角矩形并跳过 `covered` 中的像素；用于绘制不透明卡片下方的边框和遮罩。
@@ -333,7 +338,7 @@ impl Frame<'_> {
         }
         let area = rect.to_pixels(self.scale);
         let clip = self.limit.to_pixels_outer(self.scale);
-        let radii = [radius * self.scale; 4];
+        let radii = [radius * self.scale * self.corner_scale; 4];
         let tint = self.tint(color.argb());
         self.canvas
             .rounded_rect(area, radii, color.argb(), clip, Some(covered), tint);
@@ -350,8 +355,13 @@ impl Frame<'_> {
         let area = rect.to_pixels(self.scale);
         let clip = self.limit.to_pixels_outer(self.scale);
         let tint = self.tint(color.argb());
-        self.canvas
-            .round_corners(area, radius * self.scale, color.argb(), clip, tint);
+        self.canvas.round_corners(
+            area,
+            radius * self.scale * self.corner_scale,
+            color.argb(),
+            clip,
+            tint,
+        );
     }
 
     /// 用宽 `width`（逻辑像素）的笔绘制一组线段、圆周和圆弧，用于绘制图标。
@@ -435,7 +445,7 @@ impl Frame<'_> {
         let clip = self.limit.to_pixels_outer(self.scale);
         self.canvas.shadow(
             area,
-            radius * self.scale,
+            radius * self.scale * self.corner_scale,
             blur * self.scale,
             color.argb(),
             clip,

@@ -263,6 +263,8 @@ pub struct Renderer {
     scale: f32,
     /// 界面缩放倍数，1 为不缩放（见 [`Self::set_zoom`]）。
     zoom: f32,
+    /// 圆角缩放倍数，1 为主题默认（见 [`Self::set_corner_scale`]）。
+    corner_scale: f32,
     /// 当前背景色，打包成 `0xAARRGGBB`。
     background: u32,
     /// 下一帧必然被不透明内容完全覆盖的区域（逻辑像素），填充背景色时跳过，见
@@ -491,6 +493,7 @@ impl Renderer {
             dark: is_dark(background),
             scale,
             zoom: 1.0,
+            corner_scale: 1.0,
             background: background.argb(),
             cover: None,
             base: Vec::new(),
@@ -537,6 +540,7 @@ impl Renderer {
             dark: is_dark(background),
             scale,
             zoom: 1.0,
+            corner_scale: 1.0,
             background: background.argb(),
             cover: None,
             base: Vec::new(),
@@ -642,6 +646,11 @@ impl Renderer {
     pub fn set_zoom(&mut self, zoom: f32) {
         self.scale = self.scale / self.zoom * zoom;
         self.zoom = zoom;
+    }
+
+    /// 设置圆角缩放倍数 `scale`（1 为当前主题的圆角大小）。
+    pub fn set_corner_scale(&mut self, scale: f32) {
+        self.corner_scale = scale.max(0.0);
     }
 
     /// 窗口尺寸或系统的缩放系数变化时调用。
@@ -832,6 +841,7 @@ impl Renderer {
                 gamma,
                 dark,
                 scale,
+                corner_scale: self.corner_scale,
                 bounds,
                 limit: bounds,
                 opacity: 1.0,
@@ -894,6 +904,7 @@ impl Renderer {
                 gamma: &self.gamma,
                 dark: self.dark,
                 scale: self.scale,
+                corner_scale: self.corner_scale,
                 bounds: Rect::new(0.0, 0.0, width, height),
                 limit: Rect::new(0.0, 0.0, width, height),
                 opacity: 1.0,

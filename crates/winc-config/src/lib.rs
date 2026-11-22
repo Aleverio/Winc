@@ -8,17 +8,22 @@ mod config;
 pub mod files;
 mod font;
 mod json;
+pub mod plugin;
 mod run;
 mod state;
 mod version;
 
 pub use config::{
-    AutoSave, BackgroundFit, Backup, Config, FolderDrop, OptionAsMeta, PullMode, RenderWhitespace,
-    Saved, SearchStyle, TextWidth, ThemeChoice, VimClipboard, VimMapMode, VimMapping, WorktreeOpen,
-    config_path,
+    AutoSave, BackgroundFit, Backup, Config, FolderDrop, LspServerEntry, OptionAsMeta, PullMode,
+    RenderWhitespace, Saved, SearchStyle, TextWidth, ThemeChoice, VimClipboard, VimMapMode,
+    VimMapping, WorktreeOpen, config_path,
 };
 pub use font::{FontRequest, font_list, resolve_font, resolve_font_list};
 pub use json::Json;
+pub use plugin::{
+    PluginCommand, PluginInput, PluginManifest, PluginOutput, PluginRegistry, PluginSetting,
+    PluginSettingKind, intern, load_plugins,
+};
 pub use run::{
     RunConfig, affects_detected_configs, create_run_configs, detected_run_configs,
     load_run_configs, run_configs_path,

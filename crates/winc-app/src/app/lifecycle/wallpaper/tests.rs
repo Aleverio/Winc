@@ -5,7 +5,12 @@ use winc_config::BackgroundFit::{Fill, Fit, Stretch, Tile};
 
 fn source(opacity: u8, fit: BackgroundFit) -> Source {
     let path = PathBuf::new();
-    Source { path, opacity, fit }
+    Source {
+        path,
+        opacity,
+        fit,
+        blur: 0,
+    }
 }
 
 #[test]

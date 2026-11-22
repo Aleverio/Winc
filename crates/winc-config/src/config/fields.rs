@@ -60,6 +60,13 @@ macro_rules! weight_field {
     };
 }
 
+// 子模块复用上面定义的 `bool_field!` 等宏，因此声明必须放在宏之后。
+mod lsp;
+mod plugins;
+
+pub(super) use lsp::LSP;
+pub(super) use plugins::PLUGINS;
+
 /// 配置文件中的各节（顶层值为对象的键）和其中的设置，按写出的顺序排列。
 pub(super) const SECTIONS: &[(&str, &[Field])] = &[
     ("editor", EDITOR),
@@ -76,6 +83,7 @@ pub(super) const SECTIONS: &[(&str, &[Field])] = &[
     ("keyboard", KEYBOARD),
     ("format", FORMAT),
     ("lsp", LSP),
+    ("plugins", PLUGINS),
 ];
 
 /// 顶层的单值设置，写在各节之后。
@@ -327,6 +335,67 @@ const UI: &[Field] = &[
                 BackgroundFit::Tile => "tile",
             };
             Some(Json::String(value.into()))
+        },
+    },
+    Field {
+        key: "backgroundBlur",
+        read: |config, value, name, problems| {
+            let label = t!("config-label-background-blur");
+            config.ui_background_blur =
+                read_number(value, name, Config::BACKGROUND_BLUR_RANGE, label, problems)
+                    .map(|blur| blur.round() as u8);
+        },
+        write: |config| {
+            config
+                .ui_background_blur
+                .map(|blur| number(f32::from(blur)))
+        },
+    },
+    Field {
+        key: "panelOpacity",
+        read: |config, value, name, problems| {
+            let label = t!("config-label-panel-opacity");
+            config.ui_panel_opacity =
+                read_number(value, name, Config::PANEL_OPACITY_RANGE, label, problems)
+                    .map(|opacity| opacity.round() as u8);
+        },
+        write: |config| {
+            config
+                .ui_panel_opacity
+                .map(|opacity| number(f32::from(opacity)))
+        },
+    },
+    Field {
+        key: "accentColor",
+        read: |config, value, name, problems| match value.as_str().map(str::trim) {
+            Some("") | None => {}
+            Some(color) if is_hex_color(color) => config.ui_accent = Some(color.to_owned()),
+            Some(_) => problems.push(t!("config-accent-invalid", name = name)),
+        },
+        write: |config| config.ui_accent.clone().map(Json::String),
+    },
+    Field {
+        key: "cornerScale",
+        read: |config, value, name, problems| {
+            let label = t!("config-label-corner-scale");
+            config.ui_corner_scale =
+                read_number(value, name, Config::CORNER_SCALE_RANGE, label, problems)
+                    .map(|scale| scale.round() as u16);
+        },
+        write: |config| config.ui_corner_scale.map(|scale| number(f32::from(scale))),
+    },
+    Field {
+        key: "animationSpeed",
+        read: |config, value, name, problems| {
+            let label = t!("config-label-animation-speed");
+            config.ui_animation_speed =
+                read_number(value, name, Config::ANIMATION_SPEED_RANGE, label, problems)
+                    .map(|speed| speed.round() as u16);
+        },
+        write: |config| {
+            config
+                .ui_animation_speed
+                .map(|speed| number(f32::from(speed)))
         },
     },
     Field {
@@ -963,84 +1032,11 @@ pub(super) const FORMAT: &[Field] = &[
     },
 ];
 
-/// `lsp` 一节。
-const LSP: &[Field] = &[
-    Field {
-        key: "auto",
-        read: |config, value, name, problems| {
-            config.lsp_auto.clear();
-            let Some(languages) = value.as_array() else {
-                problems.push(t!("config-not-array", name = name));
-                return;
-            };
-            for language in languages {
-                let Some(language) = language.as_str() else {
-                    problems.push(t!("config-item-not-string", name = name));
-                    continue;
-                };
-                if let Some(id) = language_id(language, name, problems)
-                    && !config.lsp_auto.contains(&id)
-                {
-                    config.lsp_auto.push(id);
-                }
-            }
-        },
-        write: |config| {
-            (!config.lsp_auto.is_empty())
-                .then(|| Json::Array(config.lsp_auto.iter().cloned().map(Json::String).collect()))
-        },
-    },
-    Field {
-        key: "servers",
-        read: |config, value, name, problems| {
-            config.lsp_servers.clear();
-            let Some(servers) = value.as_object() else {
-                problems.push(t!("config-not-object", name = name));
-                return;
-            };
-            for (language, command) in servers {
-                let Some(args) = command.as_array() else {
-                    problems.push(t!("config-not-array", name = format!("{name}.{language}")));
-                    continue;
-                };
-                let Some(args) = args
-                    .iter()
-                    .map(|arg| {
-                        arg.as_str()
-                            .filter(|arg| !arg.is_empty())
-                            .map(str::to_owned)
-                    })
-                    .collect::<Option<Vec<_>>>()
-                    .filter(|args| !args.is_empty())
-                else {
-                    problems.push(t!(
-                        "config-item-not-string",
-                        name = format!("{name}.{language}")
-                    ));
-                    continue;
-                };
-                let id = language.trim().to_lowercase();
-                if config.lsp_servers.insert(id, args).is_some() {
-                    problems.push(t!(
-                        "config-duplicate-language",
-                        name = name,
-                        language = language
-                    ));
-                }
-            }
-        },
-        write: |config| {
-            (!config.lsp_servers.is_empty()).then(|| {
-                Json::object(config.lsp_servers.iter().map(|(language, args)| {
-                    (
-                        language.clone(),
-                        Json::Array(args.iter().cloned().map(Json::String).collect()),
-                    )
-                }))
-            })
-        },
-    },
-];
+/// `#RRGGBB` 或 `RRGGBB` 是否是一个十六进制颜色。
+fn is_hex_color(value: &str) -> bool {
+    let digits = value.strip_prefix('#').unwrap_or(value);
+    digits.len() == 6 && digits.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
 
 /// 在 `fields` 中找键名为 `key` 的一项。
 pub(super) fn find<'a>(fields: &'a [Field], key: &str) -> Option<&'a Field> {
@@ -1121,7 +1117,11 @@ fn commands_json(commands: &BTreeMap<String, String>) -> Option<Json> {
 /// 把用户写的语言（id 或名字）转成语言的 id，无法识别时记入 `problems` 并返回 `None`。
 ///
 /// 文案中用 `name` 指代所在的设置。
-fn language_id(language: &str, name: &str, problems: &mut Vec<String>) -> Option<String> {
+pub(super) fn language_id(
+    language: &str,
+    name: &str,
+    problems: &mut Vec<String>,
+) -> Option<String> {
     let id = winc_syntax::find(language).map(|l| l.id.to_owned());
     if id.is_none() {
         problems.push(t!(

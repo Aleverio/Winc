@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{self, Sender};
@@ -16,15 +16,16 @@ use crate::app::UserEvent;
 use crate::winc::WindowProxy;
 
 pub(crate) mod completion;
+pub(crate) mod discovery;
 mod edit;
 pub(crate) mod navigation;
 mod requests;
 use requests::{file_uri, hover_text};
 pub(crate) mod signature;
 mod sync;
-pub(crate) use sync::{
-    auto_server_command, display_lsp_command, incremental_change, split_server_command,
-};
+#[cfg(test)]
+pub(crate) use sync::auto_server_command;
+pub(crate) use sync::{display_lsp_command, incremental_change, split_server_command};
 #[cfg(test)]
 mod tests;
 
@@ -32,6 +33,8 @@ struct SyncRequest {
     document: winc_editor::DocumentId,
     language: String,
     command: Vec<String>,
+    env: BTreeMap<String, String>,
+    cwd: Option<PathBuf>,
     root: PathBuf,
     path: PathBuf,
     revision: u64,
@@ -46,6 +49,8 @@ pub(crate) struct LspDocumentSnapshot {
     pub(in crate::app) path: PathBuf,
     pub(in crate::app) language: String,
     command: Vec<String>,
+    env: BTreeMap<String, String>,
+    cwd: Option<PathBuf>,
     pub(in crate::app) root: PathBuf,
     pub(in crate::app) revision: u64,
     text: Rope,
@@ -61,6 +66,8 @@ struct CloseRequest {
 struct HoverRequest {
     language: String,
     command: Vec<String>,
+    env: BTreeMap<String, String>,
+    cwd: Option<PathBuf>,
     root: PathBuf,
     path: PathBuf,
     line: u32,
@@ -80,6 +87,8 @@ enum HoverRequestKind {
 pub(super) struct CompletionRequest {
     pub(super) language: String,
     pub(super) command: Vec<String>,
+    pub(super) env: BTreeMap<String, String>,
+    pub(super) cwd: Option<PathBuf>,
     pub(super) root: PathBuf,
     pub(super) path: PathBuf,
     pub(super) line: u32,
@@ -92,6 +101,8 @@ pub(super) struct CompletionRequest {
 struct FormattingRequest {
     language: String,
     command: Vec<String>,
+    env: BTreeMap<String, String>,
+    cwd: Option<PathBuf>,
     root: PathBuf,
     path: PathBuf,
     document: winc_editor::DocumentId,
@@ -111,6 +122,8 @@ pub(crate) enum NavigationKind {
 pub(crate) struct NavigationRequest {
     pub(crate) language: String,
     pub(crate) command: Vec<String>,
+    pub(crate) env: BTreeMap<String, String>,
+    pub(crate) cwd: Option<PathBuf>,
     pub(crate) root: PathBuf,
     pub(crate) path: PathBuf,
     pub(crate) line: u32,
@@ -149,6 +162,8 @@ pub(crate) struct CompletionPopup {
 struct CodeActionsRequest {
     language: String,
     command: Vec<String>,
+    env: BTreeMap<String, String>,
+    cwd: Option<PathBuf>,
     root: PathBuf,
     path: PathBuf,
     range: lsp_types::Range,
@@ -161,6 +176,8 @@ struct CodeActionsRequest {
 struct ExecuteCommandRequest {
     language: String,
     command: Vec<String>,
+    env: BTreeMap<String, String>,
+    cwd: Option<PathBuf>,
     root: PathBuf,
     command_name: String,
     arguments: Vec<serde_json::Value>,
@@ -287,6 +304,8 @@ async fn handle_request(
             document,
             language,
             command,
+            env,
+            cwd,
             root,
             path,
             revision,
@@ -297,7 +316,19 @@ async fn handle_request(
             saved,
         }) => {
             let result = async {
-                let client = get_client(&language, &command, &root, clients, proxy, false).await?;
+                let client = get_client(
+                    ClientTarget {
+                        language: &language,
+                        command: &command,
+                        env: &env,
+                        cwd: cwd.as_ref(),
+                        root: &root,
+                    },
+                    clients,
+                    proxy,
+                    false,
+                )
+                .await?;
                 let uri = file_uri(&path)?;
                 if !client.document_is_open(&uri).await {
                     client
@@ -356,6 +387,8 @@ async fn handle_request(
         Request::Hover(HoverRequest {
             language,
             command,
+            env,
+            cwd,
             root,
             path,
             line,
@@ -365,7 +398,19 @@ async fn handle_request(
             caret,
             kind,
         }) => {
-            let client = get_client(&language, &command, &root, clients, proxy, true).await?;
+            let client = get_client(
+                ClientTarget {
+                    language: &language,
+                    command: &command,
+                    env: &env,
+                    cwd: cwd.as_ref(),
+                    root: &root,
+                },
+                clients,
+                proxy,
+                true,
+            )
+            .await?;
             let uri = file_uri(&path)?;
             let proxy = proxy.clone();
             tokio::spawn(async move {
@@ -396,6 +441,8 @@ async fn handle_request(
         Request::Completion(CompletionRequest {
             language,
             command,
+            env,
+            cwd,
             root,
             path,
             line,
@@ -404,7 +451,19 @@ async fn handle_request(
             revision,
             caret,
         }) => {
-            let client = get_client(&language, &command, &root, clients, proxy, true).await?;
+            let client = get_client(
+                ClientTarget {
+                    language: &language,
+                    command: &command,
+                    env: &env,
+                    cwd: cwd.as_ref(),
+                    root: &root,
+                },
+                clients,
+                proxy,
+                true,
+            )
+            .await?;
             let uri = file_uri(&path)?;
             let proxy = proxy.clone();
             tokio::spawn(async move {
@@ -429,13 +488,27 @@ async fn handle_request(
         Request::Formatting(FormattingRequest {
             language,
             command,
+            env,
+            cwd,
             root,
             path,
             document,
             revision,
             options,
         }) => {
-            let client = get_client(&language, &command, &root, clients, proxy, true).await?;
+            let client = get_client(
+                ClientTarget {
+                    language: &language,
+                    command: &command,
+                    env: &env,
+                    cwd: cwd.as_ref(),
+                    root: &root,
+                },
+                clients,
+                proxy,
+                true,
+            )
+            .await?;
             let uri = file_uri(&path)?;
             let proxy = proxy.clone();
             tokio::spawn(async move {
@@ -449,9 +522,13 @@ async fn handle_request(
         }
         Request::Navigation(request) => {
             let client = match get_client(
-                &request.language,
-                &request.command,
-                &request.root,
+                ClientTarget {
+                    language: &request.language,
+                    command: &request.command,
+                    env: &request.env,
+                    cwd: request.cwd.as_ref(),
+                    root: &request.root,
+                },
                 clients,
                 proxy,
                 true,
@@ -518,6 +595,8 @@ async fn handle_request(
             let CodeActionsRequest {
                 language,
                 command,
+                env,
+                cwd,
                 root,
                 path,
                 range,
@@ -528,7 +607,19 @@ async fn handle_request(
             } = *request;
             let requested_range = range;
             let requested_message = diagnostic.message.clone();
-            let client = get_client(&language, &command, &root, clients, proxy, true).await?;
+            let client = get_client(
+                ClientTarget {
+                    language: &language,
+                    command: &command,
+                    env: &env,
+                    cwd: cwd.as_ref(),
+                    root: &root,
+                },
+                clients,
+                proxy,
+                true,
+            )
+            .await?;
             let proxy = proxy.clone();
             tokio::spawn(async move {
                 let result = async {
@@ -553,11 +644,25 @@ async fn handle_request(
         Request::ExecuteCommand(ExecuteCommandRequest {
             language,
             command,
+            env,
+            cwd,
             root,
             command_name,
             arguments,
         }) => {
-            let client = get_client(&language, &command, &root, clients, proxy, true).await?;
+            let client = get_client(
+                ClientTarget {
+                    language: &language,
+                    command: &command,
+                    env: &env,
+                    cwd: cwd.as_ref(),
+                    root: &root,
+                },
+                clients,
+                proxy,
+                true,
+            )
+            .await?;
             let proxy = proxy.clone();
             tokio::spawn(async move {
                 if let Err(error) = client
@@ -586,19 +691,34 @@ async fn handle_request(
     }
 }
 
+/// 选择一个语言服务器客户端所需的全部参数。
+struct ClientTarget<'a> {
+    language: &'a str,
+    command: &'a [String],
+    env: &'a BTreeMap<String, String>,
+    cwd: Option<&'a PathBuf>,
+    root: &'a Path,
+}
+
 async fn get_client(
-    language: &str,
-    command: &[String],
-    root: &Path,
+    target: ClientTarget<'_>,
     clients: &mut HashMap<(String, PathBuf), Arc<LspClient>>,
     proxy: &WindowProxy,
     report_startup_error: bool,
 ) -> Result<Arc<LspClient>, String> {
+    let ClientTarget {
+        language,
+        command,
+        env,
+        cwd,
+        root,
+    } = target;
     let key = (language.to_owned(), root.to_path_buf());
+    let effective_cwd = cwd.cloned().unwrap_or_else(|| root.to_path_buf());
     if let Some(client) = clients.get(&key).cloned() {
-        let matches_command = command
-            .split_first()
-            .is_some_and(|(program, args)| client.matches_command(program, args));
+        let matches_command = command.split_first().is_some_and(|(program, args)| {
+            client.matches_config(program, args, env, Some(&effective_cwd))
+        });
         if matches_command && client.get_state().await != LspClientState::Crashed {
             return Ok(client);
         }
@@ -617,11 +737,11 @@ async fn get_client(
     let Some((program, args)) = command.split_first() else {
         return Err(format!("No LSP command is configured for {language}"));
     };
-    let client = Arc::new(LspClient::new(
-        language.to_owned(),
-        program.clone(),
-        args.to_vec(),
-    ));
+    let client = Arc::new(
+        LspClient::new(language.to_owned(), program.clone(), args.to_vec())
+            .with_env(env.clone())
+            .with_cwd(effective_cwd),
+    );
     let notifications = client.subscribe_notifications();
     let server_requests = client.subscribe_server_requests();
     let _ = proxy.send_event(UserEvent::LspState(

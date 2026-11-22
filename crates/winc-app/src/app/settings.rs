@@ -4,9 +4,11 @@
 //! 再写回 [`winc_config::Config`]。关闭浮层时先离开输入框。
 
 mod adopt;
+mod appearance;
 mod card;
 mod formatters;
-mod lsp;
+pub(crate) mod lsp;
+mod plugins;
 pub(super) mod shortcuts;
 mod switches;
 
@@ -230,6 +232,7 @@ impl App {
         self.format.formatter.forget_wsl();
         self.refresh_format_rows(true);
         self.refresh_lsp_languages();
+        self.refresh_plugins();
         // 列出字体要读取字体文件，先在后台读好，打开字体菜单时不必等待；「默认 Shell」菜单中的
         // shell 同样在后台检测。
         std::thread::spawn(winc_render::installed_fonts);
@@ -733,7 +736,17 @@ impl App {
         self.settings.keyboard = true;
         let setting = self.settings.selected;
 
-        if matches!(setting, Setting::LspServer(_)) {
+        if matches!(
+            setting,
+            Setting::LspServer(_)
+                | Setting::LspDetectDirs
+                | Setting::LspServerEnv(_)
+                | Setting::LspServerCwd(_)
+                | Setting::LspDetectNames(_)
+                | Setting::AccentColor
+                | Setting::PluginPaths
+                | Setting::PluginValue(_, _, _)
+        ) {
             self.settings_start_editing(setting);
             return;
         }
@@ -781,11 +794,43 @@ impl App {
         } else {
             match tool_setting(setting) {
                 Some((task, id)) => task_commands(&self.config, task).get(id).cloned(),
-                None if let Setting::LspServer(id) = setting => self
+                None if let Setting::LspServer(id) = setting => {
+                    lsp::display_configured_lsp_command(&self.config, id)
+                }
+                None if setting == Setting::LspDetectDirs => {
+                    Some(self.config.lsp_detect_dirs.join(", "))
+                }
+                None if let Setting::LspServerEnv(id) = setting => self
                     .config
-                    .lsp_servers
+                    .lsp_server_entries
                     .get(id)
-                    .map(|args| crate::app::lsp::display_lsp_command(args)),
+                    .and_then(|entries| entries.first())
+                    .map(|entry| {
+                        entry
+                            .env
+                            .iter()
+                            .map(|(key, value)| format!("{key}={value}"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    }),
+                None if let Setting::LspServerCwd(id) = setting => self
+                    .config
+                    .lsp_server_entries
+                    .get(id)
+                    .and_then(|entries| entries.first())
+                    .and_then(|entry| entry.cwd.clone()),
+                None if let Setting::LspDetectNames(id) = setting => self
+                    .config
+                    .lsp_detect_names
+                    .get(id)
+                    .map(|names| names.join(", ")),
+                None if setting == Setting::PluginPaths => {
+                    Some(self.config.plugin_paths.join(", "))
+                }
+                None if let Setting::PluginValue(plugin, key, _) = setting => {
+                    Some(self.plugin_setting_value(plugin, key))
+                }
+                None if setting == Setting::AccentColor => self.config.ui_accent.clone(),
                 None if setting == Setting::TerminalShell => self.config.terminal_shell.clone(),
                 None if setting == Setting::GitPath => self.config.git_path.clone(),
                 None if setting == Setting::LatexPath => self.config.latex_path.clone(),
@@ -926,6 +971,23 @@ impl App {
             None if let Setting::LspServer(id) = setting => {
                 self.settings_commit_lsp_server(setting, id, value)
             }
+            None if setting == Setting::LspDetectDirs => {
+                self.settings_commit_lsp_detect_dirs(setting, value)
+            }
+            None if let Setting::LspServerEnv(id) = setting => {
+                self.settings_commit_lsp_env(id, value)
+            }
+            None if let Setting::LspServerCwd(id) = setting => {
+                self.settings_commit_lsp_cwd(id, value)
+            }
+            None if let Setting::LspDetectNames(id) = setting => {
+                self.settings_commit_lsp_detect_names(id, value)
+            }
+            None if setting == Setting::PluginPaths => self.settings_commit_plugin_paths(value),
+            None if let Setting::PluginValue(plugin, key, _) = setting => {
+                self.settings_commit_plugin_setting(plugin, key, value)
+            }
+            None if self.commit_accent(setting, value.as_deref()) => {}
             None if setting == Setting::TerminalShell => {
                 self.settings.editing = None;
                 self.settings.editing_original = None;
@@ -1126,6 +1188,7 @@ impl App {
                 (self.config.ui_background_opacity).unwrap_or(Config::BACKGROUND_OPACITY),
                 Config::BACKGROUND_OPACITY_RANGE,
             ),
+            _ if let Some(value) = self.appearance_value(setting) => value,
             Setting::TerminalSize => (
                 ViewFonts::of(&self.config).terminal,
                 Config::EDITOR_SIZE_RANGE,
@@ -1182,6 +1245,7 @@ impl App {
                 let next = current + if up { OPACITY_STEP } else { -OPACITY_STEP };
                 self.config.ui_background_opacity = Some(next.clamp(*range.start(), *range.end()));
             }
+            _ if self.step_appearance(setting, up) => {}
             // 只改字号，无需重新加载字体。
             Setting::TerminalSize => {
                 let current = ViewFonts::of(&self.config).terminal;
@@ -1368,6 +1432,7 @@ impl App {
     /// 先把原文件另存为一个副本再写入（写出的文件不保留注释），并提示副本的位置。版本号
     /// （`config_rev`）加一，应用层据此把新配置发给其他窗口。
     pub(super) fn save_config(&mut self) {
+        self.clear_lsp_detection_cache();
         self.store.config_rev += 1;
         // `:set` 的改动只在本次运行中生效：写入时换回配置文件中的值。
         self.vim_swap_options();

@@ -4,6 +4,7 @@ use super::*;
 
 use std::borrow::Cow;
 
+use winc_config::PluginSettingKind;
 use winc_i18n::t;
 
 mod about;
@@ -33,6 +34,8 @@ pub enum SettingsPage {
     Terminal,
     /// 模块：可选模块的开关。
     Modules,
+    /// 插件：声明式外部命令的启用、信任和设置。
+    Plugins,
     /// 快捷键：只列出键位，不含设置项，整页由 [`KeysLayout`] 单独布局。
     Keys,
     /// 关于：版本和应用内更新。
@@ -48,12 +51,13 @@ pub struct Modules {
 
 impl SettingsPage {
     /// 全部分类，顺序与分类栏从上到下的顺序一致。
-    pub const ALL: [SettingsPage; 9] = [
+    pub const ALL: [SettingsPage; 10] = [
         SettingsPage::Appearance,
         SettingsPage::Editor,
         SettingsPage::Format,
         SettingsPage::Git,
         SettingsPage::Lsp,
+        SettingsPage::Plugins,
         SettingsPage::Terminal,
         SettingsPage::Modules,
         SettingsPage::Keys,
@@ -77,6 +81,7 @@ impl SettingsPage {
             SettingsPage::Format => t!("settings-page-format"),
             SettingsPage::Git => t!("settings-page-git"),
             SettingsPage::Lsp => t!("settings-page-lsp"),
+            SettingsPage::Plugins => t!("settings-page-plugins"),
             SettingsPage::Terminal => t!("settings-page-terminal"),
             SettingsPage::Modules => t!("settings-page-modules"),
             SettingsPage::Keys => t!("settings-page-keys"),
@@ -102,6 +107,21 @@ pub struct ToolLanguages {
     pub fix: Vec<&'static str>,
     /// LSP server rows currently available in the settings page.
     pub lsp: Vec<&'static str>,
+    /// 插件页列出的插件；打开设置时从清单读入。
+    pub plugins: Vec<PluginRow>,
+}
+
+/// 插件页中的一个插件；文字已经转成 `'static`，可以直接用作 [`Setting`] 的参数。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PluginRow {
+    /// 插件 id。
+    pub id: &'static str,
+    /// 显示名称。
+    pub name: &'static str,
+    /// 命令列表：（命令 id，显示标题）。
+    pub commands: Vec<(&'static str, &'static str)>,
+    /// 设置列表：（键，显示名称，类型）。
+    pub settings: Vec<(&'static str, &'static str, PluginSettingKind)>,
 }
 
 /// 一页中的一组设置项，共用一块底色，可以带标题。
@@ -181,6 +201,16 @@ pub enum Setting {
     BackgroundFit,
     /// 背景图片的不透明度（`ui.backgroundOpacity`）。
     BackgroundOpacity,
+    /// 背景图片的模糊半径（`ui.backgroundBlur`）。
+    BackgroundBlur,
+    /// 侧栏和编辑区卡片的不透明度（`ui.panelOpacity`）。
+    PanelOpacity,
+    /// 主题强调色（`ui.accentColor`）。
+    AccentColor,
+    /// 圆角缩放（`ui.cornerScale`）。
+    CornerScale,
+    /// 动画速度（`ui.animationSpeed`）。
+    AnimationSpeed,
     /// 文件树把连续的单子目录合并显示为一行。
     CompactFolders,
     /// 预览标签：在文件树中单击文件时在预览标签中打开。
@@ -243,8 +273,30 @@ pub enum Setting {
     LspServer(&'static str),
     /// Automatically select the built-in server for a language.
     LspAuto(&'static str),
+    /// Enable or disable the configured server for a language.
+    LspServerEnabled(&'static str),
+    /// Extra environment variables for the configured server (`KEY=value, …`).
+    LspServerEnv(&'static str),
+    /// Working directory for the configured server.
+    LspServerCwd(&'static str),
+    /// 是否自动在文件系统中查找语言服务器。
+    LspDetect,
+    /// 自动查找语言服务器时额外搜索的目录，用逗号分隔。
+    LspDetectDirs,
+    /// 某种语言自动查找时额外尝试的可执行文件名，用逗号分隔。
+    LspDetectNames(&'static str),
     /// 为当前文档的语言添加或修改 LSP server.
     AddLspLanguage,
+    /// 插件清单文件或目录，用逗号分隔（`plugins.paths`）。
+    PluginPaths,
+    /// 是否启用一个插件（`plugins.enabled`）。
+    PluginEnabled(&'static str),
+    /// 运行一条插件命令。
+    PluginCommand(&'static str, &'static str),
+    /// 一个文本类型的插件设置项（`plugins.values`）：插件 id、设置键和显示名称。
+    PluginValue(&'static str, &'static str, &'static str),
+    /// 一个布尔类型的插件设置项（`plugins.values`）：插件 id、设置键和显示名称。
+    PluginBool(&'static str, &'static str, &'static str),
     /// 格式化工具一组下面的「添加语言…」。
     AddLanguage,
     /// 修复工具一组下面的「添加语言…」。
@@ -358,7 +410,12 @@ impl Setting {
             | Setting::SmoothScrolling
             | Setting::BackgroundImage
             | Setting::BackgroundFit
-            | Setting::BackgroundOpacity => SettingsPage::Appearance,
+            | Setting::BackgroundOpacity
+            | Setting::BackgroundBlur
+            | Setting::PanelOpacity
+            | Setting::AccentColor
+            | Setting::CornerScale
+            | Setting::AnimationSpeed => SettingsPage::Appearance,
             Setting::EditorFont
             | Setting::EditorSize
             | Setting::TabWidth
@@ -407,9 +464,20 @@ impl Setting {
             | Setting::FixCommand(_)
             | Setting::AddLanguage
             | Setting::AddFixLanguage => SettingsPage::Format,
-            Setting::LspServer(_) | Setting::LspAuto(_) | Setting::AddLspLanguage => {
-                SettingsPage::Lsp
-            }
+            Setting::LspServer(_)
+            | Setting::LspAuto(_)
+            | Setting::LspServerEnabled(_)
+            | Setting::LspServerEnv(_)
+            | Setting::LspServerCwd(_)
+            | Setting::LspDetect
+            | Setting::LspDetectDirs
+            | Setting::LspDetectNames(_)
+            | Setting::AddLspLanguage => SettingsPage::Lsp,
+            Setting::PluginPaths
+            | Setting::PluginEnabled(_)
+            | Setting::PluginCommand(_, _)
+            | Setting::PluginValue(_, _, _)
+            | Setting::PluginBool(_, _, _) => SettingsPage::Plugins,
             Setting::TerminalShell
             | Setting::TerminalPosition
             | Setting::TerminalTabPosition
@@ -480,6 +548,11 @@ impl Setting {
             Setting::BackgroundImage => t!("settings-background-image"),
             Setting::BackgroundFit => t!("settings-background-fit"),
             Setting::BackgroundOpacity => t!("settings-background-opacity"),
+            Setting::BackgroundBlur => t!("settings-background-blur"),
+            Setting::PanelOpacity => t!("settings-panel-opacity"),
+            Setting::AccentColor => t!("settings-accent-color"),
+            Setting::CornerScale => t!("settings-corner-scale"),
+            Setting::AnimationSpeed => t!("settings-animation-speed"),
             Setting::Outline => t!("settings-outline"),
             Setting::CompactFolders => t!("settings-compact-folders"),
             Setting::PreviewOnClick => t!("settings-preview-on-click"),
@@ -506,7 +579,17 @@ impl Setting {
             }
             Setting::LspServer(id) => winc_syntax::find(id).map_or(id, |l| l.name),
             Setting::LspAuto(_) => t!("settings-lsp-auto"),
+            Setting::LspServerEnabled(_) => t!("settings-lsp-server-enabled"),
+            Setting::LspServerEnv(_) => t!("settings-lsp-server-env"),
+            Setting::LspServerCwd(_) => t!("settings-lsp-server-cwd"),
+            Setting::LspDetect => t!("settings-lsp-detect"),
+            Setting::LspDetectDirs => t!("settings-lsp-detect-dirs"),
+            Setting::LspDetectNames(id) => winc_syntax::find(id).map_or(id, |l| l.name),
             Setting::AddLspLanguage => t!("settings-lsp-add-current"),
+            Setting::PluginPaths => t!("settings-plugin-paths"),
+            Setting::PluginEnabled(name) => name,
+            Setting::PluginCommand(_, title) => title,
+            Setting::PluginValue(_, _, title) | Setting::PluginBool(_, _, title) => title,
             Setting::AddLanguage | Setting::AddFixLanguage => t!("settings-add-language"),
             Setting::TerminalShell => t!("settings-terminal-shell"),
             Setting::TerminalPosition => t!("settings-terminal-position"),
@@ -581,6 +664,11 @@ impl Setting {
             Setting::BackgroundImage => Some(t!("settings-background-image-desc")),
             Setting::BackgroundFit => Some(t!("settings-background-fit-desc")),
             Setting::BackgroundOpacity => Some(t!("settings-background-opacity-desc")),
+            Setting::BackgroundBlur => Some(t!("settings-background-blur-desc")),
+            Setting::PanelOpacity => Some(t!("settings-panel-opacity-desc")),
+            Setting::AccentColor => Some(t!("settings-accent-color-desc")),
+            Setting::CornerScale => Some(t!("settings-corner-scale-desc")),
+            Setting::AnimationSpeed => Some(t!("settings-animation-speed-desc")),
             Setting::RemoteImages => Some(t!("settings-remote-images-desc")),
             Setting::TextWidth => Some(t!("settings-text-width-desc")),
             Setting::MarkdownLineNumbers => Some(t!("settings-markdown-line-numbers-desc")),
@@ -597,6 +685,17 @@ impl Setting {
             Setting::FixOnSave => Some(t!("settings-fix-on-save-desc")),
             Setting::SkipOnSave => Some(t!("settings-skip-on-save-desc")),
             Setting::LspAuto(_) => Some(t!("settings-lsp-auto-desc")),
+            Setting::LspDetect => Some(t!("settings-lsp-detect-desc")),
+            Setting::LspDetectDirs => Some(t!("settings-lsp-detect-dirs-desc")),
+            Setting::LspDetectNames(_) => Some(t!("settings-lsp-detect-names-desc")),
+            Setting::LspServerEnabled(_) => Some(t!("settings-lsp-server-enabled-desc")),
+            Setting::LspServerEnv(_) => Some(t!("settings-lsp-server-env-desc")),
+            Setting::LspServerCwd(_) => Some(t!("settings-lsp-server-cwd-desc")),
+            Setting::PluginPaths => Some(t!("settings-plugin-paths-desc")),
+            Setting::PluginEnabled(_) => Some(t!("settings-plugin-enabled-desc")),
+            Setting::PluginCommand(_, _) => Some(t!("settings-plugin-command-desc")),
+            Setting::PluginValue(_, _, _) => Some(t!("settings-plugin-setting-desc")),
+            Setting::PluginBool(_, _, _) => Some(t!("settings-plugin-bool-desc")),
             Setting::GitModule => Some(t!("settings-git-module-desc")),
             Setting::RemoteModule => Some(t!("settings-remote-module-desc")),
             Setting::GitConfirmPush => Some(t!("settings-git-confirm-push-desc")),
@@ -634,6 +733,10 @@ impl Setting {
             | Setting::UiSize
             | Setting::FontWeight
             | Setting::BackgroundOpacity
+            | Setting::BackgroundBlur
+            | Setting::PanelOpacity
+            | Setting::CornerScale
+            | Setting::AnimationSpeed
             | Setting::TerminalSize
             | Setting::TerminalFontWeight
             | Setting::TabWidth
@@ -684,10 +787,21 @@ impl Setting {
             | Setting::TerminalConfirmClose
             | Setting::TerminalPrompt
             | Setting::TerminalShellIntegration
-            | Setting::TerminalApplicationPriority => SettingControl::Switch,
+            | Setting::TerminalApplicationPriority
+            | Setting::LspServerEnabled(_)
+            | Setting::LspDetect
+            | Setting::PluginEnabled(_)
+            | Setting::PluginBool(_, _, _) => SettingControl::Switch,
             Setting::FormatCommand(_)
             | Setting::FixCommand(_)
             | Setting::LspServer(_)
+            | Setting::LspServerEnv(_)
+            | Setting::LspServerCwd(_)
+            | Setting::LspDetectDirs
+            | Setting::LspDetectNames(_)
+            | Setting::AccentColor
+            | Setting::PluginPaths
+            | Setting::PluginValue(_, _, _)
             | Setting::TerminalShell
             | Setting::GitPath
             | Setting::LatexPath => SettingControl::Command,
@@ -708,9 +822,10 @@ impl Setting {
             | Setting::AutoSave
             | Setting::GitOpenWorktree
             | Setting::GitPullMode => SettingControl::Choice,
-            Setting::AddLanguage | Setting::AddFixLanguage | Setting::AddLspLanguage => {
-                SettingControl::Action
-            }
+            Setting::AddLanguage
+            | Setting::AddFixLanguage
+            | Setting::AddLspLanguage
+            | Setting::PluginCommand(_, _) => SettingControl::Action,
             Setting::KeySearch => SettingControl::Search,
             Setting::Version => SettingControl::Product,
             Setting::ReleaseNotes

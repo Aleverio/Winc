@@ -741,7 +741,7 @@ fn draw_palette_rows(app: &App, frame: &mut Frame<'_>, parts: &PickerParts) {
 
     let scroll = drawn_scroll(app.overlays.picker.scroll);
     for i in parts.visible(scroll, app.overlays.picker.hits.len()) {
-        let Some(&action) = crate::app::palette().get(app.overlays.picker.hits[i]) else {
+        let Some(command) = app.command(app.overlays.picker.hits[i]) else {
             continue;
         };
         let row = parts.row(i, scroll);
@@ -749,7 +749,9 @@ fn draw_palette_rows(app: &App, frame: &mut Frame<'_>, parts: &PickerParts) {
         draw_pick_row(app, frame, row, i, clip);
 
         let mut right = row.right() - 14.0;
-        if let Some(shortcut) = keymap::shortcut(action) {
+        if let crate::app::CommandRef::Builtin(action) = command
+            && let Some(shortcut) = keymap::shortcut(action)
+        {
             right -= frame.measure(FontKind::Ui, app.fonts.ui_small, &shortcut);
             ui_text_small(frame, app, right, row, &shortcut, p.text_dim, clip);
             right -= 16.0;
@@ -762,14 +764,20 @@ fn draw_palette_rows(app: &App, frame: &mut Frame<'_>, parts: &PickerParts) {
         }
 
         // 查询命中的字用强调色标出来：中文名、英文名谁命中标谁。
-        let title = action.title();
+        let (title, english) = match command {
+            crate::app::CommandRef::Builtin(action) => (action.title(), action.english()),
+            crate::app::CommandRef::Plugin { plugin, command } => app
+                .plugin_command_titles(plugin, command)
+                .unwrap_or(("", "")),
+        };
         let marked = app.palette_matched(title);
         let at = (row.x + PICKER_TEXT_X, row);
         let x = marked_label(frame, app, app.fonts.ui, at, title, &marked, p.text, clip);
         let room = (right - x - 8.0).max(0.0);
         if room > 20.0 {
-            let english = ellipsize(frame, action.english(), app.fonts.ui_small, room);
-            let marked = if english.len() == action.english().len() {
+            let full = english;
+            let english = ellipsize(frame, full, app.fonts.ui_small, room);
+            let marked = if english.len() == full.len() {
                 app.palette_matched(&english)
             } else {
                 Vec::new()

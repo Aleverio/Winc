@@ -17,6 +17,23 @@ fn decoded(name: &str, bytes: &[u8]) -> Result<Picture, String> {
     result
 }
 
+#[test]
+fn blur_smooths_edges_without_changing_size() {
+    let src = Pixels {
+        width: 3,
+        height: 1,
+        rgba: vec![255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255],
+    };
+    let out = blur(&src, 1);
+    assert_eq!(out.width, 3);
+    assert_eq!(out.height, 1);
+    let rgba = out.rgba;
+    assert_eq!(rgba[0..4], [127, 127, 0, 255]);
+    assert_eq!(rgba[4..8], [85, 85, 85, 255]);
+    assert_eq!(rgba[8..12], [0, 127, 127, 255]);
+    assert_eq!(blur(&src, 0), src);
+}
+
 fn png(width: u32, height: u32, color: png::ColorType, data: &[u8]) -> Vec<u8> {
     let mut out = Vec::new();
     let mut encoder = png::Encoder::new(&mut out, width, height);

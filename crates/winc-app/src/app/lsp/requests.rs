@@ -115,7 +115,10 @@ impl App {
     }
 
     pub(in crate::app) fn sync_lsp_documents(&mut self) {
-        let configured = !self.config.lsp_servers.is_empty() || !self.config.lsp_auto.is_empty();
+        let configured = !self.config.lsp_servers.is_empty()
+            || !self.config.lsp_auto.is_empty()
+            || !self.config.lsp_server_entries.is_empty()
+            || self.config.lsp_detect != Some(false);
         if !configured && self.lsp_sent.is_empty() {
             return;
         }
@@ -154,12 +157,6 @@ impl App {
                 continue;
             }
             self.lsp_failed.remove(&doc.id);
-            let command = if self.config.lsp_auto.iter().any(|id| id == language) {
-                auto_server_command(language)
-            } else {
-                self.config.lsp_servers.get(language).cloned()
-            };
-            let Some(command) = command else { continue };
             let Some(rope) = doc.text().rope() else {
                 continue;
             };
@@ -170,11 +167,17 @@ impl App {
                 .or_else(|| path.parent())
                 .unwrap_or(path)
                 .to_path_buf();
+            let Some(server) = self.lsp_resolve_server(language, &root) else {
+                continue;
+            };
+            let command = server.command.clone();
             let previous = self.lsp_sent.get(&doc.id);
             let same_target = previous.is_some_and(|sent| {
                 sent.path == *path
                     && sent.language == language
                     && sent.command == command
+                    && sent.env == server.env
+                    && sent.cwd == server.cwd
                     && sent.root == root
             });
             if let Some(sent) = previous.filter(|_| !same_target) {
@@ -217,7 +220,9 @@ impl App {
                 path.clone(),
                 doc.revision,
                 language.to_owned(),
-                command,
+                server.command,
+                server.env,
+                server.cwd,
                 root,
                 text,
                 changes,
@@ -268,6 +273,8 @@ impl App {
             revision,
             language,
             command,
+            env,
+            cwd,
             root,
             text,
             changes,
@@ -280,6 +287,8 @@ impl App {
                 document: id,
                 language: language.clone(),
                 command: command.clone(),
+                env: env.clone(),
+                cwd: cwd.clone(),
                 root: root.clone(),
                 path: path.clone(),
                 revision,
@@ -296,6 +305,8 @@ impl App {
                             path: path.clone(),
                             language,
                             command,
+                            env,
+                            cwd,
                             root,
                             revision,
                             text: snapshot,
@@ -337,15 +348,20 @@ impl App {
             self.flash("Hover requires an open text file".to_owned());
             return;
         };
-        let command = if self.config.lsp_auto.iter().any(|id| id == &language) {
-            auto_server_command(&language)
-        } else {
-            self.config.lsp_servers.get(&language).cloned()
-        };
-        let Some(server_command) = command else {
+        let resolve_root = self
+            .editor
+            .root()
+            .filter(|root| path.starts_with(root))
+            .or_else(|| path.parent())
+            .unwrap_or(&path)
+            .to_path_buf();
+        let Some(server) = self.lsp_resolve_server(&language, &resolve_root) else {
             self.flash(format!("No LSP server is configured for {language}"));
             return;
         };
+        let server_command = server.command;
+        let env = server.env;
+        let cwd = server.cwd;
         let root = self
             .editor
             .root()
@@ -360,6 +376,8 @@ impl App {
         if let Err(error) = bridge.hover(HoverRequest {
             language,
             command: server_command,
+            env,
+            cwd,
             root,
             path,
             line,
@@ -389,14 +407,19 @@ impl App {
         else {
             return false;
         };
-        let command = if self.config.lsp_auto.iter().any(|id| id == &language) {
-            auto_server_command(&language)
-        } else {
-            self.config.lsp_servers.get(&language).cloned()
-        };
-        let Some(server_command) = command else {
+        let resolve_root = self
+            .editor
+            .root()
+            .filter(|root| path.starts_with(root))
+            .or_else(|| path.parent())
+            .unwrap_or(&path)
+            .to_path_buf();
+        let Some(server) = self.lsp_resolve_server(&language, &resolve_root) else {
             return false;
         };
+        let server_command = server.command;
+        let env = server.env;
+        let cwd = server.cwd;
         let root = self
             .editor
             .root()
@@ -411,6 +434,8 @@ impl App {
         let request = FormattingRequest {
             language,
             command: server_command,
+            env,
+            cwd,
             root,
             path,
             document,
@@ -446,17 +471,22 @@ impl App {
         if self.lsp_code_actions.contains_key(&key) || !self.lsp_code_actions_pending.insert(key) {
             return;
         }
-        let command = if self.config.lsp_auto.iter().any(|id| id == &language) {
-            auto_server_command(&language)
-        } else {
-            self.config.lsp_servers.get(&language).cloned()
-        };
-        let Some(server_command) = command else {
+        let resolve_root = self
+            .editor
+            .root()
+            .filter(|root| path.starts_with(root))
+            .or_else(|| path.parent())
+            .unwrap_or(&path)
+            .to_path_buf();
+        let Some(server) = self.lsp_resolve_server(&language, &resolve_root) else {
             self.lsp_code_actions_pending.remove(&key);
             self.lsp_code_actions.insert(key, Ok(Vec::new()));
             self.request_redraw();
             return;
         };
+        let server_command = server.command;
+        let env = server.env;
+        let cwd = server.cwd;
         let root = self
             .editor
             .root()
@@ -478,6 +508,8 @@ impl App {
             .send(Request::CodeActions(Box::new(CodeActionsRequest {
                 language,
                 command: server_command,
+                env,
+                cwd,
                 root,
                 path,
                 range: diagnostic.range,
@@ -561,15 +593,20 @@ impl App {
             .or_else(|| path.parent())
             .unwrap_or(&path)
             .to_path_buf();
-        let command = if self.config.lsp_auto.iter().any(|id| id == &language) {
-            auto_server_command(&language)
-        } else {
-            self.config.lsp_servers.get(&language).cloned()
-        };
-        let Some(server_command) = command else {
+        let resolve_root = self
+            .editor
+            .root()
+            .filter(|root| path.starts_with(root))
+            .or_else(|| path.parent())
+            .unwrap_or(&path)
+            .to_path_buf();
+        let Some(server) = self.lsp_resolve_server(&language, &resolve_root) else {
             self.flash(format!("No LSP server is configured for {language}"));
             return;
         };
+        let server_command = server.command;
+        let env = server.env;
+        let cwd = server.cwd;
         let mut applied = false;
         let command_to_run = match action {
             lsp_types::CodeActionOrCommand::CodeAction(action) => {
@@ -596,6 +633,8 @@ impl App {
             if let Err(error) = bridge.execute_command(ExecuteCommandRequest {
                 language,
                 command: server_command,
+                env,
+                cwd,
                 root,
                 command_name: command.command,
                 arguments: command.arguments.unwrap_or_default(),

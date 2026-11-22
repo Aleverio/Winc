@@ -21,14 +21,19 @@ impl App {
         else {
             return false;
         };
-        let command = if self.config.lsp_auto.iter().any(|id| id == &language) {
-            auto_server_command(&language)
-        } else {
-            self.config.lsp_servers.get(&language).cloned()
-        };
-        let Some(command) = command else {
+        let resolve_root = self
+            .editor
+            .root()
+            .filter(|root| path.starts_with(root))
+            .or_else(|| path.parent())
+            .unwrap_or(&path)
+            .to_path_buf();
+        let Some(server) = self.lsp_resolve_server(&language, &resolve_root) else {
             return false;
         };
+        let command = server.command;
+        let env = server.env;
+        let cwd = server.cwd;
         let root = self
             .editor
             .root()
@@ -42,6 +47,8 @@ impl App {
         match bridge.navigation(NavigationRequest {
             language,
             command,
+            env,
+            cwd,
             root,
             path,
             line: position.line,

@@ -7,6 +7,20 @@ impl App {
     pub(crate) fn switch_on(&self, setting: Setting) -> bool {
         match setting {
             Setting::LspAuto(language) => self.config.lsp_auto.contains(&language.to_owned()),
+            Setting::LspDetect => self.config.lsp_detect != Some(false),
+            Setting::PluginBool(plugin, key, _) => self.plugin_bool_value(plugin, key),
+            Setting::PluginEnabled(name) => self
+                .plugins
+                .plugins
+                .iter()
+                .find(|plugin| plugin.name == name)
+                .is_some_and(|plugin| self.config.plugin_enabled.iter().any(|id| id == &plugin.id)),
+            Setting::LspServerEnabled(language) => self
+                .config
+                .lsp_server_entries
+                .get(language)
+                .and_then(|entries| entries.first())
+                .is_some_and(|entry| entry.enabled),
             Setting::FormatOnSave => self.config.format_on_save == Some(true),
             Setting::FixOnSave => self.config.fix_on_save == Some(true),
             Setting::AutoSaveTyping => self.config.auto_save_while_typing == Some(true),
@@ -92,6 +106,47 @@ impl App {
                     .filter(|_| self.settings.open)
                     .map(|clock| (setting, clock));
                 self.request_redraw();
+                return;
+            }
+            Setting::LspDetect => {
+                self.settings_set_lsp_detect(on);
+                return;
+            }
+            Setting::PluginBool(plugin, key, _) => {
+                self.set_plugin_bool_value(plugin, key, on);
+                self.settings.switch_slide = self
+                    .clock(super::animation::SWITCH_SLIDE)
+                    .filter(|_| self.settings.open)
+                    .map(|clock| (setting, clock));
+                return;
+            }
+            Setting::PluginEnabled(name) => {
+                let Some(id) = self
+                    .plugins
+                    .plugins
+                    .iter()
+                    .find(|plugin| plugin.name == name)
+                    .map(|plugin| plugin.id.clone())
+                else {
+                    return;
+                };
+                if on {
+                    if !self.config.plugin_enabled.iter().any(|item| item == &id) {
+                        self.config.plugin_enabled.push(id);
+                    }
+                } else {
+                    self.config.plugin_enabled.retain(|item| item != &id);
+                }
+                self.save_config();
+                self.settings.switch_slide = self
+                    .clock(super::animation::SWITCH_SLIDE)
+                    .filter(|_| self.settings.open)
+                    .map(|clock| (setting, clock));
+                self.request_redraw();
+                return;
+            }
+            Setting::LspServerEnabled(language) => {
+                self.settings_toggle_lsp_server_enabled(language);
                 return;
             }
             Setting::FormatOnSave => self.config.format_on_save = Some(on),

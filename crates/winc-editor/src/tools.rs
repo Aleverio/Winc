@@ -6,6 +6,7 @@
 pub mod format;
 pub mod host;
 pub mod latex;
+pub mod plugin;
 pub mod remote_env;
 pub mod shell;
 pub mod wsl;
