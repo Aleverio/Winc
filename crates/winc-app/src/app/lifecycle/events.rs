@@ -369,6 +369,7 @@ impl ApplicationHandler<UserEvent> for App {
                 if self.terminal.open {
                     self.update_terminal_link();
                 }
+                self.update_text_link();
                 // 按住 `⌥` 时分支选择器中的「拉取」变为「拉取并变基」，提交按钮变为「提交并推送」。
                 if (self.overlays.picker.open && self.picker_has_actions()) || self.commit_shown() {
                     self.request_redraw();

@@ -840,8 +840,10 @@ impl App {
             {
                 app.set_preview_mode(mode);
             }
-            if let Some(anchor) = anchor {
-                app.preview.markdown.pending_anchor = Some((id, anchor));
+            match anchor {
+                Some(anchor) if shown_area(app).is_none() => drop(app.go_to_heading(&anchor)),
+                Some(anchor) => app.preview.markdown.pending_anchor = Some((id, anchor)),
+                None => {}
             }
         });
     }
