@@ -335,6 +335,19 @@ impl App {
             SortLinesAscending => editing(self, Command::SortLines { descending: false }),
             SortLinesDescending => editing(self, Command::SortLines { descending: true }),
             TrimTrailingWhitespace => editing(self, Command::TrimTrailingWhitespace),
+            UnescapeUnicode | EscapeUnicode => {
+                // 所有选区都是空的才转换整个文件，否则只转换选中的部分。
+                let whole = (self.editor.active())
+                    .is_some_and(|d| d.selections().0.iter().all(|s| s.is_empty()));
+                editing(
+                    self,
+                    if action == UnescapeUnicode {
+                        Command::UnescapeUnicode { whole }
+                    } else {
+                        Command::EscapeUnicode { whole }
+                    },
+                );
+            }
             IndentUsingSpaces => self.use_indent(false),
             IndentUsingTabs => self.use_indent(true),
             ConvertIndentationToSpaces => self.convert_indentation(false),

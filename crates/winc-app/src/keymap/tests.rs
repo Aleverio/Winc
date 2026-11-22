@@ -673,6 +673,8 @@ fn edits_in_diff_matches_the_diff_command_list() {
         SortLinesAscending,
         SortLinesDescending,
         TrimTrailingWhitespace,
+        UnescapeUnicode,
+        EscapeUnicode,
         Format,
         FormatSelection,
         Fix,

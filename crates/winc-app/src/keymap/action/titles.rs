@@ -144,6 +144,8 @@ impl Action {
             SortLinesAscending => t!("cmd-sort-lines-ascending"),
             SortLinesDescending => t!("cmd-sort-lines-descending"),
             TrimTrailingWhitespace => t!("cmd-trim-trailing-whitespace"),
+            UnescapeUnicode => t!("cmd-unescape-unicode"),
+            EscapeUnicode => t!("cmd-escape-unicode"),
             IndentUsingSpaces => t!("cmd-indent-using-spaces"),
             IndentUsingTabs => t!("cmd-indent-using-tabs"),
             ConvertIndentationToSpaces => t!("cmd-convert-indentation-to-spaces"),

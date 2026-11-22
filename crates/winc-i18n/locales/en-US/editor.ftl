@@ -125,6 +125,8 @@ editor-encoding-windows-1258 = Vietnamese (Windows 1258)
 editor-encoding-windows-874 = Thai (Windows 874)
 editor-encoding-lossy = Non-UTF-8
 editor-encoding-binary = Binary
+editor-encoding-unicode-escapes = Unicode Escapes (\uXXXX)
+editor-encoding-unicode-escapes-short = Unicode Escapes
 editor-encoding-unencodable = “{ $char }” can’t be saved in { $encoding }; use “Save with Encoding” to save as UTF-8
 
 ## Reading and writing files.
