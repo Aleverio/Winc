@@ -1,6 +1,6 @@
 [Desktop Entry]
-Name=Winc
-Comment=A lighter, faster desktop code editor
+Name=Winct
+Comment=Winct Editor - a lighter, faster desktop code editor
 Exec=winc %F
 Icon=winc
 Type=Application

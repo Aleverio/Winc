@@ -25,7 +25,7 @@
 <?define FileTypes = $(var.MarkdownTypes);$(var.JsonTypes);$(var.ConfigTypes);$(var.MarkupTypes);$(var.StyleTypes);$(var.ScriptTypes);$(var.TableTypes);$(var.TextTypes);$(var.JavascriptTypes);$(var.TypescriptTypes);$(var.PythonTypes);$(var.RustTypes);$(var.GoTypes);$(var.CTypes);$(var.CodeTypes)?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <!-- UUIDv5(DNS, com.deeix.winc); keep this product family stable across releases. -->
-  <Product Id="*" Name="Winc" Language="1033" Version="$(var.Version)" Manufacturer="DEEIX"
+  <Product Id="*" Name="Winct" Language="1033" Version="$(var.Version)" Manufacturer="DEEIX"
            UpgradeCode="00FDC6A5-D527-59AE-B4A5-E051B25222F3">
     <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" Platform="x64"/>
     <MajorUpgrade AllowDowngrades="yes" Schedule="afterInstallInitialize"/>
@@ -64,7 +64,7 @@
             <File Source="$(var.Source)\msi\winc-installation" KeyPath="yes"/>
           </Component>
           <Component Id="FileAssociations" Guid="*" Win64="yes">
-            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\winc.exe" Name="FriendlyAppName" Value="Winc" Type="string" KeyPath="yes"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\winc.exe" Name="FriendlyAppName" Value="Winct" Type="string" KeyPath="yes"/>
             <RegistryValue Root="HKLM" Key="Software\Classes\Applications\winc.exe\DefaultIcon" Value="[#WincExe],0" Type="string"/>
             <RegistryValue Root="HKLM" Key="Software\Classes\Applications\winc.exe\shell\open\command" Value="&quot;[#WincExe]&quot; &quot;%1&quot;" Type="string"/>
             <!-- The shell reads only the value names of SupportedTypes. An empty value means Null to
@@ -210,9 +210,9 @@
         </Directory>
       </Directory>
       <Directory Id="ProgramMenuFolder">
-        <Directory Id="ApplicationProgramsFolder" Name="Winc">
+        <Directory Id="ApplicationProgramsFolder" Name="Winct">
           <Component Id="StartMenu" Guid="*" Win64="yes">
-            <Shortcut Id="StartMenuShortcut" Name="Winc" Target="[#WincExe]" WorkingDirectory="INSTALLFOLDER" Icon="WincIcon"/>
+            <Shortcut Id="StartMenuShortcut" Name="Winct" Target="[#WincExe]" WorkingDirectory="INSTALLFOLDER" Icon="WincIcon"/>
             <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
             <RegistryValue Root="HKCU" Key="Software\DEEIX\winc\MSI" Name="Start Menu Shortcut" Type="integer" Value="1" KeyPath="yes"/>
           </Component>

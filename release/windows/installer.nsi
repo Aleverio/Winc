@@ -6,15 +6,15 @@ SetCompressor /SOLID lzma
 !include "Sections.nsh"
 !include "FileFunc.nsh"
 
-Name "Winc"
+Name "Winct"
 OutFile "${OUT_FILE}"
 InstallDir "$LOCALAPPDATA\Programs\winc"
 InstallDirRegKey HKCU "Software\DEEIX\winc" "InstallDir"
 Icon "${SOURCE}\winc.ico"
 UninstallIcon "${SOURCE}\winc.ico"
 VIProductVersion "${VIVERSION}"
-VIAddVersionKey /LANG=1033 "ProductName" "Winc"
-VIAddVersionKey /LANG=1033 "FileDescription" "Winc installer"
+VIAddVersionKey /LANG=1033 "ProductName" "Winct"
+VIAddVersionKey /LANG=1033 "FileDescription" "Winct installer"
 VIAddVersionKey /LANG=1033 "FileVersion" "${VERSION}"
 VIAddVersionKey /LANG=1033 "LegalCopyright" "DEEIX"
 !ifdef SIGN_SCRIPT
@@ -37,14 +37,14 @@ VIAddVersionKey /LANG=1033 "LegalCopyright" "DEEIX"
 ; The optional section that lists winc under the supported file types.
 LangString FileTypesSection ${LANG_ENGLISH} "Associate file types"
 LangString FileTypesSection ${LANG_SIMPCHINESE} "关联文件类型"
-LangString FileTypesText ${LANG_ENGLISH} "Lists Winc among the programs for source and text files. A type opened with Winc by default then shows its own document icon. Windows may ask once which program to use for these files."
-LangString FileTypesText ${LANG_SIMPCHINESE} "把 Winc 列为源代码和文本文件的可选程序。设为默认程序的类型会显示各自的文档图标。Windows 可能会询问一次用哪个程序打开这些文件。"
+LangString FileTypesText ${LANG_ENGLISH} "Lists Winct among the programs for source and text files. A type opened with Winct by default then shows its own document icon. Windows may ask once which program to use for these files."
+LangString FileTypesText ${LANG_SIMPCHINESE} "把 Winct 列为源代码和文本文件的可选程序。设为默认程序的类型会显示各自的文档图标。Windows 可能会询问一次用哪个程序打开这些文件。"
 
 ; Explorer context menu labels, in the installer's language.
-LangString OpenFileVerb ${LANG_ENGLISH} "Open with Winc"
-LangString OpenFileVerb ${LANG_SIMPCHINESE} "通过 Winc 打开"
-LangString OpenFolderVerb ${LANG_ENGLISH} "Open in Winc"
-LangString OpenFolderVerb ${LANG_SIMPCHINESE} "在 Winc 中打开"
+LangString OpenFileVerb ${LANG_ENGLISH} "Open with Winct"
+LangString OpenFileVerb ${LANG_SIMPCHINESE} "通过 Winct 打开"
+LangString OpenFolderVerb ${LANG_ENGLISH} "Open in Winct"
+LangString OpenFolderVerb ${LANG_SIMPCHINESE} "在 Winct 中打开"
 
 ; Types winc can open, listed under Applications\winc.exe\SupportedTypes: winc appears in
 ; "Open with" > "Choose another app" for them. Nothing is written under the types themselves unless
@@ -191,7 +191,7 @@ LangString OpenFolderVerb ${LANG_SIMPCHINESE} "在 Winc 中打开"
 ; The winc: URL scheme: winc://file/<absolute path>[:line[:column]] opens a file or folder in winc,
 ; which receives the whole link as its argument.
 !macro RegisterUrlScheme
-  WriteRegStr HKCU "Software\Classes\winc" "" "URL:Winc"
+  WriteRegStr HKCU "Software\Classes\winc" "" "URL:Winct"
   WriteRegStr HKCU "Software\Classes\winc" "URL Protocol" ""
   WriteRegStr HKCU "Software\Classes\winc\DefaultIcon" "" "$INSTDIR\winc.exe,0"
   WriteRegStr HKCU "Software\Classes\winc\shell\open\command" "" '"$INSTDIR\winc.exe" "%1"'
@@ -242,7 +242,7 @@ LangString OpenFolderVerb ${LANG_SIMPCHINESE} "在 Winc 中打开"
   retry_deleted_${RETRY}:
 !macroend
 
-Section "Winc" SEC_MAIN
+Section "Winct" SEC_MAIN
   SectionIn RO
   SetShellVarContext current
   SetOutPath "$INSTDIR"
@@ -266,7 +266,7 @@ Section "Winc" SEC_MAIN
   !insertmacro UpdateUserPath "Add"
   WriteUninstaller "$INSTDIR\uninstall.exe"
   WriteRegStr HKCU "Software\DEEIX\winc" "InstallDir" "$INSTDIR"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc" "DisplayName" "Winc"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc" "DisplayName" "Winct"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc" "DisplayVersion" "${VERSION}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc" "Publisher" "DEEIX"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc" "DisplayIcon" "$INSTDIR\winc.ico"
@@ -274,11 +274,12 @@ Section "Winc" SEC_MAIN
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc" "QuietUninstallString" '$\"$INSTDIR\uninstall.exe$\" /S'
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc" "NoModify" 1
   WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc" "NoRepair" 1
-  ; The Start menu shows a shortcut's file name, and creating Winc.lnk over an existing winc.lnk
-  ; keeps the existing file name, so any shortcut of that name is removed first.
+  ; The Start menu shows a shortcut's file name. Remove the old Winc.lnk as well so upgrades from
+  ; the pre-rebrand build do not leave two shortcuts behind.
   Delete "$SMPROGRAMS\winc.lnk"
-  CreateShortcut "$SMPROGRAMS\Winc.lnk" "$INSTDIR\winc.exe" "" "$INSTDIR\winc.ico"
-  WriteRegStr HKCU "Software\Classes\Applications\winc.exe" "FriendlyAppName" "Winc"
+  Delete "$SMPROGRAMS\Winc.lnk"
+  CreateShortcut "$SMPROGRAMS\Winct.lnk" "$INSTDIR\winc.exe" "" "$INSTDIR\winc.ico"
+  WriteRegStr HKCU "Software\Classes\Applications\winc.exe" "FriendlyAppName" "Winct"
   WriteRegStr HKCU "Software\Classes\Applications\winc.exe\DefaultIcon" "" "$INSTDIR\winc.exe,0"
   WriteRegStr HKCU "Software\Classes\Applications\winc.exe\shell\open\command" "" '"$INSTDIR\winc.exe" "%1"'
   !insertmacro ForEachRetiredFileType UnregisterFileType
@@ -321,6 +322,7 @@ FunctionEnd
 Section "Uninstall"
   SetShellVarContext current
   Delete "$SMPROGRAMS\Winc.lnk"
+  Delete "$SMPROGRAMS\Winct.lnk"
   Delete "$INSTDIR\winc.exe"
   Delete "$INSTDIR\winc-pty.exe"
   !insertmacro DeleteRetrying "OpenConsole.exe"

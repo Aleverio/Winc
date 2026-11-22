@@ -1,6 +1,6 @@
 [Desktop Entry]
-Name=Winc
-Comment=Open winc:// links in Winc
+Name=Winct
+Comment=Open winc:// links in Winct
 Exec=winc %u
 Icon=winc
 Type=Application
