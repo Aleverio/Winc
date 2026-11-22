@@ -226,6 +226,10 @@ pub enum Setting {
     TerminalModule,
     /// 远程模块的开关。
     RemoteModule,
+    /// 资源管理器的右键菜单（Windows），记在注册表里。
+    ExplorerMenu,
+    /// 把 Winc 列为各文件类型的候选程序（Windows 上由安装程序装在当前用户之下时）。
+    FileAssociations,
     /// 「快捷键」页顶部的搜索框。
     ///
     /// 该页没有设置项，选中这一项即表示停留在该页。
@@ -326,6 +330,7 @@ impl Setting {
                 SettingsPage::Git
             }
             S::GitRememberCredentials => SettingsPage::Git,
+            S::ExplorerMenu | S::FileAssociations => SettingsPage::General,
             S::GitModule | S::TerminalModule | S::RemoteModule => SettingsPage::Modules,
             S::Version | S::Updates | S::ReleaseNotes | S::Website | S::Repository => {
                 SettingsPage::About
@@ -424,6 +429,7 @@ impl Setting {
             S::GitTree | S::FormatCommand(_) | S::FixCommand(_) | S::AddLanguage => return None,
             S::AddFixLanguage | S::Version | S::Updates | S::ReleaseNotes => return None,
             S::Website | S::Repository | S::Community | S::License | S::KeySearch => return None,
+            S::ExplorerMenu | S::FileAssociations => return None,
         })
     }
 
@@ -523,6 +529,8 @@ impl Setting {
             Setting::LatexPath => t!("settings-latex-path"),
             Setting::TerminalModule => t!("settings-terminal-module"),
             Setting::RemoteModule => t!("settings-remote-module"),
+            Setting::ExplorerMenu => t!("settings-explorer-menu"),
+            Setting::FileAssociations => t!("settings-file-associations"),
             Setting::KeySearch => t!("settings-key-search"),
         }
     }
@@ -590,6 +598,8 @@ impl Setting {
             Setting::SkipOnSave => Some(t!("settings-skip-on-save-desc")),
             Setting::GitModule => Some(t!("settings-git-module-desc")),
             Setting::RemoteModule => Some(t!("settings-remote-module-desc")),
+            Setting::ExplorerMenu => Some(t!("settings-explorer-menu-desc")),
+            Setting::FileAssociations => Some(t!("settings-file-associations-desc")),
             Setting::GitConfirmPush => Some(t!("settings-git-confirm-push-desc")),
             Setting::GitRememberCredentials => Some(t!("settings-git-remember-credentials-desc")),
             Setting::SystemProxy => Some(t!("settings-system-proxy-desc")),
@@ -673,6 +683,8 @@ impl Setting {
             | Setting::GitAutoFetch
             | Setting::GitTree
             | Setting::GitStagingArea
+            | Setting::ExplorerMenu
+            | Setting::FileAssociations
             | Setting::TerminalModule
             | Setting::RemoteModule
             | Setting::TerminalCopyOnSelect

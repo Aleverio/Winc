@@ -392,3 +392,18 @@ fn snapshot_settings_search() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 截图：「通用」页底部的「系统集成」一组，只在 Windows 上列出（`settings-integration-light`）。
+#[test]
+#[ignore = "截图，手动运行"]
+fn snapshot_settings_integration() {
+    crate::shell_integration::list_in_tests(true);
+    winc_i18n::set_locale(winc_i18n::Locale::SOURCE);
+    let dir = sample_folder("settings-integration-shot");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    app.open_settings();
+    app.settings.integration.menu = true;
+    app.settings.scroll = app.settings_layout().max_scroll();
+    shoot(&mut app, "settings-integration-light");
+    let _ = std::fs::remove_dir_all(&dir);
+}

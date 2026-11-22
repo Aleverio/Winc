@@ -90,21 +90,32 @@ impl SettingsPage {
             items,
         };
         match self {
-            SettingsPage::General => vec![
-                group(t!("settings-group-language"), vec![S::Language]),
-                group(
-                    t!("settings-group-launch"),
-                    vec![S::RestoreFolder, S::NewFileOnStartup, S::RestoreWindow],
-                ),
-                group(
-                    t!("settings-group-saving"),
-                    vec![S::AutoSave, S::HotExit, S::ConfirmClose],
-                ),
-                group(
-                    t!("settings-group-network"),
-                    vec![S::CheckUpdates, S::SystemProxy],
-                ),
-            ],
+            SettingsPage::General => {
+                let mut sections = vec![
+                    group(t!("settings-group-language"), vec![S::Language]),
+                    group(
+                        t!("settings-group-launch"),
+                        vec![S::RestoreFolder, S::NewFileOnStartup, S::RestoreWindow],
+                    ),
+                    group(
+                        t!("settings-group-saving"),
+                        vec![S::AutoSave, S::HotExit, S::ConfirmClose],
+                    ),
+                    group(
+                        t!("settings-group-network"),
+                        vec![S::CheckUpdates, S::SystemProxy],
+                    ),
+                ];
+                // 只在 Windows 上列出；各文件类型的登记由安装程序写在当前用户之下时才能改。
+                if crate::shell_integration::available() {
+                    let mut items = vec![S::ExplorerMenu];
+                    if crate::shell_integration::types_available() {
+                        items.push(S::FileAssociations);
+                    }
+                    sections.push(group(t!("settings-group-integration"), items));
+                }
+                sections
+            }
             SettingsPage::Appearance => {
                 // 平滑滚动只在 macOS 上列出：其他平台上滚轮本来就一格一格立即滚动。系统标题栏只在
                 // 其他平台列出：macOS 上标题栏总是和内容融为一体。
