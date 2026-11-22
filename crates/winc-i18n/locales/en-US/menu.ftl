@@ -81,6 +81,7 @@ menu-remove-folder = Remove from Window
 menu-rename-group = Rename This Folder Group…
 menu-open-group = Open This Folder Group
 menu-open-in-terminal = Open in Terminal
+menu-run-in-terminal = Run in Terminal
 menu-close-tabs-right = Close Tabs to the Right
 menu-close-tabs-left = Close Tabs to the Left
 menu-close-saved-tabs = Close Saved Tabs
