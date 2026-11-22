@@ -464,6 +464,12 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
                 (crate::layout::vim_clipboard_label(choice).to_owned(), false)
             } else if row.setting == Setting::Zoom {
                 (format!("{}%", app.config.ui_zoom.unwrap_or(100)), false)
+            } else if row.setting == Setting::DefaultLanguage {
+                let name = match app.default_language() {
+                    Some(language) => language.name,
+                    None => crate::app::MenuCommand::UsePlainText.label(),
+                };
+                (name.to_owned(), false)
             } else if row.setting == Setting::TextWidth {
                 let choice = app.config.markdown_text_width.unwrap_or_default();
                 (crate::layout::text_width_label(choice).to_owned(), false)

@@ -561,8 +561,9 @@ fn typing_filters_the_language_menu() {
     app.pointer.modifiers = winit::keyboard::ModifiersState::empty();
     assert_eq!(app.popup().unwrap().query, "zz");
     // Esc：先清空筛选，列出全部；再按一次关掉菜单。
+    // 刚才选过的 Rust 移到最近选择的语言中：多出一条分隔线。
     named(&mut app, NamedKey::Escape);
-    assert_eq!(app.popup().unwrap().levels[0].rows.len(), all);
+    assert_eq!(app.popup().unwrap().levels[0].rows.len(), all + 1);
     named(&mut app, NamedKey::Escape);
     assert!(app.overlays.context_menu.is_none());
 

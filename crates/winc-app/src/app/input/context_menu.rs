@@ -982,6 +982,8 @@ pub enum MenuTarget {
     BackgroundFit,
     /// 设置中「Markdown 预览正文宽度」的选项菜单。
     TextWidth,
+    /// 设置中「新建文件的默认语言」的选项菜单：纯文本和全部语言。
+    DefaultLanguage,
     /// 设置的终端页中的「默认 Shell」。
     DefaultShell,
     /// 设置的终端页中的「位置」。

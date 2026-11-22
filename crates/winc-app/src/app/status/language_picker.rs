@@ -121,14 +121,21 @@ impl App {
         self.request_redraw();
     }
 
-    /// 按查询筛选语言：没有查询时先列「自动检测」（文档有文件名时）和「纯文本」，之后按名字
-    /// 排列全部语言；有查询时按 [`rank`] 排列，同一等级内按名字排列。
+    /// 按查询筛选语言：没有查询时先列「自动检测」（文档有文件名时）、「纯文本」和最近选择的
+    /// 语言，之后按名字排列其余语言；有查询时按 [`rank`] 排列，同一等级内按名字排列。
     pub(in crate::app) fn language_picker_refresh(&mut self) {
         let needle = needle(self.overlays.picker.input.text());
         let named = self.editor.active().is_some_and(|d| d.path.is_some());
         let mut rows: Vec<LanguageRow> = named.then_some(LanguageRow::Detect).into_iter().collect();
         rows.push(LanguageRow::Plain);
-        let mut languages: Vec<LanguageRow> = (0..winc_syntax::languages().len())
+        let all = winc_syntax::languages();
+        let recent: Vec<usize> = (self.state.recent_languages.iter())
+            .filter(|_| needle.is_empty())
+            .filter_map(|id| all.iter().position(|l| l.id == id.as_str()))
+            .collect();
+        rows.extend(recent.iter().copied().map(LanguageRow::Language));
+        let mut languages: Vec<LanguageRow> = (0..all.len())
+            .filter(|i| !recent.contains(i))
             .map(LanguageRow::Language)
             .collect();
         languages.sort_by_key(|row| row.title().to_lowercase());

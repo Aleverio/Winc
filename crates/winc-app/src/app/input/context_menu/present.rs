@@ -375,6 +375,7 @@ impl App {
             MenuTarget::BackgroundImage => background_menu(),
             MenuTarget::BackgroundFit => background_fit_menu(),
             MenuTarget::TextWidth => text_width_menu(),
+            MenuTarget::DefaultLanguage => document_language_menu(false, &[]),
             MenuTarget::TerminalPosition => terminal_position_menu(),
             MenuTarget::TerminalTabPosition => terminal_tab_position_menu(),
             MenuTarget::OptionAsMeta => option_as_meta_menu(),
@@ -665,7 +666,7 @@ impl App {
                 let Some(doc) = self.editor.document(*id) else {
                     return;
                 };
-                document_language_menu(doc.path.is_some())
+                document_language_menu(doc.path.is_some(), &self.state.recent_languages)
             }
             MenuTarget::ReadOnly(id) => {
                 let own = self.editor.document(*id).is_some_and(|doc| doc.is_locked());
@@ -840,6 +841,7 @@ impl App {
                 | MenuTarget::BackgroundImage
                 | MenuTarget::BackgroundFit
                 | MenuTarget::TextWidth
+                | MenuTarget::DefaultLanguage
                 | MenuTarget::TerminalPosition
                 | MenuTarget::TerminalTabPosition
                 | MenuTarget::OptionAsMeta
@@ -859,6 +861,7 @@ impl App {
             MenuTarget::BackgroundImage => Some(Setting::BackgroundImage),
             MenuTarget::BackgroundFit => Some(Setting::BackgroundFit),
             MenuTarget::TextWidth => Some(Setting::TextWidth),
+            MenuTarget::DefaultLanguage => Some(Setting::DefaultLanguage),
             MenuTarget::TerminalPosition => Some(Setting::TerminalPosition),
             MenuTarget::TerminalTabPosition => Some(Setting::TerminalTabPosition),
             MenuTarget::OptionAsMeta => Some(Setting::TerminalOptionAsMeta),
@@ -985,6 +988,18 @@ impl App {
     /// 状态栏缩进、行尾、编码菜单中当前使用的那一项打勾；「排除的语言」菜单中已被排除的语言打勾；
     /// 格式化工具菜单中当前使用的那一项打勾。
     pub(in crate::app) fn menu_checked(&self, command: MenuCommand) -> bool {
+        // 设置中的默认语言：当前的设置打勾。
+        let target = self.overlays.context_menu.as_ref().map(|menu| &menu.target);
+        if let Some(MenuTarget::DefaultLanguage) = target {
+            let chosen = self.default_language().map(|language| language.id);
+            return match command {
+                MenuCommand::UsePlainText => chosen.is_none(),
+                MenuCommand::UseLanguage(i) => {
+                    chosen.is_some() && winc_syntax::languages().get(i).map(|l| l.id) == chosen
+                }
+                _ => false,
+            };
+        }
         if let MenuCommand::ShowTab(i) = command {
             return self.editor.active == Some(i);
         }

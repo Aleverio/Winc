@@ -169,6 +169,7 @@ impl App {
             },
             text_content_w: 0.0,
             preview_tab: None,
+            startup_file: None,
             clipboard: Default::default(),
             vim,
             bars: crate::app::editor::InputBars {

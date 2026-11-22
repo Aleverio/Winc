@@ -723,6 +723,8 @@ impl App {
             Setting::HotExit => self.config.hot_exit != Some(false),
             Setting::ConfirmClose => self.config.confirm_close == Some(true),
             Setting::RestoreFolder => self.config.restore_folder != Some(false),
+            Setting::NewFileOnStartup => self.config.new_file_on_startup == Some(true),
+            Setting::DetectLanguageOnPaste => self.config.detect_language_on_paste != Some(false),
             Setting::StickyScroll => self.config.sticky_scroll != Some(false),
             Setting::VimMode => self.config.vim_enabled == Some(true),
             Setting::VimRelativeNumber => self.config.vim_relative_number == Some(true),
@@ -791,6 +793,8 @@ impl App {
             Setting::HotExit => self.config.hot_exit = Some(on),
             Setting::ConfirmClose => self.config.confirm_close = Some(on),
             Setting::RestoreFolder => self.config.restore_folder = Some(on),
+            Setting::NewFileOnStartup => self.config.new_file_on_startup = Some(on),
+            Setting::DetectLanguageOnPaste => self.config.detect_language_on_paste = Some(on),
             Setting::StickyScroll => self.config.sticky_scroll = Some(on),
             Setting::VimMode => {
                 self.config.vim_enabled = Some(on);

@@ -136,6 +136,9 @@ impl SettingsPage {
                     Setting::HotExit,
                     Setting::ConfirmClose,
                     Setting::RestoreFolder,
+                    Setting::NewFileOnStartup,
+                    Setting::DefaultLanguage,
+                    Setting::DetectLanguageOnPaste,
                     Setting::DropFolder,
                     Setting::PreviewOnClick,
                     Setting::FindInFiles,
@@ -301,6 +304,12 @@ pub enum Setting {
     ConfirmClose,
     /// 启动时打开上次退出时打开的目录和标签。
     RestoreFolder,
+    /// 启动时没有可恢复的内容时新建文件（`editor.newFileOnStartup`）。
+    NewFileOnStartup,
+    /// 新建文件的默认语言（`editor.defaultLanguage`）。
+    DefaultLanguage,
+    /// 粘贴时按内容识别语言（`editor.detectLanguageOnPaste`）。
+    DetectLanguageOnPaste,
     /// 粘滞滚动：滚动时在编辑区顶部钉住当前所在的函数、类和标题。
     StickyScroll,
     /// Vim 模式。
@@ -522,6 +531,9 @@ impl Setting {
             | Setting::HotExit
             | Setting::ConfirmClose
             | Setting::RestoreFolder
+            | Setting::NewFileOnStartup
+            | Setting::DefaultLanguage
+            | Setting::DetectLanguageOnPaste
             | Setting::DropFolder
             | Setting::FindInFiles
             | Setting::CompactFolders
@@ -611,6 +623,9 @@ impl Setting {
             Setting::HotExit => t!("settings-hot-exit"),
             Setting::ConfirmClose => t!("settings-confirm-close"),
             Setting::RestoreFolder => t!("settings-restore-folder"),
+            Setting::NewFileOnStartup => t!("settings-new-file-on-startup"),
+            Setting::DefaultLanguage => t!("settings-default-language"),
+            Setting::DetectLanguageOnPaste => t!("settings-detect-language-on-paste"),
             Setting::DropFolder => t!("settings-drop-folder"),
             Setting::FindInFiles => t!("settings-find-in-files"),
             Setting::StickyScroll => t!("settings-sticky-scroll"),
@@ -706,6 +721,9 @@ impl Setting {
             Setting::HotExit => Some(t!("settings-hot-exit-desc")),
             Setting::ConfirmClose => Some(t!("settings-confirm-close-desc")),
             Setting::RestoreFolder => Some(t!("settings-restore-folder-desc")),
+            Setting::NewFileOnStartup => Some(t!("settings-new-file-on-startup-desc")),
+            Setting::DefaultLanguage => Some(t!("settings-default-language-desc")),
+            Setting::DetectLanguageOnPaste => Some(t!("settings-detect-language-on-paste-desc")),
             Setting::DropFolder => Some(t!("settings-drop-folder-desc")),
             Setting::FindInFiles => Some(t!("settings-find-in-files-desc")),
             Setting::StickyScroll => Some(t!("settings-sticky-scroll-desc")),
@@ -794,6 +812,8 @@ impl Setting {
             | Setting::HotExit
             | Setting::ConfirmClose
             | Setting::RestoreFolder
+            | Setting::NewFileOnStartup
+            | Setting::DetectLanguageOnPaste
             | Setting::CompactFolders
             | Setting::PreviewOnClick
             | Setting::StickyScroll
@@ -844,6 +864,7 @@ impl Setting {
             | Setting::BackgroundImage
             | Setting::BackgroundFit
             | Setting::TextWidth
+            | Setting::DefaultLanguage
             | Setting::Zoom
             | Setting::RenderWhitespace
             | Setting::VimClipboard

@@ -68,6 +68,12 @@ pub struct Config {
     ///
     /// 关闭后每次启动都显示开始页；命令行指定了目录或文件时仍然打开。
     pub restore_folder: Option<bool>,
+    /// 启动时没有可恢复的目录和标签时，是否新建一个未命名文件代替开始页，默认为否。
+    pub new_file_on_startup: Option<bool>,
+    /// 新建的未命名文件的语言（语言的标识，如 `markdown`）；未设置时为纯文本。
+    pub default_language: Option<String>,
+    /// 向空的未命名纯文本文档粘贴时是否按内容识别语言，默认为是。
+    pub detect_language_on_paste: Option<bool>,
     /// 把目录拖进已打开目录的窗口时怎样处理，默认每次询问。
     pub drop_folder: Option<FolderDrop>,
     /// 「在文件中查找」打开在哪里；没写时按键位方案：`idea` 为对话框，否则为侧栏。

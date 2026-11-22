@@ -315,6 +315,7 @@ impl App {
             | Setting::BackgroundImage
             | Setting::BackgroundFit
             | Setting::TextWidth
+            | Setting::DefaultLanguage
             | Setting::TerminalPosition
             | Setting::TerminalTabPosition
             | Setting::TerminalOptionAsMeta
@@ -335,6 +336,7 @@ impl App {
                     Setting::BackgroundImage => MenuTarget::BackgroundImage,
                     Setting::BackgroundFit => MenuTarget::BackgroundFit,
                     Setting::TextWidth => MenuTarget::TextWidth,
+                    Setting::DefaultLanguage => MenuTarget::DefaultLanguage,
                     Setting::TerminalPosition => MenuTarget::TerminalPosition,
                     Setting::TerminalTabPosition => MenuTarget::TerminalTabPosition,
                     Setting::TerminalOptionAsMeta => MenuTarget::OptionAsMeta,

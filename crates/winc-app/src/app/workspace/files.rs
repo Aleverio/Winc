@@ -298,16 +298,21 @@ impl App {
         if replace.is_none() {
             self.preview_tab = None;
         }
+        let startup = self.startup_file_index();
         self.auto_save_active();
         let count = self.editor.tab_count();
         let index = self.editor.open_tab(path);
         let id = self.editor.documents[index].id;
+        let added = self.editor.tab_count() > count;
+        if let Some(old) = startup.filter(|_| added) {
+            self.replace_preview_tab(old, index);
+        }
         if !preview {
             // 以其他方式打开预览标签中的文件时，该标签成为普通标签。
             if self.preview_tab == Some(id) {
                 self.preview_tab = None;
             }
-        } else if self.editor.tab_count() > count {
+        } else if added {
             if let Some(old) = replace {
                 self.replace_preview_tab(old, index);
             }
@@ -326,8 +331,8 @@ impl App {
         self.request_redraw();
     }
 
-    /// 用新打开的第 `new` 个标签替换预览标签（第 `old` 个）：新标签移到原位置，原标签关闭，
-    /// 不播放动画，不记入最近关闭的标签。
+    /// 用新打开的第 `new` 个标签替换预览标签或启动时新建的文件（第 `old` 个）：新标签移到
+    /// 原位置，原标签关闭，不播放动画，不记入最近关闭的标签。
     fn replace_preview_tab(&mut self, old: usize, new: usize) {
         let id = self.editor.documents[new].id;
         let replaced = self.editor.documents[old].id;
@@ -657,9 +662,46 @@ impl App {
     /// 新建未命名文档并切换到该文档。
     pub(in crate::app) fn new_file(&mut self) {
         self.editor.new_untitled();
+        // 新建的未命名文件使用设置的默认语言（`editor.defaultLanguage`）。
+        let language = self.default_language();
+        if let (Some(language), Some(doc)) = (language, self.editor.active_mut()) {
+            doc.choose_language(language);
+        }
         self.focus = Focus::Editor;
         self.relayout();
         self.request_redraw();
+    }
+
+    /// 返回设置的新建文件的默认语言；未设置或没有这种语言时为 `None`。
+    pub(crate) fn default_language(&self) -> Option<&'static winc_syntax::Language> {
+        let id = self.config.default_language.as_deref()?;
+        winc_syntax::languages()
+            .iter()
+            .copied()
+            .find(|l| l.id == id)
+    }
+
+    /// 启动或新建窗口时没有目录和标签的，按设置（`editor.newFileOnStartup`）新建一个未命名
+    /// 文件，代替开始页。之后打开的第一个文件或目录替换它（见 [`App::startup_file_index`]）。
+    pub(crate) fn start_with_new_file(&mut self) {
+        let empty = self.editor.root().is_none() && self.editor.tab_count() == 0;
+        if self.config.new_file_on_startup == Some(true) && empty {
+            self.new_file();
+            self.startup_file = self.editor.active().map(|doc| doc.id);
+        }
+    }
+
+    /// 返回启动时新建的文件的序号；它不是唯一的标签、已关闭或已修改时为 `None`。
+    pub(crate) fn startup_file_index(&self) -> Option<usize> {
+        let index = self.editor.index_of(self.startup_file?)?;
+        let doc = &self.editor.documents[index];
+        (self.editor.tab_count() == 1 && !doc.history.has_changes()).then_some(index)
+    }
+
+    /// 窗口是否什么都没开：没有目录，标签至多是启动时新建、尚未修改的那个文件。
+    pub(crate) fn is_blank(&self) -> bool {
+        let unused = self.editor.documents.is_empty() || self.startup_file_index().is_some();
+        self.editor.root().is_none() && unused
     }
 
     /// 循环切换标签：`forward` 为 `true` 时切到下一个，否则切到上一个；到两端后绕回。

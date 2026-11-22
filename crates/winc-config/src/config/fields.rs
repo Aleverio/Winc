@@ -170,6 +170,9 @@ const EDITOR: &[Field] = &[
     bool_field!("hotExit", hot_exit),
     bool_field!("confirmClose", confirm_close),
     bool_field!("restoreFolder", restore_folder),
+    bool_field!("newFileOnStartup", new_file_on_startup),
+    string_field!("defaultLanguage", default_language),
+    bool_field!("detectLanguageOnPaste", detect_language_on_paste),
     bool_field!("openFolderInNewWindow", open_folder_in_new_window),
     Field {
         key: "dropFolder",
