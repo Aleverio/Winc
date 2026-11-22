@@ -66,12 +66,9 @@ struct Surface {
 }
 
 impl Surface {
-    /// 创建 `width` × `height`（物理像素）的 32 位 BGRA `IOSurface`。
-    ///
-    /// # Panics
-    ///
-    /// `IOSurfaceCreate` 失败时 panic。
-    fn new(width: u32, height: u32) -> Self {
+    /// 创建 `width` × `height`（物理像素）的 32 位 BGRA `IOSurface`；系统无法分配时（内存
+    /// 不足、尺寸超过上限）返回 `None`。
+    fn new(width: u32, height: u32) -> Option<Self> {
         let values =
             [width as i32, height as i32, 4, PIXEL_FORMAT_BGRA as i32].map(CFNumber::new_i32);
         // SAFETY: 这些是 IOSurface.framework 导出的全局常量字符串，在进程生命周期内有效，
@@ -88,8 +85,7 @@ impl Surface {
         let properties = CFDictionary::from_slices(&keys, &values);
         // SAFETY: 属性字典由 `CFString` 键和 `CFNumber` 值组成，包含宽、高、每元素字节数和
         // 像素格式，符合 `IOSurfaceCreate` 的要求；字典在调用期间保持存活。
-        let surface =
-            unsafe { IOSurfaceRef::new(properties.as_opaque()) }.expect("IOSurfaceCreate 失败");
+        let surface = unsafe { IOSurfaceRef::new(properties.as_opaque()) }?;
         // 标明像素是 sRGB。不标时合成器把这些数值当成显示器自己的色彩空间，P3 广色域屏上
         // 显示的颜色比配色里写的更艳（`#3574F0` 显示出来接近 `#0E75F9`）。
 
@@ -97,11 +93,11 @@ impl Surface {
         // `IOSurfaceSetValue` 的要求。
         unsafe { surface.set_value(kIOSurfaceColorSpace, kCGColorSpaceSRGB) };
         let stride = surface.bytes_per_row() / 4;
-        Self {
+        Some(Self {
             surface,
             stride,
             purgeable: false,
-        }
+        })
     }
 
     /// 标成可清除或不可清除，返回标回不可清除时内容是否已被系统收回；已是该状态时不做处理。
@@ -312,7 +308,12 @@ impl Presenter {
     fn acquire(&mut self) -> Option<usize> {
         if self.surfaces.iter().all(Surface::in_use) {
             if self.surfaces.len() < MAX_SURFACES {
-                self.surfaces.push(Surface::new(self.width, self.height));
+                // 分配不到时这一帧不画，下一帧再试；已有的 surface 空闲后照常使用。
+                match Surface::new(self.width, self.height) {
+                    Some(surface) => self.surfaces.push(surface),
+                    None if self.surfaces.is_empty() => return None,
+                    None => self.wait_for_free(),
+                }
             } else {
                 self.wait_for_free();
             }

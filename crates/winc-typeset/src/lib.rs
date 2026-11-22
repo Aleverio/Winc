@@ -962,7 +962,9 @@ impl Cx<'_, '_> {
                 let indent = base * 2.0;
                 // 正文里的编号链到这里（见 `winc_preview::markdown` 的脚注引用）。
                 out.anchors.push((format!("fn-{label}"), y));
-                let flow = self.blocks(blocks, x + indent, y, width - indent, env, out);
+                // 列比缩进还窄时宽度不能为负：其中的图表按宽度缩放字号。
+                let width = (width - indent).max(1.0);
+                let flow = self.blocks(blocks, x + indent, y, width, env, out);
                 let marker = format!("{label}.");
                 self.marker(
                     &marker,
