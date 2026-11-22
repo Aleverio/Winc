@@ -113,6 +113,8 @@ pub enum MenuCommand {
     /// 在系统文件管理器中显示。
     Reveal,
     OpenInTerminal,
+    /// 在终端中运行文件树里的脚本文件。
+    RunScript,
     /// 只在该目录中做全局搜索。
     FindInFolder,
     CopyPath,
@@ -566,6 +568,7 @@ impl MenuCommand {
             MenuCommand::GroupFolder(..) => "",
             MenuCommand::Reveal | MenuCommand::LocationReveal => crate::system::reveal_label(),
             MenuCommand::OpenInTerminal => t!("menu-open-in-terminal"),
+            MenuCommand::RunScript => t!("menu-run-in-terminal"),
             MenuCommand::FindInFolder => t!("cmd-find-in-folder"),
             MenuCommand::CopyPath => t!("cmd-copy-path"),
             MenuCommand::CopyRelativePath => t!("cmd-copy-relative-path"),
