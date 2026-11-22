@@ -494,7 +494,7 @@ pub fn decode_known(bytes: &[u8], encoding: Encoding) -> String {
 /// 以这种方式打开的文档只读。
 pub(crate) fn decode_as(bytes: &[u8], encoding: Encoding) -> (String, bool) {
     if let Encoding::UnicodeEscapes { latin1, .. } = encoding {
-        // 与 Java 读取资源文件相同：不是合法的 UTF-8 时按 ISO-8859-1 读。
+        // 依据 `java.util.PropertyResourceBundle`：不是合法的 UTF-8 时按 ISO-8859-1 读。
         let text = match std::str::from_utf8(bytes) {
             Ok(text) if !latin1 => text.to_owned(),
             _ => bytes.iter().map(|&b| char::from(b)).collect(),
@@ -571,22 +571,22 @@ pub(crate) fn encode(text: &str, encoding: Encoding) -> Result<Vec<u8>, char> {
 
 /// 按 Unicode 转义读入的文件中，含转义或其他字符的各行在文件中原来的写法。
 ///
-/// 保存时没改过的行照原样写回，改过或新加的行按文件里多数的写法写，见 [`encode_with`]。
+/// 保存时未修改的行按原来的写法写回，修改或新增的行按文件中多数行的写法写，见 [`encode_with`]。
 #[derive(Debug, Default)]
 pub(crate) struct EscapeOrigin {
     /// 显示的一行（不含换行符）对应的文件中的写法；同样内容的行按出现的顺序排列。
     lines: std::collections::HashMap<String, Vec<String>>,
-    /// 改过或新加的行是否直接写字符：直接写字符的行多于含转义的行时为真。
+    /// 修改或新增的行是否直接写字符：直接写字符的行多于含转义的行时为真。
     raw: bool,
     /// 文件是否按 ISO-8859-1 存放；与保存的编码不同时原来的写法不能用。
     latin1: bool,
 }
 
-/// 按 `encoding` 解码好的 `.properties` 文字 `text` 中有 `\uXXXX` 转义时，返回把转义换成字符后的
+/// 按 `encoding` 解码后的 `.properties` 文字 `text` 中有 `\uXXXX` 转义时，返回把转义换成字符后的
 /// 文字、对应的 [`Encoding::UnicodeEscapes`] 和各行原来的写法；没有转义时返回 `None`。
 ///
 /// 文件按 UTF-8 或 ISO-8859-1（识别为 Windows-1252）存放；直接写的字符和转义可以混用。
-/// `forced` 是用户选过、或文档原本使用的 Unicode 转义：此时没有转义也照样转换。
+/// `forced` 是用户选择的、或文档已在使用的 Unicode 转义：此时没有转义也转换。
 pub(crate) fn unicode_escapes_view(
     text: &str,
     encoding: Encoding,
@@ -594,7 +594,7 @@ pub(crate) fn unicode_escapes_view(
 ) -> Option<(String, Encoding, EscapeOrigin)> {
     use winc_core::transform::unescape_unicode_text;
     let (base, latin1) = match encoding {
-        // 只有 ASCII 时两种存法一样，沿用原来的。
+        // 只有 ASCII 时两种存法的字节相同，沿用原来的。
         Encoding::Utf8 => {
             let forced = matches!(forced, Some(Encoding::UnicodeEscapes { latin1: true, .. }));
             (Cow::Borrowed(text), forced && text.is_ascii())
@@ -615,7 +615,7 @@ pub(crate) fn unicode_escapes_view(
     if shown == base && forced.is_none() {
         return None;
     }
-    // 转义换成字符不跨行，两边的行一一对应。按行数决定新写的行用哪种写法，一样多时写成转义。
+    // 转义换成字符不跨行，两边的行一一对应。按行数决定新写的行用哪种写法，行数相同时写成转义。
     let mut origin = EscapeOrigin {
         latin1,
         ..EscapeOrigin::default()
@@ -656,8 +656,8 @@ fn lowercase_escapes(text: &str) -> bool {
     lower > upper
 }
 
-/// 同 [`encode`]，按 Unicode 转义保存时按各行原来的写法 `origin` 写：没改过的行照原样写回，其余
-/// 的行按文件里多数的写法写。
+/// 同 [`encode`]，按 Unicode 转义保存时按各行原来的写法 `origin` 写：未修改的行按原来的写法
+/// 写回，其余的行按文件中多数行的写法写。
 ///
 /// # Errors
 ///
@@ -698,7 +698,7 @@ pub(crate) fn encode_with(
     })
 }
 
-/// 把 `text` 按 `\r\n`、`\n`、`\r`（`.properties` 认的换行符）分行，返回各行的内容和换行符。
+/// 把 `text` 按 `\r\n`、`\n`、`\r`（`.properties` 识别的换行符）分行，返回各行的内容和换行符。
 fn split_lines(text: &str) -> impl Iterator<Item = (&str, &str)> {
     let mut rest = Some(text);
     std::iter::from_fn(move || {

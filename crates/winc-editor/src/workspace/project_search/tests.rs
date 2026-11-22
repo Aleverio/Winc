@@ -1094,7 +1094,7 @@ fn dependency_folders_are_found_two_levels_down() {
     let _ = fs::remove_dir_all(&dir);
 }
 
-/// `.properties` 中的 `\uXXXX` 转义按显示的字符查找，替换后照原样写回转义。
+/// `.properties` 中的 `\uXXXX` 转义按显示的字符查找，替换后写回转义。
 #[test]
 fn properties_escapes_are_searched_as_characters() {
     let dir = scratch("properties-escapes");

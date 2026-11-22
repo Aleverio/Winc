@@ -917,8 +917,8 @@ fn load_as(path: &Path, encoding: Encoding) -> Result<Loaded, OpenError> {
             "editor-large-utf8-only"
         ))));
     }
-    // 按 Unicode 转义读：先按文件本身的编码解码，再换掉转义并记下各行原来的写法。与 Java 读取
-    // 资源文件相同，不是合法的 UTF-8 时按 ISO-8859-1 读。
+    // 按 Unicode 转义读：先按文件的编码解码，再把转义换成字符并记录各行原来的写法。依据
+    // `java.util.PropertyResourceBundle`，不是合法的 UTF-8 时按 ISO-8859-1 读。
     let escapes = matches!(encoding, Encoding::UnicodeEscapes { .. });
     let base = match encoding {
         Encoding::UnicodeEscapes { latin1, .. }
@@ -985,10 +985,10 @@ fn load_auto(
         .map(|loaded| unicode_escapes(loaded, path, prefer))
 }
 
-/// `.properties` 文件中有 `\uXXXX` 转义时，改按 [`Encoding::UnicodeEscapes`] 读入：编辑器里显示
+/// `.properties` 文件中有 `\uXXXX` 转义时，改按 [`Encoding::UnicodeEscapes`] 读入：编辑区中显示
 /// 字符，保存时写回转义，见 [`charset::unicode_escapes_view`]。
 ///
-/// 文档原本就按 Unicode 转义显示（`prefer`）时，重读后照样转换。
+/// 文档已按 Unicode 转义显示（`prefer`）时，重读后没有转义也转换。
 fn unicode_escapes(loaded: Loaded, path: &Path, prefer: Encoding) -> Loaded {
     let forced = matches!(prefer, Encoding::UnicodeEscapes { .. }).then_some(prefer);
     let name = path.file_name().map(|n| n.to_string_lossy());
@@ -1209,7 +1209,7 @@ pub(super) fn write_atomic(
 /// 非 UTF-8 编码（GBK、UTF-16 等）按原编码写回；遇到该编码无法表示的字符时不写入，并在错误
 /// 信息中指出该字符。
 ///
-/// 按 Unicode 转义保存时没改过的行按 `origin` 中原来的写法写回。
+/// 按 Unicode 转义保存时未修改的行按 `origin` 中原来的写法写回。
 fn write_rope(
     target: &Path,
     rope: &Rope,

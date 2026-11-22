@@ -580,7 +580,7 @@ pub struct Document {
     /// 用户通过「通过编码重新打开」选的编码：之后从磁盘重新读取时按它解码，不再识别编码，也不
     /// 再判断是否二进制。
     chosen: Option<Encoding>,
-    /// 按 Unicode 转义读入时各行原来的写法：保存时没改过的行照原样写回。
+    /// 按 Unicode 转义读入时各行原来的写法：保存时未修改的行按它写回。
     escape_origin: Option<std::sync::Arc<charset::EscapeOrigin>>,
 }
 

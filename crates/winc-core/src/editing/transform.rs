@@ -631,7 +631,7 @@ pub fn unescape_unicode_text(text: &str) -> String {
 /// 把 `text` 中 ASCII 以外的字符写成 `\uXXXX` 转义，是 [`unescape_unicode_text`] 的逆运算。
 ///
 /// `latin1` 为真时 ISO-8859-1 能表示的字符（U+00FF 以内）原样保留。`lowercase` 为真时十六进制
-/// 用小写。落单的反斜杠后面的字符在 `.properties` 中就是这个字符本身，转义时去掉这个反斜杠。
+/// 用小写。落单的反斜杠后面的字符在 `.properties` 中是这个字符本身，转义时去掉这个反斜杠。
 pub fn escape_unicode_text(text: &str, lowercase: bool, latin1: bool) -> String {
     let limit = if latin1 { 0xFF } else { 0x7F };
     let mut out = String::with_capacity(text.len());

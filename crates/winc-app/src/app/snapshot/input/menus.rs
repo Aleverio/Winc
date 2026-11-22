@@ -816,8 +816,8 @@ fn a_binary_file_can_be_reopened_with_an_encoding() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// `.properties` 打开后按 Unicode 转义显示字符，编码菜单里列出「Unicode 转义」并勾上，小写的转义
-/// 也一样；其他文件不列出。
+/// `.properties` 打开后按 Unicode 转义显示字符，编码菜单中列出「Unicode 转义」并勾选，小写的转义
+/// 同样处理；其他文件不列出。
 #[test]
 fn the_encoding_menu_offers_unicode_escapes_for_properties() {
     use crate::app::status::status_bar::StatusItem;

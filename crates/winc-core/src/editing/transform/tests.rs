@@ -396,7 +396,7 @@ fn unicode_escape_text_helpers_round_trip() {
     assert_eq!(shown, "a=你好 \\\\u4F60 \\u000A 😀");
     assert_eq!(escape_unicode_text(&shown, false, false), source);
     assert_eq!(escape_unicode_text("你", true, false), "\\u4f60");
-    // ISO-8859-1 的字符原样保留；落单的反斜杠后面的字符就是字符本身，去掉反斜杠。
+    // ISO-8859-1 的字符原样保留；落单的反斜杠后面的字符是字符本身，去掉反斜杠。
     assert_eq!(escape_unicode_text("ü你", false, true), "ü\\u4F60");
     let written = escape_unicode_text("a\\你 b\\\\你", false, false);
     assert_eq!(written, "a\\u4F60 b\\\\\\u4F60");

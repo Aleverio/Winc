@@ -2,7 +2,7 @@
 
 use super::*;
 
-/// `.properties` 中的 `\uXXXX` 转义读入时换成字符，编辑后保存写回转义，没改的行一字不差。
+/// `.properties` 中的 `\uXXXX` 转义读入时换成字符，编辑后保存写回转义，未修改的行逐字节不变。
 #[test]
 fn properties_files_show_unicode_escapes_as_characters() {
     let dir = scratch("unicode-escapes");
@@ -57,7 +57,7 @@ fn properties_files_show_unicode_escapes_as_characters() {
     fs::remove_dir_all(&dir).unwrap();
 }
 
-/// `.properties` 中有转义才转换：小写的转义按小写写回；没有转义，或不是 `.properties` 的文件照
+/// `.properties` 中有转义才转换：小写的转义按小写写回；没有转义，或不是 `.properties` 的文件按
 /// 原文显示。
 #[test]
 fn only_properties_files_with_escapes_convert() {
@@ -84,7 +84,7 @@ fn only_properties_files_with_escapes_convert() {
         assert_eq!(doc.encoding, Encoding::Utf8, "{name}");
         assert_eq!(doc.text_range(0, usize::MAX).unwrap(), text, "{name}");
     }
-    // Git 里的旧版本按文档的编码解码，与编辑器里的文字一致。
+    // Git 中的旧版本按文档的编码解码，与编辑区中的文字一致。
     let escapes = Encoding::UnicodeEscapes {
         lowercase: false,
         latin1: false,
@@ -96,8 +96,8 @@ fn only_properties_files_with_escapes_convert() {
     fs::remove_dir_all(&dir).unwrap();
 }
 
-/// 直接写的字符和转义混用的文件也按字符显示；保存时没改过的行照原样写回，改过和新加的行按文件里
-/// 多数的写法写。
+/// 直接写的字符和转义混用的文件也按字符显示；保存时未修改的行按原来的写法写回，修改和新增的行按
+/// 文件中多数行的写法写。
 #[test]
 fn mixed_properties_keep_untouched_lines_as_written() {
     let dir = scratch("unicode-escapes-mixed");
@@ -116,12 +116,12 @@ fn mixed_properties_keep_untouched_lines_as_written() {
         doc.save().unwrap();
         (shown, fs::read_to_string(&path).unwrap())
     };
-    // 多数是转义：新加的行写成转义，直接写的「简体中文」原样保留；ASCII 字符的转义不换。
+    // 多数是转义：新增的行写成转义，直接写的「简体中文」原样保留；ASCII 字符的转义不换。
     let escaped = "a=\\u4F60\\u597D\nb=\\u0041\nname=简体中文\nemoji=\\uD83D\\uDE00\n";
     let (shown, written) = save("escaped.properties", escaped, "c=再见\n");
     assert_eq!(shown, "a=你好\nb=\\u0041\nname=简体中文\nemoji=😀\n");
     assert_eq!(written, format!("{escaped}c=\\u518D\\u89C1\n"));
-    // 多数直接写：新加的行也直接写。
+    // 多数直接写：新增的行也直接写。
     let direct = "a=你好\nb=世界\nc=\\u4F60\n";
     let (shown, written) = save("direct.properties", direct, "c=再见\n");
     assert_eq!(shown, "a=你好\nb=世界\nc=你\n");
@@ -129,8 +129,8 @@ fn mixed_properties_keep_untouched_lines_as_written() {
     fs::remove_dir_all(&dir).unwrap();
 }
 
-/// ISO-8859-1 的 `.properties`：西欧字母直接写成一个字节，其他字符写成转义；保存时照原样写回。
-/// 落单的反斜杠后面的字符就是字符本身，写成转义时去掉反斜杠，含义不变。
+/// ISO-8859-1 的 `.properties`：西欧字母直接写成一个字节，其他字符写成转义，保存时按原来的写法
+/// 写回。落单的反斜杠后面的字符是字符本身，写成转义时去掉反斜杠，含义不变。
 #[test]
 fn latin1_properties_and_backslashes_round_trip() {
     let dir = scratch("unicode-escapes-latin1");
@@ -190,7 +190,7 @@ fn unicode_commands_convert_only_selections_when_some_cursors_select() {
     assert_eq!(doc.text_range(0, usize::MAX).unwrap(), "a=你\nb=\\u597D\n");
 }
 
-/// 保存时不改变 `.properties` 的含义：ASCII 字符的转义（`\u0020` 是键里的空格）不换成字符；只用
+/// 保存时不改变 `.properties` 的含义：ASCII 字符的转义（`\u0020` 是键中的空格）不换成字符；只用
 /// `\r` 换行的文件逐行保留原来的写法；ISO-8859-1 的文件改选「Unicode 转义」保存仍按它存。
 #[test]
 fn unicode_escapes_keep_the_meaning_of_properties() {
