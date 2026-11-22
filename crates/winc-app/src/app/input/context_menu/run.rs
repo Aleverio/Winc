@@ -281,6 +281,15 @@ impl App {
                 }
                 _ => {}
             },
+            MenuTarget::DefaultLanguage => {
+                let language = match command {
+                    MenuCommand::UseLanguage(i) => winc_syntax::languages().get(i).copied(),
+                    _ => None,
+                };
+                self.config.default_language = language.map(|language| language.id.to_owned());
+                self.save_config();
+                self.request_redraw();
+            }
             MenuTarget::TextWidth => {
                 if let MenuCommand::TextWidth(i) = command
                     && let Some(&width) = winc_config::TextWidth::ALL.get(i)
