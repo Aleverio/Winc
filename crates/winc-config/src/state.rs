@@ -36,6 +36,16 @@ impl State {
         self.commit_messages.insert(0, message.to_owned());
         self.commit_messages.truncate(MAX_COMMIT_MESSAGES);
     }
+
+    /// 语言菜单开头列出的最近使用的语言数（种）：菜单开头的一小组，不必滚动即可看到。
+    pub const RECENT_LANGUAGES: usize = 5;
+
+    /// 把语言 `id` 记为最近选择的一种：已有的移到最前，超过上限时丢掉最旧的。
+    pub fn remember_language(&mut self, id: &str) {
+        self.recent_languages.retain(|known| known != id);
+        self.recent_languages.insert(0, id.to_owned());
+        self.recent_languages.truncate(Self::RECENT_LANGUAGES);
+    }
 }
 
 /// 由程序维护的运行状态：最近目录、各目录的现场和项目工具选择。
@@ -92,6 +102,8 @@ pub struct State {
     /// Markdown 预览左侧的标题列表是否钉住、一直展开；默认只在鼠标停留时展开。所有窗口共用，
     /// 下次启动沿用。
     pub markdown_toc_pinned: bool,
+    /// 用户最近选择的语言（语言的标识），最近的在前，至多 [`State::RECENT_LANGUAGES`] 种。
+    pub recent_languages: Vec<String>,
     /// 侧栏宽度（逻辑像素）；`None` 表示没有调整过。所有视图、窗口和仓库共用，下次启动沿用。
     pub panel_width: Option<f32>,
     /// 各类能预览的文件打开时的显示方式：键为种类（`markdown`、`svg`、`table`），值为
@@ -574,6 +586,13 @@ impl State {
             .unwrap_or(false);
         state.markdown_toc_pinned =
             root.get("markdownTocPinned").and_then(Json::as_bool) == Some(true);
+        state.recent_languages = (root.get("recentLanguages").and_then(Json::as_array))
+            .unwrap_or_default()
+            .iter()
+            .filter_map(Json::as_str)
+            .take(Self::RECENT_LANGUAGES)
+            .map(str::to_owned)
+            .collect();
         state.stay_outside_applications = root
             .get("stayOutsideApplications")
             .and_then(Json::as_bool)
@@ -720,6 +739,10 @@ impl State {
         }
         if self.markdown_toc_pinned {
             fields.push(("markdownTocPinned", Json::Bool(true)));
+        }
+        if !self.recent_languages.is_empty() {
+            let recent = self.recent_languages.iter().cloned().map(Json::String);
+            fields.push(("recentLanguages", Json::Array(recent.collect())));
         }
         if self.stay_outside_applications {
             fields.push(("stayOutsideApplications", Json::Bool(true)));

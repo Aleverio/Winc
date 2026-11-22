@@ -277,7 +277,12 @@ pub fn run() {
         // `ssh://` 参数，或者上次开着的远端目录。
         match cli::remote_open(&args.targets) {
             Some(open) => app.open_remote(open),
-            None if args.targets.is_empty() => app.restore_remote_folder(),
+            None if args.targets.is_empty() => {
+                let reconnecting = app.restore_remote_folder();
+                if !reconnecting {
+                    app.start_with_new_file();
+                }
+            }
             None => {}
         }
     }

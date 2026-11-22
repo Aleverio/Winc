@@ -135,10 +135,13 @@ impl App {
         }
     }
 
-    /// 立即打开目录 `path` 并恢复该目录上次的标签。
+    /// 立即打开目录 `path` 并恢复该目录上次的标签，启动时新建的文件尚未修改时先关掉。
     ///
-    /// 不处理当前已打开的目录和标签，调用方须先完成这些处理。
+    /// 不处理当前已打开的目录和其他标签，调用方须先完成这些处理。
     pub(crate) fn open_folder_now(&mut self, path: &Path) {
+        if let Some(index) = self.startup_file_index() {
+            self.discard_tab(self.editor.documents[index].id);
+        }
         if let Err(e) = self.editor.open_folder(path) {
             let name = winc_editor::display_name(path);
             self.notify(

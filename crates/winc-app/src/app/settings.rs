@@ -8,6 +8,7 @@ mod card;
 mod formatters;
 pub(super) mod shortcuts;
 mod stepper;
+mod values;
 
 use stepper::step;
 
@@ -48,6 +49,8 @@ pub struct SettingsState {
     pub scroll: f32,
     /// 鼠标悬停的部件。
     pub hover: Option<SettingsPart>,
+    /// 取值与默认不同的设置项：名称后面有「恢复默认」。打开设置和配置变化时重新算。
+    pub changed: Vec<Setting>,
     /// 格式化页列出的语言。
     ///
     /// 打开设置时确定，打开期间只会增加，不会减少，已列出的语言也不换位置。
@@ -62,6 +65,8 @@ pub struct SettingsState {
     ///
     /// 渲染失败时像素为空，不再重试，图标不显示。
     pub logo: Option<(u32, Vec<u8>)>,
+    /// 这次显示「关于」页是否已经播放过图标的动画；离开该页或重新打开设置后再播放一次。
+    pub logo_played: bool,
     /// 快捷键页的搜索框：按命令名或按键搜索。
     pub keys_query: TextField,
     /// 是否正在录制按键：按下的键写入搜索框，不执行。
@@ -198,6 +203,7 @@ impl App {
         self.settings.cache = None;
         self.settings.scroll = 0.0;
         self.settings.selected = Setting::default();
+        self.settings.logo_played = false;
         self.settings.search.set_text("");
         self.settings.error = self.broken_font(self.settings.selected.page());
         self.settings.keyboard = false;
@@ -206,6 +212,7 @@ impl App {
         // 每次打开设置重新查询发行版中的工具：其间新安装的能列出来。
         self.format.formatter.forget_wsl();
         self.refresh_format_rows(true);
+        self.refresh_changed_settings();
         // 列出字体要读取字体文件，先在后台读好，打开字体菜单时不必等待；「默认 Shell」菜单中的
         // shell 同样在后台检测。
         std::thread::spawn(winc_render::installed_fonts);
@@ -261,8 +268,8 @@ impl App {
 
     /// 返回设置浮层中窗口坐标 (`x`, `y`) 处的部件。
     ///
-    /// 先判断上一帧绘制出的「安装方法…」链接，再判断布局中的部件。滚动到标题之下而不可见的
-    /// 链接不可点击。
+    /// 先判断上一帧绘制出的「安装方法…」和「恢复默认」，再判断布局中的部件。滚动到标题之下而
+    /// 不可见的链接不可点击。
     pub(super) fn settings_part_at(&self, x: f32, y: f32) -> Option<SettingsPart> {
         let layout = self.settings_layout();
         if layout.page == SettingsPage::Keys
@@ -278,6 +285,11 @@ impl App {
             .find(|(_, r)| r.contains(x, y) && layout.body.contains(x, y));
         if let Some(&(setting, _)) = link {
             return Some(SettingsPart::Install(setting));
+        }
+        let reset = (self.hits.reset_links.iter())
+            .find(|(_, r)| r.contains(x, y) && layout.body.contains(x, y));
+        if let Some(&(setting, _)) = reset {
+            return Some(SettingsPart::Reset(setting));
         }
         match layout.part_at(x, y)? {
             // 版本号和链接只有文字那一块可点，与悬停底色一致。
@@ -324,6 +336,35 @@ impl App {
             self.settings.logo = Some((size, rgba));
         }
         self.settings.logo.as_ref().map_or(&[], |(_, rgba)| rgba)
+    }
+
+    /// 每帧绘制前调用：「关于」页刚显示出来时播放一次图标逐层出现的动画。
+    ///
+    /// 设置浮层出现期间画的是开头的快照，动画等浮层出现之后再开始；动态效果关闭时不播放。
+    pub(in crate::app) fn track_about_logo(&mut self) {
+        if !self.settings.open {
+            return;
+        }
+        let about = self.settings.selected.page() == crate::layout::SettingsPage::About
+            && !self.settings_searching();
+        if !about {
+            self.settings.logo_played = false;
+            self.motion.about_logo = None;
+        } else if !std::mem::replace(&mut self.settings.logo_played, true) {
+            let wait = match &self.settings.motion {
+                Some((true, clock)) => super::animation::DIALOG_IN.mul_f32(1.0 - clock.linear()),
+                _ => std::time::Duration::ZERO,
+            };
+            let total = wait + crate::app::setup::LOGO_BUILD;
+            let delay = wait.as_secs_f32() / total.as_secs_f32();
+            self.motion.about_logo = self.clock(total).map(|clock| (clock, delay));
+        }
+    }
+
+    /// 返回「关于」页图标逐层出现的进度，0 到 1；没有在播放时为 `None`。
+    pub(crate) fn about_logo_build(&self) -> Option<f32> {
+        let (clock, delay) = self.motion.about_logo?;
+        Some(((clock.linear() - delay) / (1.0 - delay)).clamp(0.0, 1.0))
     }
 
     /// 是否支持应用内更新：不支持时「关于」页只写明原因，不显示「检查更新」按钮。
@@ -723,6 +764,8 @@ impl App {
             Setting::HotExit => self.config.hot_exit != Some(false),
             Setting::ConfirmClose => self.config.confirm_close == Some(true),
             Setting::RestoreFolder => self.config.restore_folder != Some(false),
+            Setting::NewFileOnStartup => self.config.new_file_on_startup == Some(true),
+            Setting::DetectLanguageOnPaste => self.config.detect_language_on_paste != Some(false),
             Setting::StickyScroll => self.config.sticky_scroll != Some(false),
             Setting::VimMode => self.config.vim_enabled == Some(true),
             Setting::VimRelativeNumber => self.config.vim_relative_number == Some(true),
@@ -791,6 +834,8 @@ impl App {
             Setting::HotExit => self.config.hot_exit = Some(on),
             Setting::ConfirmClose => self.config.confirm_close = Some(on),
             Setting::RestoreFolder => self.config.restore_folder = Some(on),
+            Setting::NewFileOnStartup => self.config.new_file_on_startup = Some(on),
+            Setting::DetectLanguageOnPaste => self.config.detect_language_on_paste = Some(on),
             Setting::StickyScroll => self.config.sticky_scroll = Some(on),
             Setting::VimMode => {
                 self.config.vim_enabled = Some(on);
@@ -1375,6 +1420,9 @@ impl App {
         self.vim_swap_options();
         self.write_config();
         self.vim_swap_options();
+        if self.settings.open {
+            self.refresh_changed_settings();
+        }
     }
 
     /// 把配置写入配置文件。
