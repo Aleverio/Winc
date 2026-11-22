@@ -463,6 +463,7 @@ impl App {
             | UserEvent::GitOperated
             | UserEvent::RemoteConnected
             | UserEvent::RemoteListed
+            | UserEvent::FolderListed
             | UserEvent::RemoteWatching
             | UserEvent::FormatPlanned
             | UserEvent::FileWorked

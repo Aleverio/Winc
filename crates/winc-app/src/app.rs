@@ -50,7 +50,7 @@ pub(crate) use git::commit::{
 };
 pub(crate) use input::context_menu::{
     CHECK_COLUMN, ICON_COLUMN, MenuIcon, POPUP_PAD, POPUP_TEXT_X, PopupLevel, PopupMenu, PopupRow,
-    folder_rows,
+    folder_level,
 };
 pub use input::context_menu::{ContextMenu, MenuButton, MenuCommand};
 pub use input::palette::palette;
@@ -285,6 +285,8 @@ pub enum UserEvent {
     RemoteConnected,
     /// 远程选择面板在后台读好了一个目录。
     RemoteListed,
+    /// 后台为目录菜单读好了一个远端目录。
+    FolderListed,
     /// 后台对远端目录的监视已经启动。
     RemoteWatching,
     /// 到远端主机的连接意外中断。
@@ -1136,6 +1138,7 @@ impl App {
             UserEvent::GitOperated => self.poll_branch_ops(),
             UserEvent::RemoteConnected => self.poll_remote(),
             UserEvent::RemoteListed => self.poll_remote_listings(),
+            UserEvent::FolderListed => self.poll_folder_levels(),
             UserEvent::RemoteWatching => self.poll_remote_watcher(),
             UserEvent::FormatPlanned => self.poll_formatting(),
             UserEvent::FileWorked => self.poll_file_work(),

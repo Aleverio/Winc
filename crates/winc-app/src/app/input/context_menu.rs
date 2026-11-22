@@ -31,7 +31,7 @@ mod tests;
 pub use menus::*;
 pub(crate) use popup::{
     CHECK_COLUMN, ICON_COLUMN, POPUP_PAD, POPUP_TEXT_X, PopupLevel, PopupMenu, PopupRow,
-    folder_rows,
+    folder_level,
 };
 pub(crate) use present::MenuIcon;
 
