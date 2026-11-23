@@ -308,6 +308,9 @@ impl ApplicationHandler<UserEvent> for App {
             WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
                 self.cancel_touch();
                 self.window_frame_changed();
+                if self.note_minimized() {
+                    return;
+                }
                 if let Some(renderer) = &mut self.frame.renderer {
                     renderer.resize();
                 }
