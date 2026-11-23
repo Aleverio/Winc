@@ -555,6 +555,7 @@ impl App {
             UserEvent::OpenFolderIn(path, new_window, never_ask) => {
                 self.open_folder_in(&path, new_window, never_ask);
             }
+            UserEvent::AttachFolder(path) => self.add_folder(&path),
             UserEvent::Pasted(done, failure, copying) => {
                 self.copy_finished(&copying);
                 self.pasted_into_tree(done, failure);

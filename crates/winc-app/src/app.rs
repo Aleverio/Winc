@@ -197,6 +197,8 @@ pub enum UserEvent {
     Move(Vec<PathBuf>, PathBuf, bool),
     /// 「要在哪里打开」提示框中做了选择：目录、是否在新窗口打开、是否勾选了「不再询问」。
     OpenFolderIn(PathBuf, bool, bool),
+    /// 「要在哪里打开」提示框中选择了「添加到此项目」：该目录加入当前项目。
+    AttachFolder(PathBuf),
     /// 后台格式化已有结果。
     Formatted,
     /// 提示框中回答了是否允许运行项目自带的格式化工具。
