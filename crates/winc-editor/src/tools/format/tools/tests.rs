@@ -87,6 +87,31 @@ fn package_json_counts_only_declared_dependencies() {
     ));
 }
 
+/// Astro 只有声明了 `prettier-plugin-astro` 才用 Prettier；只装了 Prettier 时不回退到它，
+/// 否则会报找不到 `.astro` 的解析器。
+#[test]
+fn astro_uses_prettier_only_with_the_plugin() {
+    let root = scratch("detect-astro");
+    assert_eq!(detect(Task::Format, "astro", &root), Detected::NoPreset);
+
+    std::fs::write(
+        root.join("package.json"),
+        r#"{"devDependencies": {"prettier": "^3", "prettier-plugin-astro": "^0.14"}}"#,
+    )
+    .unwrap();
+    assert!(matches!(
+        detect(Task::Format, "astro", &root),
+        Detected::Preset(p, Some(reason)) if p.name == "Prettier" && reason == "package.json"
+    ));
+
+    std::fs::write(
+        root.join("package.json"),
+        r#"{"devDependencies": {"prettier": "^3"}}"#,
+    )
+    .unwrap();
+    assert_eq!(detect(Task::Format, "astro", &root), Detected::NoPreset);
+}
+
 #[cfg(unix)] // 用不带扩展名的脚本冒充工具；Windows 上程序要带 PATHEXT 中的扩展名
 #[test]
 fn black_is_preferred_when_the_project_configures_both() {

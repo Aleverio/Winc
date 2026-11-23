@@ -159,6 +159,7 @@ fn detects_common_languages_and_names() {
         ("schema.graphql", "GraphQL"),
         ("flake.nix", "Nix"),
         ("App.svelte", "Svelte"),
+        ("src/pages/index.astro", "Astro"),
         ("Index.ets", "ArkTS"),
         ("Index.ETS", "ArkTS"),
         ("paper.tex", "LaTeX"),
@@ -173,6 +174,26 @@ fn detects_common_languages_and_names() {
     }
     // vim 的俄语教程 `tutor.ru` 不是 Ruby。
     assert_eq!(detect("tutor.ru").id, "text");
+}
+
+/// Astro 是 HTML 类的标记语言，文件开头另有 TypeScript frontmatter；与网页、脚本和样式表
+/// 互相查找用法。
+#[test]
+fn astro_is_html_with_frontmatter() {
+    let astro = detect("src/pages/index.astro");
+    assert_eq!((astro.id, astro.name), ("astro", "Astro"));
+    assert_eq!(astro.markup, Markup::Html);
+    assert!(astro.frontmatter);
+    assert!(astro.is_related(detect("a.ts")));
+    assert!(astro.is_related(detect("a.css")));
+    assert!(astro.is_related(detect("index.html")));
+    assert_eq!(
+        astro.file_name("untitled").as_deref(),
+        Some("untitled.astro")
+    );
+    // 其他 HTML 类文件没有 frontmatter。
+    assert!(!detect("index.html").frontmatter);
+    assert!(!detect("App.vue").frontmatter);
 }
 
 #[test]

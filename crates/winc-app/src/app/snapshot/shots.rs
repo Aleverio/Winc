@@ -10,6 +10,24 @@ use super::*;
 #[cfg(unix)]
 use winc_editor::format::Task;
 
+/// 截图：Astro 的 frontmatter、模板与内嵌脚本样式。
+#[test]
+#[ignore = "截图，手动运行"]
+fn snapshot_astro_syntax() {
+    let dir = sample_folder("shot-astro");
+    let file = dir.join("page.astro");
+    std::fs::write(
+        &file,
+        "---\nimport Layout from '../layouts/Layout.astro';\n\ninterface Props {\n  title: string;\n}\n\nconst { title } = Astro.props;\n---\n\n<Layout title={title}>\n  <!-- HTML 注释 -->\n  <h1 class=\"title\">{title}</h1>\n  <script>const n = 1;</script>\n  <style>.title { color: #ff5d01; }</style>\n</Layout>\n",
+    )
+    .unwrap();
+
+    let mut app = app_with(&file, true);
+    shoot(&mut app, "astro-syntax");
+
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 #[test]
 #[ignore = "截图，手动运行"]
 fn snapshot_placeholder() {

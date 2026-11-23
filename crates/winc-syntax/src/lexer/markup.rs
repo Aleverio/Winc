@@ -1,5 +1,5 @@
-//! 标记语言（HTML、XML、SVG、Vue、Svelte）的规则：标签、属性、字符实体，以及 HTML 中内嵌的
-//! 脚本与样式。
+//! 标记语言（HTML、XML、SVG、Vue、Svelte、Astro）的规则：标签、属性、字符实体，以及 HTML 中
+//! 内嵌的脚本与样式；Astro 还有文件开头 `---` 之间的 TypeScript frontmatter。
 //!
 //! 正文中的引号按标点处理，只有标签内的属性值才记成字符串。
 
@@ -22,6 +22,29 @@ impl Lexer<'_> {
         let n = self.chars.len();
         let mut tag = None;
         let mut i = match state {
+            LineState::Start => {
+                if self.language.frontmatter && self.frontmatter_fence() {
+                    self.push(0, 3, TokenKind::Decorator);
+                    return LineState::Frontmatter { inner: 0 };
+                }
+                0
+            }
+            LineState::Frontmatter { inner } => {
+                if self.frontmatter_fence() {
+                    self.push(0, 3, TokenKind::Decorator);
+                    return LineState::Normal;
+                }
+                let next = Lexer::new(
+                    embedded(true),
+                    self.chars,
+                    self.tokens.as_deref_mut(),
+                    self.base,
+                )
+                .run(expand(inner));
+                return LineState::Frontmatter {
+                    inner: compact(next),
+                };
+            }
             LineState::Tag(kind) => {
                 tag = Some(kind);
                 0
@@ -84,6 +107,16 @@ impl Lexer<'_> {
         }
 
         tag.map_or(LineState::Normal, LineState::Tag)
+    }
+
+    /// 本行是否只含 `---`（后面可以有空白），用于 Astro frontmatter 的开始与结束。
+    fn frontmatter_fence(&self) -> bool {
+        let end = self
+            .chars
+            .iter()
+            .rposition(|c| !c.is_whitespace())
+            .map_or(0, |last| last + 1);
+        self.chars[..end] == ['-', '-', '-']
     }
 
     /// 返回 `i` 处 CDATA 段（`<![CDATA[…]]>`）的开头长度（字符）与结束规则。

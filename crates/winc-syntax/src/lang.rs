@@ -176,6 +176,10 @@ pub struct Language {
     pub quoted_identifiers: bool,
     /// 标记语言的写法：标签、属性、实体，以及 HTML 中内嵌的脚本与样式。
     pub markup: Markup,
+    /// 文件第一行是否是 `---` 分隔的 frontmatter，内容按 TypeScript 着色（Astro）。
+    ///
+    /// 只有在文件第一行识别开头的 `---`；之后单独一行为 `---` 时结束。
+    pub frontmatter: bool,
     /// [`Markup::Html`] 中内容按脚本着色的标签名（不区分大小写），HTML 是 `<script>`；
     /// 微信小程序的 WXML 另有 `<wxs>`。
     pub script_tags: &'static [&'static str],
@@ -289,8 +293,8 @@ pub enum Markup {
     None,
     /// XML：标签、属性、实体与 CDATA。
     Xml,
-    /// HTML、SVG 与单文件组件（Vue、Svelte）：在 XML 之上，`<script>` 的内容按 TypeScript、
-    /// `<style>` 的内容按 SCSS 着色，标签名不区分大小写。
+    /// HTML、SVG 与单文件组件（Vue、Svelte、Astro）：在 XML 之上，`<script>` 的内容按
+    /// TypeScript、`<style>` 的内容按 SCSS 着色，标签名不区分大小写。
     Html,
 }
 
@@ -355,11 +359,12 @@ const RELATED: &[&[&str]] = &[
         "html",
         "vue",
         "svelte",
+        "astro",
         "wxml",
         "wxs",
     ],
     &[
-        "css", "scss", "sass", "less", "html", "vue", "svelte", "wxml", "wxss",
+        "css", "scss", "sass", "less", "html", "vue", "svelte", "astro", "wxml", "wxss",
     ],
     &["java", "kotlin", "scala", "groovy"],
     &["shell", "dockerfile", "makefile"],
@@ -458,6 +463,18 @@ impl Language {
             other => other,
         })
     }
+
+    /// 返回从文件第一行开始高亮时的行首状态。
+    ///
+    /// Astro 的首行 `---` 开始 frontmatter，因此从 [`crate::LineState::Start`] 开始；其余语言
+    /// 与 [`crate::LineState::Normal`] 相同。
+    pub fn start_state(&self) -> crate::LineState {
+        if self.frontmatter {
+            crate::LineState::Start
+        } else {
+            crate::LineState::Normal
+        }
+    }
 }
 
 /// 各语言共用的默认规则：全部关闭，各语言用 `..BASE` 覆盖需要的字段。
@@ -510,6 +527,7 @@ const BASE: Language = Language {
     quoted_keys: false,
     quoted_identifiers: false,
     markup: Markup::None,
+    frontmatter: false,
     script_tags: &["script"],
     stylesheet: false,
     colon_symbols: false,
@@ -600,6 +618,7 @@ static ALL: &[&Language] = &[
     &SVG,
     &VUE,
     &SVELTE,
+    &ASTRO,
     &WXML,
     &CSS,
     &SCSS,

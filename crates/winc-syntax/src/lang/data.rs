@@ -424,6 +424,15 @@ pub(super) static SVELTE: Language = Language {
     ..HTML
 };
 
+/// Astro 组件的规则，其余字段沿用 HTML；文件开头的 `---` 之间是 TypeScript。
+pub(super) static ASTRO: Language = Language {
+    id: "astro",
+    name: "Astro",
+    extensions: &["astro"],
+    frontmatter: true,
+    ..HTML
+};
+
 /// 微信小程序的 WXML 的规则，其余字段沿用 HTML；`<wxs>` 中的 WXS 按脚本着色。
 pub(super) static WXML: Language = Language {
     id: "wxml",
