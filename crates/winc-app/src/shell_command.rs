@@ -321,8 +321,8 @@ fn unreadable(path: &std::path::Path) -> Option<String> {
 ///
 /// Unix 上仅在标准输入是终端时转移；新进程的标准输入不是终端，不会再次转移。Windows 上仅在由启动
 /// 脚本启动（[`Args::launcher`]）时转移；新进程的参数不带该标记，不会再次转移。`--wait` 和 `-`
-/// 必须留在前台，`--new-instance` 和开发构建留在前台以便查看输出。
-pub(crate) fn detach(args: &Args) -> bool {
+/// 必须留在前台，`--new-instance` 和开发构建留在前台以便查看输出。`tokens` 交给后台的窗口进程。
+pub(crate) fn detach(args: &Args, tokens: &crate::instance::LaunchTokens) -> bool {
     #[cfg(unix)]
     {
         use std::io::IsTerminal;
@@ -349,6 +349,7 @@ pub(crate) fn detach(args: &Args) -> bool {
         // 独立的进程组：终端关闭时发给前台进程组的 SIGHUP 不会结束窗口进程。
         Command::new(program)
             .args(std::env::args_os().skip(1))
+            .envs(tokens.env())
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -359,6 +360,8 @@ pub(crate) fn detach(args: &Args) -> bool {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
+        // Windows 上没有激活令牌。
+        let _ = tokens;
         use std::process::{Command, Stdio};
         // 图形界面程序由启动脚本（批处理文件或 shell 脚本）调用时，脚本等待程序退出，命令不会
         // 返回；只有经过启动脚本时才转移。
@@ -391,7 +394,7 @@ pub(crate) fn detach(args: &Args) -> bool {
     }
     #[cfg(not(any(unix, windows)))]
     {
-        let _ = args;
+        let _ = (args, tokens);
         false
     }
 }

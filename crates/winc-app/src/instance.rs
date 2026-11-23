@@ -3,7 +3,7 @@
 //! 已在运行的 winc 持有 [`AppLock`]（每个用户只有一个），等待连接的位置由 `app_socket_path`
 //! 或 `app_pipe_name` 决定，后者只在 Windows 上使用。Unix 套接字放在只有当前用户能创建的目录中，
 //! 命名管道拒绝来自其他主机的连接。消息格式为一行版本号，第 2 版在其后另有一行激活令牌（见
-//! [`launch_token`]），之后每三个（路径、行、列）一组：路径、行号、列号各占一个以 NUL 结尾的
+//! [`LaunchTokens`]），之后每三个（路径、行、列）一组：路径、行号、列号各占一个以 NUL 结尾的
 //! 字段。没有激活令牌时发送第 1 版消息。
 //!
 //! 持有 [`AppLock`] 的进程正在退出时回 `busy`，连接失败时新进程自己打开目标。
@@ -27,26 +27,69 @@ const HELLO_TOKEN: &str = "winc-open 2\n";
 pub struct Launch {
     /// 要打开的目录和文件；为空时把当前窗口切到前台。
     pub targets: Vec<Target>,
-    /// 新进程收到的激活令牌（见 [`launch_token`]）；没有时为 `None`。
+    /// 新进程收到的激活令牌（见 [`LaunchTokens`]）；没有时为 `None`。
     pub token: Option<String>,
 }
 
-/// 启动本进程的程序给出的激活令牌：`XDG_ACTIVATION_TOKEN`（Wayland），其次
-/// `DESKTOP_STARTUP_ID`（X11）；没有或不合法时返回 `None`。
-///
-/// 随目标交给正在运行的 winc，供其切换或新建窗口时使用。
-#[cfg(all(unix, not(target_os = "macos")))]
-pub fn launch_token() -> Option<String> {
-    ["XDG_ACTIVATION_TOKEN", "DESKTOP_STARTUP_ID"]
-        .into_iter()
-        .filter_map(|name| std::env::var(name).ok())
-        .find(|token| valid_token(token))
+/// Wayland 合成器交给新进程的激活令牌所在的环境变量。
+#[cfg(unix)]
+const WAYLAND_TOKEN: &str = "XDG_ACTIVATION_TOKEN";
+/// X11 启动通知的令牌所在的环境变量。
+#[cfg(unix)]
+const X11_TOKEN: &str = "DESKTOP_STARTUP_ID";
+
+/// 启动本进程的程序给出的激活令牌，按窗口系统分开保存；不合法的令牌视为没有。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LaunchTokens {
+    /// `XDG_ACTIVATION_TOKEN` 中的令牌。
+    wayland: Option<String>,
+    /// `DESKTOP_STARTUP_ID` 中的令牌。
+    x11: Option<String>,
 }
 
-/// 启动本进程的程序给出的激活令牌；本平台没有，始终返回 `None`。
-#[cfg(not(all(unix, not(target_os = "macos"))))]
-pub fn launch_token() -> Option<String> {
-    None
+impl LaunchTokens {
+    /// 读出环境变量中的激活令牌，并从本进程的环境中移除，子进程不再继承已使用的令牌。
+    ///
+    /// 须在启动其他线程之前调用：移除环境变量时不能有其他线程读取环境。
+    #[cfg(all(unix, not(target_os = "macos")))]
+    #[allow(unsafe_code)] // `std::env::remove_var`
+    pub fn take() -> LaunchTokens {
+        let read = |name| std::env::var(name).ok().filter(|token| valid_token(token));
+        let tokens = LaunchTokens {
+            wayland: read(WAYLAND_TOKEN),
+            x11: read(X11_TOKEN),
+        };
+        // SAFETY: 调用方保证此时只有本线程，没有线程同时读写环境。
+        unsafe {
+            std::env::remove_var(WAYLAND_TOKEN);
+            std::env::remove_var(X11_TOKEN);
+        }
+        tokens
+    }
+
+    /// 本平台没有激活令牌，返回空的结果。
+    #[cfg(not(all(unix, not(target_os = "macos"))))]
+    pub fn take() -> LaunchTokens {
+        LaunchTokens::default()
+    }
+
+    /// 交给正在运行的 winc 的令牌，优先取 Wayland 的。
+    pub fn forwarded(&self) -> Option<&str> {
+        self.wayland.as_deref().or(self.x11.as_deref())
+    }
+
+    /// 本进程第一个窗口使用的令牌；`wayland` 表示窗口系统是否为 Wayland。
+    pub fn for_window(&self, wayland: bool) -> Option<String> {
+        if wayland { &self.wayland } else { &self.x11 }.clone()
+    }
+
+    /// 转到后台的窗口进程所需的环境变量，见 [`crate::shell_command::detach`]。
+    #[cfg(unix)]
+    pub fn env(&self) -> impl Iterator<Item = (&'static str, &str)> {
+        let wayland = self.wayland.as_deref().map(|token| (WAYLAND_TOKEN, token));
+        let x11 = self.x11.as_deref().map(|token| (X11_TOKEN, token));
+        wayland.into_iter().chain(x11)
+    }
 }
 
 /// 激活令牌能否写入消息：非空，且不含换行符和 NUL。

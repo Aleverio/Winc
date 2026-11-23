@@ -144,7 +144,7 @@ impl App {
         self.request_redraw();
     }
 
-    /// 记下新启动的 winc 交来的激活令牌 `token`（见 [`crate::instance::launch_token`]），在下一次
+    /// 记下新启动的 winc 交来的激活令牌 `token`（见 [`crate::instance::LaunchTokens`]），在下一次
     /// 建系统窗口或切到前台时使用一次。不使用 X11、Wayland 的平台上忽略。
     pub(crate) fn set_activation(&mut self, token: Option<String>) {
         #[cfg(all(unix, not(target_os = "macos")))]
