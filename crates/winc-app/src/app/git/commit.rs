@@ -101,7 +101,7 @@ const UNDO_H: f32 = 28.0;
 const CONTEXT_ROW: f32 = 24.0;
 /// 说明条右端「中止」按钮的宽度（逻辑像素）。
 ///
-/// 40 是经验值：「中止」两个字加左右各 8 像素的留白。
+/// 40 为「中止」两个字加左右各 8 像素的留白。
 const BANNER_ABORT_W: f32 = 40.0;
 /// 拆分按钮右边下拉箭头那一段的宽度（逻辑像素），与 `TOGGLE_W` 同宽：两个字符宽的图标。
 const BUTTON_MENU_W: f32 = 26.0;
@@ -113,22 +113,22 @@ type CardButtons = (Rect, Rect, Option<Rect>);
 /// 「上一次提交」那一栏里「撤销」文字两侧的留白（逻辑像素），与悬停底色的圆角相当。
 const UNDO_PAD: f32 = 6.0;
 /// 提交卡片、说明条左右的边距（逻辑像素），和标题行的项目名、右端按钮对齐；卡片离视图底边
-/// 也是这么多。
+/// 也取该值。
 const MARGIN: f32 = 8.0;
 /// 提交信息中一行的高度（逻辑像素），取多行输入框统一的行高。
 pub(crate) const MESSAGE_LINE: f32 = 20.0;
 /// 提交信息框内文字行与上下边框之间的留白（逻辑像素），与行数无关。
 ///
-/// 2 是经验值：单行时框高 24，与搜索框同高。左右留白另加行高中字形上下的空白，使文字
+/// 取 2：单行时框高 24，与搜索框同高。左右留白另加行高中字形上下的空白，使文字
 /// 与边框的可见间距四边相等。
 pub(crate) const MESSAGE_PAD: f32 = 2.0;
 /// 提交信息框最多显示的行数（行），再多就在框内滚动。
 ///
-/// 8 是经验值：再多的说明就在框内滚动，不再挤占下面列表的高度。
+/// 取 8：不再挤占下面列表的高度。
 const MESSAGE_MAX_LINES: usize = 8;
 /// 窗口很矮时，列表至少留下的高度（逻辑像素）。
 ///
-/// 72 是经验值：三行列表各 24，仍能看出列表里有几项。
+/// 72 为三行列表（每行 24）的高度，仍能看出列表里有几项。
 const LIST_MIN: f32 = 72.0;
 
 /// 绘制时量好的几段文字的宽度（逻辑像素），供 [`App::commit_parts`] 排版：布局时不量文字。
@@ -371,7 +371,7 @@ pub(crate) struct CommitSticky {
 
 /// 固定在列表顶部的最大层数（层）。
 ///
-/// 5 是经验值：目录再深时固定的行已经占掉大半个列表。
+/// 取 5：目录再深时固定的行已经占掉大半个列表。
 const STICKY_MAX: usize = 5;
 
 /// 组、目录展开或收起的动画。
@@ -683,8 +683,8 @@ enum Outcome {
     Staged(Result<(), String>, PathBuf),
     /// 提交前检查完了新增的内容：其中 TODO、FIXME 的处数，在哪个仓库里检查的。
     TodoChecked(usize, PathBuf),
-    /// 提交前的格式化做完了：改动了几个文件，在哪个仓库里进行的。
-    Reformatted(usize, PathBuf),
+    /// 提交前的格式化做完了：改动了几个文件、几个没能格式化，在哪个仓库里进行的。
+    Reformatted(usize, usize, PathBuf),
     /// 写入其他仓库暂存区的一步操作完成，或者失败的原因。
     OtherStaged(Result<(), String>),
     /// 读到了文件在暂存区中的内容：仓库、文件、发出读取时暂存区的版本、内容（不是文本时为
@@ -750,7 +750,7 @@ pub(crate) struct CommitState {
     pub(crate) card: Slide,
     /// 「上一次提交」那一栏拉开、收起。
     pub(crate) undo: Slide,
-    /// 最近一帧画的上一次提交：栏收起途中（已经推送、撤销）照样写着它。
+    /// 最近一帧画的上一次提交：栏收起途中（已经推送、撤销）仍然显示它。
     undo_drawn: Option<LastCommit>,
     /// 是否修改上一次提交。
     pub amend: bool,
@@ -809,7 +809,7 @@ pub(crate) struct CommitState {
     other_stage_queue: VecDeque<(PathBuf, bool, Vec<PathBuf>)>,
     /// 是否有写入其他仓库暂存区的操作正在后台执行。
     other_stage_running: bool,
-    /// 暂存区写完之后接着提交：按下提交时暂存的操作尚未完成。
+    /// 暂存区写完之后随后提交：按下提交时暂存的操作尚未完成。
     commit_queued: bool,
     /// 下一次提交不运行钩子；提交成功后关闭。
     pub(crate) no_verify: bool,
@@ -889,6 +889,8 @@ pub(crate) struct CommitState {
     pub(crate) stash_files_folded: bool,
     /// 储藏的预览标签：和改动列表的预览标签分开，那个标签跟着工作区里的文件刷新。
     pub(crate) stash_preview: Option<DocumentId>,
+    /// 正在询问新增的 TODO 要不要仍然提交：这次提交在等回答。
+    todo_asked: bool,
     /// 提交成功以后继续推送（「提交并推送」）。
     push_after: bool,
     /// 与 `push_after` 一起：推送改为同步，先拉取上游的新提交再推送（「提交并同步」）。
@@ -904,6 +906,25 @@ pub(crate) struct CommitState {
 }
 
 impl CommitState {
+    /// 放弃「提交以后推送」：这次提交没有开始，或没有成功。
+    ///
+    /// 推送的意图只属于发起它的那一次提交；留到之后，下一次普通的提交会不经确认就推送。
+    pub(super) fn drop_push_intent(&mut self) {
+        self.push_after = false;
+        self.sync_after = false;
+    }
+
+    /// 是否有一次提交在进行或在等待：后台正在提交或检查、在等暂存写完，或在等用户回答。
+    pub(super) fn pending(&self) -> bool {
+        self.busy || self.commit_queued || self.todo_asked
+    }
+
+    /// 是否这次提交成功以后继续推送；只有在真实仓库里提交的测试用到，这些测试只在 Unix 上编译。
+    #[cfg(all(test, unix))]
+    pub(crate) fn pushes_after(&self) -> bool {
+        self.push_after
+    }
+
     /// 是否显示暂存区（见 [`CommitState::staging`] 字段）。
     pub(crate) fn staging(&self) -> bool {
         self.staging
@@ -1007,6 +1028,7 @@ impl Default for CommitState {
             stash_view: None,
             stash_files_folded: false,
             stash_preview: None,
+            todo_asked: false,
             push_after: false,
             sync_after: false,
             last: None,
@@ -1126,7 +1148,7 @@ impl App {
     ///
     /// 卡片出现时从视图底部滑上来，消失时（提交完、改动都没了）滑下去；上一次提交在提交以后拉开，
     /// 推送、撤销以后收起。上面的改动列表和储藏跟着移动。刚读到仓库状态（启动、换仓库）时和提交
-    /// 视图不在屏幕上时直接到终态：它们本来就在那里，切到提交视图时也不补放动画。
+    /// 视图不在屏幕上时直接到终态：它们原本就在那里，切到提交视图时也不补放动画。
     pub(in crate::app) fn track_commit_bars(&mut self) {
         let known = self.git.status.is_some();
         let card = known.then(|| self.commit_compose_shown());
@@ -1290,7 +1312,7 @@ impl App {
     /// 仓库状态刷新了，`old` 是刷新前的状态，`rows` 是刷新前的各行（提交视图不在屏幕上时为
     /// `None`）：改动的文件变了时开始 [`CommitShift`]。
     ///
-    /// 只是内容变了（保存文件）时文件和各自的状态都不变，不做过渡，列表照常响应点击。组、目录
+    /// 只是内容变了（保存文件）时文件和各自的状态都不变，不做过渡，列表仍然响应点击。组、目录
     /// 正在展开或收起时也不做，两种动画不叠在一起。
     pub(in crate::app) fn begin_commit_shift(
         &mut self,

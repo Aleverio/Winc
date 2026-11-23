@@ -243,6 +243,7 @@ impl App {
             // 界面已按成功的结果显示：放弃其余的操作，按仓库的实际状态重新显示。
             self.git.commit.staging_queue.clear();
             self.git.commit.commit_queued = false;
+            self.git.commit.drop_push_intent();
             self.git.commit.index.clear();
             self.notify(NoticeKind::Error, t!("git-stage-failed", error = e));
         }
@@ -252,7 +253,7 @@ impl App {
         }
         self.git_refresh();
         if std::mem::take(&mut self.git.commit.commit_queued) {
-            self.git_commit();
+            self.git_commit_resumed();
         }
     }
 
