@@ -118,15 +118,20 @@ impl Navigation {
 }
 
 impl App {
-    /// 把光标当前位置记入后退、前进的历史，每处理完一批事件调用一次。
+    /// 把当前标签记入后退、前进的历史，每处理完一批事件调用一次。
+    ///
+    /// 文本标签记录光标位置；日志、差异、图片等只读标签没有光标，记录标签本身（行列记为 0），
+    /// 使后退、前进也能回到打开过的这些标签。
     pub(in crate::app) fn track_navigation(&mut self) {
         let Some(doc) = self.editor.active() else {
             return;
         };
-        if !doc.shows_text() {
-            return;
-        }
-        let key = (doc.id, doc.selection.head, doc.revision);
+        let text = doc.shows_text();
+        let key = if text {
+            (doc.id, doc.selection.head, doc.revision)
+        } else {
+            (doc.id, 0, doc.revision)
+        };
         let nav = &self.jumps.navigation;
         // 当前项仍是该文档、路径也没变（另存为不改版本号）：记下的就是现在的位置。
         let current = nav.spots.get(nav.current);
@@ -136,7 +141,11 @@ impl App {
             return;
         }
         self.jumps.navigation.last = Some(key);
-        let (line, col) = doc.text().pos_to_line_col(doc.selection.head);
+        let (line, col) = if text {
+            doc.text().pos_to_line_col(doc.selection.head)
+        } else {
+            (0, 0)
+        };
         let here = Spot {
             id: doc.id,
             path: doc.path.clone(),
@@ -145,6 +154,14 @@ impl App {
         };
         let revision = doc.revision;
         self.jumps.navigation.observe(here, revision);
+    }
+
+    /// 后退或前进：当前是日志标签时先在提交之间移动，否则按位置历史回到上一个、下一个标签和
+    /// 光标位置。
+    pub(in crate::app) fn navigate_history(&mut self, forward: bool) {
+        if !self.log_navigate(forward) {
+            self.navigate(forward);
+        }
     }
 
     /// 后退或前进一项（`forward` 为 `true` 时前进；macOS 上后退为 `⌃-`，前进为 `⌃⇧-`）。
@@ -199,6 +216,11 @@ impl App {
             return false;
         }
         self.focus = Focus::Editor;
+
+        // 日志、差异、图片等标签没有光标：切到标签即可。
+        if !self.editor.active().is_some_and(|d| d.shows_text()) {
+            return true;
+        }
 
         // 标签还没读（刚重新打开、恢复现场后没去过）时，读好再放回光标（`loading.rs`）。
         let (line, col) = (spot.line, spot.col);
