@@ -827,11 +827,10 @@ impl Setting {
             | Setting::AutoSave
             | Setting::GitOpenWorktree
             | Setting::GitPullMode => SettingControl::Choice,
-            Setting::AddLanguage
-            | Setting::AddFixLanguage
-            | Setting::AddLspLanguage
-            | Setting::PluginCommand(_, _)
-            | Setting::ReloadPlugins => SettingControl::Action,
+            Setting::AddLanguage | Setting::AddFixLanguage | Setting::AddLspLanguage => {
+                SettingControl::Action
+            }
+            Setting::PluginCommand(_, _) | Setting::ReloadPlugins => SettingControl::Button,
             Setting::KeySearch => SettingControl::Search,
             Setting::Version => SettingControl::Product,
             Setting::ReleaseNotes

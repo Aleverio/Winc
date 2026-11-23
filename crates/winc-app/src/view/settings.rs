@@ -509,6 +509,16 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
                     let empty = text.is_empty();
                     (text, empty)
                 }
+                Setting::PluginPaths => {
+                    let text = app.config.plugin_paths.join(", ");
+                    let empty = text.is_empty();
+                    (text, empty)
+                }
+                Setting::PluginValue(plugin, key, _) => {
+                    let text = app.plugin_setting_value(plugin, key);
+                    let empty = text.is_empty();
+                    (text, empty)
+                }
                 _ => match app.settings.tool_row(row.setting) {
                     Some(r) => (r.tool.clone(), r.unset),
                     None if row.setting == Setting::TerminalShell => match app.configured_shell() {
@@ -607,12 +617,46 @@ fn draw_row(app: &mut App, frame: &mut Frame<'_>, row: &SettingRow, clip: Rect) 
             None
         }
         SettingControl::Button => {
-            // 不支持应用内更新时说明行已写明原因，不显示按钮；正在检查、下载时按钮变淡。
-            if app.updates_supported() {
-                let enabled = app.can_check_updates();
-                let label = t!("settings-check-now");
-                let role = ButtonRole::Normal;
-                draw_action_button(app, frame, row.control, label, role, enabled, hovered);
+            match row.setting {
+                Setting::Updates => {
+                    // 不支持应用内更新时说明行已写明原因，不显示按钮；正在检查、下载时按钮变淡。
+                    if app.updates_supported() {
+                        let enabled = app.can_check_updates();
+                        let label = t!("settings-check-now");
+                        draw_action_button(
+                            app,
+                            frame,
+                            row.control,
+                            label,
+                            ButtonRole::Normal,
+                            enabled,
+                            hovered,
+                        );
+                    }
+                }
+                Setting::PluginCommand(_, _) => {
+                    draw_action_button(
+                        app,
+                        frame,
+                        row.control,
+                        t!("settings-plugin-run"),
+                        ButtonRole::Normal,
+                        true,
+                        hovered,
+                    );
+                }
+                Setting::ReloadPlugins => {
+                    draw_action_button(
+                        app,
+                        frame,
+                        row.control,
+                        row.setting.label(),
+                        ButtonRole::Normal,
+                        true,
+                        hovered,
+                    );
+                }
+                _ => {}
             }
             None
         }

@@ -165,11 +165,7 @@ impl App {
     }
 
     /// 插件设置行当前显示的值；没有保存过时使用清单里的默认值。
-    pub(in crate::app) fn plugin_setting_value(
-        &self,
-        plugin: &'static str,
-        key: &'static str,
-    ) -> String {
+    pub(crate) fn plugin_setting_value(&self, plugin: &'static str, key: &'static str) -> String {
         self.config
             .plugin_values
             .get(plugin)
@@ -179,11 +175,7 @@ impl App {
     }
 
     /// 布尔插件设置项当前的开关状态。
-    pub(in crate::app) fn plugin_bool_value(
-        &self,
-        plugin: &'static str,
-        key: &'static str,
-    ) -> bool {
+    pub(crate) fn plugin_bool_value(&self, plugin: &'static str, key: &'static str) -> bool {
         if let Some(name) = capability_from_key(key) {
             return self
                 .config
@@ -195,7 +187,7 @@ impl App {
     }
 
     /// 切换一个布尔插件设置项，并写回配置。
-    pub(in crate::app) fn set_plugin_bool_value(
+    pub(crate) fn set_plugin_bool_value(
         &mut self,
         plugin: &'static str,
         key: &'static str,

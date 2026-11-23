@@ -364,6 +364,7 @@ settings-plugin-paths-desc = JSONC 清单文件或目录，用逗号分隔；只
 settings-plugin-reload = 重新加载插件
 settings-plugin-reload-desc = 重新读取清单并重启沙箱插件，无需重启 Winct
 settings-plugin-reloaded = 插件已重新加载
+settings-plugin-run = 运行
 settings-plugin-enabled-desc = 只有启用的插件才会把命令加入命令面板
 settings-plugin-command-desc = 运行这条命令；首次使用会询问是否信任
 settings-plugin-setting-desc = 保存在 plugins.values 中，可通过占位符引用

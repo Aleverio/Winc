@@ -138,6 +138,7 @@ impl App {
                     self.config.plugin_enabled.retain(|item| item != &id);
                 }
                 self.save_config();
+                self.refresh_plugins();
                 self.settings.switch_slide = self
                     .clock(super::animation::SWITCH_SLIDE)
                     .filter(|_| self.settings.open)
