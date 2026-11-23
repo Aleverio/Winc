@@ -194,16 +194,21 @@ function Prune-Releases([string]$Current, [string]$Previous) {
     $root = Join-Path $HomeDir 'releases'
     if (-not (Test-Path -LiteralPath $root)) { return }
     $entries = @(Get-ChildItem -LiteralPath $root -Directory | ForEach-Object {
-        if ($_.Name -match '^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?$') {
+        if ($_.Name -match '^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?$') {
             [PSCustomObject]@{
                 Name = $_.Name; Path = $_.FullName
                 Major = [int]$Matches[1]; Minor = [int]$Matches[2]; Patch = [int]$Matches[3]
+                Pre = $Matches[4]
             }
         }
     } | Sort-Object -Property Major, Minor, Patch -Descending)
     $count = 0
     foreach ($entry in $entries) {
         if ($entry.Name -eq $Current -or $entry.Name -eq $Previous) { continue }
+        if ($entry.Pre) {
+            Remove-Item -LiteralPath $entry.Path -Recurse -Force
+            continue
+        }
         $count++
         if ($count -gt $KEEP) { Remove-Item -LiteralPath $entry.Path -Recurse -Force }
     }

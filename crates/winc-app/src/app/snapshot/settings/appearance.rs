@@ -71,7 +71,7 @@ fn settings_font_name_is_checked_and_can_be_abandoned() {
     // bisa dipakai di mesin ini, bukan sekadar terdaftar di fontconfig (mis. icomoon).
     // Cari font yang benar-benar lolos commit di UI, bukan sekadar lolos check statis
     // atau terdaftar dengan nama aneh di fontconfig.
-    let usable = winc_render::installed_fonts().into_iter().find(|family| {
+    let usable = winc_render::installed_fonts().iter().find(|family| {
         let name = family.name.trim();
         if name.is_empty() || name.chars().any(char::is_control) {
             return false;

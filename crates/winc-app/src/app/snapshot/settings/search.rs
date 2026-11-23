@@ -23,6 +23,7 @@ fn listed(app: &App) -> (Vec<Setting>, Vec<&'static str>) {
 fn search_finds_settings_on_every_page() {
     let dir = search_folder("settings-search");
     let mut app = app_with(&dir, false);
+    #[cfg(unix)]
     crate::app::snapshot::editor::format::without_path_tools(&mut app);
     app.config.terminal_enabled = Some(true);
     app.open_settings();
