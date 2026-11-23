@@ -912,15 +912,17 @@ impl App {
             && self.active_shows_text()
             && !matches!(
                 self.pointer.hover,
-                Hover::TreeRow(_) | Hover::Sticky(_) | Hover::Folded(_) | Hover::LongLine(_)
+                Hover::TreeRow(_)
+                    | Hover::Sticky(_)
+                    | Hover::Folded(_)
+                    | Hover::LongLine(_)
+                    | Hover::Scrollbar(_)
             )
             && self.layout.text.contains(x, y)
             && !self.layout.search.contains(x, y)
             && !(self.overlays.picker.open && self.layout.picker.contains(x, y))
             && !self.over_corner_card(x, y)
             && x < self.layout.editor.right() - SCROLLBAR_HIT
-            // 底边的水平滚动条只在行宽超出编辑区时出现，按命中结果判断。
-            && !matches!(self.target_at(x, y), Target::Scrollbar(..))
             || self.over_diff_text(x, y)
                 && x < self.layout.editor.right() - SCROLLBAR_HIT
                 && matches!(self.target_at(x, y), Target::Editor);
@@ -942,6 +944,9 @@ impl App {
 
         let icon = if let Hover::ResizeEdge(direction) = self.pointer.hover {
             resize_cursor(direction)
+        } else if matches!(self.pointer.drag, Drag::Scrollbar { .. }) {
+            // 拖动滚动条期间鼠标经过文字和链接时保持箭头。
+            CursorIcon::Default
         } else if matches!(self.pointer.drag, Drag::ImageResize)
             || self.pointer.hover == Hover::ImageHandle
         {

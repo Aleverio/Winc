@@ -51,8 +51,8 @@ fn scrollbars_show_while_scrolling_or_hovered() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-/// 回归：编辑区的水平滚动条上显示箭头，与竖直滚动条一致；没有水平滚动条时，文字区底部的文字上
-/// 仍显示文本光标。
+/// 编辑区的水平滚动条上显示箭头，拖动滑块经过文字时也是箭头；没有水平滚动条时，文字区底部
+/// 显示文本光标。
 #[test]
 fn the_text_cursor_leaves_the_editor_horizontal_scrollbar() {
     use winit::window::CursorIcon;
@@ -81,6 +81,10 @@ fn the_text_cursor_leaves_the_editor_horizontal_scrollbar() {
         app.pointer.hover,
         Hover::Scrollbar(Scrollbar::EditorHorizontal)
     );
+    app.on_mouse_down(MouseButton::Left);
+    assert_eq!(cursor(&mut app, t.x + 40.0, t.y + 8.0), CursorIcon::Default);
+    app.on_mouse_up(MouseButton::Left);
+    assert_eq!(cursor(&mut app, t.x + 40.0, t.y + 8.0), CursorIcon::Text);
 
     // 行宽不超过编辑区时没有水平滚动条，同一位置上是文字区，显示文本光标。
     std::fs::write(dir.join("short.txt"), "short\n".repeat(400)).unwrap();
