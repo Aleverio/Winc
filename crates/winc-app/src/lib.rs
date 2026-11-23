@@ -77,6 +77,8 @@ pub fn run() {
     if let Some(code) = elevated::helper() {
         std::process::exit(code);
     }
+    // 在启动任何线程之前取出激活令牌，见 `LaunchTokens::take`。
+    let tokens = instance::LaunchTokens::take();
     shell_command::enter_real_path();
     crash::install();
     // 本线程是界面线程：不等待远端主机的应答，访问远端文件的操作都在后台线程上进行。
@@ -161,11 +163,11 @@ pub fn run() {
     if failed && args.targets.is_empty() {
         std::process::exit(1);
     }
-    if !args.one_off() && !args.new_instance && !bench.silent() && hand_over(&args) {
+    if !args.one_off() && !args.new_instance && !bench.silent() && hand_over(&args, &tokens) {
         std::process::exit(i32::from(failed));
     }
     // 从终端启动时窗口进程转到后台，命令立即返回。
-    if !bench.silent() && shell_command::detach(&args) {
+    if !bench.silent() && shell_command::detach(&args, &tokens) {
         std::process::exit(i32::from(failed));
     }
 
@@ -250,10 +252,8 @@ pub fn run() {
     let mut winc = Winc::new(Some(event_loop.create_proxy()), template);
     let (key, proxy) = winc.reserve();
     let mut app = App::new(editor, proxy, bench, config);
-    // 桌面环境启动 winc 时给出的激活令牌由第一个窗口使用：合成器据此把窗口切到前台，并结束
-    // 启动通知（GNOME 在收到令牌之前一直显示忙碌指针，程序坞中也不显示该窗口）。之后启动的
-    // winc 交来的令牌见 `hand_over`。
-    app.set_activation(instance::launch_token());
+    // 第一个窗口出示启动本进程时给出的激活令牌，合成器随之结束启动通知。
+    app.set_activation(tokens.for_window(is_wayland(&event_loop)));
     app.watch_git_output();
     winc_editor::proxy::follow_system_proxy(app.config.system_proxy != Some(false));
     app.store.config_path = config_path;
@@ -370,7 +370,7 @@ pub(crate) fn open_targets(editor: &mut Editor, args: &cli::Args) -> Opened {
 
 /// 是否已将要打开的目录和文件交给正在运行的 winc，由该进程切到打开该目录的窗口、新建窗口或
 /// 切到前台。
-fn hand_over(args: &cli::Args) -> bool {
+fn hand_over(args: &cli::Args, tokens: &instance::LaunchTokens) -> bool {
     let targets: Vec<cli::Target> = args
         .targets
         .iter()
@@ -379,7 +379,20 @@ fn hand_over(args: &cli::Args) -> bool {
             ..t.clone()
         })
         .collect();
-    instance::forward_to_app(&targets, instance::launch_token().as_deref())
+    instance::forward_to_app(&targets, tokens.forwarded())
+}
+
+/// 事件循环是否使用 Wayland。
+#[cfg(all(unix, not(target_os = "macos")))]
+fn is_wayland<T>(event_loop: &EventLoop<T>) -> bool {
+    use winit::platform::wayland::EventLoopExtWayland;
+    event_loop.is_wayland()
+}
+
+/// 事件循环是否使用 Wayland；本平台始终为否。
+#[cfg(not(all(unix, not(target_os = "macos"))))]
+fn is_wayland<T>(_event_loop: &EventLoop<T>) -> bool {
+    false
 }
 
 /// 设置界面语言，并让汉字按界面语言的字形显示，返回字形所用的语言是否发生变化。
