@@ -454,6 +454,66 @@ pub fn shift<'a>(
     }
 }
 
+/// 返回在源代码中按回车要做的修改：列表项续一项，引用中下一行继续同一段引用；空的列表项、
+/// 空的引用退出一层（同 [`enter`]）。不在列表项或引用中时返回 `None`，按普通方式换行。
+pub fn source<'a>(
+    before: &str,
+    after: &str,
+    next: Option<&str>,
+    above: impl Iterator<Item = &'a str>,
+) -> Option<Edit> {
+    let p = parse(before);
+    if p.marker.is_none() && p.quote.is_empty() {
+        return None;
+    }
+    let empty = p.rest.trim().is_empty() && after.trim().is_empty();
+    if p.marker.is_none() && !empty {
+        return Some(Edit::insert(line_break(before)));
+    }
+    Some(enter(before, after, next, above))
+}
+
+/// 在空的引用段落上退出引用时，上一行 `prev` 是否为同一层的空引用行（回车另起一段时留下的
+/// 分隔），应一并去掉；去掉后引用的末尾不多出一个空行。
+pub fn quote_gap(before: &str, after: &str, prev: Option<&str>) -> bool {
+    let p = parse(before);
+    let empty = p.rest.trim().is_empty() && after.trim().is_empty();
+    if p.marker.is_some() || p.quote.is_empty() || !empty {
+        return false;
+    }
+    prev.is_some_and(|line| {
+        let q = parse(line);
+        q.marker.is_none() && q.rest.trim().is_empty() && depth(q.quote) == depth(p.quote)
+    })
+}
+
+/// 依次读完 `lines`（从文档开头起）之后，是否位于围栏代码块（```` ``` ````、`~~~`）或公式块
+/// （`$$`）之中。引用中的围栏同样计算。
+pub fn inside_fence<'a>(lines: impl Iterator<Item = &'a str>) -> bool {
+    // 打开的围栏：符号和长度；公式块的符号记为 `$`。
+    let mut open: Option<(u8, usize)> = None;
+    for line in lines {
+        let p = parse(line);
+        let body = p.rest.trim_start_matches(' ');
+        if p.rest.len() - body.len() > 3 {
+            continue;
+        }
+        let Some(&first) = body.as_bytes().first() else {
+            continue;
+        };
+        let run = body.bytes().take_while(|&b| b == first).count();
+        match open {
+            Some((b'$', _)) if body.trim_end() == "$$" => open = None,
+            Some((c, n)) if c == first && run >= n && body[run..].trim().is_empty() => open = None,
+            Some(_) => {}
+            None if matches!(first, b'`' | b'~') && run >= 3 => open = Some((first, run)),
+            None if body.trim_end() == "$$" => open = Some((b'$', 2)),
+            None => {}
+        }
+    }
+    open.is_some()
+}
+
 /// 返回 ⇧ 回车要插入的文字：段内换行。
 ///
 /// 位于列表项或引用中时，下一行继续同一项或同一段引用，行首带引用的 `>` 和与内容对齐的缩进。

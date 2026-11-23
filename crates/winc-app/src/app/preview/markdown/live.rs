@@ -52,7 +52,7 @@ impl App {
             Key::Named(NamedKey::Enter) if !shift && self.live_table_step(Step::Down) => {
                 return true;
             }
-            Key::Named(NamedKey::Enter) => return self.live_enter(shift),
+            Key::Named(NamedKey::Enter) => return self.live_enter(shift, false),
             Key::Named(NamedKey::Backspace) => return self.live_backspace(),
             Key::Named(NamedKey::Delete) => return self.live_delete(),
             Key::Named(NamedKey::Home) => return self.live_line_edge(false),
@@ -259,13 +259,17 @@ impl App {
     /// 按住 ⇧ 时段内换行（见 `winc_preview::markdown::enter`）。
     ///
     /// 光标在代码块、公式、表格、HTML 块中时返回 `false`，按编辑区的方式换行并保持缩进。
-    /// 有选区时先替换选区：光标之前的文字截至选区开头，之后的文字从选区末尾算起。
-    pub(super) fn live_enter(&mut self, shift: bool) -> bool {
+    /// 有选区时先替换选区：光标之前的文字截至选区开头，之后的文字从选区末尾算起。在空的引用
+    /// 段落上退出引用时，上一行留下的空引用行一并去掉。
+    ///
+    /// `source` 为真时是源代码中的回车（规则见 `winc_preview::markdown::enter::source`）：不在
+    /// 列表项或引用中时返回 `false`，由调用方按普通方式换行。
+    pub(super) fn live_enter(&mut self, shift: bool, source: bool) -> bool {
         use winc_preview::markdown::enter;
-        if !shift && self.live_fence() {
+        if !source && !shift && self.live_fence() {
             return true;
         }
-        if self.live_leaf().is_some_and(|l| !l.prose) {
+        if !source && self.live_leaf().is_some_and(|l| !l.prose) {
             return false;
         }
         let Some(doc) = self.editor.active() else {
@@ -290,6 +294,8 @@ impl App {
         let to_line = line_of(to);
         let rest = line_text(to_line);
         let after = rest[(to - rope.line_to_byte(to_line)).min(rest.len())..].to_owned();
+        let first = line_of(from);
+        let prev = (first > 0).then(|| line_text(first - 1));
         let edit = if shift {
             enter::Edit {
                 before: 0,
@@ -298,19 +304,31 @@ impl App {
             }
         } else {
             let next = (to_line + 1 < rope.len_lines()).then(|| line_text(to_line + 1));
-            let first = line_of(from);
             let above: Vec<String> = (first.saturating_sub(200)..first)
                 .rev()
                 .map(line_text)
                 .collect();
-            enter::enter(
-                &before,
-                &after,
-                next.as_deref(),
-                above.iter().map(String::as_str),
-            )
+            let above = above.iter().map(String::as_str);
+            let edit = if source {
+                enter::source(&before, &after, next.as_deref(), above)
+            } else {
+                Some(enter::enter(&before, &after, next.as_deref(), above))
+            };
+            let Some(edit) = edit else {
+                return false;
+            };
+            edit
         };
-        let (a, b) = (from - edit.before, (to + edit.after).min(rope.len_bytes()));
+        // 退出引用时连同上一行的空引用行一起替换。
+        let gap = !shift
+            && edit.before == before.len()
+            && enter::quote_gap(&before, &after, prev.as_deref());
+        let a = if gap {
+            rope.line_to_byte(first - 1)
+        } else {
+            from - edit.before
+        };
+        let b = (to + edit.after).min(rope.len_bytes());
         // 有序列表中续出一项：其后同一层各项的序号顺延，与新增的一项在同一次修改中完成，
         // 撤销一步即可恢复。
         let item = edit.text.rsplit('\n').next().unwrap_or_default();
@@ -346,8 +364,35 @@ impl App {
             doc.selection = winc_core::Selection::point(caret);
         }
         self.preview.markdown.goal = None;
-        self.start_live_editing();
+        if source {
+            self.ensure_caret_visible();
+        } else {
+            self.start_live_editing();
+        }
         true
+    }
+
+    /// 在源代码中按回车：Markdown 文件开着写作快捷键、光标不在代码块或公式块中时，列表项和
+    /// 引用续写记号（见 [`Self::live_enter`]）；返回是否已处理。
+    pub(in crate::app) fn source_markdown_enter(&mut self) -> bool {
+        if !self.markdown_keys() || self.markdown_live() {
+            return false;
+        }
+        let Some(doc) = self.editor.active() else {
+            return false;
+        };
+        if !doc.extra_selections().is_empty() {
+            return false;
+        }
+        let Some(rope) = doc.text().rope() else {
+            return false;
+        };
+        let head = rope.char_to_line(doc.selection.from().min(rope.len_chars()));
+        let lines: Vec<String> = (0..head).map(|l| rope.line(l).to_string()).collect();
+        if winc_preview::markdown::enter::inside_fence(lines.iter().map(String::as_str)) {
+            return false;
+        }
+        self.live_enter(false, true)
     }
 
     /// 补全闭围栏：在围栏行（```` ```rust ````、`$$`）末尾按回车时，光标移到两行围栏之间的空行。
@@ -522,6 +567,13 @@ impl App {
         let line = rope.byte_to_line(caret);
         let start = rope.line_to_byte(line);
         let before = rope.byte_slice(start..caret).to_string();
+        // 空的引用段落：与回车一样退出引用，上一行的空引用行一并去掉。
+        let after = line_end_text(rope, line, caret);
+        let prev = (line > 0).then(|| rope.line(line - 1).to_string());
+        let prev = prev.as_deref().map(|l| l.trim_end_matches(['\n', '\r']));
+        if winc_preview::markdown::enter::quote_gap(&before, &after, prev) {
+            return self.live_enter(false, false);
+        }
         let Some(edit) = winc_preview::markdown::enter::backspace(&before) else {
             // 光标位于块的开头：预览中看不到光标前的缩进和块之间的空行，逐个删除时光标
             // 看起来不动。一次删到上一行的末尾；隔着空行时与上一块合并。
@@ -965,4 +1017,11 @@ impl App {
         self.reset_blink();
         self.request_redraw();
     }
+}
+
+/// 返回第 `line` 行中字节偏移 `at` 之后到行尾的文字（不含换行符）。
+fn line_end_text(rope: &ropey::Rope, line: usize, at: usize) -> String {
+    let end = rope.line_to_byte(line) + rope.line(line).len_bytes();
+    let text = rope.byte_slice(at.min(end)..end).to_string();
+    text.trim_end_matches(['\n', '\r']).to_owned()
 }

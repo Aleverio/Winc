@@ -231,3 +231,40 @@ fn margins_split_quote_marks_from_indentation() {
     assert_eq!(margins("    - 子项"), (0, 4));
     assert_eq!(indent("  续行"), 2);
 }
+
+#[test]
+fn the_source_continues_lists_and_quotes_only() {
+    // 引用中下一行继续同一段引用；列表续一项；普通段落按普通方式换行。
+    assert_eq!(
+        source("> 引用", "", None, [].into_iter()),
+        Some(Edit::insert("\n> ".into()))
+    );
+    assert_eq!(
+        source("- 一", "", None, [].into_iter()),
+        Some(Edit::insert("\n- ".into()))
+    );
+    assert_eq!(source("段落", "", None, [].into_iter()), None);
+    // 空的引用行退出引用。
+    let exit = source("> ", "", None, ["> 引用"].into_iter()).unwrap();
+    assert_eq!((exit.before, exit.text.as_str()), (2, "\n"));
+}
+
+#[test]
+fn leaving_a_quote_drops_the_empty_quote_line_above() {
+    assert!(quote_gap("> ", "", Some(">")));
+    assert!(quote_gap("> > ", "", Some("> >")));
+    assert!(!quote_gap("> ", "", Some("> 引用")));
+    assert!(!quote_gap("> 字", "", Some(">")));
+    assert!(!quote_gap("> > ", "", Some(">")));
+}
+
+#[test]
+fn fences_are_tracked_from_the_top() {
+    let inside = |text: &str| inside_fence(text.lines());
+    assert!(inside("前\n```rust\nfn x() {}"));
+    assert!(!inside("```\ncode\n```\n后"));
+    assert!(inside("````\n```\n"));
+    assert!(inside("> ```\n> code"));
+    assert!(inside("$$\nx^2"));
+    assert!(!inside("$$\nx^2\n$$"));
+}

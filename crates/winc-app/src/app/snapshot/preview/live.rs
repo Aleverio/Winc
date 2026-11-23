@@ -835,3 +835,70 @@ fn shift_enter_breaks_the_line_inside_the_paragraph() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 回归：在空的引用段落上回车或退格退出引用时，上面那行空引用行一并去掉，引用的末尾不多出一个
+/// 空行。
+#[test]
+fn leaving_a_quote_drops_the_empty_quote_line() {
+    use winit::keyboard::{Key, NamedKey};
+    let enter = Key::Named(NamedKey::Enter);
+    let backspace = Key::Named(NamedKey::Backspace);
+
+    let (mut app, dir) = live_doc("md-quote-exit", "> 引用\n");
+    put_caret(&mut app, "引用", true);
+    assert!(app.markdown_key(&enter, false));
+    assert_eq!(with_caret(&app), "> 引用\n>\n> |\n");
+    settle(&mut app);
+    assert!(app.markdown_key(&enter, false));
+    assert_eq!(with_caret(&app), "> 引用\n\n|\n");
+
+    let (mut app, _) = live_doc("md-quote-back", "> 引用\n");
+    put_caret(&mut app, "引用", true);
+    assert!(app.markdown_key(&enter, false));
+    settle(&mut app);
+    assert!(app.markdown_key(&backspace, false));
+    assert_eq!(with_caret(&app), "> 引用\n\n|\n");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 源代码中按回车：引用、列表续写记号，空的项退出；普通段落和代码块中按普通方式换行。
+#[test]
+fn enter_in_markdown_source_continues_quotes_and_lists() {
+    let dir = sample_folder("md-source-enter");
+    let path = dir.join("SOURCE.md");
+    std::fs::write(&path, "> 引用\n\n- 一\n\n段落\n\n```\n- 代码\n```\n").unwrap();
+    let mut app = app_with(&path, false);
+    paint(&mut app);
+    let caret = |app: &App| {
+        let doc = app.editor.active().unwrap();
+        let mut text = doc_text(app);
+        let at = doc.text().rope().unwrap().char_to_byte(doc.selection.head);
+        text.insert(at, '|');
+        text
+    };
+    let put = |app: &mut App, needle: &str| {
+        let text = doc_text(app);
+        let byte = text.find(needle).unwrap() + needle.len();
+        let doc = app.editor.active_mut().unwrap();
+        let pos = doc.text().rope().unwrap().byte_to_char(byte);
+        doc.selection = winc_core::Selection::point(pos);
+    };
+
+    put(&mut app, "引用");
+    assert!(app.source_markdown_enter());
+    assert!(caret(&app).starts_with("> 引用\n> |\n"), "{}", caret(&app));
+    assert!(app.source_markdown_enter());
+    assert!(caret(&app).starts_with("> 引用\n\n|\n"), "{}", caret(&app));
+
+    put(&mut app, "- 一");
+    assert!(app.source_markdown_enter());
+    assert!(caret(&app).contains("- 一\n- |\n"), "{}", caret(&app));
+    assert!(app.source_markdown_enter());
+    assert!(caret(&app).contains("- 一\n\n|\n"), "{}", caret(&app));
+
+    put(&mut app, "段落");
+    assert!(!app.source_markdown_enter());
+    put(&mut app, "- 代码");
+    assert!(!app.source_markdown_enter());
+    let _ = std::fs::remove_dir_all(&dir);
+}

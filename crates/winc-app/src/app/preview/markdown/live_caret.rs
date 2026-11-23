@@ -611,8 +611,12 @@ impl App {
             // 打字机模式：平滑地滚到光标所在的行停在中间。
             let view = self.preview.markdown.area.h;
             let to = (y + h / 2.0 - view / 2.0).max(0.0);
-            if (to - self.preview.markdown.scroll()).abs() >= 1.0 {
-                self.glide_pane_to(ScrollTarget::Markdown, to);
+            let before = self.preview.markdown.scroll();
+            if (to - before).abs() >= 1.0 {
+                // 每换一行都平滑滚动，不论距离远近。
+                self.set_pane_scroll(ScrollTarget::Markdown, to);
+                let min = crate::app::scroll::editor::TYPEWRITER_MIN as f32;
+                self.glide_pane_over(ScrollTarget::Markdown, before, min);
             }
             return;
         }

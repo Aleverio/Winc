@@ -400,6 +400,8 @@ impl App {
             Key::Named(NamedKey::Home) => Command::LineStart { extend },
             Key::Named(NamedKey::End) => Command::LineEnd { extend },
             Key::Named(NamedKey::Enter | NamedKey::Tab) if control => return,
+            // Markdown 源代码中列表项、引用续写记号（`App::source_markdown_enter`）。
+            Key::Named(NamedKey::Enter) if !shift && self.source_markdown_enter() => return,
             Key::Named(NamedKey::Enter) => Command::Newline,
             Key::Named(NamedKey::Tab) if shift => Command::Outdent,
             Key::Named(NamedKey::Tab) => Command::Indent,
