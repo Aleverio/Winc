@@ -683,6 +683,35 @@ impl App {
         }
     }
 
+    /// 绘制一帧之前推进动画、滚动和预览，并重新排版。
+    pub(in crate::app) fn prepare_frame(&mut self) {
+        self.vim_sync();
+        self.settle_animations();
+        self.advance_wheel_glide();
+        self.advance_fling(Instant::now());
+        self.continue_drag_scroll();
+        self.track_modules();
+        self.track_about_logo();
+        self.track_commit_bars();
+        self.track_search_rows();
+        self.track_words();
+        self.track_suggest();
+        self.git_follow_active();
+        self.relayout();
+        self.run_when_loaded();
+        self.advance_search();
+        self.advance_images();
+    }
+
+    /// 按各区域在屏幕上的滚动位置（见 `App::begin_scroll_frame`）用 `renderer` 绘制并提交一帧，
+    /// 返回是否画成。
+    pub(in crate::app) fn draw_scrolled(&mut self, renderer: &mut Renderer) -> bool {
+        let scrolled = self.begin_scroll_frame();
+        let drawn = renderer.draw(|frame| view::draw(self, frame));
+        self.end_scroll_frame(scrolled);
+        drawn
+    }
+
     /// 绘制一帧并提交。
     ///
     /// 窗口看不见时跳过绘制；当前标签还在后台读取时保留上一帧；绘制后重新判断悬停目标，
@@ -701,22 +730,7 @@ impl App {
             self.frame.dirty = false;
             return;
         }
-        self.vim_sync();
-        self.settle_animations();
-        self.advance_wheel_glide();
-        self.advance_fling(Instant::now());
-        self.continue_drag_scroll();
-        self.track_modules();
-        self.track_about_logo();
-        self.track_commit_bars();
-        self.track_search_rows();
-        self.track_words();
-        self.track_suggest();
-        self.git_follow_active();
-        self.relayout();
-        self.run_when_loaded();
-        self.advance_search();
-        self.advance_images();
+        self.prepare_frame();
 
         self.caches.highlight_pending = false;
         self.ime.cursor = None;
@@ -734,9 +748,7 @@ impl App {
         if let Some(window) = &self.window.handle {
             window.pre_present_notify();
         }
-        let scrolled = self.begin_scroll_frame();
-        let drawn = renderer.draw(|frame| view::draw(self, frame));
-        self.end_scroll_frame(scrolled);
+        let drawn = self.draw_scrolled(&mut renderer);
         let elapsed = started.elapsed();
         self.frame.renderer = Some(renderer);
         if !drawn {

@@ -1379,12 +1379,12 @@ impl App {
         self.request_redraw();
     }
 
-    /// 立即同步绘制一帧，不等待下一轮事件循环。
+    /// 立即同步绘制一帧，不等待下一轮事件循环；画法与平常的一帧相同（见 `App::prepare_frame`）。
     pub(in crate::app) fn paint_now(&mut self) {
-        self.relayout();
+        self.prepare_frame();
         if let Some(mut renderer) = self.frame.renderer.take() {
             self.declare_base(&mut renderer);
-            renderer.draw(|frame| view::draw(self, frame));
+            self.draw_scrolled(&mut renderer);
             self.frame.renderer = Some(renderer);
         }
     }
