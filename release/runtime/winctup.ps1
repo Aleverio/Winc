@@ -210,7 +210,7 @@ function Prune-Releases([string]$Current, [string]$Previous) {
             continue
         }
         $count++
-        if ($count -gt $KEEP) { Remove-Item -LiteralPath $entry.Path -Recurse -Force }
+        if ($count -ge $KEEP) { Remove-Item -LiteralPath $entry.Path -Recurse -Force }
     }
 }
 
