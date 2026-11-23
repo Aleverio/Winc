@@ -46,6 +46,10 @@ pub enum Pick {
     KeyFile,
     /// 远端文件树的「下载…」：选本机的目录，把参数中的各项下载到那里。
     Download(Vec<PathBuf>),
+    /// 「将项目另存为…」：选项目文件的保存位置。
+    SaveProject,
+    /// 「打开项目…」：只能选项目文件（见 [`winc_config::PROJECT_EXTENSIONS`]）。
+    OpenProject,
 }
 
 /// 无法打开的文件在编辑区中给出的操作。
@@ -182,7 +186,7 @@ impl App {
         if self.is_folder(&path) || !self.may_be_file(&path) {
             return;
         }
-        self.update_state(|state| state.remember_file(&path));
+        self.update_state(move |state| state.remember_file(&path));
     }
 
     /// 在预览标签中打开文件 `path`。
@@ -369,7 +373,8 @@ impl App {
         self.jumps.navigation.relocate(from, to);
         let known = |(path, _): &(PathBuf, _)| path.starts_with(from);
         if self.state.places.iter().any(known) {
-            self.update_state(|state| state.move_places(from, to));
+            let (old, new) = (from.to_path_buf(), to.to_path_buf());
+            self.update_state(move |state| state.move_places(&old, &new));
         }
         self.picker_touched(vec![from.to_path_buf(), to.to_path_buf()]);
         self.files_changed_under_results();
@@ -846,6 +851,10 @@ impl App {
         {
             return;
         }
+        // 窗口内绘制的提示框，以及尚未答复的关闭询问，与系统的提示框同样处理。
+        if self.overlays.alert.is_some() || self.closing_pending() {
+            return;
+        }
         for &id in ids {
             let Some(doc) = self.editor.document(id) else {
                 continue;
@@ -1055,12 +1064,14 @@ impl App {
                 (name, dir)
             }
             Pick::KeyFile => (String::new(), crate::app::remote::key_dir()),
+            Pick::SaveProject => self.project_save_place(),
             Pick::Open
             | Pick::OpenFolder
             | Pick::WslFolder(_)
             | Pick::WorktreeFolder
             | Pick::AddFolder
             | Pick::BackgroundImage
+            | Pick::OpenProject
             | Pick::Download(_) => (String::new(), None),
         };
 
@@ -1075,6 +1086,12 @@ impl App {
                 Pick::Open | Pick::BackgroundImage | Pick::KeyFile => Panel::Open {
                     files: true,
                     dir: dir.as_deref(),
+                    types: &[],
+                },
+                Pick::OpenProject => Panel::Open {
+                    files: true,
+                    dir: None,
+                    types: winc_config::PROJECT_EXTENSIONS,
                 },
                 Pick::OpenFolder
                 | Pick::WslFolder(_)
@@ -1083,8 +1100,9 @@ impl App {
                 | Pick::Download(_) => Panel::Open {
                     files: false,
                     dir: None,
+                    types: &[],
                 },
-                Pick::SaveAs(_) => Panel::Save {
+                Pick::SaveAs(_) | Pick::SaveProject => Panel::Save {
                     name: &name,
                     dir: dir.as_deref(),
                 },
@@ -1109,13 +1127,26 @@ impl App {
                     let choose = Choose::Open {
                         directory: false,
                         dir: None,
+                        types: None,
                     };
                     (choose, t!("cmd-open-file"))
+                }
+                Pick::OpenProject => {
+                    let choose = Choose::Open {
+                        directory: false,
+                        dir: None,
+                        types: Some((
+                            t!("workspace-project-files"),
+                            winc_config::PROJECT_EXTENSIONS,
+                        )),
+                    };
+                    (choose, t!("cmd-open-project"))
                 }
                 Pick::KeyFile => {
                     let choose = Choose::Open {
                         directory: false,
                         dir: dir.as_deref(),
+                        types: None,
                     };
                     (choose, t!("workspace-remote-dialog-key-choose"))
                 }
@@ -1123,6 +1154,7 @@ impl App {
                     let choose = Choose::Open {
                         directory: true,
                         dir: None,
+                        types: None,
                     };
                     (choose, t!("cmd-open-folder"))
                 }
@@ -1130,6 +1162,7 @@ impl App {
                     let choose = Choose::Open {
                         directory: true,
                         dir: None,
+                        types: None,
                     };
                     (choose, t!("menu-download"))
                 }
@@ -1139,6 +1172,13 @@ impl App {
                         dir: dir.as_deref(),
                     },
                     t!("cmd-save-as"),
+                ),
+                Pick::SaveProject => (
+                    Choose::Save {
+                        name: &name,
+                        dir: dir.as_deref(),
+                    },
+                    t!("cmd-save-project-as"),
                 ),
             };
             // 面板的标题不带省略号。
@@ -1157,11 +1197,13 @@ impl App {
             // 系统的对话框只能选文件或者只能选目录：「打开…」选文件，目录从「打开目录…」选。
             let title = match &kind {
                 Pick::Open | Pick::BackgroundImage => t!("cmd-open-file"),
+                Pick::OpenProject => t!("cmd-open-project"),
                 Pick::KeyFile => t!("workspace-remote-dialog-key-choose"),
                 Pick::OpenFolder | Pick::WorktreeFolder => t!("cmd-open-folder"),
                 Pick::AddFolder => t!("cmd-add-folder"),
                 Pick::WslFolder(_) => t!("cmd-open-wsl-folder"),
                 Pick::SaveAs(_) => t!("cmd-save-as"),
+                Pick::SaveProject => t!("cmd-save-project-as"),
                 Pick::Download(_) => t!("menu-download"),
             };
             // 对话框的标题不带省略号；挂在窗口上，打开期间窗口不响应。
@@ -1171,6 +1213,10 @@ impl App {
             }
             if let Some(dir) = &dir {
                 dialog = dialog.set_directory(dir);
+            }
+            if matches!(kind, Pick::OpenProject) {
+                let name = t!("workspace-project-files");
+                dialog = dialog.add_filter(name, winc_config::PROJECT_EXTENSIONS);
             }
             // 对话框有自己的消息循环，在后台线程上等待关闭，事件循环正常运行。
             std::thread::spawn(move || {
@@ -1182,13 +1228,15 @@ impl App {
                     dialog = dialog.set_directory(home.unwrap_or(root));
                 }
                 let path = match &kind {
-                    Pick::Open | Pick::BackgroundImage | Pick::KeyFile => dialog.pick_file(),
+                    Pick::Open | Pick::BackgroundImage | Pick::KeyFile | Pick::OpenProject => {
+                        dialog.pick_file()
+                    }
                     Pick::OpenFolder
                     | Pick::WslFolder(_)
                     | Pick::WorktreeFolder
                     | Pick::AddFolder
                     | Pick::Download(_) => dialog.pick_folder(),
-                    Pick::SaveAs(_) => dialog.set_file_name(&name).save_file(),
+                    Pick::SaveAs(_) | Pick::SaveProject => dialog.set_file_name(&name).save_file(),
                 };
                 let _ = proxy.send_event(UserEvent::Picked(kind, path));
             });
@@ -1227,22 +1275,23 @@ impl App {
             | Pick::AddFolder
             | Pick::BackgroundImage
             | Pick::KeyFile
-            | Pick::Download(_) => None,
+            | Pick::Download(_)
+            | Pick::SaveProject
+            | Pick::OpenProject => None,
         };
 
         let Some(path) = path else { return };
 
         match kind {
-            Pick::Open => {
-                self.open_path(&path);
-                self.note_opened_file(&path);
-            }
+            Pick::Open => self.open_from_outside(&path),
             Pick::OpenFolder | Pick::WslFolder(_) => self.open_path(&path),
             Pick::WorktreeFolder => self.worktree_folder_picked(path),
             Pick::AddFolder => self.add_folder(&path),
             Pick::BackgroundImage => self.set_background_image(Some(path)),
             Pick::KeyFile => self.key_file_picked(&path),
             Pick::Download(paths) => self.download(paths, path),
+            Pick::SaveProject => self.save_project_as(path),
+            Pick::OpenProject => self.open_from_outside(&path),
             Pick::SaveAs(id) => {
                 if self.save_document(id, Some(path))
                     && let Some(prompt) = continuation
@@ -1279,9 +1328,8 @@ impl App {
             .is_some_and(winc_editor::Watcher::reliable);
         if !live {
             // 发行版无法访问时目录都读不到，保留现有的文件树。
-            let reachable = self.editor.root().is_none_or(winc_editor::wsl::reachable);
-            if let Some(ws) = (self.editor.workspace.as_mut()).filter(|_| reachable) {
-                ws.refresh();
+            if self.editor.root().is_none_or(winc_editor::wsl::reachable) {
+                self.rescan_tree(|_| {});
             }
             self.overlays.picker.stale = true;
         }
