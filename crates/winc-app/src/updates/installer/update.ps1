@@ -45,8 +45,11 @@ try {
     }
     if ($process.ExitCode -notin @(0, 1641, 3010)) { throw "installer failed with $($process.ExitCode)" }
     # A silent installer skips a file that is still in use and reports success all the same.
+    # With 1641 or 3010 the files are replaced at the next restart, so they are unchanged for now.
     $after = (Get-FileHash -LiteralPath $Executable -Algorithm SHA256).Hash
-    if ($after -eq $before) { throw 'the installer left the application unchanged' }
+    if ($process.ExitCode -eq 0 -and $after -eq $before) {
+        throw 'the installer left the application unchanged'
+    }
     $held.Dispose()
     if ($Relaunch -eq '1') { Start-Process -FilePath $Executable -WorkingDirectory $directory }
     exit 0

@@ -402,3 +402,17 @@ fn changes_below_a_watched_link_are_reported_under_the_link() {
     wait_for(&watcher, &woken, &[&link.join("ready.txt")]);
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// 指向上级目录、主目录或根目录的链接只监视一层；指向别处的整棵监视。
+#[test]
+fn links_to_folders_that_contain_them_or_home_are_watched_one_level_deep() {
+    let home = Path::new("/home/me");
+    let link = Path::new("/home/me/project/up");
+    for real in ["/home/me/project", "/home/me", "/home", "/"] {
+        assert!(is_wide(link, Path::new(real), Some(home)), "{real}");
+    }
+    for real in ["/home/me/other", "/srv/data", "/home/me/project/up-real"] {
+        assert!(!is_wide(link, Path::new(real), Some(home)), "{real}");
+    }
+    assert!(!is_wide(link, Path::new("/srv"), None));
+}

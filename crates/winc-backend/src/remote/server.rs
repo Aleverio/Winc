@@ -78,6 +78,8 @@ struct Job {
     cancelled: AtomicBool,
     /// 命令的进程组（组长的进程号）；命令还没有启动时为 `None`。
     group: Mutex<Option<i32>>,
+    /// 组长是否已经退出并被回收：此后它的进程号可能给了别的程序，见 [`kill_group`]。
+    reaped: AtomicBool,
     /// 输出按需发送时还可以发送的标准输出字节数，对端读走后追加（[`kind::CREDIT`]）。
     credit: Mutex<usize>,
     /// 可以发送的字节数增加，或命令被要求结束时通知。
@@ -95,7 +97,7 @@ impl Job {
         self.cancelled.store(true, Ordering::Relaxed);
         let group = *self.group.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(group) = group {
-            kill_group(group);
+            kill_group(group, self.reaped.load(Ordering::Relaxed));
         }
         // 取得锁再通知：等待的线程要么还没检查过标志，要么已经在等通知。
         let _credit = self.credit.lock().unwrap_or_else(PoisonError::into_inner);
@@ -897,6 +899,7 @@ fn exec(frame: &Frame, job: &Arc<Job>, output: &Output) -> io::Result<Vec<u8>> {
     drop(progress);
     // 被要求结束时进程组由 `Job::cancel` 结束，这里随之返回。
     let status = child.wait();
+    job.reaped.store(true, Ordering::Relaxed);
     // 命令已退出，输出的管道可能仍被它遗留在后台的子进程占用：等 `GRACE`，仍未关闭就结束
     // 进程组，再等 `GRACE`。此后不再等待：脱离了进程组的子进程不能让这个请求一直不结束。
     // 读取的线程等着对端读走输出时不计时：输出还没有发完，不是管道被占着。
@@ -920,7 +923,7 @@ fn exec(frame: &Frame, job: &Arc<Job>, output: &Output) -> io::Result<Vec<u8>> {
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 killed = true;
                 if let Some(group) = group {
-                    kill_group(group);
+                    kill_group(group, true);
                 }
                 deadline = Instant::now() + GRACE;
             }
@@ -944,12 +947,19 @@ fn exec(frame: &Frame, job: &Arc<Job>, output: &Output) -> io::Result<Vec<u8>> {
     }
 }
 
-/// 强制结束进程组 `group`（组长的进程号）。组内已没有进程时没有效果。
-// 本函数只有对 `libc::kill` 的一次调用需要 `unsafe`，因此只在此处放开 `unsafe_code`。
+/// 强制结束进程组 `group`（组长的进程号）；`reaped` 是组长是否已被回收。组内已没有进程时
+/// 没有效果。
+///
+/// 组长被回收后，组内还有进程时它的号码不会再分配；组散了以后号码可以给新的进程。这时又有
+/// 进程用着这个号码，就是别的程序，不发信号。
+// 本函数只有对 `libc` 的两次调用需要 `unsafe`，因此只在此处放开 `unsafe_code`。
 #[allow(unsafe_code)]
-fn kill_group(group: i32) {
-    // SAFETY: 负的进程号表示进程组。`kill` 只发送信号，不访问内存，失败时返回 -1。组长已被
-    // 回收后，其进程号在组内仍有进程时不会被重新分配，信号不会发给无关的进程。
+fn kill_group(group: i32, reaped: bool) {
+    // SAFETY: `getsid` 只查询，没有这个进程时返回 -1。
+    if reaped && unsafe { libc::getsid(group) } > 0 {
+        return;
+    }
+    // SAFETY: 负的进程号表示进程组。`kill` 只发送信号，不访问内存，失败时返回 -1。
     unsafe { libc::kill(-group, libc::SIGKILL) };
 }
 

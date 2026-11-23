@@ -223,8 +223,14 @@ fn run_launch(
 }
 
 /// 记录用户同意运行 `config` 时使用的键：同一个文件中的各配置分别记录。
+///
+/// 名字接在配置文件的路径后面，不用 `Path::join`：名字写成绝对路径时它会取代整个路径，键就
+/// 成了别的目录的。
 fn trust_key(root: &Path, config: &RunConfig) -> PathBuf {
-    run_configs_path(root).join(&config.name)
+    let mut key = run_configs_path(root).into_os_string();
+    key.push(std::path::MAIN_SEPARATOR_STR);
+    key.push(&config.name);
+    PathBuf::from(key)
 }
 
 impl App {

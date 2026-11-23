@@ -1360,7 +1360,7 @@ fn a_file_opened_while_tabs_are_restored_stays_current() {
     assert_eq!(app.state.session_for(&root), Some(&session));
 
     let prepared = crate::app::prepare_restore(Some(&root), Some(&session), None);
-    *app.disk.prepared.lock().unwrap() = Some((root, Some(session), prepared));
+    *app.disk.prepared.lock().unwrap() = vec![(root, Some(session), prepared)];
     app.poll_prepared_tabs();
     assert!(!app.restoring_tabs());
     let paths: Vec<_> = (app.editor.documents.iter())
@@ -1374,4 +1374,27 @@ fn a_file_opened_while_tabs_are_restored_stays_current() {
         app.editor.active().unwrap().path.as_deref(),
         Some(second.as_path())
     );
+}
+
+#[test]
+fn tabs_are_restored_when_another_folders_result_arrives_alongside() {
+    let dir = sample_folder("session-two-results");
+    let other = sample_folder("session-two-results-other");
+    let mut app = blank_app(false);
+    app.open_folder(&dir);
+    let root = app.editor.root().unwrap().to_path_buf();
+
+    // 当前目录的结果和另一个目录晚到的结果在界面线程收取之前都放了进来。
+    app.disk.restoring = Some(root.clone());
+    let results = vec![
+        (root, None, crate::app::Prepared::default()),
+        (other.clone(), None, crate::app::Prepared::default()),
+    ];
+    *app.disk.prepared.lock().unwrap() = results;
+    app.poll_prepared_tabs();
+    assert!(!app.restoring_tabs());
+    assert!(app.disk.prepared.lock().unwrap().is_empty());
+
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&other);
 }

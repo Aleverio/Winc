@@ -104,6 +104,15 @@ pub struct Watcher {
     inner: Inner,
 }
 
+/// 链接 `link` 指向的目录 `real` 是否大到不能整棵监视：它包含链接自己（指向上级目录），或
+/// 包含主目录 `home`。这样的链接只监视它的这一层。
+///
+/// 整棵监视在有的系统上要给每个子目录登记一次：指向上级目录、主目录或根目录的链接会把整棵
+/// 树都登记上，占满系统的监视名额。
+fn is_wide(link: &Path, real: &Path, home: Option<&Path>) -> bool {
+    link.starts_with(real) || home.is_some_and(|home| home.starts_with(real))
+}
+
 impl Watcher {
     /// 开始递归监视 `root` 及其所有子目录。
     ///
@@ -157,6 +166,13 @@ impl Watcher {
         let real = real.filter(|real| real != root);
         // 监视真实路径：不跟随链接时，监视链接本身收不到它指向的目录中的变化。
         let watched = real.clone().unwrap_or_else(|| root.to_path_buf());
+        let home = crate::wsl::home_dir(root);
+        let home = home.and_then(|home| winc_config::files::canonicalize(home).ok());
+        let wide = (real.as_deref()).is_some_and(|real| is_wide(root, real, home.as_deref()));
+        let mode = match wide {
+            true => RecursiveMode::NonRecursive,
+            false => RecursiveMode::Recursive,
+        };
 
         // 不跟随符号链接：文件树不展开链接到的目录，监视它们只会多占监视名额；链接指向上级
         // 目录时还会把整个上级目录树都监视上。
@@ -187,7 +203,7 @@ impl Watcher {
             },
             config,
         )?;
-        inner.watch(&watched, RecursiveMode::Recursive)?;
+        inner.watch(&watched, mode)?;
         Ok(Watcher {
             root: root.to_path_buf(),
             pending,

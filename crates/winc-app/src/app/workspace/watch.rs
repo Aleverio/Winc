@@ -100,6 +100,14 @@ type FetchBack = (u64, winc_editor::DirFetched);
 /// 目录读好并放进文件树的缓存后要做的事，参数是递归展开的范围。
 type AfterFetch = Box<dyn FnOnce(&mut App, winc_editor::Expansion)>;
 
+impl TreeScans {
+    /// 丢弃等目录读好后要做的事：换了打开的目录，它们说的行和路径属于原来的目录。
+    pub(in crate::app) fn forget_follow_ups(&mut self) {
+        self.after.clear();
+        self.then.clear();
+    }
+}
+
 impl Default for TreeScans {
     fn default() -> Self {
         Self {

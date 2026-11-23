@@ -188,7 +188,7 @@ impl App {
         self.spawn_blocking_then(UserEvent::TabsPrepared, move || {
             let prepared = prepare_restore(Some(&root), session.as_ref(), backups.as_deref());
             let mut slot = slot.lock().unwrap_or_else(PoisonError::into_inner);
-            *slot = Some((root, session, prepared));
+            slot.push((root, session, prepared));
         });
         self.request_redraw();
     }
@@ -202,15 +202,18 @@ impl App {
     ///
     /// 期间打开的文件仍是当前标签，不被现场里当时的当前标签取代。
     pub(in crate::app) fn poll_prepared_tabs(&mut self) {
-        let prepared = (self.disk.prepared.lock())
-            .unwrap_or_else(PoisonError::into_inner)
-            .take();
-        let Some((root, session, prepared)) = prepared else {
+        // 几个目录的结果可能先后到达：只取正在等的那个目录的，其余的丢弃。
+        let prepared = {
+            let mut slot = (self.disk.prepared.lock()).unwrap_or_else(PoisonError::into_inner);
+            std::mem::take(&mut *slot)
+        };
+        let wanted = |root: &PathBuf| {
+            self.disk.restoring.as_ref() == Some(root) && self.editor.root() == Some(root)
+        };
+        let prepared = prepared.into_iter().rfind(|(root, ..)| wanted(root));
+        let Some((_, session, prepared)) = prepared else {
             return;
         };
-        if self.disk.restoring.as_ref() != Some(&root) || self.editor.root() != Some(&root) {
-            return;
-        }
         self.disk.restoring = None;
         let opened = self.editor.active().map(|doc| doc.id);
         let restored = restore_prepared(&mut self.editor, session.as_ref(), prepared);
@@ -291,6 +294,8 @@ impl App {
     /// 包括输入框和浮层、全局搜索结果、`⌘P` 面板的文件表、文件树的滚动位置和动画、
     /// 已关闭标签的记录（`⇧⌘T`）以及后退前进历史。
     fn reset_folder_views(&mut self) {
+        // 等文件树读好后要做的事（选中某一行等）属于旧目录。
+        self.panels.tree.scans.forget_follow_ups();
         // 输入框和浮层中保存的行号、路径属于旧目录，在新目录中无效。
         self.panels.name_input = None;
         self.bars.goto_input = None;
@@ -645,4 +650,4 @@ fn report_state_error(result: &std::io::Result<()>) {
 }
 
 /// 后台读好的、恢复标签要用的内容：目录、它的现场和读到的备份。
-pub(in crate::app) type PreparedTabs = Arc<Mutex<Option<(PathBuf, Option<Session>, Prepared)>>>;
+pub(in crate::app) type PreparedTabs = Arc<Mutex<Vec<(PathBuf, Option<Session>, Prepared)>>>;
