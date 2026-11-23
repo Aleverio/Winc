@@ -344,12 +344,7 @@ impl ApplicationHandler<UserEvent> for App {
                     self.reset_blink();
                     self.terminal_window_focused();
                     // 其他 winc 窗口可能修改了最近列表，重新读取后开始页和项目菜单显示最新内容。
-                    // 读不出来时保留内存中的状态，不换成空的。
-                    if let Some(path) = &self.store.state_path
-                        && let Ok(Some(state)) = State::read(path)
-                    {
-                        self.state = state;
-                    }
+                    self.reload_state();
                 } else {
                     self.cancel_chord();
                     let ids: Vec<DocumentId> = self.editor.documents.iter().map(|d| d.id).collect();
@@ -530,6 +525,7 @@ impl App {
                 }
             }
             UserEvent::CloseConfirmed(ok) => self.close_confirmed(ok),
+            UserEvent::StateStored(request, state) => self.state_stored(request, *state),
             UserEvent::LatexRc(approved) => {
                 let (doc, dir, text) = *approved;
                 self.latex_rc_approved(doc, &dir, &text);

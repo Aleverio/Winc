@@ -182,7 +182,7 @@ impl App {
         if self.is_folder(&path) || !self.may_be_file(&path) {
             return;
         }
-        self.update_state(|state| state.remember_file(&path));
+        self.update_state(move |state| state.remember_file(&path));
     }
 
     /// 在预览标签中打开文件 `path`。
@@ -369,7 +369,8 @@ impl App {
         self.jumps.navigation.relocate(from, to);
         let known = |(path, _): &(PathBuf, _)| path.starts_with(from);
         if self.state.places.iter().any(known) {
-            self.update_state(|state| state.move_places(from, to));
+            let (old, new) = (from.to_path_buf(), to.to_path_buf());
+            self.update_state(move |state| state.move_places(&old, &new));
         }
         self.picker_touched(vec![from.to_path_buf(), to.to_path_buf()]);
         self.files_changed_under_results();

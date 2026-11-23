@@ -758,7 +758,7 @@ impl App {
 
     /// 显示或隐藏缩略图栏（带滑入、滑出的过渡），并记入状态文件。
     pub(in crate::app) fn toggle_pdf_thumbnails(&mut self) {
-        self.update_state(|state| state.pdf_thumbnails_hidden = !state.pdf_thumbnails_hidden);
+        self.update_state(move |state| state.pdf_thumbnails_hidden = !state.pdf_thumbnails_hidden);
         let shown = !self.state.pdf_thumbnails_hidden;
         self.preview.pdf.strip_motion = self.clock(PDF_MOTION).map(|clock| (shown, clock));
         self.request_redraw();

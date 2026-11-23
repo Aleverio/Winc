@@ -224,7 +224,7 @@ impl App {
     /// 窗口要关了：记下它的大小和位置；有多个窗口时最后关闭的算数。
     pub(super) fn remember_window(&mut self) {
         if let Some(frame) = self.window_frame_now() {
-            self.update_state(|state| state.window = Some(frame));
+            self.update_state(move |state| state.window = Some(frame));
         }
     }
 

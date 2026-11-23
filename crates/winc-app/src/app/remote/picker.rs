@@ -548,9 +548,10 @@ impl App {
             _ => None,
         };
         let selected = self.overlays.picker.selected;
-        self.update_state(|state| {
+        let removed = host.clone();
+        self.update_state(move |state| {
             folders.iter().for_each(|folder| state.forget(folder));
-            if let Some(host) = &host {
+            if let Some(host) = &removed {
                 state.set_remote_key(host.as_str(), "");
             }
         });

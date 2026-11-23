@@ -197,6 +197,16 @@ impl Shared {
         found.map(|(key, _)| *key)
     }
 
+    /// 各窗口开着的目录，连同它们规范化后的路径：[`Self::window_with`] 认作同一个目录的写法。
+    pub fn open_roots(&self) -> Vec<PathBuf> {
+        let roots = self.roots.borrow();
+        let real = |root: &PathBuf| winc_config::files::canonicalize(root).ok();
+        let roots = roots
+            .iter()
+            .flat_map(|(_, root)| [Some(root.clone()), real(root)]);
+        roots.flatten().collect()
+    }
+
     /// 开着包含 `path` 的目录的窗口；有几个时（嵌套的目录）取最里面的一个。
     pub fn window_containing(&self, path: &Path) -> Option<WindowKey> {
         let roots = self.roots.borrow();
@@ -839,6 +849,8 @@ impl Winc {
         let mut app = App::new(editor, proxy, Bench::off(), config);
         app.watch_git_output();
         app.store.config_path = template.config_path;
+        // 新窗口从文件读状态：先等其他窗口提交的修改写完。
+        winc_config::state_writer::flush();
         app.state = (template.state_path.as_deref())
             .map(State::load_from)
             .unwrap_or_default();
@@ -998,6 +1010,8 @@ impl ApplicationHandler<Envelope> for Winc {
         for slot in &mut self.windows {
             slot.app.exiting(event_loop);
         }
+        // 各窗口退出时提交的现场先写完：进程结束前文件里是全的，下面的写入也排在它们之后。
+        winc_config::state_writer::flush();
         self.remember_windows();
     }
 }

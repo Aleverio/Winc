@@ -229,7 +229,7 @@ impl App {
     pub(in crate::app) fn close_folder_now(&mut self) {
         // `last` 是别的 winc 进程写的（指向别的目录）时不动，该进程异常中止后仍需用它恢复。
         if let Some(root) = self.editor.root().map(Path::to_path_buf) {
-            self.update_state(|state| {
+            self.update_state(move |state| {
                 if state.last.as_deref() == Some(root.as_path()) {
                     state.last = None;
                 }
@@ -286,7 +286,7 @@ impl App {
 
         // 退出时会再记录一次；此处先设置 `last`，使进程异常中止后下次启动仍能回到该目录，
         // 并找回未保存的内容。还没有现场的目录先记一个空现场：`last` 只认有现场的目录。
-        self.update_state(|state| {
+        self.update_state(move |state| {
             state.remember(&root);
             if state.session_for(&root).is_none() {
                 state.set_session(Session {
@@ -315,16 +315,12 @@ impl App {
     pub(in crate::app) fn save_session(&mut self) {
         let reopen = self.config.restore_folder != Some(false);
         let root = self.editor.root().map(Path::to_path_buf);
-        let shared = self.link.shared.clone();
-        self.update_state(|state| match root {
+        let open = self.link.shared.open_roots();
+        self.update_state(move |state| match root {
             Some(root) if reopen => state.last = Some(root),
             _ if !reopen => state.last = None,
             _ => {
-                if state
-                    .last
-                    .as_deref()
-                    .is_some_and(|last| shared.window_with(last, None).is_none())
-                {
+                if (state.last.as_ref()).is_some_and(|last| !open.contains(last)) {
                     state.last = None;
                 }
             }
@@ -340,7 +336,7 @@ impl App {
         let places = self.places_now();
         let Some(folder) = self.editor.root().map(Path::to_path_buf) else {
             if !places.is_empty() {
-                self.update_state(|state| places::record(state, &places));
+                self.update_state(move |state| places::record(state, &places));
             }
             return;
         };
@@ -387,7 +383,7 @@ impl App {
         let folds = self.editor.all_folds().into_iter().collect();
         let earlier = self.state.session_for(&folder).and_then(|s| s.window);
         let window = self.window_frame_now().or(earlier);
-        self.update_state(|state| {
+        self.update_state(move |state| {
             places::record(state, &places);
             state.set_session(Session {
                 folder,
@@ -411,7 +407,8 @@ impl App {
 
     /// 最近列表中的目录已不存在（删除、移动，或者外接磁盘未挂载）：从列表中移除并提示。
     pub(in crate::app) fn forget_missing_recent(&mut self, folder: &Path) {
-        self.update_state(|state| state.forget(folder));
+        let gone = folder.to_path_buf();
+        self.update_state(move |state| state.forget(&gone));
         self.notify(
             NoticeKind::Warning,
             winc_i18n::t!(
@@ -423,19 +420,68 @@ impl App {
 
     /// 修改状态（最近目录、各目录的现场）并写入状态文件；失败时在标准错误输出原因。
     ///
-    /// 先重新读出状态文件，在其上修改再写回（见 [`State::update`]），不会盖掉别的 winc 进程
-    /// 刚写入的内容；内存中的状态随之换成最新的。测试和测量时没有状态文件，只改内存。
-    pub(in crate::app) fn update_state(&mut self, change: impl FnOnce(&mut State)) {
+    /// 内存中的状态立即修改；文件由后台重新读出、在其上做同一个修改再写回（见
+    /// [`State::update`]），不会盖掉别的 winc 进程刚写入的内容，写完后内存中的状态换成文件里
+    /// 的（[`App::state_stored`]）。测试和测量时没有状态文件，只改内存；没有事件循环时当场写。
+    pub(in crate::app) fn update_state(
+        &mut self,
+        change: impl FnOnce(&mut State) + Clone + Send + 'static,
+    ) {
         let Some(path) = self.store.state_path.clone() else {
             change(&mut self.state);
             return;
         };
-        let (state, result) = State::update(&path, &self.state, change);
-        self.state = state;
-        if let Err(e) = result {
-            eprintln!("winc: 无法记下最近打开的目录：{e}");
-        }
+        let Some(proxy) = self.link.proxy.clone() else {
+            let (state, result) = State::update(&path, &self.state, change);
+            self.state = state;
+            report_state_error(&result);
+            self.sync_system_recents();
+            return;
+        };
+        let current = self.state.clone();
+        change.clone()(&mut self.state);
         self.sync_system_recents();
+        self.store.state_requests += 1;
+        let request = self.store.state_requests;
+        winc_config::state_writer::update(path, current, change, move |state, result| {
+            report_state_error(result);
+            let stored = UserEvent::StateStored(request, Box::new(state.clone()));
+            let _ = proxy.send_event(stored);
+        });
+    }
+
+    /// 在后台重新读出状态文件：其他 winc 进程可能修改了最近列表。读不出来时保留内存中的状态。
+    pub(in crate::app) fn reload_state(&mut self) {
+        let Some(path) = self.store.state_path.clone() else {
+            return;
+        };
+        let Some(proxy) = self.link.proxy.clone() else {
+            if let Ok(Some(state)) = State::read(&path) {
+                self.state = state;
+            }
+            return;
+        };
+        self.store.state_requests += 1;
+        let request = self.store.state_requests;
+        winc_config::state_writer::reload(path, move |state| {
+            let _ = proxy.send_event(UserEvent::StateStored(request, Box::new(state)));
+        });
+    }
+
+    /// 后台读写完了状态文件：内存中的状态换成文件里的，其中有其他 winc 进程写入的内容。
+    ///
+    /// 之后又提交过读写时不换：文件里还没有那些修改，等最后一次的结果。
+    pub(in crate::app) fn state_stored(&mut self, request: u64, state: State) {
+        if request != self.store.state_requests {
+            return;
+        }
+        let recents = |state: &State| (state.recent.clone(), state.recent_files.clone());
+        let changed = recents(&state) != recents(&self.state);
+        self.state = state;
+        if changed {
+            self.sync_system_recents();
+        }
+        self.request_redraw();
     }
 
     /// 把最近打开的目录和文件交给系统：macOS 的最近文档列表（程序坞菜单）、Windows 的任务栏
@@ -532,12 +578,19 @@ impl App {
             }
             StartAction::Forget(index) => {
                 if let Some(folder) = self.state.recent.get(index).cloned() {
-                    self.update_state(|state| state.forget(&folder));
+                    self.update_state(move |state| state.forget(&folder));
                 }
             }
         }
 
         self.set_hover(Hover::None);
         self.request_redraw();
+    }
+}
+
+/// 状态文件没能写入时在标准错误输出原因。
+fn report_state_error(result: &std::io::Result<()>) {
+    if let Err(e) = result {
+        eprintln!("winc: 无法记下最近打开的目录：{e}");
     }
 }

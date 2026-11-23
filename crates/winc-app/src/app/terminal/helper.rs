@@ -666,7 +666,7 @@ impl App {
             self.terminal
                 .python_declined
                 .retain(|declined| *declined != venv);
-            self.update_state(|state| state.trust_repo(&venv, 1));
+            self.update_state(move |state| state.trust_repo(&venv, 1));
         } else if !self.terminal.python_declined.contains(&venv) {
             self.terminal.python_declined.push(venv);
         }

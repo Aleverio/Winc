@@ -55,6 +55,7 @@ impl App {
                 saved_config: config.clone(),
                 config_path: None,
                 state_path: None,
+                state_requests: 0,
                 config_rev: 0,
             },
             config,

@@ -548,7 +548,7 @@ impl App {
     /// 打开或关闭「显示全部仓库」；所有窗口共用，下次启动沿用。
     pub(in crate::app) fn toggle_all_repositories(&mut self) {
         let on = !self.commit_all_repositories();
-        self.update_state(|state| state.commit_all_repositories = Some(on));
+        self.update_state(move |state| state.commit_all_repositories = Some(on));
         if on {
             self.git_read_summaries();
         }

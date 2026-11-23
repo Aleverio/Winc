@@ -152,6 +152,6 @@ impl App {
 
     /// 打开或关闭提交前格式化（提交按钮的菜单）。
     pub(super) fn toggle_reformat(&mut self) {
-        self.update_state(|state| state.commit_reformat = !state.commit_reformat);
+        self.update_state(move |state| state.commit_reformat = !state.commit_reformat);
     }
 }

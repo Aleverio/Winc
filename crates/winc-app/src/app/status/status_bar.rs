@@ -138,7 +138,7 @@ impl App {
             MenuCommand::UseLanguage(i) => {
                 if let Some(&language) = winc_syntax::languages().get(i) {
                     self.use_language(language);
-                    self.update_state(|state| state.remember_language(language.id));
+                    self.update_state(move |state| state.remember_language(language.id));
                 }
             }
             MenuCommand::UsePlainText => self.use_language(winc_syntax::detect("")),

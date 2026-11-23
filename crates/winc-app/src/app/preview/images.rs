@@ -424,7 +424,7 @@ impl App {
             PreviewMode::Preview => Some("preview"),
         };
         let key = preview_key(kind).to_owned();
-        self.update_state(|state| match saved {
+        self.update_state(move |state| match saved {
             Some(mode) => _ = state.preview_modes.insert(key, mode.to_owned()),
             None => _ = state.preview_modes.remove(&key),
         });

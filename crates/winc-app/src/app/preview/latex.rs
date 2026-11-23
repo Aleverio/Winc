@@ -429,7 +429,8 @@ impl App {
 
     /// 用户同意运行目录 `dir` 中内容为 `text` 的 `latexmkrc`：记下来，重新编译文档 `doc`。
     pub(in crate::app) fn latex_rc_approved(&mut self, doc: DocumentId, dir: &Path, text: &str) {
-        self.update_state(|state| state.approve_command(dir, text));
+        let (dir, text) = (dir.to_path_buf(), text.to_owned());
+        self.update_state(move |state| state.approve_command(&dir, &text));
         self.build_latex(doc);
     }
 

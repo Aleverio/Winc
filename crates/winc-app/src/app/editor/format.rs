@@ -634,7 +634,7 @@ impl App {
             return;
         };
 
-        self.update_state(|state| match &answer.command {
+        self.update_state(move |state| match &answer.command {
             // 项目设置中的命令只有「运行」和「取消」两个回答，到这里的都是同意。
             Some(command) => state.approve_command(&answer.folder, command),
             None => state.set_tool_choice(&answer.folder, run),

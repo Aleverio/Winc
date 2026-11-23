@@ -143,7 +143,7 @@ impl App {
     /// 把侧栏宽度记进状态文件：以后打开的窗口、下次启动都用这个宽度。
     pub(in crate::app) fn remember_panel_width(&mut self) {
         let width = self.panels.sidebar.width.round();
-        self.update_state(|state| state.panel_width = Some(width));
+        self.update_state(move |state| state.panel_width = Some(width));
     }
 
     /// 侧栏是否处于显示状态（动画的目标状态）。

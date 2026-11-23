@@ -718,7 +718,8 @@ impl App {
         dialog.error = None;
         // 密钥文件按主机记下：此后经最近的目录、重新连接和终端登录这台主机时都用它。
         if self.state.remote_key(target.as_str()).unwrap_or_default() != key {
-            self.update_state(|state| state.set_remote_key(target.as_str(), &key));
+            let host = target.clone();
+            self.update_state(move |state| state.set_remote_key(host.as_str(), &key));
         }
         self.remote.form = Some((host, port));
         self.remote_open(target, String::new(), After::Browse);

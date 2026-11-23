@@ -197,7 +197,7 @@ impl App {
         let Some(root) = self.git.root.clone() else {
             return;
         };
-        self.update_state(|state| {
+        self.update_state(move |state| {
             let repos = &mut state.sign_off_repos;
             match repos.iter().position(|repo| *repo == root) {
                 Some(at) => drop(repos.remove(at)),
@@ -253,7 +253,7 @@ impl App {
         self.git.commit.fold_motion = None;
         self.git.commit.shift = None;
         self.git.commit.overflow = None;
-        self.update_state(|state| state.commit_tree = !flat);
+        self.update_state(move |state| state.commit_tree = !flat);
         self.git.commit.scroll = self.git.commit.scroll.min(self.commit_max_scroll());
         self.reveal_commit_selection();
         self.request_redraw();
@@ -304,7 +304,7 @@ impl App {
             }
             MenuCommand::CommitSortBy(sort) => {
                 self.git.commit.set_sort(sort);
-                self.update_state(|state| state.commit_sort = sort.key().to_owned());
+                self.update_state(move |state| state.commit_sort = sort.key().to_owned());
                 self.reveal_commit_selection();
             }
             MenuCommand::GitShowOutput => self.show_git_output(),

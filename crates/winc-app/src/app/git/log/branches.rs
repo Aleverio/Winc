@@ -164,7 +164,7 @@ impl App {
     pub(super) fn toggle_log_branches(&mut self) {
         let from = self.log_branches_shown();
         let shown = !self.state.log_branches.unwrap_or(true);
-        self.update_state(|state| state.log_branches = Some(shown));
+        self.update_state(move |state| state.log_branches = Some(shown));
         let clock = self.clock(crate::app::animation::SIDEBAR_ANIMATION);
         self.git.log.branches_motion = clock.map(|clock| (from, clock));
         self.relayout();

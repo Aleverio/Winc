@@ -1227,7 +1227,8 @@ impl App {
         if !trusted {
             return;
         }
-        self.update_state(|state| state.trust_repo(root, fingerprint));
+        let trusted = root.to_path_buf();
+        self.update_state(move |state| state.trust_repo(&trusted, fingerprint));
         if let Some(git) = self.git.tool.get() {
             git.trust(root, fingerprint);
         }

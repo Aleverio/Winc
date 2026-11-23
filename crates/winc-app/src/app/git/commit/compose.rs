@@ -61,7 +61,8 @@ impl App {
 
     /// 提交成功后记下这次的信息：所有窗口共用，下次启动沿用。
     pub(super) fn remember_commit_message(&mut self, message: &str) {
-        self.update_state(|state| state.remember_commit_message(message));
+        let message = message.to_owned();
+        self.update_state(move |state| state.remember_commit_message(&message));
     }
 
     /// 首行的格式提示：首行过长（见 [`SUBJECT_LIMIT`]），或者首行后面紧接着正文、没有空一行；
@@ -177,7 +178,7 @@ impl App {
 
     /// 打开或关闭提交前检查新增的 TODO（提交按钮的菜单）。
     pub(super) fn toggle_check_todo(&mut self) {
-        self.update_state(|state| state.commit_check_todo = !state.commit_check_todo);
+        self.update_state(move |state| state.commit_check_todo = !state.commit_check_todo);
     }
 
     /// 提交按钮菜单的最后几项：「提交检查」子菜单（格式化代码、检查 TODO 两个开关），以及最近的

@@ -1319,3 +1319,16 @@ fn confirm_close_asks_before_quitting_or_closing_the_window() {
     assert!(app.alert_key(&Key::Named(NamedKey::Enter), false));
     assert!(app.closing.quit_requested);
 }
+
+/// 后台写完状态文件后内存中的状态换成文件里的；之后又提交过读写时不换，等最后一次的结果。
+#[test]
+fn only_the_latest_stored_state_replaces_the_one_in_memory() {
+    let mut app = app_with(&sample_folder("state-stored"), false);
+    app.store.state_requests = 2;
+    let mut stored = app.state.clone();
+    stored.commit_reformat = true;
+    app.state_stored(1, stored.clone());
+    assert!(!app.state.commit_reformat);
+    app.state_stored(2, stored);
+    assert!(app.state.commit_reformat);
+}

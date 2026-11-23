@@ -348,6 +348,8 @@ pub enum UserEvent {
     Latex,
     /// 确认框中同意运行项目的 `latexmkrc`：要重新编译的文档，文件所在的目录和内容。
     LatexRc(Box<(DocumentId, PathBuf, String)>),
+    /// 后台读写完了状态文件：第几次请求，和文件里现在的状态。
+    StateStored(u64, Box<State>),
     /// 后台已检查或重读被其他程序修改的文件。
     Reread,
     /// 后台已重读文件树中被其他程序修改的目录。

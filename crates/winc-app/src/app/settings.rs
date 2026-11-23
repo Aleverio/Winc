@@ -1283,6 +1283,8 @@ pub(crate) struct Store {
     pub config_path: Option<PathBuf>,
     /// 状态写回的文件；`None` 时只记录在内存中（测试和性能测量使用，避免改动用户的历史）。
     pub state_path: Option<PathBuf>,
+    /// 向后台提交过几次状态文件的读写；只采用最后一次送回的状态。
+    pub(crate) state_requests: u64,
     /// 配置的版本号：本窗口每写入一次配置文件加 1，应用层据此把新配置发给其他窗口。
     pub(crate) config_rev: u64,
 }

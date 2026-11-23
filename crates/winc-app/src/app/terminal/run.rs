@@ -316,7 +316,8 @@ impl App {
     pub(crate) fn approved_run(&mut self, config: RunConfig) {
         if let Some(root) = self.editor.root() {
             let key = trust_key(root, &config);
-            self.update_state(|state| state.trust_repo(&key, config.fingerprint()));
+            let fingerprint = config.fingerprint();
+            self.update_state(move |state| state.trust_repo(&key, fingerprint));
         }
         self.start_run(config);
     }
@@ -474,13 +475,14 @@ impl App {
         let Some(root) = self.editor.root().map(Path::to_path_buf) else {
             return;
         };
-        let configs = std::mem::take(&mut self.run.list);
-        self.update_state(|state| {
-            for config in &configs {
-                state.trust_repo(&trust_key(&root, config), config.fingerprint());
+        let trusted: Vec<(PathBuf, u64)> = (self.run.list.iter())
+            .map(|config| (trust_key(&root, config), config.fingerprint()))
+            .collect();
+        self.update_state(move |state| {
+            for (key, fingerprint) in &trusted {
+                state.trust_repo(key, *fingerprint);
             }
         });
-        self.run.list = configs;
     }
 
     /// 配置 `config` 的程序是否正在运行。

@@ -1441,6 +1441,7 @@ fn window_frame(json: &std::collections::BTreeMap<String, Json>) -> Option<Windo
 }
 
 mod places;
+pub mod writer;
 pub use places::{FilePlace, MAX_PLACES};
 use places::{read_file_places, read_views, write_file_places};
 
