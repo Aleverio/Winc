@@ -348,8 +348,13 @@ pub fn job(
 ) -> Job {
     let dir = root.parent().unwrap_or(Path::new("")).to_path_buf();
     // 写成 `./名字`：以 `-` 开头的文件名不会被当作选项。
-    let name = root.file_name().map(|name| Path::new(".").join(name));
-    let name = name.map(OsString::from).unwrap_or_default();
+    // 各平台都用 `/`，TeX 把 `\` 当作命令的开头。
+    let name = root.file_name().map(|name| {
+        let mut path = OsString::from("./");
+        path.push(name);
+        path
+    });
+    let name = name.unwrap_or_default();
     let stem = root
         .file_stem()
         .map_or_else(|| "main".into(), |s| s.to_string_lossy().into_owned());
