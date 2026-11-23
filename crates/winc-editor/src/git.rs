@@ -30,7 +30,7 @@ mod trust;
 mod worktree;
 
 use parse::*;
-use pathspec::{nul_separated, path_batches};
+use pathspec::{merge_folders, nul_separated, path_batches};
 pub use trust::*;
 pub use worktree::*;
 
@@ -888,12 +888,14 @@ impl Git {
     /// 储藏 `paths` 的改动（含未跟踪的文件），其余的改动留在工作区和暂存区；`message` 是储藏的
     /// 说明，为空时由 `git` 生成。
     ///
-    /// 路径以 `/` 分隔并按字面匹配：`[`、`*`、`?` 不作为通配符。路径过多时由标准输入传入
-    /// （`--pathspec-from-file`，`git` 2.26 起）：分批会储藏成多份。
+    /// 路径以 `/` 分隔并按字面匹配：`[`、`*`、`?` 不作为通配符。路径过多时先把整个选中的目录
+    /// 合并成一项（见 [`merge_folders`]），仍然过多时由标准输入传入（`--pathspec-from-file`，
+    /// `git` 2.26 起）：分批会储藏成多份。
     ///
     /// # Errors
     ///
-    /// 同 [`Git::operate`]。
+    /// 同 [`Git::operate`]。本机 Windows 上合并后的路径仍然过多时返回提示：`git` 储藏时把路径
+    /// 写进内部命令（`git clean` 等）的命令行，超出 Windows 命令行的长度上限。
     pub fn stash_paths(
         &self,
         root: &Path,
@@ -906,11 +908,22 @@ impl Git {
         if !message.is_empty() {
             args.extend(["--message", message].map(OsString::from));
         }
-        let batches = path_batches(root, paths);
+        let mut batches = path_batches(root, paths);
+        if batches.len() > 1 {
+            let status = self.status(root, &Cancel::default())?;
+            let changed: Vec<PathBuf> = (status.entries.into_iter())
+                .flat_map(|e| std::iter::once(e.path).chain(e.from))
+                .collect();
+            batches = path_batches(root, &merge_folders(root, paths, &changed));
+        }
         if let [batch] = &batches[..] {
             args.push("--".into());
             args.extend(batch.iter().cloned());
             return self.operate(root, &args);
+        }
+        let native = !winc_backend::is_remote(root) && crate::wsl::locate_here(root).is_none();
+        if cfg!(windows) && native {
+            return Err(winc_i18n::t!("git-stash-too-many").to_owned());
         }
         let specs: Vec<OsString> = batches.into_iter().flatten().collect();
         args.extend(["--pathspec-from-file=-", "--pathspec-file-nul"].map(OsString::from));

@@ -1,5 +1,6 @@
 //! 作用于一组文件的 `git` 命令的路径参数：按字面匹配，过长时分批或由标准输入传入。
 
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
@@ -48,6 +49,41 @@ pub(super) fn path_batches(root: &Path, paths: &[PathBuf]) -> Vec<Vec<OsString>>
         }
     }
     batches
+}
+
+/// 把 `chosen` 中整个选中的目录合并成一项：某个目录下有变化的路径（`changed`）全部在
+/// `chosen` 中时，以该目录代替其中的各个路径，取最上层的这种目录，`root` 本身除外。
+///
+/// 路径都是绝对路径；结果按 `chosen` 原来的先后，不重复。
+pub(super) fn merge_folders(root: &Path, chosen: &[PathBuf], changed: &[PathBuf]) -> Vec<PathBuf> {
+    let dirs = |path: &Path| -> Vec<PathBuf> {
+        (path.ancestors().skip(1))
+            .take_while(|d| *d != root && d.starts_with(root))
+            .map(Path::to_path_buf)
+            .collect()
+    };
+    let picked: HashSet<&Path> = chosen.iter().map(PathBuf::as_path).collect();
+    // 各目录下有变化的路径数，和其中选中的路径数。
+    let mut counts: HashMap<PathBuf, (usize, usize)> = HashMap::new();
+    for path in changed {
+        let hit = usize::from(picked.contains(path.as_path()));
+        for dir in dirs(path) {
+            let count = counts.entry(dir).or_default();
+            count.0 += 1;
+            count.1 += hit;
+        }
+    }
+    let full = |dir: &PathBuf| counts.get(dir).is_some_and(|&(all, hit)| all == hit);
+    let mut seen = HashSet::new();
+    let mut merged = Vec::new();
+    for path in chosen {
+        let top = dirs(path).into_iter().rfind(full);
+        let path = top.unwrap_or_else(|| path.clone());
+        if seen.insert(path.clone()) {
+            merged.push(path);
+        }
+    }
+    merged
 }
 
 /// 返回 `specs` 以 NUL 分隔的字节，供 `--pathspec-from-file=- --pathspec-file-nul` 从标准输入读取。
