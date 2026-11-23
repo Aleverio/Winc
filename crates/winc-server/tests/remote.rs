@@ -704,7 +704,8 @@ fn the_server_is_uploaded_once_and_started_from_the_upload_directory() {
     let connection =
         Connection::deploy(bootstrap(&reused), &reused, &remote::Abort::default()).unwrap();
     assert!(std::fs::read(&installed).unwrap() == deploy.programs[0].content);
-    drop(connection);
+    // 等服务进程退出：它还在运行时程序文件不能改写。
+    connection.close();
     // 已有的程序残缺（字节数不符）：重新上传后照常启动。
     std::fs::write(&installed, "damaged").unwrap();
     std::fs::set_permissions(&installed, PermissionsExt::from_mode(0o700)).unwrap();
@@ -1099,6 +1100,53 @@ fn a_command_that_leaves_a_child_holding_its_output_still_finishes() {
 
 /// 经真实的 `ssh` 连接：需要环境变量 `WINC_TEST_SSH_TARGET`（免输入即可登录的主机）和
 /// `WINC_TEST_SSH_SERVER`（该主机上服务进程的路径）。
+/// 输出随到随读的命令：读取的一方不读时对端发到上限就停下，输出不在本机越积越多；读走以后
+/// 继续发送，内容一个字节不少。
+#[test]
+fn an_unread_stream_stops_at_the_window_and_resumes_when_read() {
+    use std::io::Read;
+
+    let target = connect("paced");
+    let dir = scratch("paced");
+    let far = through(&target, &dir);
+    // 共 16 MiB，每写出 4 KiB 在文件里记一次进度。
+    let script = "i=0; while [ $i -lt 4096 ]; do head -c 4096 /dev/zero; i=$((i+1)); \
+                  echo $i > progress; done";
+    let mut running = remote::spawn(&far, &sh(script)).unwrap();
+    let progress = || {
+        let text = std::fs::read_to_string(dir.join("progress")).unwrap_or_default();
+        text.trim().parse::<usize>().unwrap_or(0)
+    };
+    // 等进度停下来：连续 300 毫秒没有变化。
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let mut seen = (progress(), Instant::now());
+    while seen.1.elapsed() < Duration::from_millis(300) {
+        assert!(Instant::now() < deadline, "命令没有停下：{}", seen.0);
+        std::thread::sleep(Duration::from_millis(20));
+        let now = progress();
+        if now != seen.0 {
+            seen = (now, Instant::now());
+        }
+    }
+    // 上限 2 MiB，加上两端管道里的：远不到全部的 4096 次。
+    assert!((1..1024).contains(&seen.0), "停在第 {} 次", seen.0);
+
+    let mut total = 0;
+    let mut buffer = vec![0; 64 << 10];
+    loop {
+        let read = running.read(&mut buffer).unwrap();
+        if read == 0 {
+            break;
+        }
+        assert!(buffer[..read].iter().all(|&byte| byte == 0));
+        total += read;
+    }
+    assert_eq!(total, 4096 * 4096);
+    assert_eq!(running.code(), Some(Some(0)));
+    assert_eq!(progress(), 4096);
+    remote::disconnect(&target);
+}
+
 #[test]
 #[ignore = "需要一台可以免输入登录、已放好服务进程的主机"]
 fn over_ssh() {
