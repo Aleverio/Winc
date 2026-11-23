@@ -498,3 +498,77 @@ fn shoot_split_panes() {
     shoot(&mut app, "split-panes");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 回归：编辑区卡片的圆角按整张卡片修整。此前按前台窗格的编辑区计算，上下拆分、前台在上时
+/// 圆角修在了两个窗格之间，卡片底部反而是直角；三栏合并时同样修在了操作栏上沿。
+#[test]
+fn the_editor_card_keeps_its_corners_when_split() {
+    let dir = sample_folder("panes-corners");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    app.panels.sidebar.visible = true;
+    app.relayout();
+    paint(&mut app);
+    let card = app.editor_card();
+    let bar = app.layout.top_bar;
+    assert_eq!((card.x, card.right(), card.y), (bar.x, bar.right(), bar.y));
+
+    app.run_action(Action::SplitDown);
+    paint(&mut app);
+    let top = app.panes.rects[0];
+    app.focus_pane(top.id);
+    paint(&mut app);
+    assert_eq!(app.editor.panes.focused, top.id);
+    let card = app.editor_card();
+    let frame = app.palette.frame_bg;
+    // 卡片底部的两个角在圆弧外侧露出窗口底色；上面窗格的底边在卡片中间，不修圆角。
+    assert!(near(
+        pixel(&app, (card.x + 0.5, card.bottom() - 0.5)),
+        frame
+    ));
+    assert!(near(
+        pixel(&app, (card.right() - 0.5, card.bottom() - 0.5)),
+        frame
+    ));
+    let inner = top.editor;
+    assert!(!near(
+        pixel(&app, (inner.x + 0.5, inner.bottom() - 0.5)),
+        frame
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 拆分、合并时各窗格一开始就在最终的位置，变化之前的画面在上面淡出。
+#[test]
+fn panes_crossfade_when_split_and_merged() {
+    let dir = sample_folder("panes-motion");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    app.panes.animate_without_window = true;
+    paint(&mut app);
+    let whole = app.layout.editor;
+
+    app.run_action(Action::SplitRight);
+    assert!(app.panes.motion.is_some());
+    paint(&mut app);
+    let right = app.panes.rects[1].whole;
+    let line = app.panes.dividers[0].line;
+    let at = (line.x + 0.5, line.y + line.h / 2.0);
+    // 刚开始时画面还是拆分之前的，结束时是新布局。
+    app.freeze_pane_motion(std::time::Duration::ZERO);
+    paint(&mut app);
+    let start = pixel(&app, at);
+    app.freeze_pane_motion(std::time::Duration::from_secs(1));
+    paint(&mut app);
+    let end = pixel(&app, at);
+    assert_ne!(start, end);
+    app.settle_animations();
+    assert!(app.panes.motion.is_none());
+    paint(&mut app);
+    assert_eq!(app.panes.rects[1].whole, right);
+    assert_eq!(pixel(&app, at), end);
+
+    app.run_action(Action::Unsplit);
+    assert!(app.panes.motion.is_some());
+    paint(&mut app);
+    assert_eq!(app.layout.editor, whole);
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -5,6 +5,8 @@
 
 use winc_editor::panes::{Axis, Node, PaneId};
 
+mod motion;
+
 use super::*;
 use crate::app::Scrollbars;
 use crate::app::TabHit;
@@ -86,7 +88,12 @@ pub(crate) struct PaneUi {
     pub drawing_background: bool,
     /// 这一次从系统拖进来的文件拆出的窗格：同一次拖进来的其余文件也开在这里。
     pub dropped_into: Option<PaneId>,
-    /// 前台以外各窗格的标签栏和滚动条。
+    /// 窗格增减后的过渡：变化之前的编辑区卡片在新布局上淡出（见 `motion.rs`）。
+    pub(crate) motion: Option<motion::PaneMotion>,
+    /// 测试中没有窗口时仍播放过渡。
+    #[cfg(test)]
+    pub(crate) animate_without_window: bool,
+    /// 前台以外各窗格的标签栏、滚动条、预览和日志视图的状态。
     parked: Vec<ParkedPane>,
 }
 
@@ -99,6 +106,8 @@ struct ParkedPane {
     /// 只用其中 [`PANE_AREAS`] 的部分。
     scrollbars: Scrollbars,
     preview: PanePreview,
+    /// 日志视图在绘制时更新的状态。
+    log: crate::app::git::log::LogFrame,
     /// 上一次画出的标签栏控件：标签、新建和列表按钮、预览切换与浏览器按钮。
     controls: Vec<Rect>,
 }
@@ -112,6 +121,7 @@ impl ParkedPane {
             hits: Vec::new(),
             scrollbars: Scrollbars::default(),
             preview: PanePreview::default(),
+            log: Default::default(),
             controls: Vec::new(),
         }
     }
@@ -265,6 +275,7 @@ impl App {
         std::mem::swap(&mut self.hits.tabs, &mut parked.hits);
         (self.scroll.bars).exchange(&mut parked.scrollbars, &PANE_AREAS);
         self.preview.exchange(&mut parked.preview);
+        self.git.log.exchange_frame(&mut parked.log);
         parked.controls.clear();
     }
 
@@ -452,6 +463,11 @@ impl App {
         vec![self.pane_rects(self.editor.panes.focused, self.panes.area)]
     }
 
+    /// 整张编辑区卡片（含顶栏那一行）：拆分、分栏预览和三栏合并都在它以内。
+    pub(crate) fn editor_card(&self) -> Rect {
+        self.panes.area
+    }
+
     /// `(x, y)` 所在的窗格（含它的标签栏）；没有拆分时为 `None`。
     pub(in crate::app) fn pane_at(&self, x: f32, y: f32) -> Option<PaneRects> {
         (self.panes.rects.iter())
@@ -561,6 +577,7 @@ impl App {
             self.open_path(path);
             return;
         }
+        self.capture_panes();
         self.focus_pane(pane);
         let canonical = winc_config::files::canonicalize(path).unwrap_or_else(|_| path.into());
         let had = (self.editor.tabs().iter()).any(|d| d.path.as_deref() == Some(&*canonical));
@@ -616,6 +633,7 @@ impl App {
         let Some(&first) = docs.first() else {
             return;
         };
+        self.capture_panes();
         let source = self.editor.panes.focused;
         self.settle_editor_glide();
         self.tabs.marked.clear();
@@ -737,6 +755,7 @@ impl App {
 
     /// 向右（`Axis::Row`）或向下拆分前台窗格，新窗格打开当前标签。
     pub(in crate::app) fn split_editor(&mut self, axis: Axis) {
+        self.capture_panes();
         let old = self.editor.panes.focused;
         self.settle_editor_glide();
         if self.editor.split(axis).is_none() {
@@ -751,6 +770,7 @@ impl App {
 
     /// 把当前标签移到新拆出的窗格，原窗格里不再有它；窗格里只有这一个标签时不动。
     pub(in crate::app) fn move_to_split(&mut self, axis: Axis) {
+        self.capture_panes();
         let old = self.editor.panes.focused;
         let Some(doc) = self.editor.active().map(|d| d.id) else {
             return;
@@ -765,6 +785,7 @@ impl App {
 
     /// 合并全部窗格，标签都回到前台窗格。
     pub(in crate::app) fn unsplit_editor(&mut self) {
+        self.capture_panes();
         if !self.editor.panes.is_split() {
             return;
         }
