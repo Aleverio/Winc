@@ -7,7 +7,7 @@ use std::path::{Component, Path, PathBuf};
 
 use winc_i18n::t;
 
-use crate::workspace::copying::{Copying, DownloadState, copy_item, download_item};
+use crate::workspace::copying::{Copying, Skips, copy_item, download_item};
 
 pub use crate::workspace::copying::Skipped;
 
@@ -312,21 +312,18 @@ pub fn copy_into(
             Some(parent) if same(source, dir) => parent,
             _ => dir,
         };
-        copy_one(source, dir, Naming::Copy, copying)
+        copy_one(source, dir, Naming::Copy, copying, None)
     })
 }
 
-/// 把 `source` 复制到目录 `dir` 中，重名时按 `naming` 取名，返回新路径。
-fn copy_one(source: &Path, dir: &Path, naming: Naming, copying: &Copying) -> io::Result<PathBuf> {
-    copy_one_with(source, dir, naming, copying, None)
-}
-
-fn copy_one_with(
+/// 把 `source` 复制到目录 `dir` 中，重名时按 `naming` 取名，返回新路径；`skips` 的作用见
+/// [`download_into`]。
+fn copy_one(
     source: &Path,
     dir: &Path,
     naming: Naming,
     copying: &Copying,
-    state: Option<&mut DownloadState>,
+    skips: Option<&mut Skips>,
 ) -> io::Result<PathBuf> {
     let meta = winc_backend::fs::symlink_metadata(source)?;
     let name = source.file_name().ok_or_else(|| {
@@ -342,47 +339,42 @@ fn copy_one_with(
     }
 
     let target = free_path(dir, &name, meta.is_dir(), naming);
-    match state {
-        Some(state) => download_item(source, &target, copy_symlink, copying, state)?,
+    match skips {
+        Some(skips) => download_item(source, &target, copy_symlink, copying, skips)?,
         None => copy_item(source, &target, copy_symlink, copying)?,
     }
     Ok(target)
 }
 
-/// 一次下载的结果：`done` 是下载好的各项，`skipped` 是被跳过的项及原因，`failed` 是失败的那一项
-/// 的相对路径和原因（没有失败时为 `None`）。
+/// 一次下载的结果。
 #[derive(Debug, Default)]
 pub struct DownloadOutcome {
-    /// 已下载好的各项的新路径。
+    /// 已下载的各项在本机的路径，顺序与输入相同。
     pub done: Vec<PathBuf>,
-    /// 跳过而未下载的项及原因。
+    /// 目录中跳过的子项，包括出错之前跳过的。
     pub skipped: Vec<Skipped>,
-    /// 失败的那一项的相对路径和原因；没有失败时为 `None`。
+    /// 出错位置（写法同 [`Skipped::name`]）及原因；未出错时为 `None`。
     pub failed: Option<(String, io::Error)>,
 }
 
-/// 把远端的 `sources` 下载到本机目录 `dir`，供文件树的「下载…」使用。
+/// 把远端的 `sources` 逐项下载到本机目录 `dir` 中，命名规则同 [`copy_into`]，进度记入 `copying`。
 ///
-/// 顶层的非常规文件或失效符号链接照常报错；目录内部无法跨机传输的项跳过并记入结果，不再中断
-/// 整棵目录。重名规则同 [`copy_into`]，进度记入 `copying`，经它可以取消。
+/// 跳过目录中的特殊文件和无法复制的符号链接并记入结果；`sources` 中的项本身属于此类时照常报错。
+/// 出错或被取消时停止。
 #[must_use]
 pub fn download_into(sources: &[PathBuf], dir: &Path, copying: &Copying) -> DownloadOutcome {
     let mut outcome = DownloadOutcome::default();
     for source in sources {
-        let dir = match source.parent() {
-            Some(parent) if same(source, dir) => parent,
-            _ => dir,
-        };
-        let mut state = DownloadState::new(source);
-        match copy_one_with(source, dir, Naming::Copy, copying, Some(&mut state)) {
+        let mut skips = Skips::new(source);
+        let copied = copy_one(source, dir, Naming::Copy, copying, Some(&mut skips));
+        outcome.skipped.append(&mut skips.list);
+        match copied {
             Ok(path) => outcome.done.push(path),
             Err(error) => {
-                outcome.skipped.append(&mut state.skipped);
-                outcome.failed = Some((state.failed, error));
+                outcome.failed = Some((skips.failed_name(), error));
                 break;
             }
         }
-        outcome.skipped.append(&mut state.skipped);
     }
     outcome
 }
@@ -449,7 +441,7 @@ pub fn bring_images(
             return Ok(file.to_path_buf());
         }
         winc_backend::fs::create_dir_all(into)?;
-        copy_one(file, into, Naming::Numbered, &Copying::default())
+        copy_one(file, into, Naming::Numbered, &Copying::default(), None)
     })
 }
 

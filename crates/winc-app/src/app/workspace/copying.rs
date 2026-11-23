@@ -159,69 +159,57 @@ impl App {
         }
     }
 
-    /// 下载结束：失败时提示原因及实际出错的子路径；跳过了不可下载项时用警告列出这些项；
-    /// 否则提示下载了什么，按钮在文件管理器中显示下载到的地方。
-    ///
-    /// 取消时不显示这些结果通知：`copy_finished` 已经闪过「已取消下载」，再报「已下载」（旧行为）
-    /// 会让人以为下载成功了。这个改变只为消除误导，不涉及跳过与报错的规则。
+    /// 下载结束后提示结果：出错时提示出错位置和原因，否则提示已下载的内容，并提供在文件管理器中
+    /// 显示的按钮；有跳过的子项时一并列出，以警告级别提示。`canceled` 为真时不提示。
     pub(in crate::app) fn downloaded(&mut self, outcome: DownloadOutcome, canceled: bool) {
+        self.request_redraw();
+        if canceled {
+            return;
+        }
         let DownloadOutcome {
             done,
             skipped,
             failed,
         } = outcome;
-        if !canceled {
-            if let Some((name, error)) = failed {
-                // 真实 I/O 错误优先于跳过清单：若先跳过若干项后又在第四项失败，这里只报错误，
-                // 先前的跳过项不再另行提示。完整清单仍在 outcome.skipped 中。
-                self.notify(
-                    NoticeKind::Error,
-                    t!(
-                        "workspace-download-failed",
-                        name = name,
-                        error = error.to_string()
-                    ),
-                );
-            } else if !skipped.is_empty() {
-                let separator = match winc_i18n::locale() {
-                    winc_i18n::Locale::EnUs => ", ",
-                    winc_i18n::Locale::ZhCn => "、",
-                };
-                let paths = skipped
-                    .iter()
-                    .map(|item| {
-                        t!(
-                            "workspace-download-skipped-item",
-                            name = item.name.clone(),
-                            reason = item.reason.clone()
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join(separator);
+        let list = (!skipped.is_empty()).then(|| skipped_list(&skipped));
+        if let Some((name, error)) = failed {
+            let error = error.to_string();
+            let failed = t!("workspace-download-failed", name = name, error = error);
+            let message = match list {
+                Some(paths) => t!(
+                    "workspace-download-failed-skipped",
+                    failed = failed,
+                    paths = paths
+                ),
+                None => failed,
+            };
+            self.notify(NoticeKind::Error, message);
+            return;
+        }
+        let Some(last) = done.last().cloned() else {
+            return;
+        };
+        let downloaded = match done.as_slice() {
+            [one] => t!(
+                "workspace-download-done-one",
+                name = winc_editor::display_name(one)
+            ),
+            many => t!("workspace-download-done-many", count = many.len()),
+        };
+        let (kind, message) = match list {
+            Some(paths) => {
+                let count = skipped.len();
                 let message = t!(
                     "workspace-download-skipped",
-                    done = done.len(),
-                    count = skipped.len(),
+                    downloaded = downloaded,
+                    count = count,
                     paths = paths
                 );
-                match done.last().cloned() {
-                    Some(last) => {
-                        self.notify_with(NoticeKind::Warning, message, NoticeAction::Reveal(last))
-                    }
-                    None => self.notify(NoticeKind::Warning, message),
-                }
-            } else if let Some(last) = done.last().cloned() {
-                let message = match done.as_slice() {
-                    [one] => t!(
-                        "workspace-download-done-one",
-                        name = winc_editor::display_name(one)
-                    ),
-                    many => t!("workspace-download-done-many", count = many.len()),
-                };
-                self.notify_with(NoticeKind::Done, message, NoticeAction::Reveal(last));
+                (NoticeKind::Warning, message)
             }
-        }
-        self.request_redraw();
+            None => (NoticeKind::Done, downloaded),
+        };
+        self.notify_with(kind, message, NoticeAction::Reveal(last));
     }
 
     /// 取消正在进行的各次复制：各自正在复制的一项停止，已复制完的各项保留。
@@ -261,9 +249,51 @@ impl App {
     }
 }
 
+/// 提示中最多列出的跳过项数；提示框宽度有限，超出部分只给出数目。
+const SKIPPED_SHOWN: usize = 3;
+
+/// 生成提示中的跳过项列表，超过 [`SKIPPED_SHOWN`] 项时只列出前几项。
+fn skipped_list(skipped: &[winc_editor::paste::Skipped]) -> String {
+    let shown = skipped.iter().take(SKIPPED_SHOWN).map(|item| {
+        t!(
+            "workspace-download-skipped-item",
+            name = item.name.clone(),
+            reason = item.reason.clone()
+        )
+    });
+    let paths = shown.collect::<Vec<_>>().join(t!("common-list-separator"));
+    match skipped
+        .len()
+        .checked_sub(SKIPPED_SHOWN)
+        .filter(|rest| *rest > 0)
+    {
+        Some(rest) => t!(
+            "workspace-download-skipped-more",
+            paths = paths,
+            rest = rest
+        ),
+        None => paths,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::size_label;
+    use super::{size_label, skipped_list};
+    use winc_editor::paste::Skipped;
+
+    #[test]
+    fn long_skipped_lists_show_the_first_items_and_a_count() {
+        let item = |name: &str| Skipped {
+            name: name.to_owned(),
+            reason: "原因".to_owned(),
+        };
+        assert_eq!(skipped_list(&[item("a")]), "a（原因）");
+        let five = ["a", "b", "c", "d", "e"].map(item);
+        assert_eq!(
+            skipped_list(&five),
+            "a（原因）、b（原因）、c（原因）及其他 2 项"
+        );
+    }
 
     #[test]
     fn sizes_are_written_with_one_decimal() {

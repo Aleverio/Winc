@@ -56,7 +56,7 @@ impl Kind {
         self == Self::Symlink
     }
 
-    /// 是否为设备、管道、套接字等非普通文件。
+    /// 是否为特殊文件（设备、命名管道、套接字等）。
     pub fn is_other(self) -> bool {
         self == Self::Other
     }

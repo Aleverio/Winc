@@ -64,47 +64,53 @@ impl Copying {
 /// 复制符号链接的方式：把链接 `from` 复制为 `to`。
 pub(crate) type Links = fn(&Path, &Path) -> io::Result<()>;
 
-/// 下载目录时被跳过的一项：`name` 是相对顶层下载项的路径，`reason` 是跳过原因。
+/// 下载目录时跳过的一项。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Skipped {
-    /// 被跳过的项相对顶层下载项的路径，例如 `project/data/app.sock`。
+    /// 相对下载项所在目录的路径，以 `/` 分隔，如 `project/data/app.sock`。
     pub name: String,
-    /// 跳过的原因。
+    /// 跳过的原因，用于提示。
     pub reason: String,
 }
 
-/// 一次下载中的附带记录：被跳过的各项，以及最近一次失败实际发生的路径。
-///
-/// `failed` 在每次进入 [`copy_tree`] 时更新为当前项，因此递归中出错时留下的是真正出错的子项，
-/// 而不是最外层的顶层目录。
+/// 下载一项时跳过的子项及出错的位置。
 #[derive(Debug)]
-pub(crate) struct DownloadState {
+pub(crate) struct Skips {
+    /// 下载项的路径。
     root: PathBuf,
-    pub skipped: Vec<Skipped>,
-    pub failed: String,
+    /// 跳过的子项，按遍历顺序。
+    pub list: Vec<Skipped>,
+    /// 出错的子项；错误发生在下载项本身时为 `None`。
+    failed: Option<PathBuf>,
 }
 
-impl DownloadState {
+impl Skips {
     pub(crate) fn new(root: &Path) -> Self {
         Self {
             root: root.to_path_buf(),
-            skipped: Vec::new(),
-            failed: crate::display_name(root).into_owned(),
+            list: Vec::new(),
+            failed: None,
         }
     }
 
-    /// 相对顶层下载项的名字，例如 `project/data/app.sock`。
-    fn label(&self, path: &Path) -> String {
+    /// 出错位置相对下载项所在目录的路径，写法同 [`Skipped::name`]。
+    pub(crate) fn failed_name(&self) -> String {
+        self.name(self.failed.as_deref().unwrap_or(&self.root))
+    }
+
+    fn skip(&mut self, path: &Path, reason: String) {
+        let name = self.name(path);
+        self.list.push(Skipped { name, reason });
+    }
+
+    /// `path` 相对下载项所在目录的路径，写法同 [`Skipped::name`]。
+    fn name(&self, path: &Path) -> String {
+        let root = crate::display_name(&self.root);
         match winc_backend::relative_lossy(path, &self.root) {
             Some(relative) if !relative.is_empty() => {
-                // 远端路径一律以 `/` 分隔；本机路径换成 `/` 后提示里的写法才一致。
-                format!(
-                    "{}/{}",
-                    crate::display_name(&self.root),
-                    relative.replace('\\', "/")
-                )
+                format!("{root}/{}", relative.replace('\\', "/"))
             }
-            _ => crate::display_name(path).into_owned(),
+            _ => root.into_owned(),
         }
     }
 }
@@ -117,33 +123,37 @@ impl DownloadState {
 /// 被 `copying` 取消时删除已复制出的 `to`，返回 [`io::ErrorKind::Interrupted`]；其余返回对应的
 /// `io::Error`，已复制出的部分保留。
 pub(crate) fn copy_item(from: &Path, to: &Path, links: Links, copying: &Copying) -> io::Result<()> {
-    copy_item_inner(from, to, links, copying, None)
+    copy_top(from, to, links, copying, None)
 }
 
-/// 下载时复制顶层项 `from`；目录内无法跨机传输的项记入 `state` 后跳过，不中断整棵目录。
+/// 同 [`copy_item`]，但跳过目录中无法跨主机传输的子项并记入 `skips`，规则见 [`copy_tree`]。
+///
+/// # Errors
+///
+/// 同 [`copy_item`]；子项出错时把该子项记入 `skips`。
 pub(crate) fn download_item(
     from: &Path,
     to: &Path,
     links: Links,
     copying: &Copying,
-    state: &mut DownloadState,
+    skips: &mut Skips,
 ) -> io::Result<()> {
-    copy_item_inner(from, to, links, copying, Some(state))
+    copy_top(from, to, links, copying, Some(skips))
 }
 
-fn copy_item_inner(
+fn copy_top(
     from: &Path,
     to: &Path,
     links: Links,
     copying: &Copying,
-    state: Option<&mut DownloadState>,
+    skips: Option<&mut Skips>,
 ) -> io::Result<()> {
     let meta = winc_backend::fs::symlink_metadata(from)?;
     copying.begin(
         crate::display_name(from).into_owned(),
         meta.is_file().then_some(meta.len),
     );
-    let copied = copy_tree(from, to, meta.kind, links, copying, true, state);
+    let copied = copy_tree(from, to, meta.kind, links, copying, skips);
     if copied.is_err() && copying.is_cancelled() {
         // `to` 是本次复制新建的：删除它不会碰到原有的内容。还没有建出来时删除失败，不必处理。
         let _ = winc_backend::fs::remove_all(to);
@@ -152,73 +162,23 @@ fn copy_item_inner(
     copied
 }
 
-/// Windows 上复制链接指向的内容时，这些错误说明目标无法跨机传输；连接断开、权限不足等真实
-/// I/O 错误不在此列，必须照常中断。
-#[cfg(not(unix))]
-fn untranslatable_link(error: &io::Error) -> bool {
-    if matches!(
-        error.kind(),
-        io::ErrorKind::NotFound | io::ErrorKind::IsADirectory | io::ErrorKind::InvalidInput
-    ) {
-        return true;
-    }
-    // 循环链接：远端 Linux 的 ELOOP 在 Rust 1.99 里仍是 `ErrorKind::Uncategorized`（`FilesystemLoop`
-    // 属不稳定的 `io_error_more`），而且本项目的远端协议只传 ErrorKind 和文字、不传 errno，所以到
-    // 这里只能是 `Other` + 系统说明。各平台写法不同（Linux 有 "Too many levels of symbolic links"，
-    // 也有 "Symbolic link loop"），这里只在处理符号链接项时调用，按文字识别不会误伤普通文件。
-    let text = error.to_string().to_ascii_lowercase();
-    text.contains("symbolic link") || text.contains("symlink loop")
-}
-
 /// 复制种类为 `kind` 的 `from`；目录逐项递归，每一项开始之前检查是否已取消。
 ///
-/// `root` 表示这是顶层下载项本身：顶层项出错时照常报错，只有目录内部的子项才跳过。
+/// 有 `skips` 时跳过目录中的特殊文件（设备、命名管道、套接字）和按 [`link_skip_reason`] 无法
+/// 复制的符号链接，并记入其中；`from` 本身不跳过。
 fn copy_tree(
     from: &Path,
     to: &Path,
     kind: Kind,
     links: Links,
     copying: &Copying,
-    root: bool,
-    mut state: Option<&mut DownloadState>,
+    mut skips: Option<&mut Skips>,
 ) -> io::Result<()> {
-    if let Some(state) = state.as_deref_mut() {
-        state.failed = state.label(from);
-    }
     if copying.is_cancelled() {
         return Err(io::ErrorKind::Interrupted.into());
     }
     if kind.is_symlink() {
-        if root {
-            return links(from, to);
-        }
-        #[cfg(not(unix))]
-        if let Some(state) = state.as_deref_mut() {
-            match links(from, to) {
-                Ok(()) => return Ok(()),
-                Err(error) if untranslatable_link(&error) => {
-                    let name = state.label(from);
-                    state.skipped.push(Skipped {
-                        name,
-                        reason: error.to_string(),
-                    });
-                    return Ok(());
-                }
-                Err(error) => return Err(error),
-            }
-        }
         return links(from, to);
-    }
-    if kind.is_other()
-        && !root
-        && let Some(state) = state.as_deref_mut()
-    {
-        let name = state.label(from);
-        state.skipped.push(Skipped {
-            name,
-            reason: t!("editor-download-skipped-special").to_owned(),
-        });
-        return Ok(());
     }
     if !kind.is_dir() {
         let watch = |bytes| copying.advance(bytes);
@@ -227,15 +187,47 @@ fn copy_tree(
     winc_backend::fs::create_dir(to)?;
     for entry in winc_backend::fs::read_dir(from)? {
         let entry = entry?;
-        copy_tree(
-            &entry.path(),
-            &to.join(winc_backend::carry_name(&entry.name, from, to)),
-            entry.kind,
-            links,
-            copying,
-            false,
-            state.as_deref_mut(),
-        )?;
+        let path = entry.path();
+        let target = to.join(winc_backend::carry_name(&entry.name, from, to));
+        let Some(skips) = skips.as_deref_mut() else {
+            copy_tree(&path, &target, entry.kind, links, copying, None)?;
+            continue;
+        };
+        if entry.kind.is_other() {
+            skips.skip(&path, t!("editor-download-skipped-special").to_owned());
+            continue;
+        }
+        if let Err(error) = copy_tree(&path, &target, entry.kind, links, copying, Some(skips)) {
+            if entry.kind.is_symlink()
+                && let Some(reason) = link_skip_reason(&error)
+            {
+                skips.skip(&path, reason);
+                continue;
+            }
+            skips.failed.get_or_insert(path);
+            return Err(error);
+        }
     }
     Ok(())
+}
+
+/// 符号链接复制失败的错误 `error` 表明该链接无法跨主机传输时，返回用于提示的原因；其他错误
+/// （如连接断开、权限不足）返回 `None`。
+///
+/// 以复制目标内容的方式复制链接（Windows）时，目标不存在、为目录、为特殊文件或存在循环都会失败。
+/// 远端只传回错误的种类和描述，`ELOOP` 没有稳定的 [`io::ErrorKind`]，按描述识别。
+fn link_skip_reason(error: &io::Error) -> Option<String> {
+    Some(match error.kind() {
+        io::ErrorKind::NotFound => t!("editor-download-skipped-link-missing").to_owned(),
+        io::ErrorKind::IsADirectory => t!("editor-download-skipped-link-folder").to_owned(),
+        io::ErrorKind::InvalidInput => t!("editor-download-skipped-special").to_owned(),
+        _ => {
+            let text = error.to_string().to_ascii_lowercase();
+            let looped = ["too many levels of symbolic links", "symbolic link loop"];
+            if !looped.iter().any(|loop_text| text.contains(loop_text)) {
+                return None;
+            }
+            t!("editor-download-skipped-link-loop").to_owned()
+        }
+    })
 }

@@ -234,7 +234,7 @@ pub enum UserEvent {
     /// 粘贴到文件树中的文件已在后台复制完成：复制好的新路径、失败的原因（没有失败时为 `None`），
     /// 以及这次复制。
     Pasted(Vec<PathBuf>, Option<String>, Arc<winc_editor::Copying>),
-    /// 远端的各项已下载到本机：下载结果（已下载、被跳过、失败的子路径）以及这次复制。
+    /// 远端的各项已下载到本机：下载的结果，以及这次复制。
     Downloaded(
         winc_editor::paste::DownloadOutcome,
         Arc<winc_editor::Copying>,
