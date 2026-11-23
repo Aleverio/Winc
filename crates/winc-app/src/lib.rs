@@ -250,6 +250,10 @@ pub fn run() {
     let mut winc = Winc::new(Some(event_loop.create_proxy()), template);
     let (key, proxy) = winc.reserve();
     let mut app = App::new(editor, proxy, bench, config);
+    // 桌面环境启动 winc 时给出的激活令牌由第一个窗口使用：合成器据此把窗口切到前台，并结束
+    // 启动通知（GNOME 在收到令牌之前一直显示忙碌指针，程序坞中也不显示该窗口）。之后启动的
+    // winc 交来的令牌见 `hand_over`。
+    app.set_activation(instance::launch_token());
     app.watch_git_output();
     winc_editor::proxy::follow_system_proxy(app.config.system_proxy != Some(false));
     app.store.config_path = config_path;
