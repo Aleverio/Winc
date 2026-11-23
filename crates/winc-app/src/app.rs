@@ -740,6 +740,11 @@ enum Drag {
     Columns {
         anchor: (usize, usize),
     },
+    /// `⇧⌥` 单击已框出列，若继续拖动则转为从按下处 `anchor` 开始框选一列。
+    ColumnClick {
+        origin: (f32, f32),
+        anchor: (usize, usize),
+    },
     /// `⌥` 拖动：添加一个选区；`origin` 是按下处的位置（字符偏移）。
     AddSelect {
         origin: usize,
