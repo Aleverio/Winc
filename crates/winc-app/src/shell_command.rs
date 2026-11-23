@@ -94,7 +94,7 @@ fn bundle_of(exe: &std::path::Path) -> Option<&std::path::Path> {
 ///
 /// 只有程序位于 `APPDIR`（AppImage 运行时挂载的目录）内才算：这两个变量会被子进程继承，在 AppImage
 /// 版的内置终端里运行其他安装方式的 `winc` 时同样存在。
-#[cfg(any(target_os = "linux", all(test, unix)))]
+#[cfg(any(all(unix, not(target_os = "macos")), all(test, unix)))]
 fn appimage_of(
     exe: &std::path::Path,
     appdir: Option<&std::ffi::OsStr>,
@@ -103,8 +103,8 @@ fn appimage_of(
     exe.starts_with(appdir?).then(|| appimage.map(Into::into))?
 }
 
-#[cfg(target_os = "linux")]
-fn current_appimage() -> Option<std::path::PathBuf> {
+#[cfg(all(unix, not(target_os = "macos")))]
+pub(crate) fn current_appimage() -> Option<std::path::PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let appdir = std::env::var_os("APPDIR");
     let appimage = std::env::var_os("APPIMAGE");
@@ -399,14 +399,11 @@ pub(crate) fn detach(args: &Args, tokens: &crate::instance::LaunchTokens) -> boo
     }
 }
 
-/// 程序位于 `.app` 内时通过 `LaunchServices`（`open`）启动应用，返回是否成功；不在应用包内时返回
-/// `None`。
+/// 程序位于 `.app` 内时经 `LaunchServices`（`open`）启动应用，返回是否成功；否则返回 `None`。
 ///
-/// 由系统启动的应用是独立的进程，窗口会切到前台，系统权限不归属于终端。新进程不继承 shell 的环境
-/// 变量和当前目录，所以目标写成绝对路径；需要保留环境时使用 `--new-instance`。
-///
-/// `-n` 使参数一定送达：已有同一应用包的实例时，不带 `-n` 只会激活该实例，参数被丢弃；新进程启动后
-/// 仍按单实例规则转交。
+/// 由系统启动的应用是独立的进程，窗口会切到前台，系统权限不归属于终端。新进程不继承 shell 的环境变
+/// 量和当前目录，所以目标写成绝对路径；需要保留环境时使用 `--new-instance`。`-n` 使参数一定送达：
+/// 已有同一应用包的实例时，不带 `-n` 只会激活该实例，参数被丢弃；新进程启动后仍按单实例规则转交。
 #[cfg(target_os = "macos")]
 fn launch_bundle(args: &Args) -> Option<bool> {
     let exe = std::env::current_exe().ok()?;

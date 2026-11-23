@@ -20,7 +20,7 @@ struct RowBox<'a> {
     full: Option<CommitOverflow>,
     /// 全名伸出侧栏的那一段；没有伸出时为 `None`。
     spill: Option<Rect>,
-    /// 这一行的名字是否显示全名。按行判断，不看位置：固定在顶部的行与列表中被它盖住的
+    /// 这一行的名字是否显示全名。按行判断，不看位置：固定在顶部的行与列表中被它遮住的
     /// 那一行相同。
     wanted: bool,
     /// 名字的显示方式变化的原因，交给名字的过渡状态。
@@ -327,7 +327,7 @@ fn draw_dir_row(
     // 两种行排得整齐。
     icons::folder(frame, (icon_x, (cy - 6.0).round()), open, p.folder, list);
     // 写全名、收回途中名字画到过渡中的宽度为止，侧栏外的部分由 `draw_commit_overflow`
-    // 接着画。
+    // 继续画。
     let name_end = if wanted || retracting {
         text_x + view.width
     } else {

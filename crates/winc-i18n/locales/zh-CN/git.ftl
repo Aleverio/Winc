@@ -282,6 +282,7 @@ git-commit-todo-confirm = 新增的内容里有 { $count } 处 TODO 或 FIXME
 git-commit-todo-confirm-detail = 仍要提交吗？
 git-commit-todo-confirm-button = 仍然提交
 git-commit-reformatted = 提交前格式化了 { $count } 个文件
+git-commit-reformat-failed = { $count } 个文件未能格式化，已照原样提交
 git-undo-commit-confirm = 要撤销上次提交吗？
 git-undo-commit-confirm-detail = 「{ $subject }」中的更改将保留在暂存区，提交信息将放回输入框。
 git-undo-commit-confirm-button = 撤销提交

@@ -105,7 +105,7 @@ pub fn app_socket_path() -> Option<PathBuf> {
 
 /// 返回当前用户私有目录中名为 `winc-{name}.{extension}` 的文件路径。
 ///
-/// 路径长度超出系统对套接字路径的限制时返回 `None`。
+/// 套接字（`extension` 为 `sock`）的路径长度超出系统的限制时返回 `None`。
 pub(crate) fn private_file(name: &str, extension: &str) -> Option<PathBuf> {
     // 限制取下限：macOS 的套接字路径最多 104 字节（含结尾的 NUL），Linux 为 108 字节，
     // 这里按 104 字节减去结尾 NUL 占用的 1 字节，路径本身不得超过 103 字节。
@@ -128,7 +128,9 @@ pub(crate) fn private_file(name: &str, extension: &str) -> Option<PathBuf> {
     // 测试使用另一套名字，避免把目标交给本机正在运行的 winc 并使其切换到前台。
     let prefix = if cfg!(test) { "winc-test" } else { "winc" };
     let path = dir.join(format!("{prefix}-{name}.{extension}"));
-    (path.as_os_str().len() <= LIMIT).then_some(path)
+    // 只有套接字的路径受这个限制；锁文件等其他文件不受限，Windows 上的数据目录常常更长。
+    let fits = extension != "sock" || path.as_os_str().len() <= LIMIT;
+    fits.then_some(path)
 }
 
 /// 是否只有当前用户能访问目录 `dir`：属主与主目录相同，且其他用户没有任何权限。
@@ -429,18 +431,26 @@ mod imp {
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::mpsc::{Sender, channel};
+    use std::sync::mpsc::{RecvTimeoutError, Sender, channel};
     use std::time::Duration;
 
     use windows_sys::Win32::Foundation::{
-        ERROR_PIPE_CONNECTED, GetLastError, INVALID_HANDLE_VALUE,
+        CloseHandle, ERROR_PIPE_CONNECTED, GetLastError, HANDLE, INVALID_HANDLE_VALUE,
+    };
+    use windows_sys::Win32::Security::{
+        EqualSid, GetTokenInformation, TOKEN_QUERY, TOKEN_USER, TokenUser,
     };
     use windows_sys::Win32::Storage::FileSystem::{
         FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_ACCESS_DUPLEX,
     };
+    use windows_sys::Win32::System::IO::CancelIoEx;
     use windows_sys::Win32::System::Pipes::{
-        ConnectNamedPipe, CreateNamedPipeW, GetNamedPipeServerProcessId, PIPE_READMODE_BYTE,
-        PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
+        ConnectNamedPipe, CreateNamedPipeW, GetNamedPipeClientProcessId,
+        GetNamedPipeServerProcessId, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS,
+        PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
+    };
+    use windows_sys::Win32::System::Threading::{
+        GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
     };
 
     use super::{Launch, app_pipe_name, decode, deliver};
@@ -451,11 +461,104 @@ mod imp {
     /// 取值由界面线程的正常处理耗时决定，取自调参：界面线程阻塞超过该时长仍未答复时回
     /// `busy`，由新进程自己打开目标。
     const ANSWER_TIMEOUT: Duration = Duration::from_millis(1500);
+    /// 管道上一次读写（发出目标并等回复、读入一条消息）最长的时间（秒）。
+    ///
+    /// 取值由 [`ANSWER_TIMEOUT`] 决定：比对方等待界面线程答复的时长更长，保证对方先给出答复。
+    const REPLY_TIMEOUT: Duration = Duration::from_secs(3);
+    /// 读写超时之后再次取消的间隔（毫秒）：取消只对正在进行的那一次读写有效。
+    const CANCEL_AGAIN: Duration = Duration::from_millis(50);
     /// 单条消息可读取的最大字节数（字节），超过时按格式错误处理。
     ///
     /// 取值由系统对命令行参数总长的限制决定：macOS 为 1 MiB，Linux 默认为 2 MiB；参数中的
     /// 相对路径改写为绝对路径后长度会增加，因此留出余量。
     pub(super) const MESSAGE_LIMIT: u64 = 16 << 20;
+
+    /// 执行 `io`（在 `pipe` 上的读写），超过 [`REPLY_TIMEOUT`] 仍未完成时取消其中正在进行的
+    /// 读写，使它以错误返回。
+    ///
+    /// 管道的读写没有超时：对方连上后什么也不发，或迟迟不回复时，等待的一方会一直停住。
+    fn within<T>(pipe: &File, io: impl FnOnce() -> T) -> T {
+        // 句柄以整数交给看守线程：它在 `pipe` 被丢弃之前结束（下面等它）。
+        let handle = pipe.as_raw_handle() as usize;
+        let (done, finished) = channel::<()>();
+        let watchdog = std::thread::spawn(move || {
+            let mut limit = REPLY_TIMEOUT;
+            while finished.recv_timeout(limit) == Err(RecvTimeoutError::Timeout) {
+                // SAFETY: `io` 尚未结束（通道还开着），句柄仍然有效；没有正在进行的读写时
+                // 调用失败，没有其他效果。
+                unsafe { CancelIoEx(handle as HANDLE, std::ptr::null()) };
+                limit = CANCEL_AGAIN;
+            }
+        });
+        let result = io();
+        drop(done);
+        let _ = watchdog.join();
+        result
+    }
+
+    /// 返回进程 `process` 的用户（令牌中的 `TOKEN_USER`，其中的指针指向缓冲区自身）。
+    fn user_of(process: HANDLE) -> Option<Vec<u64>> {
+        let mut token = std::ptr::null_mut();
+        // SAFETY: `process` 是调用方给出的有效进程句柄，`token` 是可写的栈变量。
+        if unsafe { OpenProcessToken(process, TOKEN_QUERY, &mut token) } == 0 {
+            return None;
+        }
+        // `TOKEN_USER` 加上最长的 SID（68 字节）不超过 128 字节；用 `u64` 保证对齐。
+        let mut buffer = vec![0u64; 16];
+        let (mut needed, size) = (0, (buffer.len() * 8) as u32);
+        // SAFETY: `token` 是刚打开的令牌句柄；缓冲区可写、长度如实给出；用完后关闭句柄。
+        let ok = unsafe {
+            let ok = GetTokenInformation(
+                token,
+                TokenUser,
+                buffer.as_mut_ptr().cast(),
+                size,
+                &mut needed,
+            );
+            CloseHandle(token);
+            ok
+        };
+        (ok != 0).then_some(buffer)
+    }
+
+    /// 进程 `pid` 是否与本进程属于同一个用户；查不到时按不是处理。
+    ///
+    /// 管道的名字全机可见：别的用户可以抢先建一个同名的管道等着收目标，也可以连上来。
+    fn same_user(pid: u32) -> bool {
+        // SAFETY: 只请求查询权限；失败时返回空句柄。
+        let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        if process.is_null() {
+            return false;
+        }
+        let theirs = user_of(process);
+        // SAFETY: `process` 是上面打开的句柄，只关闭一次。
+        unsafe { CloseHandle(process) };
+        // SAFETY: `GetCurrentProcess` 返回的伪句柄总是有效，不需要关闭。
+        let ours = user_of(unsafe { GetCurrentProcess() });
+        let (Some(theirs), Some(ours)) = (theirs, ours) else {
+            return false;
+        };
+        let sid = |user: &[u64]| {
+            // SAFETY: 缓冲区由 `GetTokenInformation` 填好，开头是一个 `TOKEN_USER`，对齐足够。
+            unsafe { (*user.as_ptr().cast::<TOKEN_USER>()).User.Sid }
+        };
+        // SAFETY: 两个 SID 都指向各自仍然存活的缓冲区，由系统填写，格式有效。
+        unsafe { EqualSid(sid(&theirs), sid(&ours)) != 0 }
+    }
+
+    /// 管道 `pipe` 另一端的进程编号：`server` 为真时取服务的一方，否则取连上来的一方。
+    fn peer(pipe: &File, server: bool) -> Option<u32> {
+        let (mut pid, handle) = (0, pipe.as_raw_handle() as HANDLE);
+        // SAFETY: 句柄来自仍然存活的 `pipe`，`pid` 是可写的栈变量；调用失败时返回 0。
+        let ok = unsafe {
+            match server {
+                true => GetNamedPipeServerProcessId(handle, &mut pid),
+                false => GetNamedPipeClientProcessId(handle, &mut pid),
+            }
+        };
+        (ok != 0).then_some(pid)
+    }
+
     /// 把 `targets` 和激活令牌 `token` 交给正在运行的 winc，返回对方是否已收下。
     ///
     /// 目标投递到 [`app_pipe_name`] 对应的命名管道。
@@ -465,29 +568,26 @@ mod imp {
 
     /// 把 `targets` 和激活令牌 `token` 交给 `pipe` 上的 winc，返回对方是否已收下。
     ///
-    /// 连接失败、写入失败或对方没有回复 `ok` 时按未收下处理。
+    /// 连接失败、对方不是本用户的进程、写入失败、超过 [`REPLY_TIMEOUT`] 或对方没有回复 `ok`
+    /// 时按未收下处理。
     pub(super) fn forward_to(pipe: &Path, targets: &[Target], token: Option<&str>) -> bool {
         deliver(targets, token, |message| {
-            let mut stream = File::options().read(true).write(true).open(pipe)?;
-            allow_server_foreground(&stream);
-            stream.write_all(&(message.len() as u64).to_le_bytes())?;
-            stream.write_all(message)?;
-            let mut reply = String::new();
-            BufReader::new(stream).read_line(&mut reply)?;
-            Ok(reply)
+            let stream = File::options().read(true).write(true).open(pipe)?;
+            // 目标和激活令牌只交给本用户的进程；系统只允许拥有前台权限的进程切换前台窗口，
+            // 由用户启动的新进程有，正在运行的没有：转让给它，否则它的窗口留在后台。
+            let server = peer(&stream, true).filter(|pid| same_user(*pid));
+            let Some(server) = server else {
+                return Err(std::io::ErrorKind::PermissionDenied.into());
+            };
+            crate::windows::allow_foreground(server);
+            within(&stream, || {
+                (&stream).write_all(&(message.len() as u64).to_le_bytes())?;
+                (&stream).write_all(message)?;
+                let mut reply = String::new();
+                BufReader::new(&stream).read_line(&mut reply)?;
+                Ok(reply)
+            })
         })
-    }
-
-    /// 允许管道 `pipe` 另一端的服务进程把自己的窗口切到前台；取不到对方的进程编号时没有效果。
-    ///
-    /// 系统只允许拥有前台权限的进程切换前台窗口。由用户启动的新进程拥有该权限，正在运行的
-    /// 进程没有；不转让时对方打开目标后窗口留在后台，只有任务栏按钮闪烁。
-    fn allow_server_foreground(pipe: &File) {
-        let mut pid = 0;
-        // SAFETY: 句柄来自仍然存活的 `pipe`，`pid` 是可写的栈变量；调用失败时返回 0。
-        if unsafe { GetNamedPipeServerProcessId(pipe.as_raw_handle() as _, &mut pid) } != 0 {
-            crate::windows::allow_foreground(pid);
-        }
     }
 
     /// 创建一个等待连接的管道实例；`first` 为真时要求它是该名字的第一个实例。
@@ -571,11 +671,15 @@ mod imp {
                         let Some(waiting) = create(&name, false) else {
                             break;
                         };
-                        let mut stream = std::mem::replace(&mut next, waiting);
+                        let stream = std::mem::replace(&mut next, waiting);
                         if !connected {
                             continue;
                         }
-                        let Some(launch) = read_message(&mut stream) else {
+                        // 只收本用户的进程交来的；对方连上后迟迟不发时放弃这一个，不耽误后面的。
+                        if !peer(&stream, false).is_some_and(same_user) {
+                            continue;
+                        }
+                        let Some(launch) = within(&stream, || read_message(&mut &stream)) else {
                             continue;
                         };
                         let (answer, answered) = channel();
@@ -584,8 +688,10 @@ mod imp {
                             Ok(true) => b"ok\n",
                             _ => b"busy\n",
                         };
-                        let _ = stream.write_all(reply);
-                        let _ = stream.flush();
+                        within(&stream, || {
+                            let _ = (&stream).write_all(reply);
+                            let _ = (&stream).flush();
+                        });
                     }
                 })
                 .ok()?;

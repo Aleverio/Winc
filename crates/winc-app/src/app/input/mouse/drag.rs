@@ -157,7 +157,7 @@ impl App {
             Drag::TerminalDivider { start, size } => {
                 // 向上（面板在右侧时向左）拖动使面板变大；按排版允许的范围限制后再记录，
                 // 使记录的尺寸等于绘制的尺寸。拖过编辑区最小尺寸的一半时吸附为最大化，往回拖
-                // 又松开吸附，从最大的平常尺寸接着拖。
+                // 又松开吸附，从最大的平常尺寸继续拖。
                 let right = self.terminal_right();
                 let wanted = if right {
                     size - (x - start)
@@ -189,7 +189,7 @@ impl App {
                 } else {
                     self.terminal.height = drawn;
                 }
-                // 吸附、松开吸附时和 ⌘⇧↩ 一样过渡；状态不变时接着原来的过渡。
+                // 吸附、松开吸附时和 ⌘⇧↩ 一样过渡；状态不变时继续原来的过渡。
                 let snap = drawn > 0.0 && wanted - drawn > keep / 2.0;
                 self.terminal.maximized = snap;
                 self.terminal.grow = grow;

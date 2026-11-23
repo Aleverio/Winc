@@ -250,6 +250,11 @@ settings-updates-ready = { $platform ->
    *[other] { $version } 已安装，重新启动 Winc 后生效
 }
 settings-updates-install-failed = 无法安装更新：{ $error }
+settings-updates-error-location = 无法确定 Winc 的安装位置
+settings-updates-error-write = 无法写入「{ $path }」：{ $error }
+settings-updates-error-tool = 无法运行 curl 或 wget：{ $error }
+settings-updates-error-size = 下载的文件大小不符（应为 { $expected } 字节，实际为 { $actual } 字节）
+settings-updates-error-signature = 下载的文件签名不符
 settings-format-on-save-desc = 保存前用所选的格式化工具整理文件
 settings-fix-on-save-desc = 保存前自动修复 lint 工具能修复的问题
 settings-skip-on-save-desc = 保存这些语言的文件时跳过修复和格式化

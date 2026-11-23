@@ -153,6 +153,8 @@ impl Git {
         let cancel = Cancel::default();
         let mut command = self.command(root);
         command.args(["diff", "--no-color", "--no-ext-diff", "--unified=0"]);
+        // 不运行仓库配置的 `diff.*.textconv`，也不进入子模块（其配置不在信任检查的范围内）。
+        command.args(["--no-textconv", "--ignore-submodules=dirty"]);
         command.arg(if staged { "--cached" } else { "HEAD" });
         command.arg("--").args(relative_all(root, paths));
         let stdout = self.run(&mut command, STATUS_TIMEOUT, &cancel)?;
@@ -164,7 +166,7 @@ impl Git {
     }
 
     /// 读最近 `commits` 个提交：其他作者（`名字 <邮箱>`，按 `.mailmap` 归并，最近的在前，不重复，
-    /// 不含仓库配置的当前用户），以及当前用户自己写的提交信息（最近的在前，不重复，最多 `own` 条）。
+    /// 不含仓库配置的当前用户）和当前用户自己写的提交信息（最近的在前，不重复，最多 `own` 条）。
     ///
     /// # Errors
     ///
@@ -208,6 +210,15 @@ impl Git {
             }
         }
         Ok(history)
+    }
+
+    /// 是否工作区里的文件 `path` 与暂存区中的内容相同；`git` 运行失败时按不同处理。
+    pub fn matches_index(&self, root: &Path, path: &Path) -> bool {
+        let mut command = self.command(root);
+        command.args(["diff", "--name-only", "--no-ext-diff"]);
+        command.arg("--ignore-submodules=dirty").arg("--").arg(path);
+        self.run(&mut command, STATUS_TIMEOUT, &Cancel::default())
+            .is_ok_and(|names| names.trim_ascii().is_empty())
     }
 
     /// 把 `content` 登记为文件 `path` 在暂存区中的内容，工作区里的文件不变。
@@ -324,22 +335,40 @@ impl Git {
     ///
     /// # Errors
     ///
-    /// 仓库不受信任、`HEAD` 已经不是 `oid`、`git` 报错时返回说明。
+    /// 仓库不受信任、`HEAD` 已经不是 `oid`、读不到 `oid` 或它的父提交（浅克隆的边界）、`git`
+    /// 报错时返回说明。
     pub fn undo_commit(&self, root: &Path, oid: &str) -> Result<(), String> {
         self.require_trust(root)?;
         let cancel = Cancel::default();
-        let mut command = self.command(root);
-        command.args(["rev-parse", "--verify", "--quiet", &format!("{oid}^")]);
-        let parent = self.run(&mut command, SHOW_TIMEOUT, &cancel).ok();
-        let parent = parent.map(|p| String::from_utf8_lossy(&p).trim().to_owned());
+        let parents = self.parents(root, oid, &cancel)?;
         let mut command = self.command(root);
         command.args(["update-ref", "-m", "reset: undo commit"]);
-        match parent.filter(|p| !p.is_empty()) {
-            Some(parent) => command.args(["HEAD", &parent, oid]),
+        match parents.first() {
+            Some(parent) => command.args(["HEAD", parent, oid]),
             None => command.args(["-d", "HEAD", oid]),
         };
         self.run(&mut command, SHOW_TIMEOUT, &cancel)?;
         Ok(())
+    }
+
+    /// 返回提交 `oid` 记录的父提交，第一个父提交在前；根提交返回空表。
+    ///
+    /// 读取提交对象本身，不解析 `oid^`：浅克隆边界上的提交记录着父提交而仓库中没有它，解析
+    /// 失败时与根提交无法区分，据此改动引用会丢掉分支。
+    ///
+    /// # Errors
+    ///
+    /// `oid` 不是提交、`git` 运行失败时返回原因。
+    pub(super) fn parents(
+        &self,
+        root: &Path,
+        oid: &str,
+        cancel: &Cancel,
+    ) -> Result<Vec<String>, String> {
+        let mut command = self.command(root);
+        command.args(["cat-file", "commit", "--end-of-options", oid]);
+        let stdout = self.run(&mut command, SHOW_TIMEOUT, cancel)?;
+        Ok(commit_parents(&String::from_utf8_lossy(&stdout)))
     }
 
     /// 返回上一次提交的完整提交信息；还没有提交过、`git` 运行失败时为空字符串。
@@ -362,4 +391,16 @@ pub struct RecentHistory {
     pub own: Vec<String>,
     /// 仓库配置的当前用户的邮箱（`user.email`，小写）；没有配置时为空。
     pub me: String,
+}
+
+/// 返回提交对象的原文 `commit`（`git cat-file commit` 的输出）中记录的父提交，按记录的顺序。
+///
+/// 父提交写在开头的各行 `parent <提交号>` 中，到第一个空行（提交信息之前）为止。
+pub(super) fn commit_parents(commit: &str) -> Vec<String> {
+    commit
+        .lines()
+        .take_while(|line| !line.is_empty())
+        .filter_map(|line| line.strip_prefix("parent "))
+        .map(|oid| oid.trim().to_owned())
+        .collect()
 }

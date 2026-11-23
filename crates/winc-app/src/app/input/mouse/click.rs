@@ -312,7 +312,8 @@ impl App {
                     };
                 }
             }
-            // 分支面板里的分支：单击筛选，双击签出（第一下已经按它筛选了），再连着点不做别的。
+            // 分支面板里的分支：单击筛选，双击签出（第一次点击已经按它筛选了），
+            // 再连续点击不做别的。
             Target::Log(target @ crate::app::git::log::LogTarget::BranchRow(i)) => {
                 match self.click_count(x, y) {
                     1 => self.press_log(target),
