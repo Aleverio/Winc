@@ -159,7 +159,7 @@ pub(in crate::view) fn draw(app: &mut App, frame: &mut Frame<'_>, index: usize, 
     };
     let merges: Vec<Area> = visible.map_or_else(Vec::new, |v| {
         sheet
-            .merges
+            .merges()
             .iter()
             .filter(|m| m.overlaps(&v))
             .copied()

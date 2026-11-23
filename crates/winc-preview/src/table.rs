@@ -83,8 +83,10 @@ pub struct Sheet {
     row_ends: Vec<u32>,
     /// 最长一行的单元格数（合并区域伸到更右边时按合并区域算）。
     pub columns: usize,
-    /// 合并的单元格区域；显示的是区域左上角那一格的文字。
-    pub merges: Vec<Area>,
+    /// 合并的单元格区域，按第一行、第一列排序；显示的是区域左上角那一格的文字。
+    merges: Vec<Area>,
+    /// 与 `merges` 等长：到这一项为止各区域最后一行的最大值，查找时据此知道前面不必再看。
+    reach: Vec<usize>,
     /// 是否因超过 [`MAX_ROWS`]、[`MAX_COLUMNS`] 或文字总量的上限没有读完。
     pub truncated: bool,
 }
@@ -193,19 +195,45 @@ impl Sheet {
         &self.text[start..self.ends[i] as usize]
     }
 
+    /// 合并的单元格区域，按第一行、第一列排序。
+    pub fn merges(&self) -> &[Area] {
+        &self.merges
+    }
+
+    /// 设置合并的单元格区域。
+    pub fn set_merges(&mut self, mut merges: Vec<Area>) {
+        merges.sort_by_key(|m| (m.top, m.left));
+        let mut lowest = 0;
+        self.reach = (merges.iter())
+            .map(|m| {
+                lowest = lowest.max(m.bottom);
+                lowest
+            })
+            .collect();
+        self.merges = merges;
+    }
+
+    /// 可能与第 `top` 行到第 `bottom` 行有交集的合并区域：第一行不在 `bottom` 之后，且往前
+    /// 直到再没有区域伸到 `top`。
+    ///
+    /// 区域按第一行排序，通常只有几行高：要看的只是这几行附近的那些，不是全部。
+    fn merges_near(&self, top: usize, bottom: usize) -> &[Area] {
+        let end = self.merges.partition_point(|m| m.top <= bottom);
+        let start = self.reach[..end].partition_point(|&lowest| lowest < top);
+        &self.merges[start..end]
+    }
+
     /// 包含第 `row` 行第 `column` 列的合并区域。
     pub fn merge_at(&self, row: usize, column: usize) -> Option<Area> {
-        self.merges
-            .iter()
-            .find(|m| m.contains(row, column))
-            .copied()
+        let near = self.merges_near(row, row);
+        near.iter().find(|m| m.contains(row, column)).copied()
     }
 
     /// 把 `area` 扩大到完整包含与它重叠的合并区域（选中合并区域的一部分即选中整个区域）。
     pub fn cover_merges(&self, mut area: Area) -> Area {
         loop {
             let grown = self
-                .merges
+                .merges_near(area.top, area.bottom)
                 .iter()
                 .filter(|m| m.overlaps(&area))
                 .fold(area, |a, m| Area {
@@ -310,39 +338,74 @@ pub fn read_workbook(bytes: &[u8]) -> Result<Table, String> {
 /// 读磁盘上以分隔符分列的文件 `path`，用于原文不在内存中的大文件；`tabs` 的含义同
 /// [`read_delimited`]。
 ///
-/// 本机的文件只读取前 [`MAX_ROWS`] 行所需的部分；无法解码为 UTF-8 的字节替换为 U+FFFD。
+/// 一段一段地读、边读边解析，到 [`MAX_ROWS`] 行或文字总量的上限就不再往下读：文件再大、
+/// 一行再长，读进内存的只有显示得了的部分。无法解码为 UTF-8 的字节替换为 U+FFFD。
 ///
 /// # Errors
 ///
 /// 文件无法读取时返回给用户看的原因。
 pub fn load_delimited(path: &Path, tabs: bool) -> Result<Table, String> {
-    let (bytes, more) = if winc_backend::is_remote(path) {
-        (
-            winc_backend::fs::read(path).map_err(|e| e.to_string())?,
-            false,
-        )
-    } else {
-        head_lines(path, MAX_ROWS + 1).map_err(|e| e.to_string())?
-    };
-    let mut sheet = read_delimited(&String::from_utf8_lossy(&bytes), tabs);
-    sheet.truncated |= more;
+    let mut parser: Option<Delimited> = None;
+    let (mut offset, mut carry) = (0u64, Vec::new());
+    loop {
+        let (chunk, end) =
+            winc_backend::fs::read_range(path, offset, READ_PIECE).map_err(|e| e.to_string())?;
+        // 未到末尾却没有数据：再读下去不会结束。
+        if chunk.is_empty() && !end {
+            return Err(winc_i18n::t!("preview-table-invalid").to_owned());
+        }
+        offset += chunk.len() as u64;
+        carry.extend_from_slice(&chunk);
+        let text = decode(&mut carry, end);
+        let parser = parser.get_or_insert_with(|| {
+            Delimited::new(if tabs { '\t' } else { sniff_delimiter(&text) })
+        });
+        if !parser.feed(&text) || end {
+            break;
+        }
+    }
+    let sheet = parser.map_or_else(Sheet::default, Delimited::finish);
     Ok(Table {
         sheets: vec![sheet],
     })
 }
 
-/// 读本机文件 `path` 开头的 `lines` 行，返回读到的字节和其后是否还有内容。
-#[allow(clippy::disallowed_methods, reason = "调用方已确认路径在本机")]
-fn head_lines(path: &Path, lines: usize) -> std::io::Result<(Vec<u8>, bool)> {
-    use std::io::BufRead;
-    let mut reader = std::io::BufReader::new(std::fs::File::open(path)?);
-    let mut bytes = Vec::new();
-    for _ in 0..lines {
-        if reader.read_until(b'\n', &mut bytes)? == 0 {
-            return Ok((bytes, false));
+/// 读分隔符文件时一次读取的字节数（字节，1 MiB）：远端的文件一次请求最多取回这么多。
+const READ_PIECE: u32 = 1 << 20;
+
+/// 取出 `bytes` 中能解码为 UTF-8 的部分并返回；无效的字节换成 U+FFFD。结尾不完整的一个字符
+/// 留在 `bytes` 里等下一段接上，`end` 为真（后面没有了）时同样换成 U+FFFD。
+fn decode(bytes: &mut Vec<u8>, end: bool) -> String {
+    let mut text = String::new();
+    let mut rest = bytes.as_slice();
+    while !rest.is_empty() {
+        let error = match std::str::from_utf8(rest) {
+            Ok(valid) => {
+                text.push_str(valid);
+                rest = &[];
+                break;
+            }
+            Err(error) => error,
+        };
+        let (valid, after) = rest.split_at(error.valid_up_to());
+        text.push_str(&String::from_utf8_lossy(valid));
+        match error.error_len() {
+            Some(invalid) => {
+                text.push('\u{fffd}');
+                rest = &after[invalid..];
+            }
+            None if end => {
+                text.push('\u{fffd}');
+                rest = &[];
+            }
+            None => {
+                rest = after;
+                break;
+            }
         }
     }
-    Ok((bytes, !reader.fill_buf()?.is_empty()))
+    *bytes = rest.to_vec();
+    text
 }
 
 /// 读以分隔符分列的文本 `text`。
@@ -350,46 +413,104 @@ fn head_lines(path: &Path, lines: usize) -> std::io::Result<(Vec<u8>, bool)> {
 /// `tabs` 为真（TSV）时分隔符总是制表符，否则取第一行中出现最多的逗号、制表符或分号。
 /// 按 RFC 4180 处理引号：双引号括起的字段可以包含分隔符、换行，两个双引号表示一个双引号。
 pub fn read_delimited(text: &str, tabs: bool) -> Sheet {
-    let delimiter = if tabs { '\t' } else { sniff_delimiter(text) };
-    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    let mut parser = Delimited::new(if tabs { '\t' } else { sniff_delimiter(text) });
+    parser.feed(text);
+    parser.finish()
+}
 
-    let mut rows = Rows::default();
-    let mut field = String::new();
-    let mut quoted = false;
-    let mut truncated = false;
-    let mut chars = text.chars().peekable();
-    while let Some(c) = chars.next() {
-        if quoted {
+/// 一段一段读入分隔符文本的解析器：各段依次交给 [`Delimited::feed`]，最后 [`Delimited::finish`]。
+struct Delimited {
+    rows: Rows,
+    delimiter: char,
+    /// 正在读的字段。
+    field: String,
+    /// 是否在双引号括起的字段里。
+    quoted: bool,
+    /// 引号里刚读到一个双引号：下一个字符也是双引号时是写两遍的引号，否则字段的引号到此结束。
+    closing: bool,
+    /// 刚读到结束一行的回车：紧跟的换行属于同一个行尾。
+    after_cr: bool,
+    /// 还没有读过任何字符：文本开头的字节序标记不算内容。
+    fresh: bool,
+    /// 已经读满 [`MAX_ROWS`] 行：此后只看后面还有没有内容。
+    done: bool,
+    truncated: bool,
+}
+
+impl Delimited {
+    fn new(delimiter: char) -> Self {
+        Self {
+            rows: Rows::default(),
+            delimiter,
+            field: String::new(),
+            quoted: false,
+            closing: false,
+            after_cr: false,
+            fresh: true,
+            done: false,
+            truncated: false,
+        }
+    }
+
+    /// 读入下一段 `text`；返回 `false` 时已到行数或文字总量的上限，后面的不必再读。
+    fn feed(&mut self, text: &str) -> bool {
+        let mut text = text;
+        if std::mem::take(&mut self.fresh) {
+            text = text.strip_prefix('\u{feff}').unwrap_or(text);
+        }
+        for c in text.chars() {
+            if self.closing {
+                self.closing = false;
+                if c == '"' {
+                    self.field.push('"');
+                    continue;
+                }
+                self.quoted = false;
+            }
+            if self.quoted {
+                match c {
+                    '"' => self.closing = true,
+                    _ => self.field.push(c),
+                }
+                continue;
+            }
+            let after_cr = std::mem::take(&mut self.after_cr);
+            if after_cr && c == '\n' {
+                continue;
+            }
+            if self.done {
+                self.truncated = true;
+                return false;
+            }
             match c {
-                '"' if chars.peek() == Some(&'"') => {
-                    chars.next();
-                    field.push('"');
+                '"' if self.field.is_empty() => self.quoted = true,
+                '\n' | '\r' => {
+                    self.after_cr = c == '\r';
+                    push_field(&mut self.rows, &mut self.field, &mut self.truncated);
+                    self.rows.end_row();
+                    self.done = self.rows.len() == MAX_ROWS;
                 }
-                '"' => quoted = false,
-                _ => field.push(c),
-            }
-            continue;
-        }
-        match c {
-            '"' if field.is_empty() => quoted = true,
-            '\r' if chars.peek() == Some(&'\n') => {}
-            '\n' | '\r' => {
-                push_field(&mut rows, &mut field, &mut truncated);
-                rows.end_row();
-                if rows.len() == MAX_ROWS {
-                    truncated |= chars.peek().is_some();
-                    break;
+                c if c == self.delimiter => {
+                    push_field(&mut self.rows, &mut self.field, &mut self.truncated);
                 }
+                _ => self.field.push(c),
             }
-            c if c == delimiter => push_field(&mut rows, &mut field, &mut truncated),
-            _ => field.push(c),
+            // 文字总量到了上限：后面的单元格都收不下，不再读。
+            if self.rows.full {
+                return false;
+            }
         }
+        true
     }
-    if !field.is_empty() || rows.cells() > 0 {
-        push_field(&mut rows, &mut field, &mut truncated);
-        rows.end_row();
+
+    /// 结束读入，返回工作表。
+    fn finish(mut self) -> Sheet {
+        if !self.done && (!self.field.is_empty() || self.rows.cells() > 0) {
+            push_field(&mut self.rows, &mut self.field, &mut self.truncated);
+            self.rows.end_row();
+        }
+        self.rows.finish(String::new(), self.truncated)
     }
-    rows.finish(String::new(), truncated)
 }
 
 /// 把 `field` 加到 `rows` 当前行的末尾并清空；超过 [`MAX_COLUMNS`] 时丢弃并记下截断。

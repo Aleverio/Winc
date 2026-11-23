@@ -87,16 +87,24 @@ pub fn convert(bytes: &[u8]) -> Result<Book, String> {
     let archive = Archive::open(bytes).map_err(|e| match e {
         zip::Error::Invalid => invalid(),
         zip::Error::Unsupported => t!("preview-epub-unsupported").to_owned(),
+        zip::Error::TooLarge => t!("preview-epub-too-large").to_owned(),
     })?;
-    if protected(&archive) {
-        return Err(t!("preview-epub-drm").to_owned());
+    let book = (|| {
+        if protected(&archive) {
+            return Err(t!("preview-epub-drm").to_owned());
+        }
+        let package = Package::read(&archive).ok_or_else(invalid)?;
+        if package.spine.is_empty() {
+            return Err(invalid());
+        }
+        let contents = contents(&archive, &package);
+        Ok(xhtml::convert(&archive, &package, &contents))
+    })();
+    // 解压量超过上限时读不出的部件被当作没有：不显示缺了内容的书，直接说明过大。
+    if archive.exceeded() {
+        return Err(t!("preview-epub-too-large").to_owned());
     }
-    let package = Package::read(&archive).ok_or_else(invalid)?;
-    if package.spine.is_empty() {
-        return Err(invalid());
-    }
-    let contents = contents(&archive, &package);
-    Ok(xhtml::convert(&archive, &package, &contents))
+    book
 }
 
 /// 包文档（OPF）中读出的清单与书脊。

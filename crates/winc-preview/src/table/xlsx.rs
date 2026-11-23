@@ -29,11 +29,22 @@ pub(super) fn read(bytes: &[u8]) -> Result<Table, String> {
     let archive = Archive::open(bytes).map_err(|e| match e {
         zip::Error::Invalid => t!("preview-table-invalid").to_owned(),
         zip::Error::Unsupported => t!("preview-table-unsupported").to_owned(),
+        zip::Error::TooLarge => t!("preview-table-too-large").to_owned(),
     })?;
-    let workbook_path = package_target(&archive).unwrap_or_else(|| DEFAULT_WORKBOOK.to_owned());
-    let workbook = part(&archive, &workbook_path)?.ok_or(t!("preview-table-invalid"))?;
+    let table = read_archive(&archive);
+    // 解压量超过上限时读不出的部件被当作没有：不显示缺了内容的工作簿，直接说明过大。
+    if archive.exceeded() {
+        return Err(t!("preview-table-too-large").to_owned());
+    }
+    table
+}
+
+/// 读打开的 xlsx 包 `archive`，见 [`read`]。
+fn read_archive(archive: &Archive<'_>) -> Result<Table, String> {
+    let workbook_path = package_target(archive).unwrap_or_else(|| DEFAULT_WORKBOOK.to_owned());
+    let workbook = part(archive, &workbook_path)?.ok_or(t!("preview-table-invalid"))?;
     let workbook = parse(&workbook, &workbook_path)?;
-    let relations = relations(&archive, &workbook_path)?;
+    let relations = relations(archive, &workbook_path)?;
 
     let date1904 = workbook
         .descendants()
@@ -47,14 +58,14 @@ pub(super) fn read(bytes: &[u8]) -> Result<Table, String> {
             .map(|(_, target)| target.clone())
     };
     let shared = match related("/sharedStrings") {
-        Some(path) => match part(&archive, &path)? {
+        Some(path) => match part(archive, &path)? {
             Some(bytes) => shared_strings(text(&bytes, &path)?).ok_or_else(|| damaged(&path))?,
             None => Vec::new(),
         },
         None => Vec::new(),
     };
     let formats = match related("/styles") {
-        Some(path) => match part(&archive, &path)? {
+        Some(path) => match part(archive, &path)? {
             Some(bytes) => number_formats(&parse(&bytes, &path)?),
             None => Vec::new(),
         },
@@ -86,7 +97,7 @@ pub(super) fn read(bytes: &[u8]) -> Result<Table, String> {
         if !kind.ends_with("/worksheet") || !read.insert(path.as_str()) {
             continue;
         }
-        let Some(bytes) = part(&archive, path)? else {
+        let Some(bytes) = part(archive, path)? else {
             continue;
         };
         let name = node.attribute("name").unwrap_or_default().to_owned();
@@ -467,9 +478,14 @@ pub(super) fn worksheet(xml: &str, name: String, context: &Context) -> Option<Sh
         merge.bottom = merge.bottom.min(count.saturating_sub(1));
         merge.right = merge.right.min(MAX_COLUMNS - 1);
     }
-    sheet.merges = merges;
+    sheet.set_merges(merges);
     // 合并区域伸到有文字的列之外时，列数按合并区域算，区域完整显示。
-    let widest = sheet.merges.iter().map(|m| m.right + 1).max().unwrap_or(0);
+    let widest = sheet
+        .merges()
+        .iter()
+        .map(|m| m.right + 1)
+        .max()
+        .unwrap_or(0);
     sheet.columns = sheet.columns.max(widest);
     Some(sheet)
 }

@@ -80,11 +80,22 @@ pub fn convert(bytes: &[u8]) -> Result<Converted, String> {
     let archive = Archive::open(bytes).map_err(|e| match e {
         zip::Error::Invalid => t!("preview-docx-invalid").to_owned(),
         zip::Error::Unsupported => t!("preview-docx-unsupported").to_owned(),
+        zip::Error::TooLarge => t!("preview-docx-too-large").to_owned(),
     })?;
-    let main = package_target(&archive).unwrap_or_else(|| DEFAULT_DOCUMENT.to_owned());
-    let bytes = part(&archive, &main)?.ok_or(t!("preview-docx-invalid"))?;
+    let converted = convert_archive(&archive);
+    // 解压量超过上限时读不出的部件被当作没有：不显示缺了内容的文档，直接说明过大。
+    if archive.exceeded() {
+        return Err(t!("preview-docx-too-large").to_owned());
+    }
+    converted
+}
+
+/// 把打开的 docx 包 `archive` 转换成 Markdown，见 [`convert`]。
+fn convert_archive(archive: &Archive<'_>) -> Result<Converted, String> {
+    let main = package_target(archive).unwrap_or_else(|| DEFAULT_DOCUMENT.to_owned());
+    let bytes = part(archive, &main)?.ok_or(t!("preview-docx-invalid"))?;
     let document = parse(&bytes, &main)?;
-    let rels = relations(&archive, &main)?;
+    let rels = relations(archive, &main)?;
     let related = |kind: &str| {
         rels.values()
             .find(|(k, _)| k.ends_with(kind))
@@ -93,7 +104,7 @@ pub fn convert(bytes: &[u8]) -> Result<Converted, String> {
     // 样式、编号、脚注等部件缺失或损坏时按没有处理：正文仍然可以显示。
     let load_part = |kind: &str| -> Option<(String, Vec<u8>)> {
         let path = related(kind)?;
-        let bytes = part(&archive, &path).ok()??;
+        let bytes = part(archive, &path).ok()??;
         Some((path, bytes))
     };
     let styles_part = load_part("/styles");
@@ -112,7 +123,7 @@ pub fn convert(bytes: &[u8]) -> Result<Converted, String> {
     let comments = xml(&comments_part);
 
     let mut cx = Converter {
-        archive: &archive,
+        archive,
         rels: &rels,
         styles: &styles,
         numbering: &numbering,
