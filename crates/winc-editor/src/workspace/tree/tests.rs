@@ -873,10 +873,115 @@ fn a_folder_opened_for_the_background_fills_in_when_read() {
     assert_eq!(ws.selected_entry().map(|e| e.path.clone()), Some(file));
     assert!(!ws.take_open_failure());
 
-    // 此后展开别的目录就地读，不再等后台。
+    // 此后展开没有读过的目录也不在这里读：先是空的，记为待读，读好后才有内容。
     let other = ws.rows().iter().position(|e| e.name == "other").unwrap();
     ws.toggle(other);
+    assert!(!ws.rows().iter().any(|e| e.name == "b.rs"));
+    let scan = ws.take_missing().unwrap();
+    ws.apply_scan(scan.run());
     assert!(ws.rows().iter().any(|e| e.name == "b.rs"));
     assert!(ws.take_missing().is_none());
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 把 `ws` 待读的目录都读好换入，直到没有要读的。
+fn settle(ws: &mut Workspace) {
+    while let Some(scan) = ws.take_missing() {
+        ws.apply_scan(scan.run());
+    }
+}
+
+/// 各可见行相对 `ws` 根目录的路径和是否展开。
+fn shown(ws: &Workspace) -> Vec<(PathBuf, bool)> {
+    let relative = |e: &Entry| e.path.strip_prefix(&ws.root).unwrap().to_path_buf();
+    ws.rows()
+        .iter()
+        .map(|e| (relative(e), e.expanded))
+        .collect()
+}
+
+/// 一棵有合并显示的单子目录、已忽略的目录和多级子目录的目录树。
+fn nested(name: &str) -> PathBuf {
+    let root = crate::test_util::scratch(name);
+    fs::create_dir_all(root.join("java/com/acme/app/util")).unwrap();
+    fs::create_dir_all(root.join("java/com/acme/app/model")).unwrap();
+    fs::create_dir_all(root.join("docs/guide")).unwrap();
+    fs::write(root.join("java/com/acme/app/Main.java"), "").unwrap();
+    fs::write(root.join("java/com/acme/app/util/Text.java"), "").unwrap();
+    fs::write(root.join("docs/guide/intro.md"), "").unwrap();
+    fs::write(root.join("docs/index.md"), "").unwrap();
+    fs::write(root.join("readme.md"), "").unwrap();
+    root
+}
+
+#[test]
+fn expanding_after_a_fetch_shows_the_same_rows_without_the_disk() {
+    for all in [false, true] {
+        let root = nested("ws-fetch-expand");
+        let mut direct = Workspace::open(&root).unwrap();
+        let mut fetched = Workspace::open_later(&root).unwrap();
+        settle(&mut fetched);
+
+        for name in ["java", "docs"] {
+            let row = direct.row_of(&direct.root.join(name)).unwrap();
+            let limited = match all {
+                true => direct.expand_recursively(row),
+                false => {
+                    direct.toggle(row);
+                    false
+                }
+            };
+
+            let row = fetched.row_of(&fetched.root.join(name)).unwrap();
+            let fetch = fetched.fetch_to_expand(row, all).unwrap();
+            let expansion = fetched.adopt(fetch.run()).unwrap();
+            assert_eq!(expansion.limited, limited);
+            // 读好以后目录从磁盘上消失：展开只用读到的内容。
+            fs::rename(root.join(name), root.join("moved")).unwrap();
+            match all {
+                true => fetched.expand_dirs(row, expansion.dirs),
+                false => fetched.toggle(row),
+            }
+            fs::rename(root.join("moved"), root.join(name)).unwrap();
+            assert!(fetched.take_missing().is_none(), "{name} {all}");
+        }
+        assert_eq!(shown(&fetched), shown(&direct), "递归 {all}");
+        assert!(shown(&direct).len() > 4);
+
+        // 已经读过的目录不必再读。
+        let row = fetched.row_of(&fetched.root.join("docs")).unwrap();
+        fetched.toggle(row);
+        assert!(fetched.fetch_to_expand(row, false).is_none());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+}
+
+#[test]
+fn revealing_after_a_fetch_selects_the_file_without_the_disk() {
+    let root = nested("ws-fetch-reveal");
+    let mut direct = Workspace::open(&root).unwrap();
+    let mut fetched = Workspace::open_later(&root).unwrap();
+    settle(&mut fetched);
+    let file = fetched.root.join("java/com/acme/app/util/Text.java");
+    direct.reveal(&direct.root.join("java/com/acme/app/util/Text.java"));
+
+    let fetch = fetched.fetch_to_reveal(&file).unwrap();
+    fetched.adopt(fetch.run()).unwrap();
+    fs::rename(root.join("java"), root.join("moved")).unwrap();
+    fetched.reveal(&file);
+    fs::rename(root.join("moved"), root.join("java")).unwrap();
+
+    assert!(fetched.take_missing().is_none() && !fetched.awaits_reveal());
+    assert_eq!(shown(&fetched), shown(&direct));
+    assert_eq!(fetched.selected_entry().unwrap().path, file);
+    // 上级目录都读过了：不必再读。读的是别的工作区时不采用。
+    assert!(fetched.fetch_to_reveal(&file).is_none());
+    let other = Workspace::open(&root.join("docs")).unwrap();
+    let fetch = other
+        .fetch_to_reveal(&other.root.join("guide/intro.md"))
+        .unwrap();
+    assert!(fetched.adopt(fetch.run()).is_none());
+
+    let _ = fs::remove_dir_all(&root);
 }

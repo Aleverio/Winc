@@ -148,8 +148,8 @@ fn restore_panes(
 pub(crate) struct Prepared {
     /// 占用的备份目录及其锁（见 `BackupState::lock`）。
     lock: Option<(PathBuf, Option<backup::Lock>)>,
-    /// 该目录的各个备份，和已经读好的正文（见 [`PRELOAD_MAX`]）。
-    saved: Vec<(backup::Backup, Option<String>)>,
+    /// 该目录的各个备份，和已经读好的内容（见 [`PRELOAD_MAX`]）。
+    saved: Vec<(backup::Backup, Option<backup::BackupRead>)>,
     /// 现场的标签里磁盘上还在的本机文件。
     files: HashSet<PathBuf>,
 }
@@ -172,14 +172,20 @@ pub(crate) fn prepare_restore(
         (Some(backups), Some((_, Some(_)))) => backups.read_all(),
         _ => Vec::new(),
     };
-    // 正文也在这里读，恢复时界面线程不碰磁盘；合计超过上限的留到恢复时逐个读。
+    // 正文和对应的文件也在这里读，恢复时界面线程不碰磁盘；合计超过上限的留到恢复时逐个读。
     let mut left = PRELOAD_MAX;
+    let size = |path: &Path| winc_backend::fs::metadata(path).map(|m| m.len);
     let saved = (saved.into_iter())
         .map(|backup| {
-            let size = winc_backend::fs::metadata(&backup.file).map_or(u64::MAX, |m| m.len);
-            let text = (size <= left).then(|| backup.text().ok()).flatten();
-            left -= text.as_ref().map_or(0, |text| text.len() as u64).min(left);
-            (backup, text)
+            // 对应的文件已不存在时只读正文。
+            let file = backup
+                .path
+                .as_deref()
+                .map_or(0, |path| size(path).unwrap_or(0));
+            let size = size(&backup.file).map_or(u64::MAX, |text| text.saturating_add(file));
+            let read = (size <= left).then(|| backup.read().ok()).flatten();
+            left -= read.as_ref().map_or(0, |_| size);
+            (backup, read)
         })
         .collect();
     // 远端的文件不在这里查询：仍然恢复标签，文件不存在时由读取报告。
@@ -237,16 +243,20 @@ pub(crate) fn restore_prepared(
     }
 
     // 正文读不出来的备份不恢复（和头坏了的一样跳过），文件原样留在磁盘上。
-    let mut put_back = |editor: &mut Editor, saved: (backup::Backup, Option<String>)| {
-        let (backup, text) = saved;
-        let (index, conflict) = editor.restore_backup_with(&backup, text)?;
-        let doc = &editor.documents[index];
-        if conflict {
-            restored.conflicts.push(doc.name().into_owned());
-        }
-        restored.backups.push((doc.id, backup.file));
-        Some(index)
-    };
+    let mut put_back =
+        |editor: &mut Editor, saved: (backup::Backup, Option<backup::BackupRead>)| {
+            let (backup, read) = saved;
+            let (index, conflict) = match read {
+                Some(read) => editor.restore_backup_with(&backup, read),
+                None => editor.restore_backup(&backup)?,
+            };
+            let doc = &editor.documents[index];
+            if conflict {
+                restored.conflicts.push(doc.name().into_owned());
+            }
+            restored.backups.push((doc.id, backup.file));
+            Some(index)
+        };
 
     let active_tab = session.and_then(|s| s.active);
     let mut opened = Vec::new();
@@ -315,7 +325,7 @@ pub(crate) fn restore_at_launch(
     restored
 }
 
-/// 恢复之前在后台一并读好的备份正文的上限（字节，64 MiB）。
+/// 恢复之前在后台一并读好的备份正文和对应文件的上限（字节，按文件大小合计 64 MiB）。
 ///
 /// 未保存的内容通常只有几份、每份不大，全部在后台读好，恢复时界面线程不读磁盘。合计超过
 /// 上限的留到恢复时逐个读、读完即释放：内存的峰值不随备份的总量增长。

@@ -85,7 +85,20 @@ pub(crate) struct TreeScans {
     after: Vec<(u64, bool, AfterScan)>,
     /// 已经发出过几件要接着做的事，用作编号。
     issued: u64,
+    /// 后台为展开、定位读好的目录的通道，和各自读好后要做的事（按编号）。
+    fetched: (mpsc::Sender<FetchBack>, mpsc::Receiver<FetchBack>),
+    then: Vec<(u64, AfterFetch)>,
+    /// 最近一次定位的编号：更早发出的读好后不再定位。
+    reveals: u64,
+    /// 定位的路径还在等目录读好，读好选中后要滚到那里。
+    scroll_to_revealed: bool,
 }
+
+/// 后台为展开、定位读好的目录：要接着做的事的编号和读到的内容。
+type FetchBack = (u64, winc_editor::DirFetched);
+
+/// 目录读好并放进文件树的缓存后要做的事，参数是递归展开的范围。
+type AfterFetch = Box<dyn FnOnce(&mut App, winc_editor::Expansion)>;
 
 impl Default for TreeScans {
     fn default() -> Self {
@@ -94,6 +107,10 @@ impl Default for TreeScans {
             results: mpsc::channel(),
             after: Vec::new(),
             issued: 0,
+            fetched: mpsc::channel(),
+            then: Vec::new(),
+            reveals: 0,
+            scroll_to_revealed: false,
         }
     }
 }
@@ -350,9 +367,61 @@ impl App {
         });
     }
 
+    /// 在后台执行 `fetch`，读到的目录放进文件树的缓存后在界面线程上调用 `after`。
+    ///
+    /// 用于展开目录、定位文件之前；期间换了打开的目录时不调用 `after`。
+    pub(in crate::app) fn fetch_dirs_then(
+        &mut self,
+        fetch: winc_editor::DirFetch,
+        after: impl FnOnce(&mut App, winc_editor::Expansion) + 'static,
+    ) {
+        let scans = &mut self.panels.tree.scans;
+        scans.issued += 1;
+        let id = scans.issued;
+        scans.then.push((id, Box::new(after)));
+        let sender = scans.fetched.0.clone();
+        self.spawn_then(UserEvent::TreeScanned, move || {
+            let _ = sender.send((id, fetch.run()));
+        });
+    }
+
+    /// 收取后台为展开、定位读好的目录（见 [`App::fetch_dirs_then`]），放进缓存后接着做该做的事。
+    fn poll_tree_fetches(&mut self) {
+        while let Ok((id, fetched)) = self.panels.tree.scans.fetched.1.try_recv() {
+            let then = &mut self.panels.tree.scans.then;
+            let Some(at) = then.iter().position(|(issued, _)| *issued == id) else {
+                continue;
+            };
+            let (_, after) = then.remove(at);
+            let workspace = self.editor.workspace.as_mut();
+            if let Some(expansion) = workspace.and_then(|ws| ws.adopt(fetched)) {
+                after(self, expansion);
+            }
+        }
+    }
+
+    /// 记下一次新的定位并返回它的编号；见 [`App::is_latest_reveal`]。
+    pub(in crate::app) fn next_reveal(&mut self) -> u64 {
+        let scans = &mut self.panels.tree.scans;
+        scans.reveals += 1;
+        scans.scroll_to_revealed = false;
+        scans.reveals
+    }
+
+    /// 编号为 `reveal` 的定位之后是否没有再发出别的定位。
+    pub(in crate::app) fn is_latest_reveal(&self, reveal: u64) -> bool {
+        self.panels.tree.scans.reveals == reveal
+    }
+
+    /// 定位的路径所在的目录读好、选中它之后滚到那里。
+    pub(in crate::app) fn scroll_once_revealed(&mut self) {
+        self.panels.tree.scans.scroll_to_revealed = true;
+    }
+
     /// 收取后台重读完成的目录（见 [`TreeScans`]）并换进文件树；之后又发出过重读的目录不换。
     pub(in crate::app) fn poll_tree_scans(&mut self) {
         let mut changed = false;
+        let mut revealed = false;
         while let Ok((tickets, mut listing, batch)) = self.panels.tree.scans.results.1.try_recv() {
             let mut tickets = tickets.into_iter();
             let scans = &mut self.panels.tree.scans.tickets;
@@ -364,7 +433,9 @@ impl App {
             });
             let mut unreadable = None;
             if let Some(ws) = &mut self.editor.workspace {
+                let waiting = ws.awaits_reveal();
                 changed |= ws.apply_scan(listing);
+                revealed |= waiting && !ws.awaits_reveal();
                 unreadable = ws.take_open_failure().then(|| ws.name.clone());
             }
             // 刚打开的目录读不出来（没有权限等）：文件树是空的，说明原因。
@@ -389,6 +460,10 @@ impl App {
             // 换入的目录中可能又露出尚未读取的目录，随重绘的请求一并读取。
             self.request_redraw();
         }
+        if revealed && std::mem::take(&mut self.panels.tree.scans.scroll_to_revealed) {
+            self.scroll_to_selected_row();
+        }
+        self.poll_tree_fetches();
     }
 
     /// 在后台读取文件树中需要显示但尚未读取的目录（界面线程不等待远端的目录），读好后由

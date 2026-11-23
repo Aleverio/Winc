@@ -156,8 +156,10 @@ struct Missing {
     chains: HashSet<PathBuf>,
     /// 要选中、但所在目录尚未读好的路径（见 [`Workspace::reveal`]）。
     reveal: Option<PathBuf>,
-    /// 刚打开、各目录都交给后台读（见 [`Workspace::open_later`]）：要显示的目录都读好后为假。
+    /// 目录都交给后台读，调用的线程上不读（见 [`Workspace::open_later`]）。
     deferring: bool,
+    /// 打开的目录本身还没有读出结果。
+    opening: bool,
     /// 后台没能读出打开的目录本身，还没有告诉调用方（见 [`Workspace::take_open_failure`]）。
     unreadable: bool,
 }
@@ -257,7 +259,7 @@ impl Workspace {
         Self::open_with(root, false)
     }
 
-    /// 同 [`Workspace::open`]，但不在调用的线程上读目录：顶层和恢复展开的各级目录先是空的，
+    /// 同 [`Workspace::open`]，但此后都不在调用的线程上读目录：要显示而没有读过的目录先是空的，
     /// 记为待读（[`Workspace::take_missing`]），由调用方交给后台读好后换入。
     ///
     /// 界面线程上用它打开目录：目录可能在很慢的磁盘或网络盘上。读不出打开的目录本身时由
@@ -307,6 +309,7 @@ impl Workspace {
             children: HashMap::new(),
             missing: Missing {
                 deferring: later,
+                opening: later,
                 ..Missing::default()
             },
             rows: Vec::new(),
@@ -350,6 +353,9 @@ impl Workspace {
     }
 
     /// 切换第 `index` 行的展开状态；文件行和越界下标不做任何事。
+    ///
+    /// 展开还没有读过的目录时就在调用的线程上读；界面线程上先用
+    /// [`Workspace::fetch_to_expand`] 把读交给后台。
     pub fn toggle(&mut self, index: usize) {
         let Some(entry) = self.rows.get(index) else {
             return;
@@ -372,46 +378,22 @@ impl Workspace {
     ///
     /// 遵守忽略规则，不进入符号链接，也不展开文件树中不显示的名字；这一行本身被忽略时只展开
     /// 一层。返回是否因目录太多只展开了一部分（见 [`EXPAND_DIRS`]）。
+    ///
+    /// 就在调用的线程上读；界面线程上用 [`Workspace::fetch_to_expand`] 把读交给后台。
     pub fn expand_recursively(&mut self, index: usize) -> bool {
         self.expand_within(index, EXPAND_DIRS, EXPAND_ENTRIES)
     }
 
     /// 同 [`Self::expand_recursively`]，上限是目录数 `dirs` 和目录项数 `entries`。
     fn expand_within(&mut self, index: usize, dirs: usize, entries: usize) -> bool {
-        let Some(entry) = self.rows.get(index).filter(|e| e.kind == EntryKind::Dir) else {
+        let Some(fetch) = self.fetch_within(index, Some((dirs, entries))) else {
             return false;
         };
-        let path = entry.path.clone();
-        let listed = path.parent().is_some_and(|parent| {
-            walker(parent)
-                .max_depth(Some(1))
-                .build()
-                .filter_map(Result::ok)
-                .any(|e| e.path() == path)
-        });
-        if !listed {
-            self.expand_chain(path);
-            self.rebuild();
+        let Some(expansion) = self.adopt(fetch.run()) else {
             return false;
-        }
-
-        let mut walk = walker(&path);
-        walk.sort_by_file_name(|a, b| a.cmp(b));
-        let (mut expanded, mut seen, mut limited) = (0, 0, false);
-        for item in walk.build().filter_map(Result::ok) {
-            seen += 1;
-            let dir = item.file_type().is_some_and(|kind| kind.is_dir());
-            if seen > entries || (dir && expanded == dirs) {
-                limited = true;
-                break;
-            }
-            if dir {
-                expanded += 1;
-                self.expanded.insert(item.into_path());
-            }
-        }
-        self.rebuild();
-        limited
+        };
+        self.expand_dirs(index, expansion.dirs);
+        expansion.limited
     }
 
     /// 收起第 `index` 行的目录和它下面的各级目录，不访问磁盘；文件行和越界下标不做任何事。
@@ -475,6 +457,11 @@ impl Workspace {
                 }
             }
         }
+    }
+
+    /// 是否有要选中的路径还在等所在的目录读好（见 [`Workspace::reveal`]）。
+    pub fn awaits_reveal(&self) -> bool {
+        self.missing.reveal.is_some()
     }
 
     /// 重新读取全部已缓存的目录，已不是目录的展开项被移除。
@@ -834,7 +821,7 @@ impl Workspace {
 
 /// 返回目录 `dir` 的内容；未缓存时先读取并写入 `cache`，无法读取的目录按空目录处理。
 ///
-/// 当前线程不能等待读取时（界面线程上的远端目录），或工作区刚打开、目录都交给后台读时
+/// 当前线程不能等待读取时（界面线程上的远端目录），或工作区的目录都交给后台读时
 /// （[`Workspace::open_later`]）不写入缓存，把目录记入 `missing`，这次按空目录处理，读好后由
 /// [`Workspace::apply_scan`] 换入。
 fn cached_children(
@@ -1287,6 +1274,8 @@ fn take_number(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> (u128, u
 
 mod folders;
 pub(crate) use folders::{folder_prefixes, labelled_path};
+mod fetch;
+pub use fetch::{DirFetch, DirFetched, Expansion};
 mod scan;
 pub use scan::{DirListing, DirScan};
 

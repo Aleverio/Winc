@@ -191,6 +191,7 @@ impl Workspace {
             match (self.children.get(&dir), read) {
                 // 此前未能读取的目录：读到的内容（已不存在的按空目录）写入缓存。
                 (None, read @ (Read::Listed(_) | Read::Absent)) if awaited => {
+                    self.missing.opening &= dir != self.root;
                     let fresh = match read {
                         Read::Listed(fresh) => fresh,
                         _ => Vec::new(),
@@ -205,7 +206,8 @@ impl Workspace {
                 // 读取失败（连接中断、没有权限）：不写入缓存，下次需要显示时再读。
                 (None, Read::Failed) if awaited => {
                     self.missing.chains.remove(&dir);
-                    self.missing.unreadable |= self.missing.deferring && dir == self.root;
+                    self.missing.unreadable |= self.missing.opening && dir == self.root;
+                    self.missing.opening &= dir != self.root;
                 }
                 // 没有缓存的目录不需要显示；读不出来的保留已有的内容。
                 (None, _) | (Some(_), Read::Failed | Read::Blocked) => {}
@@ -233,10 +235,6 @@ impl Workspace {
                 self.expanded.remove(path);
             }
             self.rebuild();
-        }
-        // 刚打开时要显示的目录都读好了：此后展开目录就在调用的线程上读。
-        if self.missing.wanted.is_empty() && self.missing.requested.is_empty() {
-            self.missing.deferring = false;
         }
         // 此前要选中的路径：所在的目录读好后选中；待读的目录都已读完仍没有它时放弃。
         if let Some(path) = self.missing.reveal.take() {
