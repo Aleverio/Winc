@@ -531,6 +531,34 @@ fn back_and_forward_visit_log_and_diff_tabs() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn back_keeps_the_caret_line_of_a_previewed_file() {
+    let dir = navigation_folder("preview-history");
+    let notes: String = (0..400).map(|i| format!("Line {i}.\n\n")).collect();
+    std::fs::write(dir.join("notes.md"), notes).unwrap();
+    let mut app = app_with(&dir, false);
+    app.open_path(&dir.join("notes.md"));
+    app.goto_line("301");
+    app.track_navigation();
+    app.set_preview_mode(winc_editor::PreviewMode::Preview);
+    app.track_navigation();
+    app.open_path(&dir.join("main.py"));
+    app.track_navigation();
+
+    let notes = app
+        .editor
+        .documents
+        .iter()
+        .position(|d| d.name() == "notes.md")
+        .unwrap();
+    app.close_tab(notes);
+    app.track_navigation();
+    app.navigate_history(false);
+    assert_eq!(where_am_i(&app), ("notes.md".to_owned(), 300));
+
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 /// 在 `dir` 中创建一个很长的 Python 文件并返回其路径。
 ///
 /// 开头是一个类，中间隔着 200 行赋值语句，最后是两个函数。

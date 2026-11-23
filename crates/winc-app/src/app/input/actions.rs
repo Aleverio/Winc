@@ -102,7 +102,6 @@ impl App {
             GoToDefinition => self.go_to_definition(),
             OpenLink => self.open_caret_link(),
             FindReferences => self.find_references(),
-            // 有日志标签且可以后退时先在日志里后退；否则按位置历史回到上一个标签。
             GoBack => self.navigate_history(false),
             GoForward => self.navigate_history(true),
             Settings => self.open_settings(),
