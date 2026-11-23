@@ -932,6 +932,11 @@ impl ApplicationHandler<Envelope> for Winc {
                     slot.app.request_redraw();
                 }
             }
+            UserEvent::SystemThemeChanged(theme) => {
+                for slot in &mut self.windows {
+                    slot.app.system_theme_changed(theme);
+                }
+            }
             // 连接由各窗口共用，每个窗口都处理。
             UserEvent::RemoteShells => {
                 for slot in &mut self.windows {
