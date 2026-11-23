@@ -412,6 +412,12 @@ pub(crate) const OPEN_LIMIT: u64 = 4 << 30;
 /// 超过该大小的文件按大文件打开：原文留在磁盘上按需读取，内存里只记录改动。下限取自调参：按大文件
 /// 打开后每次滚动都要读磁盘，只有当整个文件读入内存的占用和耗时不可忽略时，这一代价才值得承担。
 pub const LARGE_FILE: u64 = 16 << 20;
+
+/// 本机上的文件 `path` 是否超过 [`LARGE_FILE`]、按大文件打开；远端的文件不查询，返回 `false`。
+pub fn opens_as_large(path: &Path) -> bool {
+    !winc_backend::is_remote(path)
+        && winc_backend::fs::metadata(path).is_ok_and(|m| m.len > LARGE_FILE)
+}
 /// 一次复制的最大字节数（字节，64 MiB）。
 ///
 /// 大文件全选后复制会把整个文件读进内存，因此需要限制。
