@@ -12,6 +12,8 @@ mod app;
 mod askpass;
 mod bench;
 mod cli;
+#[cfg(all(unix, not(target_os = "macos")))]
+mod color_scheme;
 mod crash;
 mod credentials;
 mod elevated;
@@ -225,6 +227,18 @@ pub fn run() {
             std::process::exit(1);
         }
     };
+
+    // X11、Wayland 上经门户读取系统的外观，在建窗口之前开始。
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let proxy = event_loop.create_proxy();
+        color_scheme::watch(move |theme| {
+            let _ = proxy.send_event(Envelope {
+                to: winc::Recipient::Active,
+                event: app::UserEvent::SystemThemeChanged(theme),
+            });
+        });
+    }
 
     // 拖到程序坞图标上、由系统转交给 winc 打开的文件和目录。winc 因此被启动时，系统在启动
     // 完成之前就交来这些路径，因此必须在事件循环开始运行之前注册回调；这些事件在窗口建好以后
