@@ -1284,9 +1284,8 @@ impl App {
             .is_some_and(winc_editor::Watcher::reliable);
         if !live {
             // 发行版无法访问时目录都读不到，保留现有的文件树。
-            let reachable = self.editor.root().is_none_or(winc_editor::wsl::reachable);
-            if let Some(ws) = (self.editor.workspace.as_mut()).filter(|_| reachable) {
-                ws.refresh();
+            if self.editor.root().is_none_or(winc_editor::wsl::reachable) {
+                self.rescan_tree(|_| {});
             }
             self.overlays.picker.stale = true;
         }

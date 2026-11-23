@@ -425,7 +425,7 @@ fn set_encoding_region() {
 
 /// 打开上次退出时的项目目录，返回是否打开成功。
 ///
-/// 目录已不存在时不做任何事，开始页的最近列表仍保留该条目。标签由 `app::restore_tabs`
+/// 目录已不存在时不做任何事，开始页的最近列表仍保留该条目。标签由 `app::restore_at_launch`
 /// 按现场恢复。
 pub(crate) fn open_session_folder(editor: &mut Editor, session: &Session) -> bool {
     winc_backend::fs::is_dir(&session.folder) && editor.open_folder(&session.folder).is_ok()

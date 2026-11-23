@@ -1,5 +1,7 @@
 //! 目录的打开、切换和关闭，最近打开的目录，以及每个目录的现场（标签和当前标签）。
 
+use std::sync::PoisonError;
+
 use super::*;
 
 /// 开始页（没有打开目录时）上可以点击的项。
@@ -174,11 +176,42 @@ impl App {
             self.restore_group(session.as_ref());
         }
         self.watch_extra_folders();
-        let restored = restore_tabs(
-            &mut self.editor,
-            session.as_ref(),
-            self.backup.root.as_deref(),
-        );
+        // 备份和各标签的文件在后台读：要等备份锁，目录可能在很慢的磁盘上。
+        self.disk.restoring = Some(root.clone());
+        let backups = self.backup.root.clone();
+        let slot = Arc::clone(&self.disk.prepared);
+        self.spawn_blocking_then(UserEvent::TabsPrepared, move || {
+            let prepared = prepare_restore(Some(&root), session.as_ref(), backups.as_deref());
+            let mut slot = slot.lock().unwrap_or_else(PoisonError::into_inner);
+            *slot = Some((root, session, prepared));
+        });
+        self.request_redraw();
+    }
+
+    /// 是否正在后台读取备份、还没有恢复打开的目录的标签；这时编辑区显示正在恢复。
+    pub(crate) fn restoring_tabs(&self) -> bool {
+        self.disk.restoring.is_some()
+    }
+
+    /// 后台读好了恢复标签要用的内容：恢复该目录上次的标签、终端和运行配置。期间换了目录时丢弃。
+    ///
+    /// 期间打开的文件仍是当前标签，不被现场里当时的当前标签取代。
+    pub(in crate::app) fn poll_prepared_tabs(&mut self) {
+        let prepared = (self.disk.prepared.lock())
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
+        let Some((root, session, prepared)) = prepared else {
+            return;
+        };
+        if self.disk.restoring.as_ref() != Some(&root) || self.editor.root() != Some(&root) {
+            return;
+        }
+        self.disk.restoring = None;
+        let opened = self.editor.active().map(|doc| doc.id);
+        let restored = restore_prepared(&mut self.editor, session.as_ref(), prepared);
+        if let Some(index) = opened.and_then(|id| self.editor.index_of(id)) {
+            self.editor.active = Some(index);
+        }
         self.adopt_restored(restored);
         if session
             .as_ref()
@@ -236,6 +269,7 @@ impl App {
             });
         }
         self.editor.workspace = None;
+        self.disk.restoring = None;
         // 标签都关了，没有要备份的：放开这个目录的备份锁（见 `release_folder_lock`）。
         self.release_folder_lock();
         self.reset_folder_views();
@@ -333,6 +367,10 @@ impl App {
     /// 现场的内容包括：有路径且仍在磁盘上的标签、有备份的未保存内容、书签、折叠的块、大纲里
     /// 收起的符号，以及当前标签。
     pub(in crate::app) fn remember_session(&mut self) {
+        // 上次的标签还没有恢复：这时记下的现场是空的，会盖掉要恢复的那一份。
+        if self.restoring_tabs() {
+            return;
+        }
         let places = self.places_now();
         let Some(folder) = self.editor.root().map(Path::to_path_buf) else {
             if !places.is_empty() {
@@ -594,3 +632,6 @@ fn report_state_error(result: &std::io::Result<()>) {
         eprintln!("winc: 无法记下最近打开的目录：{e}");
     }
 }
+
+/// 后台读好的、恢复标签要用的内容：目录、它的现场和读到的备份。
+pub(in crate::app) type PreparedTabs = Arc<Mutex<Option<(PathBuf, Option<Session>, Prepared)>>>;

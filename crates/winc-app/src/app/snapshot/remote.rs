@@ -819,7 +819,7 @@ fn crumb_menus_on_a_remote_host_list_the_folder() {
     paint(&mut app);
 
     // 尚未读取的远端目录只有一行说明，不在界面线程上读取。
-    let level = folder_level(&root, &file);
+    let level = folder_level(&root);
     assert_eq!(level.loading, Some((root.clone(), false)));
     assert_eq!(level.rows.len(), 1);
 

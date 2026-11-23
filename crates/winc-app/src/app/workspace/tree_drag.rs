@@ -386,20 +386,25 @@ impl App {
         for failure in failures {
             self.notify(NoticeKind::Error, failure);
         }
-        if !copies.is_empty()
-            && let Some(ws) = &mut self.editor.workspace
-        {
-            ws.refresh();
-            // 展开到各个副本所在的位置，再一起选中（只能选中显示出来的行）。
-            for copy in &copies {
-                ws.reveal(copy);
-            }
-            ws.select_paths(&copies);
-            self.panels.tree.motion = None;
+        if !copies.is_empty() {
+            let copies = copies.clone();
             self.focus = Focus::Tree;
-            if let Some(index) = ws.selected {
-                self.scroll_tree_to(index, false);
-            }
+            self.rescan_tree(move |app| {
+                let Some(ws) = &mut app.editor.workspace else {
+                    return;
+                };
+                // 展开到各个副本所在的位置，再一起选中（只能选中显示出来的行）。
+                for copy in &copies {
+                    ws.reveal(copy);
+                }
+                ws.select_paths(&copies);
+                app.panels.tree.motion = None;
+                if let Some(index) = ws.selected {
+                    app.scroll_tree_to(index, false);
+                }
+                app.relayout();
+                app.request_redraw();
+            });
         }
         self.picker_touched(copies);
         self.relayout();

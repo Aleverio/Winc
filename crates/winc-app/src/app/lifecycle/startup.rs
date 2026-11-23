@@ -188,6 +188,10 @@ impl App {
             disk: crate::app::workspace::DiskState {
                 watcher: None,
                 extra_watchers: Vec::new(),
+                restoring: None,
+                prepared: Arc::default(),
+                starting: Vec::new(),
+                started: Arc::default(),
                 solo: false,
                 open_alone: None,
                 changes_due: None,

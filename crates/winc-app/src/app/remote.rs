@@ -120,8 +120,6 @@ pub(crate) struct RemoteState {
     stepping: bool,
     /// 选择面板在后台读好的目录。
     pub(in crate::app) listed: picker::Listings,
-    /// 后台启动好的对远端目录的监视，由 `App::poll_remote_watcher` 取走。
-    pub(in crate::app) watching: Arc<Mutex<Option<winc_editor::Watcher>>>,
     /// 正在进行的连接成功、打开目录之后要打开的文件，及参数中写的目录（见
     /// [`App::open_remote`]）；没有时为 `None`。
     files: Option<(PathBuf, Vec<crate::cli::Target>)>,
@@ -142,7 +140,6 @@ impl Default for RemoteState {
             paused: false,
             stepping: false,
             listed: picker::Listings::default(),
-            watching: Arc::default(),
             files: None,
         }
     }

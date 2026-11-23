@@ -470,7 +470,7 @@ impl App {
             | UserEvent::RemoteConnected
             | UserEvent::RemoteListed
             | UserEvent::FolderListed
-            | UserEvent::RemoteWatching
+            | UserEvent::WatcherStarted
             | UserEvent::FormatPlanned
             | UserEvent::FileWorked
             | UserEvent::GitMergeSides
@@ -479,6 +479,8 @@ impl App {
             | UserEvent::Latex
             | UserEvent::Reread
             | UserEvent::TreeScanned
+            | UserEvent::RunConfigsLoaded
+            | UserEvent::TabsPrepared
             | UserEvent::Saved
             | UserEvent::Loaded
             | UserEvent::Counted

@@ -847,12 +847,7 @@ impl App {
             TreeTool::NewFile => self.start_new_entry(false),
             TreeTool::NewFolder => self.start_new_entry(true),
             TreeTool::Refresh => {
-                if let Some(ws) = &mut self.editor.workspace {
-                    ws.refresh();
-                    self.panels.tree.motion = None;
-                    self.clamp_tree_scroll();
-                }
-
+                self.rescan_tree(|_| {});
                 self.picker_invalidate();
             }
             TreeTool::CollapseAll => {

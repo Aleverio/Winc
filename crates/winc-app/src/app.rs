@@ -56,7 +56,9 @@ pub use input::context_menu::{ContextMenu, MenuButton, MenuCommand};
 pub use input::palette::palette;
 pub(crate) use lifecycle::alert::{AlertButton, AlertKey, AlertPart, AlertParts, InAppAlert};
 use lifecycle::appearance::{forced_theme, unusable_font};
-pub(crate) use lifecycle::backup::{restore_at_launch, restore_tabs};
+pub(crate) use lifecycle::backup::{
+    Prepared, prepare_restore, restore_at_launch, restore_prepared,
+};
 pub use lifecycle::closing::{CloseRequest, SaveChoice, SavePrompt};
 pub use lifecycle::notice::{NoticeAction, NoticeGhost, NoticeKind};
 pub use lifecycle::title_bar::WindowControl;
@@ -290,8 +292,8 @@ pub enum UserEvent {
     RemoteListed,
     /// 后台为目录菜单读好了一个远端目录。
     FolderListed,
-    /// 后台对远端目录的监视已经启动。
-    RemoteWatching,
+    /// 后台启动好了对一个目录的监视，或者没能启动。
+    WatcherStarted,
     /// 到远端主机的连接意外中断。
     RemoteClosed(winc_backend::Target),
     /// 一台远端主机的集成脚本和 shell 列表已经准备完；各窗口都收到。
@@ -348,6 +350,10 @@ pub enum UserEvent {
     Latex,
     /// 确认框中同意运行项目的 `latexmkrc`：要重新编译的文档，文件所在的目录和内容。
     LatexRc(Box<(DocumentId, PathBuf, String)>),
+    /// 后台读好了运行配置。
+    RunConfigsLoaded,
+    /// 后台读好了恢复标签要用的备份和文件信息。
+    TabsPrepared,
     /// 后台读写完了状态文件：第几次请求，和文件里现在的状态。
     StateStored(u64, Box<State>),
     /// 后台已检查或重读被其他程序修改的文件。
@@ -1148,7 +1154,7 @@ impl App {
             UserEvent::RemoteConnected => self.poll_remote(),
             UserEvent::RemoteListed => self.poll_remote_listings(),
             UserEvent::FolderListed => self.poll_folder_levels(),
-            UserEvent::RemoteWatching => self.poll_remote_watcher(),
+            UserEvent::WatcherStarted => self.poll_watchers(),
             UserEvent::FormatPlanned => self.poll_formatting(),
             UserEvent::FileWorked => self.poll_file_work(),
             UserEvent::GitMergeSides => self.poll_merge_sides(),
@@ -1157,6 +1163,8 @@ impl App {
             UserEvent::Latex => self.poll_latex(),
             UserEvent::Reread => self.poll_rereads(),
             UserEvent::TreeScanned => self.poll_tree_scans(),
+            UserEvent::RunConfigsLoaded => self.poll_run_configs(),
+            UserEvent::TabsPrepared => self.poll_prepared_tabs(),
             UserEvent::Saved => self.poll_saves(),
             UserEvent::Loaded => self.poll_loads(),
             UserEvent::Counted => self.poll_words(),

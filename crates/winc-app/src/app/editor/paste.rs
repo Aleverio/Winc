@@ -360,16 +360,23 @@ impl App {
         if let Some(message) = failure {
             self.notify(NoticeKind::Error, message);
         }
-        let Some(ws) = self.editor.workspace.as_mut() else {
+        if self.editor.workspace.is_none() {
             return;
-        };
-        ws.refresh();
-        if let Some(last) = pasted.last() {
-            ws.reveal(last);
         }
-        if let Some(index) = ws.selected {
-            self.scroll_tree_to(index, false);
-        }
+        let last = pasted.last().cloned();
+        self.rescan_tree(move |app| {
+            let Some(ws) = app.editor.workspace.as_mut() else {
+                return;
+            };
+            if let Some(last) = &last {
+                ws.reveal(last);
+            }
+            if let Some(index) = ws.selected {
+                app.scroll_tree_to(index, false);
+            }
+            app.relayout();
+            app.request_redraw();
+        });
         self.picker_touched(pasted);
         self.relayout();
         self.request_redraw();

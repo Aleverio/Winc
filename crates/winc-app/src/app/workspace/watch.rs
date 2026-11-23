@@ -6,7 +6,7 @@
 //! 收到系统通知后立即唤醒界面，但等待 [`SETTLE`] 之后才处理：切换分支、解压、格式化整个
 //! 项目等操作产生的密集改动合并为一批，只更新一次。
 
-use std::sync::mpsc;
+use std::sync::{PoisonError, mpsc};
 use std::time::{Duration, Instant};
 
 use winc_editor::{
@@ -64,8 +64,14 @@ impl Default for Rereads {
     }
 }
 
-/// 后台重读的一批目录：各目录的读取代号（按读取顺序）与目录内容。
-type ScanBack = (Vec<u64>, DirListing);
+/// 后台启动好的监视：目录和监视器，启动失败时为 `None`。
+pub(in crate::app) type Started = Arc<Mutex<Vec<(PathBuf, Option<Watcher>)>>>;
+
+/// 后台重读的一批目录：各目录的读取代号（按读取顺序）、目录内容，和读好后要接着做的事的编号。
+type ScanBack = (Vec<u64>, DirListing, Option<u64>);
+
+/// 文件树重读完成后在界面线程上接着做的事（选中、展开到某一行）。
+type AfterScan = Box<dyn FnOnce(&mut App)>;
 
 /// 在后台重读的、文件树中被其他程序修改过的目录。
 ///
@@ -75,6 +81,10 @@ pub(crate) struct TreeScans {
     pub(in crate::app) tickets: Tickets<PathBuf>,
     /// 后台重读结果的通道：发送端交给工作线程，接收端由界面线程轮询。
     pub(in crate::app) results: (mpsc::Sender<ScanBack>, mpsc::Receiver<ScanBack>),
+    /// 等某一批重读读好后要做的事：编号、是否改为等下一批（这一批里有目录被更新的重读取代）。
+    after: Vec<(u64, bool, AfterScan)>,
+    /// 已经发出过几件要接着做的事，用作编号。
+    issued: u64,
 }
 
 impl Default for TreeScans {
@@ -82,6 +92,8 @@ impl Default for TreeScans {
         Self {
             tickets: Tickets::default(),
             results: mpsc::channel(),
+            after: Vec::new(),
+            issued: 0,
         }
     }
 }
@@ -100,21 +112,12 @@ impl App {
         // 换了目录或关闭了目录：原来附加的目录不再监视。
         self.watch_extra_folders();
         self.git_folder_changed();
-        let (Some(root), Some(proxy)) = (root, self.link.proxy.clone()) else {
+        let Some(root) = root.filter(|_| self.link.proxy.is_some()) else {
             return;
         };
-        // 远端主机上的目录由服务进程在那台主机上监视；启动要发出请求，在后台进行。
-        if winc_backend::is_remote(&root) {
-            self.start_remote_watcher(root);
-            self.index_folder();
-            return;
-        }
-        // 监视启动失败（例如超出系统允许的监视数量）时 `watcher` 为 `None`，
-        // 由 `check_disk` 在窗口重新获得焦点时检查文档并重读文件树。
-        self.disk.watcher = Watcher::start(&root, move || {
-            let _ = proxy.send_event(UserEvent::FilesChanged);
-        })
-        .ok();
+        // 启动在后台进行：远端要发出请求，本机在有的系统上要走遍整棵目录树。启动失败（例如超出
+        // 系统允许的监视数量）时没有监视，由 `check_disk` 在窗口重新获得焦点时检查。
+        self.start_watcher(root);
         self.index_folder();
     }
 
@@ -123,56 +126,72 @@ impl App {
         let root = (self.disk.watcher.as_ref())
             .filter(|watcher| watcher.exited())
             .map(|watcher| watcher.root().to_path_buf());
-        let (Some(root), Some(proxy)) = (root, self.link.proxy.clone()) else {
+        let Some(root) = root.filter(|_| self.link.proxy.is_some()) else {
             return;
         };
         // 远端的监视随连接中断而结束：连接恢复后重新启动。
-        if let Some(at) = winc_backend::locate(&root) {
-            if winc_backend::remote::is_connected(&at.target) {
-                self.disk.watcher = None;
-                self.start_remote_watcher(root);
-            }
-            return;
-        }
-        if !winc_editor::wsl::reachable(&root) {
-            return;
-        }
-        let wake = move || {
-            let _ = proxy.send_event(UserEvent::FilesChanged);
+        let reachable = match winc_backend::locate(&root) {
+            Some(at) => winc_backend::remote::is_connected(&at.target),
+            None => winc_editor::wsl::reachable(&root),
         };
-        if let Ok(watcher) = Watcher::start(&root, wake) {
-            self.disk.watcher = Some(watcher);
+        if reachable {
+            self.disk.watcher = None;
+            self.start_watcher(root);
         }
     }
 
-    /// 在后台启动对远端目录 `root` 的监视，启动好后由 [`App::poll_remote_watcher`] 接收。
+    /// 在后台启动对目录 `folder` 的监视，启动好后由 [`App::poll_watchers`] 接收；已经在启动
+    /// 的不再启动一次。
     ///
-    /// 启动失败（服务进程无法监视、连接中断）时没有监视，变化由 `check_disk` 在窗口重新获得
-    /// 焦点时检查。
-    fn start_remote_watcher(&mut self, root: PathBuf) {
+    /// 启动失败时没有监视，变化由 `check_disk` 在窗口重新获得焦点时检查。
+    fn start_watcher(&mut self, folder: PathBuf) {
         let Some(proxy) = self.link.proxy.clone() else {
             return;
         };
-        let slot = Arc::clone(&self.remote.watching);
-        self.spawn_blocking_then(UserEvent::RemoteWatching, move || {
+        if self.disk.starting.contains(&folder) {
+            return;
+        }
+        self.disk.starting.push(folder.clone());
+        let started = Arc::clone(&self.disk.started);
+        self.spawn_blocking_then(UserEvent::WatcherStarted, move || {
             let wake = move || {
                 let _ = proxy.send_event(UserEvent::FilesChanged);
             };
-            if let Ok(watcher) = Watcher::start(&root, wake) {
-                *slot
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(watcher);
-            }
+            let watcher = Watcher::start(&folder, wake).ok();
+            let mut started = started.lock().unwrap_or_else(PoisonError::into_inner);
+            started.push((folder, watcher));
         });
     }
 
-    /// 接收后台启动好的远端目录的监视；期间换了目录时丢弃（监视随之结束）。
-    pub(in crate::app) fn poll_remote_watcher(&mut self) {
-        let started = (self.remote.watching.lock())
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take();
-        if let Some(watcher) = started.filter(|w| Some(w.root()) == self.editor.root()) {
-            self.disk.watcher = Some(watcher);
+    /// 接收后台启动好的监视：打开的目录、附加的目录和展开的链接目录各归其位；期间不再需要
+    /// 监视的目录（换了目录、收起了链接）丢弃，监视随之结束。
+    ///
+    /// 启动期间磁盘上的变化没有通知：启动好后重读文件树，检查打开的文档。
+    pub(in crate::app) fn poll_watchers(&mut self) {
+        let started = {
+            let mut started = (self.disk.started.lock()).unwrap_or_else(PoisonError::into_inner);
+            std::mem::take(&mut *started)
+        };
+        let mut extra = self.extra_folders();
+        extra.extend(self.expanded_links());
+        let mut watching = false;
+        for (folder, watcher) in started {
+            self.disk.starting.retain(|starting| *starting != folder);
+            let Some(watcher) = watcher else {
+                continue;
+            };
+            let watched = |w: &Watcher| w.root() == folder;
+            if Some(folder.as_path()) == self.editor.root() {
+                self.disk.watcher = Some(watcher);
+                watching = true;
+            } else if extra.contains(&folder) && !self.disk.extra_watchers.iter().any(watched) {
+                self.disk.extra_watchers.push(watcher);
+                watching = true;
+            }
+        }
+        if watching {
+            self.rescan_tree(|_| {});
+            self.sync_documents(|_| true);
         }
     }
 
@@ -231,18 +250,10 @@ impl App {
         let mut folders = self.extra_folders();
         folders.extend(self.expanded_links());
         (self.disk.extra_watchers).retain(|watcher| folders.iter().any(|f| f == watcher.root()));
-        let Some(proxy) = self.link.proxy.clone() else {
-            return;
-        };
         for folder in folders {
-            if self.disk.extra_watchers.iter().any(|w| w.root() == folder) {
-                continue;
+            if !self.disk.extra_watchers.iter().any(|w| w.root() == folder) {
+                self.start_watcher(folder);
             }
-            let proxy = proxy.clone();
-            let started = Watcher::start(&folder, move || {
-                let _ = proxy.send_event(UserEvent::FilesChanged);
-            });
-            self.disk.extra_watchers.extend(started);
         }
     }
 
@@ -260,15 +271,7 @@ impl App {
         if let Some(ws) = &self.editor.workspace {
             let scan = ws.scan((!changes.rescan).then_some(changes.paths.as_slice()));
             if !scan.dirs().is_empty() {
-                let tickets = scan
-                    .dirs()
-                    .iter()
-                    .map(|dir| self.panels.tree.scans.tickets.issue(dir.clone()))
-                    .collect();
-                let sender = self.panels.tree.scans.results.0.clone();
-                self.spawn_then(UserEvent::TreeScanned, move || {
-                    let _ = sender.send((tickets, scan.run()));
-                });
+                self.spawn_scan(scan, None);
             }
         }
 
@@ -322,15 +325,55 @@ impl App {
         });
     }
 
+    /// 在后台重读文件树中全部已缓存的目录，读好换入后在界面线程上调用 `after`。
+    ///
+    /// 用于本程序刚改过磁盘（删除、复制、粘贴）或用户要求刷新时；没有打开目录时不调用 `after`。
+    pub(in crate::app) fn rescan_tree(&mut self, after: impl FnOnce(&mut App) + 'static) {
+        let Some(scan) = self.editor.workspace.as_ref().map(|ws| ws.scan(None)) else {
+            return;
+        };
+        let scans = &mut self.panels.tree.scans;
+        scans.issued += 1;
+        let batch = scans.issued;
+        scans.after.push((batch, false, Box::new(after)));
+        self.spawn_scan(scan, Some(batch));
+    }
+
+    /// 在后台执行 `scan`，读好后由 [`App::poll_tree_scans`] 换入；`batch` 是读好后要做的事的编号。
+    fn spawn_scan(&mut self, scan: winc_editor::DirScan, batch: Option<u64>) {
+        let tickets = (scan.dirs().iter())
+            .map(|dir| self.panels.tree.scans.tickets.issue(dir.clone()))
+            .collect();
+        let sender = self.panels.tree.scans.results.0.clone();
+        self.spawn_then(UserEvent::TreeScanned, move || {
+            let _ = sender.send((tickets, scan.run(), batch));
+        });
+    }
+
     /// 收取后台重读完成的目录（见 [`TreeScans`]）并换进文件树；之后又发出过重读的目录不换。
     pub(in crate::app) fn poll_tree_scans(&mut self) {
         let mut changed = false;
-        while let Ok((tickets, mut listing)) = self.panels.tree.scans.results.1.try_recv() {
+        while let Ok((tickets, mut listing, batch)) = self.panels.tree.scans.results.1.try_recv() {
             let mut tickets = tickets.into_iter();
             let scans = &mut self.panels.tree.scans.tickets;
-            listing.retain(|dir| tickets.next().is_some_and(|t| scans.redeem(dir, t)));
+            let mut superseded = false;
+            listing.retain(|dir| {
+                let current = tickets.next().is_some_and(|t| scans.redeem(dir, t));
+                superseded |= !current;
+                current
+            });
             if let Some(ws) = &mut self.editor.workspace {
                 changed |= ws.apply_scan(listing);
+            }
+            // 这一批要接着做的事，连同之前改为等下一批的；有目录被取代时内容还不是最新的，再等。
+            let after = std::mem::take(&mut self.panels.tree.scans.after);
+            for (id, late, run) in after {
+                if (late || Some(id) == batch) && !superseded {
+                    run(self);
+                } else {
+                    let late = late || Some(id) == batch;
+                    self.panels.tree.scans.after.push((id, late, run));
+                }
             }
         }
         if changed {
@@ -347,13 +390,7 @@ impl App {
         let Some(scan) = (self.editor.workspace.as_mut()).and_then(|ws| ws.take_missing()) else {
             return;
         };
-        let tickets = (scan.dirs().iter())
-            .map(|dir| self.panels.tree.scans.tickets.issue(dir.clone()))
-            .collect();
-        let sender = self.panels.tree.scans.results.0.clone();
-        self.spawn_then(UserEvent::TreeScanned, move || {
-            let _ = sender.send((tickets, scan.run()));
-        });
+        self.spawn_scan(scan, None);
     }
 
     /// 收取后台检查、重读的结果（见 [`Rereads`]）。

@@ -188,7 +188,7 @@ fn session_is_saved_on_exit_and_restored_next_time() {
     // 运行期间切换目录时恢复的标签都只占位，当前标签交给后台读取，不在事件循环中读文件。
     let mut switched = Editor::default();
     assert!(crate::open_session_folder(&mut switched, &session));
-    crate::app::restore_tabs(&mut switched, Some(&session), None);
+    crate::app::lifecycle::backup::restore_tabs(&mut switched, Some(&session), None);
     assert!(switched.documents.iter().all(|d| d.is_pending()));
     let mut restored = blank_app(false);
     restored.editor = editor;
@@ -1331,4 +1331,47 @@ fn only_the_latest_stored_state_replaces_the_one_in_memory() {
     assert!(!app.state.commit_reformat);
     app.state_stored(2, stored);
     assert!(app.state.commit_reformat);
+}
+
+/// 换目录后上次的标签在后台读好之前：这时记现场不盖掉要恢复的那一份；期间打开的文件在标签
+/// 恢复后仍是当前标签。
+#[test]
+fn a_file_opened_while_tabs_are_restored_stays_current() {
+    let dir = sample_folder("restore-gap");
+    let mut app = app_with(&dir, false);
+    let root = app.editor.root().unwrap().to_path_buf();
+    let (first, second) = (root.join("src/main.rs"), root.join("notes.md"));
+    std::fs::write(&second, "notes\n").unwrap();
+    let ids: Vec<_> = app.editor.documents.iter().map(|doc| doc.id).collect();
+    app.close_documents(&ids);
+    let session = Session {
+        folder: root.clone(),
+        tabs: vec![Tab::File(first.clone())],
+        active: Some(0),
+        ..Session::default()
+    };
+    let stored = session.clone();
+    app.update_state(move |state| state.set_session(stored));
+
+    app.disk.restoring = Some(root.clone());
+    assert!(app.restoring_tabs());
+    app.open_path(&second);
+    app.remember_session();
+    assert_eq!(app.state.session_for(&root), Some(&session));
+
+    let prepared = crate::app::prepare_restore(Some(&root), Some(&session), None);
+    *app.disk.prepared.lock().unwrap() = Some((root, Some(session), prepared));
+    app.poll_prepared_tabs();
+    assert!(!app.restoring_tabs());
+    let paths: Vec<_> = (app.editor.documents.iter())
+        .filter_map(|doc| doc.path.clone())
+        .collect();
+    assert!(
+        paths.contains(&first) && paths.contains(&second),
+        "{paths:?}"
+    );
+    assert_eq!(
+        app.editor.active().unwrap().path.as_deref(),
+        Some(second.as_path())
+    );
 }

@@ -143,25 +143,74 @@ fn restore_panes(
     editor.focus_pane(PaneId(panes.focused as u32));
 }
 
-/// 按上次的现场恢复标签，并把备份中未保存的内容放回文档。
+/// 恢复标签之前从磁盘读好的内容，见 [`prepare_restore`]。
+#[derive(Default)]
+pub(crate) struct Prepared {
+    /// 占用的备份目录及其锁（见 `BackupState::lock`）。
+    lock: Option<(PathBuf, Option<backup::Lock>)>,
+    /// 该目录的各个备份（只有头）。
+    saved: Vec<backup::Backup>,
+    /// 现场的标签里磁盘上还在的本机文件。
+    files: HashSet<PathBuf>,
+}
+
+/// 读出恢复目录 `folder` 的标签要用的内容：占用备份目录 `root` 中它的备份并读出各备份的头，
+/// 查出现场 `session` 的标签里哪些文件还在。
 ///
-/// 标签按原来的顺序重新打开，激活当时的标签，文件树展开到该文件所在的层级；现场中没有记录
-/// 的备份（进程中止前来不及记录现场）也会恢复，排在已记录的标签之后。`root` 为备份目录，
-/// 为 `None` 时只打开标签；现场中已不存在的文件跳过，除非它还有未保存的内容。
+/// 要等备份锁、读目录，在后台线程上调用；`root` 为 `None` 时不读备份。
+pub(crate) fn prepare_restore(
+    folder: Option<&Path>,
+    session: Option<&Session>,
+    root: Option<&Path>,
+) -> Prepared {
+    let backups = root.map(|root| Backups::new(root, folder));
+    let lock = backups
+        .as_ref()
+        .map(|b| (b.dir().to_owned(), b.lock_within(RESTORE_LOCK_WAIT)));
+    // 目录被另一个 winc 进程打开时，那里的备份仍由该进程使用，不恢复。
+    let saved = match (&backups, &lock) {
+        (Some(backups), Some((_, Some(_)))) => backups.read_all(),
+        _ => Vec::new(),
+    };
+    // 远端的文件不在这里查询：仍然恢复标签，文件不存在时由读取报告。
+    let files = (session.iter().flat_map(|session| &session.tabs))
+        .filter_map(|tab| match tab {
+            Tab::File(path) if !winc_backend::is_remote(path) => Some(path),
+            _ => None,
+        })
+        .filter(|path| winc_backend::fs::is_file(path))
+        .cloned()
+        .collect();
+    Prepared { lock, saved, files }
+}
+
+/// 按上次的现场恢复标签，并把备份中未保存的内容放回文档；就在调用的线程上读磁盘。
+///
+/// 界面线程上换目录时把读交给后台（[`prepare_restore`]），读好后调用 [`restore_prepared`]。
 pub(crate) fn restore_tabs(
     editor: &mut Editor,
     session: Option<&Session>,
     root: Option<&Path>,
 ) -> Restored {
-    let backups = root.map(|root| Backups::new(root, editor.root()));
-    let lock = backups
-        .as_ref()
-        .map(|b| (b.dir().to_owned(), b.lock_within(RESTORE_LOCK_WAIT)));
-    // 目录被另一个 winc 进程打开时，那里的备份仍由该进程使用，不恢复。
-    let mut saved = match (&backups, &lock) {
-        (Some(backups), Some((_, Some(_)))) => backups.read_all(),
-        _ => Vec::new(),
-    };
+    let prepared = prepare_restore(editor.root(), session, root);
+    restore_prepared(editor, session, prepared)
+}
+
+/// 按上次的现场和读好的 `prepared` 恢复标签，并把备份中未保存的内容放回文档。
+///
+/// 标签按原来的顺序重新打开，激活当时的标签，文件树展开到该文件所在的层级；现场中没有记录
+/// 的备份（进程中止前来不及记录现场）也会恢复，排在已记录的标签之后。现场中已不存在的文件
+/// 跳过，除非它还有未保存的内容。
+pub(crate) fn restore_prepared(
+    editor: &mut Editor,
+    session: Option<&Session>,
+    prepared: Prepared,
+) -> Restored {
+    let Prepared {
+        lock,
+        mut saved,
+        files,
+    } = prepared;
     let mut restored = Restored {
         lock,
         ..Default::default()
@@ -194,9 +243,8 @@ pub(crate) fn restore_tabs(
         let index = match tab {
             Tab::File(path) => take(&mut saved, |b| b.path.as_deref() == Some(path.as_path()))
                 .and_then(|backup| put_back(editor, backup))
-                // 远端的文件在界面线程上无法查询：仍然恢复标签，文件不存在时由读取报告。
                 .or_else(|| {
-                    let found = winc_backend::is_remote(path) || winc_backend::fs::is_file(path);
+                    let found = winc_backend::is_remote(path) || files.contains(path);
                     found.then(|| editor.open_pending(path))
                 }),
             Tab::Untitled(name) => take(&mut saved, |b| {
