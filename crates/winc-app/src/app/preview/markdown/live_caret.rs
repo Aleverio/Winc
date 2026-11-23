@@ -137,7 +137,10 @@ impl App {
             } else {
                 byte < live.leaf.start
             };
-        let blank = |line: usize| rope.line(line).chars().all(char::is_whitespace);
+        // 显示为空段落的空行（见 `Markdown::with_blank_lines`）是光标可以停留的一行。
+        let blank = |line: usize| {
+            rope.line(line).chars().all(char::is_whitespace) && !self.live_blank_line(line)
+        };
         let mut line = rope.char_to_line(next);
         let mut target = next;
         if outside && blank(line) {
@@ -152,7 +155,9 @@ impl App {
                 while blank(line) && line > 0 {
                     line -= 1;
                 }
-                if !blank(line) {
+                if self.live_blank_line(line) {
+                    target = rope.line_to_char(line);
+                } else if !blank(line) {
                     target = line_end(rope, line);
                 }
             }
@@ -172,6 +177,27 @@ impl App {
         self.reset_blink();
         self.request_redraw();
         true
+    }
+
+    /// 第 `line` 行是否为显示成空段落的空行（见 `Markdown::with_blank_lines`）；解析结果不是
+    /// 当前版本时为 `false`。
+    pub(super) fn live_blank_line(&self, line: usize) -> bool {
+        let Some(doc) = self.editor.active() else {
+            return false;
+        };
+        let (Some(parsed), Some(rope)) = (self.preview.markdown.parsed.as_ref(), doc.text().rope())
+        else {
+            return false;
+        };
+        if self.preview.markdown.checked != Some(doc.revision) || line >= rope.len_lines() {
+            return false;
+        }
+        let start = rope.line_to_byte(line);
+        let i = parsed.leaves.partition_point(|l| l.range.start < start);
+        parsed
+            .leaves
+            .get(i)
+            .is_some_and(|l| l.range.start == start && l.range.is_empty())
     }
 
     /// 原文第 `at` 个字节所在的叶子块是否为正文（段落、标题）；不在任何叶子块中时为

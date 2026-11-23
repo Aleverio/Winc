@@ -28,6 +28,15 @@ impl App {
         {
             return true;
         }
+        // 任务项中 ⌘↩ 勾选或取消勾选。
+        if cmd
+            && !self.pointer.modifiers.alt_key()
+            && !self.pointer.modifiers.shift_key()
+            && *key == Key::Named(NamedKey::Enter)
+            && self.live_toggle_tasks()
+        {
+            return true;
+        }
         // 表格中 ⌘↩ 在下方插入一行，⌘⇧⌫ 删除当前行。
         if cmd && !self.pointer.modifiers.alt_key() && self.live_leaf().is_some_and(|l| l.table) {
             let shift = self.pointer.modifiers.shift_key();
@@ -75,6 +84,40 @@ impl App {
             _ => return false,
         };
         self.live_vertical(down, by);
+        true
+    }
+
+    /// 切换选中的各行（没有选区时是光标所在的一行）中任务项的勾选框：有未勾选的项时全部
+    /// 勾选，否则全部取消，一次撤销即可恢复。其中没有任务项时返回 `false`。
+    fn live_toggle_tasks(&mut self) -> bool {
+        let Some((first, last, _)) = self.selected_lines() else {
+            return false;
+        };
+        let Some(rope) = self.editor.active().and_then(|d| d.text().rope()) else {
+            return false;
+        };
+        let boxes: Vec<(usize, bool)> = (first..=last)
+            .filter_map(|l| {
+                let line = super::writing::line_text(rope, l);
+                let (at, checked) = winc_preview::markdown::enter::task_box(&line)?;
+                Some((rope.line_to_byte(l) + at, checked))
+            })
+            .collect();
+        if boxes.is_empty() {
+            return false;
+        }
+        let check = boxes.iter().any(|&(_, checked)| !checked);
+        if let Some(doc) = self.editor.active_mut() {
+            doc.begin_undo_group();
+        }
+        for (at, checked) in boxes {
+            if checked != check {
+                self.toggle_markdown_task(at);
+            }
+        }
+        if let Some(doc) = self.editor.active_mut() {
+            doc.end_undo_group();
+        }
         true
     }
 
@@ -580,6 +623,10 @@ impl App {
             if line == 0 || !before.trim().is_empty() {
                 return false;
             }
+            // 上一行是显示为空段落的空行：按普通删除去掉这一行。
+            if before.is_empty() && self.live_blank_line(line - 1) {
+                return false;
+            }
             let blank = |l: usize| rope.line(l).chars().all(char::is_whitespace);
             let to = rope.byte_to_char(caret);
             let from = if !blank(line - 1) {
@@ -614,6 +661,19 @@ impl App {
                     self.preview.markdown.goal = None;
                     self.start_live_editing();
                     self.request_redraw();
+                    return true;
+                }
+                // 光标在空行上：只去掉一个空行，光标移到上一块的末尾。
+                if blank(line) {
+                    if let Some(doc) = self.editor.active_mut() {
+                        doc.selection = winc_core::Selection::new(from, from + 1);
+                    }
+                    self.run(winc_editor::Command::Insert(String::new()));
+                    if let Some(doc) = self.editor.active_mut() {
+                        doc.selection = winc_core::Selection::point(from);
+                    }
+                    self.preview.markdown.goal = None;
+                    self.start_live_editing();
                     return true;
                 }
                 from
@@ -666,6 +726,10 @@ impl App {
         if head != line_end(rope, line) || line + 1 >= rope.len_lines() || !blank(line + 1) {
             return false;
         }
+        // 光标在空行上，或其后的空行中有显示为空段落的：按普通删除只去掉一个空行。
+        if blank(line) || (line + 2 < rope.len_lines() && blank(line + 2)) {
+            return false;
+        }
         let Some(below) = (line + 1..rope.len_lines()).find(|&l| !blank(l)) else {
             return false;
         };
@@ -689,9 +753,9 @@ impl App {
         true
     }
 
-    /// 处理正文中输入的空格：行首的任务框简写（`[]`、`-[]`、`- [`）换成任务项 `- [ ] `。
+    /// 处理正文中输入的空格：行首的块标记简写（任务框 `[]`、全角的 `》`、`1。` 等）换成标记。
     ///
-    /// 规则见 `winc_preview::markdown::enter::task`。不是简写、有选区、有多个光标、输入法
+    /// 规则见 `winc_preview::markdown::enter::shorthand`。不是简写、有选区、有多个光标、输入法
     /// 正在组字、或光标位于代码块等块中时返回 `false`，按普通输入处理。
     pub(super) fn live_space(&mut self) -> bool {
         let composing = !self.preedit_at(Focus::Editor).is_empty();
@@ -712,7 +776,7 @@ impl App {
         let text = rope.line(line).to_string();
         let text = text.trim_end_matches(['\n', '\r']);
         let at = (caret - rope.line_to_byte(line)).min(text.len());
-        let Some(edit) = winc_preview::markdown::enter::task(&text[..at], &text[at..]) else {
+        let Some(edit) = winc_preview::markdown::enter::shorthand(&text[..at], &text[at..]) else {
             return false;
         };
         let (a, b) = (

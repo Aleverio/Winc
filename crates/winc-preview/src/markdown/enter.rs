@@ -232,10 +232,19 @@ pub fn enter<'a>(
         }
         // 空行上：只多一行。
         None if empty => Edit::insert("\n".to_owned()),
-        // 段落、标题：另起一段。光标在行尾、下一行仍属于同一段时，把这一行和下一行之间的换行
-        // 也替换掉，下一行成为新的一段，光标落在它的开头。
+        // 光标在一行文字的开头（标题在 `#` 之后）：上方多一行空行，这一行原样下移，光标随之
+        // 下移；位于段落的续行开头时把段落分成两段。
+        None if before.is_empty() => Edit::insert("\n".to_owned()),
+        None if heading_marker(before) => Edit {
+            before: before.len(),
+            after: 0,
+            text: format!("\n{before}"),
+        },
+        // 段落、标题：另起一段。光标在行尾、其后还有一行时，把这一行末尾的换行也替换掉：下一行
+        // 属于同一段时成为新的一段，光标落在它的开头；下一行是空行时光标所在的新空行之后不多出
+        // 一个空行。
         None => {
-            let joined = after.is_empty() && next.is_some_and(|l| !l.trim().is_empty());
+            let joined = after.is_empty() && next.is_some();
             Edit {
                 before: 0,
                 after: usize::from(joined),
@@ -243,6 +252,27 @@ pub fn enter<'a>(
             }
         }
     }
+}
+
+/// `text` 是否只有标题的标记：至多 3 个空格的缩进、1 至 6 个 `#`，以及其后的空白。
+fn heading_marker(text: &str) -> bool {
+    let body = text.trim_start_matches(' ');
+    let level = body.bytes().take_while(|&b| b == b'#').count();
+    text.len() - body.len() <= 3
+        && (1..=6).contains(&level)
+        && body.len() > level
+        && body[level..].bytes().all(|b| b == b' ' || b == b'\t')
+}
+
+/// 返回任务项 `line` 中勾选框的位置（字节偏移，指向 `[`）和是否已勾选；不是任务项时为
+/// `None`。
+pub fn task_box(line: &str) -> Option<(usize, bool)> {
+    let p = parse(line);
+    let m = p.marker.as_ref().filter(|m| m.task)?;
+    Some((
+        p.quote.len() + p.indent.len() + m.bullet.len() + m.gap.len(),
+        m.checked,
+    ))
 }
 
 /// 返回有序列表中新增一项之后，其后同一层各项需要修改的序号。
@@ -286,6 +316,56 @@ pub fn renumber<S: AsRef<str>>(
         changes.push((i, start..start + m.bullet.len() - 1, next));
     }
     changes
+}
+
+/// 增删行之后，返回要从哪些有序列表项起用 [`renumber`] 重排其后的序号：改动处所在各层列表中，
+/// 位于改动处或其上方、离改动处最近的一项。
+///
+/// `line` 是第一处改动所在的行，`above` 是从上一行起向上的各行。返回的每一项是从 `line`
+/// 向上数的行数，0 表示 `line` 本身（它是同层的第一项时）。
+pub fn renumber_from<'a>(line: &str, above: impl Iterator<Item = &'a str>) -> Vec<usize> {
+    let own = parse(line);
+    let quote = depth(own.quote);
+    // 越往上只找更外层的项：缩进须小于该值。
+    let mut limit = match own.marker {
+        Some(_) => own.indent.len() + 1,
+        None => usize::MAX,
+    };
+    let mut first = true;
+    let mut found = Vec::new();
+    for (i, text) in above.take(LOOKBACK).enumerate() {
+        if text.trim().is_empty() {
+            continue;
+        }
+        let p = parse(text);
+        if depth(p.quote) != quote {
+            break;
+        }
+        match &p.marker {
+            Some(m) if p.indent.len() < limit => {
+                // 同层的上一项存在时，从上一项起重排；否则 `line` 是同层的第一项。
+                if first && own.marker.is_some() && p.indent.len() < own.indent.len() {
+                    found.push(0);
+                }
+                first = false;
+                if m.ordered() {
+                    found.push(i + 1);
+                }
+                limit = p.indent.len();
+            }
+            Some(_) => {}
+            None if p.rest.starts_with([' ', '\t']) => {}
+            None => break,
+        }
+        if limit == 0 {
+            break;
+        }
+    }
+    if first && own.marker.is_some() {
+        found.push(0);
+    }
+    found.retain(|&i| i > 0 || own.marker.as_ref().is_some_and(Marker::ordered));
+    found
 }
 
 /// 返回 `line` 开头的引用标记（`>`）和缩进的长度（字节）。
@@ -345,6 +425,40 @@ pub fn task(before: &str, after: &str) -> Option<Edit> {
             Some((c, _)) => format!("{c} {mark}"),
             None => mark.to_owned(),
         },
+    })
+}
+
+/// 返回在行首的块标记简写之后输入空格时要做的修改；不是简写时返回 `None`，按普通输入处理。
+///
+/// 简写有任务框（见 [`task`]），以及中文输入法输入的全角记号：`》` 换成引用的 `>`，`1。`、
+/// `1．`、`1）` 换成有序列表项的 `1.`、`1)`。换成的标记之后带一个空格。
+pub fn shorthand(before: &str, after: &str) -> Option<Edit> {
+    if let Some(edit) = task(before, after) {
+        return Some(edit);
+    }
+    let p = parse(before);
+    if p.marker.is_some() {
+        return None;
+    }
+    let body = p.rest.trim_start_matches([' ', '\t']);
+    let text = if !body.is_empty() && body.chars().all(|c| c == '》') {
+        format!("{} ", ">".repeat(body.chars().count()))
+    } else {
+        let digits = body.bytes().take_while(u8::is_ascii_digit).count();
+        let delim = match &body[digits..] {
+            "。" | "．" => '.',
+            "）" => ')',
+            _ => return None,
+        };
+        if digits == 0 || digits > 9 {
+            return None;
+        }
+        format!("{}{delim} ", &body[..digits])
+    };
+    Some(Edit {
+        before: body.len(),
+        after: 0,
+        text,
     })
 }
 

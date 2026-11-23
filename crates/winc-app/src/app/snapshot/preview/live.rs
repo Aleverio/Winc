@@ -902,3 +902,96 @@ fn enter_in_markdown_source_continues_quotes_and_lists() {
     assert!(!app.source_markdown_enter());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 删除、插入有序列表项之后，其后各项的原文序号与显示一致，撤销一步连同序号一起恢复；
+/// 代码块中的文字不改。
+#[test]
+fn ordered_lists_are_renumbered_after_lines_change() {
+    let dir = sample_folder("md-renumber");
+    let path = dir.join("LIST.md");
+    let list = "1. 甲\n2. 乙\n3. 丙\n4. 丁\n\n```\n1. 代码\n3. 代码\n```\n";
+    std::fs::write(&path, list).unwrap();
+    let mut app = app_with(&path, false);
+    paint(&mut app);
+    let select = |app: &mut App, needle: &str| {
+        let text = doc_text(app);
+        let at = text.find(needle).unwrap();
+        let rope = app.editor.active().unwrap().text().rope().unwrap().clone();
+        let (a, b) = (rope.byte_to_char(at), rope.byte_to_char(at + needle.len()));
+        app.editor.active_mut().unwrap().selection = winc_core::Selection::new(a, b);
+    };
+
+    select(&mut app, "2. 乙\n");
+    app.run(Command::Backspace { word: false });
+    assert!(
+        doc_text(&app).starts_with("1. 甲\n2. 丙\n3. 丁\n\n"),
+        "{}",
+        doc_text(&app)
+    );
+    app.run(Command::Undo);
+    assert_eq!(doc_text(&app), list);
+
+    select(&mut app, "2. 乙");
+    let head = app.editor.active().unwrap().selection.from();
+    app.editor.active_mut().unwrap().selection = winc_core::Selection::point(head);
+    app.run(Command::Insert("1. 新\n".to_owned()));
+    assert!(
+        doc_text(&app).starts_with("1. 甲\n2. 新\n3. 乙\n4. 丙\n5. 丁\n"),
+        "{}",
+        doc_text(&app)
+    );
+
+    select(&mut app, "1. 代码\n");
+    app.run(Command::Backspace { word: false });
+    assert!(
+        doc_text(&app).ends_with("```\n3. 代码\n```\n"),
+        "{}",
+        doc_text(&app)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 分栏时预览的文字中同一位置也画出编辑区的光标，在预览上点击之后同样画出。
+#[test]
+fn the_split_preview_shows_the_source_caret_in_its_text() {
+    let dir = sample_folder("md-split-caret");
+    let path = dir.join("SPLIT.md");
+    std::fs::write(&path, "# 标题\n\n一段**粗体**文字\n").unwrap();
+    let mut app = app_with(&path, false);
+    paint(&mut app);
+    app.set_preview_mode(PreviewMode::Split);
+    settle(&mut app);
+    let text = doc_text(&app);
+    let byte = text.find("文字").unwrap();
+    let doc = app.editor.active_mut().unwrap();
+    doc.selection = winc_core::Selection::point(doc.text().rope().unwrap().byte_to_char(byte));
+    app.blink.visible = true;
+    paint(&mut app);
+    let shown = |app: &App, byte: usize| {
+        let laid = app.preview.markdown.layout.as_ref().unwrap();
+        let (x, y, h) = laid.caret_point(byte).unwrap();
+        let area = app.preview.markdown.area;
+        let at = (
+            laid.left + x,
+            area.y - app.preview.markdown.scroll() + y + h / 2.0,
+        );
+        near(pixel(app, at), app.palette.caret)
+    };
+    assert!(shown(&app, byte));
+
+    // 在预览上点击一个字：编辑区的光标移到该处，预览的文字中也在该处画出光标。
+    let target = text.find("粗体").unwrap() + "粗".len();
+    let (x, y, h) = {
+        let laid = app.preview.markdown.layout.as_ref().unwrap();
+        let (x, y, h) = laid.caret_point(target).unwrap();
+        let area = app.preview.markdown.area;
+        (laid.left + x, area.y - app.preview.markdown.scroll() + y, h)
+    };
+    super::click(&mut app, (x, y + h / 2.0));
+    assert!(app.preview.markdown.focused);
+    assert_eq!(app.markdown_caret_source(), Some(target));
+    app.blink.visible = true;
+    paint(&mut app);
+    assert!(shown(&app, target));
+    let _ = std::fs::remove_dir_all(&dir);
+}
