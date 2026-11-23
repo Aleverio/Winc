@@ -368,6 +368,69 @@ fn pane_commands_are_unavailable_without_a_split() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// 前台窗格中第 `index` 个标签的中点。
+fn tab_point(app: &App, index: usize) -> (f32, f32) {
+    let rect = app.hits.tabs.iter().find(|h| h.index == index).unwrap().tab;
+    (rect.x + 20.0, rect.y + rect.h / 2.0)
+}
+
+#[test]
+fn the_tab_menu_counts_only_the_tabs_of_its_pane() {
+    use MenuCommand::*;
+    let dir = sample_folder("panes-tab-menu");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    app.open_path(&dir.join("src/main.rs"));
+    // 右边只有 main.rs，左边留着已保存的 short.rs。
+    app.run_action(Action::MoveToSplitRight);
+    app.run(Command::Insert("// x\n".into()));
+    paint(&mut app);
+    assert_eq!(app.editor.tab_count(), 1);
+
+    let at = tab_point(&app, 0);
+    right_click(&mut app, at);
+    let commands = menu_commands(&app);
+    for command in [
+        CloseOthers,
+        CloseLeft,
+        CloseRight,
+        CloseSaved,
+        MoveToSplitRight,
+        MoveToSplitDown,
+    ] {
+        assert!(commands.contains(&(command, false)), "{command:?}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_stale_selection_stays_within_its_pane() {
+    let dir = sample_folder("panes-tab-selection");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    app.open_path(&dir.join("src/main.rs"));
+    let short = app.editor.tabs()[0].id;
+    let main = app.editor.tabs()[1].id;
+    // 右边也开着 short.rs；回到左边，选中两个标签，再关掉左边的 short.rs。
+    app.activate_tab(0);
+    app.run_action(Action::SplitRight);
+    paint(&mut app);
+    let left = app.panes.rects[0];
+    click(&mut app, (left.editor.x + 120.0, left.editor.y + 60.0));
+    app.activate_tab(0);
+    app.select_tab_range(1);
+    app.close_tab(0);
+    paint(&mut app);
+    assert_eq!(app.tabs.marked, [short, main]);
+    assert_eq!(app.tab_selection(), [main]);
+
+    let at = tab_point(&app, 0);
+    right_click(&mut app, at);
+    assert!(menu_commands(&app).contains(&(MenuCommand::CloseRight, false)));
+    app.run_menu_command(MenuCommand::CloseRight);
+    assert_eq!(app.editor.tabs()[0].id, main);
+    assert!(app.editor.document(short).is_some());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn files_dropped_at_a_pane_edge_open_in_a_new_split() {
     let dir = sample_folder("panes-file-drop");
