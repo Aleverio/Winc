@@ -529,14 +529,14 @@ impl App {
             return;
         }
 
-        // `⇧⌥` 按下拖动框出一列；`⌥` 单击添加或移除一个光标，按住拖动则添加一个选区。
+        // `⇧⌥` 单击框出列或添加选区，按下拖动框出一列；`⌥` 单击添加或移除一个光标，按住拖动则添加一个选区。
         let (shift, alt) = (
             self.pointer.modifiers.shift_key(),
             self.pointer.modifiers.alt_key(),
         );
         if alt && !l.gutter.contains(x, y) {
             if shift {
-                self.start_column_drag(x, y);
+                self.start_column_select(x, y);
             } else if count == 1 {
                 let before = self.editor.active().map(|d| d.selections().0.len());
                 self.toggle_cursor(pos);
@@ -597,5 +597,28 @@ impl App {
             self.pointer.drag = Drag::Columns { anchor };
             self.drag_columns(x, y, anchor);
         }
+    }
+
+    /// 在窗口坐标 (`x`, `y`)（逻辑像素）处进行 `⇧⌥` 列选择：单击时从主光标（或上次列选择）框出列，
+    /// 拖动时从按下处框出一列。
+    pub(super) fn start_column_select(&mut self, x: f32, y: f32) {
+        self.focus = Focus::Editor;
+        self.ime.preedit.clear();
+        let text_x = x.max(self.layout.text.x);
+        let Some(press) = self.line_cell_at(text_x, y) else {
+            return;
+        };
+        let tab_width = self.editor.active_tab_width();
+        let Some(doc) = self.editor.active_mut() else {
+            return;
+        };
+        let anchor = doc.column_anchor(tab_width);
+        doc.record_cursors();
+        doc.select_columns(anchor, press, tab_width);
+        self.cursors_changed();
+        self.pointer.drag = Drag::ColumnClick {
+            origin: (x, y),
+            anchor: press,
+        };
     }
 }

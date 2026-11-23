@@ -112,6 +112,13 @@ impl App {
             Drag::Select { by_word, origin } => self.drag_select(x, y, by_word, origin),
             Drag::SelectLine { line } => self.drag_select_line(x, y, line),
             Drag::Columns { anchor } => self.drag_columns(x, y, anchor),
+            Drag::ColumnClick { origin, anchor } => {
+                let slop = self.repeat_slop();
+                if (x - origin.0).abs() >= slop || (y - origin.1).abs() >= slop {
+                    self.pointer.drag = Drag::Columns { anchor };
+                    self.drag_columns(x, y, anchor);
+                }
+            }
             Drag::AddSelect { origin } => self.drag_add_selection(x, y, origin),
             Drag::DiffSelect { unit, origin, add } => {
                 self.drag_diff_select(x, y, unit, origin, add);
@@ -551,6 +558,7 @@ impl App {
             Drag::Select { .. }
                 | Drag::SelectLine { .. }
                 | Drag::Columns { .. }
+                | Drag::ColumnClick { .. }
                 | Drag::AddSelect { .. }
         );
         let (t, (x, y)) = (self.layout.text, self.pointer.mouse);

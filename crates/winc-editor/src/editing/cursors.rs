@@ -376,6 +376,23 @@ impl Document {
         self.select_columns(anchor, head, tab_width);
     }
 
+    /// 返回当前列选择的起点（行号，显示列），用于继续框选或从鼠标处框出一列。
+    ///
+    /// 若当前主选区与上次记录的列选择一致且文本未改动，取上次的起点；否则取当前主选区锚点对应的（行，显示列）。
+    pub fn column_anchor(&self, tab_width: usize) -> (usize, usize) {
+        let current = self
+            .cursor_memory
+            .column
+            .filter(|b| b.primary == self.selection && b.revision == self.revision);
+        match current {
+            Some(b) => b.anchor,
+            None => {
+                let (line, col) = self.text.pos_to_line_col(self.selection.anchor);
+                (line, self.col_to_cell(line, col, tab_width))
+            }
+        }
+    }
+
     /// `⌥` 单击：在位置 `pos`（`char` 偏移）处添加一个光标，成为主选区；`pos` 落在已有的某个
     /// 选区上（含两端）且不止一个选区时，改为移除该选区。
     pub fn toggle_cursor(&mut self, pos: usize) {
