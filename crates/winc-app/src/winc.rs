@@ -816,9 +816,6 @@ impl Winc {
         app.git.commit.set_flat(!app.state.commit_tree);
         let sort = crate::app::CommitSort::from_key(&app.state.commit_sort);
         app.git.commit.set_sort(sort);
-        app.git
-            .commit
-            .set_staging(app.config.git_staging_area == Some(true));
         app.restore_panel_width();
         app.editor.diff_unified = app.config.diff_inline == Some(true);
         app.apply_preview_state();

@@ -621,27 +621,23 @@ impl App {
         self.run_branch_command(crate::app::input::context_menu::MenuCommand::GitSkip);
     }
 
-    /// 回滚前先确认（系统确认框）；确认后回滚组 `group` 中勾上的文件，没有勾上的文件时回滚
-    /// 该组的全部文件。
+    /// 回滚前先确认（系统确认框）：暂存区视图中回滚组 `group` 的全部文件，勾选式下只回滚
+    /// 这一组里勾上的文件。
     pub(super) fn ask_rollback(&mut self, group: CommitGroup) {
         let Some(status) = self.git.status.as_ref() else {
             return;
         };
         let staging = self.git.commit.staging();
-        let held = || status.entries.iter().filter(|e| group.holds(e, staging));
-        let mut paths: Vec<PathBuf> = held()
-            .filter(|e| self.git.commit.checked(e))
+        let paths: Vec<PathBuf> = status
+            .entries
+            .iter()
+            .filter(|e| group.holds(e, staging))
+            .filter(|e| staging || self.git.commit.checked(e))
             .map(|e| e.path.clone())
             .collect();
-        // 勾选式下只回滚勾上的文件；暂存区视图中组里没有已暂存的文件时回滚整组。
-        if paths.is_empty() && !self.git.commit.staging() {
+        if paths.is_empty() && !staging {
             self.flash(t!("git-rollback-nothing-checked"));
-            return;
-        }
-        if paths.is_empty() {
-            paths = held().map(|e| e.path.clone()).collect();
-        }
-        if !paths.is_empty() {
+        } else if !paths.is_empty() {
             self.confirm_rollback(paths);
         }
     }

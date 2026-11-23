@@ -612,9 +612,12 @@ git-change-popup-more-lines = 另有 { $count } 行未显示
 ## 提交视图的文件列表
 
 git-commit-group-changes = 更改
-git-commit-group-staged = 已暂存的更改
+git-commit-group-staged = 暂存的更改
 git-commit-group-conflicts = 冲突
 git-commit-group-untracked = 未跟踪的文件
+git-commit-revert-group = 回滚这一组的所有文件
+git-commit-stage-group = 暂存这一组的所有更改
+git-commit-unstage-group = 取消暂存这一组的所有更改
 git-commit-open-deleted = 文件已删除，无法打开
 git-commit-blocker-conflicts = { $count } 个文件仍有未解决的冲突
 git-log-files-changed = 更改了 { $count } 个文件

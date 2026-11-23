@@ -1016,6 +1016,9 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
             let rect = app.hits.commit.iter().find(|(_, t)| *t == target)?.0;
             let label = match target {
                 CommitTarget::OpenFile(_) => t!("workspace-tip-open-file"),
+                CommitTarget::GroupRevert(_) if app.git.commit.staging() => {
+                    t!("git-commit-revert-group")
+                }
                 CommitTarget::GroupRevert(_) => t!("menu-commit-roll-back"),
                 _ => t!("workspace-tip-revert-change"),
             };
@@ -1027,16 +1030,15 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
             | CommitTarget::DirStage(..)),
         ) => {
             let rect = app.hits.commit.iter().find(|(_, t)| *t == target)?.0;
-            let unstage = matches!(
-                target,
-                CommitTarget::StageFile(_, false)
-                    | CommitTarget::DirStage(_, false)
-                    | CommitTarget::GroupStage(crate::app::CommitGroup::Staged)
-            );
-            let label = if unstage {
-                t!("menu-git-unstage")
-            } else {
-                t!("menu-git-stage")
+            let label = match target {
+                CommitTarget::GroupStage(crate::app::CommitGroup::Staged) => {
+                    t!("git-commit-unstage-group")
+                }
+                CommitTarget::GroupStage(_) => t!("git-commit-stage-group"),
+                CommitTarget::StageFile(_, false) | CommitTarget::DirStage(_, false) => {
+                    t!("menu-git-unstage")
+                }
+                _ => t!("menu-git-stage"),
             };
             Some((rect, label.to_owned()))
         }

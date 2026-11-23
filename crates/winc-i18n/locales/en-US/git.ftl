@@ -773,6 +773,9 @@ git-commit-group-changes = Changes
 git-commit-group-staged = Staged Changes
 git-commit-group-conflicts = Conflicts
 git-commit-group-untracked = Untracked Files
+git-commit-revert-group = Roll Back All Files in This Group
+git-commit-stage-group = Stage All Changes in This Group
+git-commit-unstage-group = Unstage All Changes in This Group
 git-commit-open-deleted = The file was deleted and can’t be opened
 git-commit-blocker-conflicts = { $count ->
     [one] { $count } file still has unresolved conflicts
