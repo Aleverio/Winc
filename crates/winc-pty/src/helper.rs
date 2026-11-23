@@ -252,6 +252,12 @@ impl Helper {
         self.kill_overdue();
         self.send_frames();
         self.flush()?;
+        // 唤醒只在后台线程读到新的字节时发生：这一轮没有取完的（消息一次读一块，输出有每轮
+        // 的上限）留到下一轮，不等下一次唤醒。
+        let unread = |tab: &Tab| !tab.eof && tab.pty.as_ref().is_some_and(pty::Pty::has_output);
+        if pty::stdin_pending() || self.tabs.values().any(unread) {
+            pty::wake();
+        }
 
         Ok(!(self.spawned && self.tabs.is_empty() && self.closing.is_empty()))
     }

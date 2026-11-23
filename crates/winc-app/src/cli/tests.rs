@@ -237,3 +237,13 @@ fn ssh_arguments_name_a_remote_folder_and_files() {
         assert!(args(list).is_err(), "{list:?}");
     }
 }
+
+/// 资源管理器在盘符根目录传入的 `"C:\"` 到程序里是 `C:"`：补回结尾的反斜杠。
+#[test]
+fn a_path_that_lost_its_trailing_backslash_gets_it_back() {
+    assert_eq!(unquoted("C:\""), Some("C:\\".to_owned()));
+    assert_eq!(unquoted("D:\\work\""), Some("D:\\work\\".to_owned()));
+    assert_eq!(unquoted("C:\\work"), None);
+    assert_eq!(unquoted("\""), None);
+    assert_eq!(unquoted("a\"b\""), None);
+}

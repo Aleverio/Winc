@@ -370,6 +370,10 @@ fn position(text: &str) -> Option<(&str, Option<usize>, Option<usize>)> {
     reason = "只访问本机：命令行参数是本机路径"
 )]
 fn target(arg: OsString) -> Target {
+    let arg = match arg.to_str().and_then(unquoted).filter(|_| cfg!(windows)) {
+        Some(path) => OsString::from(path),
+        None => arg,
+    };
     let whole = Target {
         path: PathBuf::from(&arg),
         line: None,
@@ -389,6 +393,17 @@ fn target(arg: OsString) -> Target {
         },
         None => whole,
     }
+}
+
+/// 返回被 Windows 的命令行规则吃掉结尾反斜杠的路径 `text` 原来的写法；不是这种情况时返回
+/// `None`。
+///
+/// 资源管理器把 `%V` 换成路径放在引号里传入；路径是盘符根目录时写成 `"C:\"`，其中的 `\"`
+/// 按规则是一个引号，程序收到的是 `C:"`。引号不能出现在 Windows 的文件名里，结尾有引号的
+/// 只能是这种情况。
+fn unquoted(text: &str) -> Option<String> {
+    let path = text.strip_suffix('"')?;
+    (!path.is_empty() && !path.contains('"')).then(|| format!("{path}\\"))
 }
 
 #[cfg(test)]
