@@ -279,6 +279,80 @@ fn files_are_reformatted_before_committing() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// 暂存视图里提交前格式化只整理磁盘上与暂存区相同的文件：没有暂存的修改（磁盘上的、编辑器里
+/// 还没保存的）不会被带进提交；工具失败时照原样提交并说明。
+#[cfg(unix)]
+#[test]
+fn reformatting_staged_files_leaves_unstaged_edits_out() {
+    let Some((mut app, root)) = git_app("git-reformat-staged", false) else {
+        return;
+    };
+    let committed = |path: &str| {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["show", &format!("HEAD:{path}")])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let main = root.join("src/main.rs");
+    let command = "tr a-z A-Z".to_owned();
+    app.config
+        .format_commands
+        .insert("rust".to_owned(), command);
+    app.run_action(Action::ShowCommit);
+    app.run_commit_button_command(MenuCommand::CommitReformat);
+    app.git.commit.set_staging(true);
+
+    // 暂存之后磁盘上又改了，状态还没有刷新：照暂存的内容提交，磁盘上的修改留着。
+    std::fs::write(&main, "fn staged() {}\n").unwrap();
+    git_in(&root, &["add", "-A"]);
+    app.git_refresh();
+    std::fs::write(&main, "fn staged() {}\nfn later() {}\n").unwrap();
+    app.git.commit.message.set_text("磁盘上改过");
+    app.git_commit();
+    app.poll_commit();
+    assert_eq!(last_message(&root), "磁盘上改过");
+    assert_eq!(committed("src/main.rs"), "fn staged() {}\n");
+    let on_disk = std::fs::read_to_string(&main).unwrap();
+    assert_eq!(on_disk, "fn staged() {}\nfn later() {}\n");
+
+    // 编辑器里有未保存的修改：不保存、不整理，照暂存的内容提交。
+    git_in(&root, &["add", "-A"]);
+    app.open_path(&main);
+    app.git_refresh();
+    app.run(winc_editor::Command::Insert("// 还没存\n".into()));
+    std::fs::write(root.join("src/new.rs"), "fn fresh() {}\n").unwrap();
+    git_in(&root, &["add", "-A"]);
+    app.git_refresh();
+    app.git.commit.message.set_text("没有保存");
+    app.git_commit();
+    app.poll_commit();
+    assert_eq!(last_message(&root), "没有保存");
+    assert_eq!(committed("src/main.rs"), on_disk);
+    assert_eq!(committed("src/new.rs"), "FN FRESH() {}\n");
+    assert!(app.editor.active().unwrap().is_dirty());
+    assert_eq!(std::fs::read_to_string(&main).unwrap(), on_disk);
+
+    // 工具失败：照原样提交，并说明有文件没能格式化。
+    let failing = "false".to_owned();
+    app.config
+        .format_commands
+        .insert("rust".to_owned(), failing);
+    std::fs::write(root.join("src/new.rs"), "fn again() {}\n").unwrap();
+    git_in(&root, &["add", "src/new.rs"]);
+    app.git_refresh();
+    app.git.commit.message.set_text("工具失败");
+    app.git_commit();
+    app.poll_commit();
+    assert_eq!(last_message(&root), "工具失败");
+    assert_eq!(committed("src/new.rs"), "fn again() {}\n");
+    let said = app.notice.text.clone().unwrap_or_default();
+    assert!(said.contains("未能格式化"), "{said}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// 「提交并同步」：确认后提交，再与上游同步：上游的新提交先拉下来，本地的提交再推上去。
 #[test]
 fn commit_and_sync_pulls_then_pushes() {

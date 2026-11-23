@@ -347,6 +347,10 @@ git-commit-reformatted = { $count ->
     [one] Reformatted 1 file before committing
    *[other] Reformatted { $count } files before committing
 }
+git-commit-reformat-failed = { $count ->
+    [one] Couldn’t reformat 1 file; committed it as is
+   *[other] Couldn’t reformat { $count } files; committed them as is
+}
 git-undo-commit-confirm = Undo the last commit?
 git-undo-commit-confirm-detail = The changes in “{ $subject }” stay staged, and its message returns to the commit box.
 git-undo-commit-confirm-button = Undo Commit

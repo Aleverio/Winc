@@ -683,8 +683,8 @@ enum Outcome {
     Staged(Result<(), String>, PathBuf),
     /// 提交前检查完了新增的内容：其中 TODO、FIXME 的处数，在哪个仓库里检查的。
     TodoChecked(usize, PathBuf),
-    /// 提交前的格式化做完了：改动了几个文件，在哪个仓库里进行的。
-    Reformatted(usize, PathBuf),
+    /// 提交前的格式化做完了：改动了几个文件、几个没能格式化，在哪个仓库里进行的。
+    Reformatted(usize, usize, PathBuf),
     /// 写入其他仓库暂存区的一步操作完成，或者失败的原因。
     OtherStaged(Result<(), String>),
     /// 读到了文件在暂存区中的内容：仓库、文件、发出读取时暂存区的版本、内容（不是文本时为

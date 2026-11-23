@@ -212,6 +212,15 @@ impl Git {
         Ok(history)
     }
 
+    /// 是否工作区里的文件 `path` 与暂存区中的内容相同；`git` 运行失败时按不同处理。
+    pub fn matches_index(&self, root: &Path, path: &Path) -> bool {
+        let mut command = self.command(root);
+        command.args(["diff", "--name-only", "--no-ext-diff"]);
+        command.arg("--ignore-submodules=dirty").arg("--").arg(path);
+        self.run(&mut command, STATUS_TIMEOUT, &Cancel::default())
+            .is_ok_and(|names| names.trim_ascii().is_empty())
+    }
+
     /// 把 `content` 登记为文件 `path` 在暂存区中的内容，工作区里的文件不变。
     ///
     /// `content` 是工作区里的形式，写入时套用该路径的过滤器（换行符的转换等）；文件的模式取自
