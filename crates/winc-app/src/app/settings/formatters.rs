@@ -349,6 +349,12 @@ impl App {
             Setting::GitPath | Setting::LatexPath => return self.settings_start_editing(setting),
             Setting::Updates => return self.settings_check_updates(),
             Setting::PluginCommand(id, _) => return self.run_plugin_command_id(id),
+            Setting::ReloadPlugins => {
+                self.refresh_plugins();
+                self.flash(t!("settings-plugin-reloaded"));
+                self.request_redraw();
+                return;
+            }
             _ => return,
         };
         self.settings.selected = setting;

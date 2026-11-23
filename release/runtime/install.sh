@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # One-command Winct bootstrap:
 #   curl -fsSL https://raw.githubusercontent.com/Aleverio/Winc/dev/release/runtime/install.sh | bash
+# Use a different channel with arguments after `--`:
+#   curl -fsSL .../install.sh | bash -s -- --channel beta
 #
 # This script is intentionally tiny. It verifies the real runtime against CHECKSUMS before running
 # it, so every later install, update and self-update uses authenticated bytes from the repository.

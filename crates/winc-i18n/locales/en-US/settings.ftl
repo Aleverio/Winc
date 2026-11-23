@@ -361,6 +361,9 @@ settings-config-write-failed = Couldn’t write the configuration file: { $error
 
 settings-plugin-paths = Manifest Paths
 settings-plugin-paths-desc = JSONC manifest files or folders, separated by commas; plugins are only read from here
+settings-plugin-reload = Reload Plugins
+settings-plugin-reload-desc = Re-read manifests and restart sandboxed plugins without restarting Winct
+settings-plugin-reloaded = Plugins reloaded
 settings-plugin-enabled-desc = Only enabled plugins contribute commands to the palette
 settings-plugin-command-desc = Run this command; first use asks for trust
 settings-plugin-setting-desc = Saved in plugins.values and available through a placeholder

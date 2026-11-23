@@ -150,4 +150,52 @@ check 'pruning keeps current, previous and the configured limit' prune_keeps_cur
 check 'hashing matches sha256sum' hash_matches_coreutils
 check 'an AppImage is extracted and both launchers work' extracts_appimage_and_launches_it
 
+lock_is_only_removed_when_held() {
+  new_home
+  mkdir -p "$LOCK_DIR"
+  LOCK_HELD=0
+  cleanup
+  [[ -d $LOCK_DIR ]]
+  LOCK_HELD=1
+  cleanup
+  [[ ! -d $LOCK_DIR ]]
+  LOCK_HELD=0
+}
+
+staging_directory_is_cleaned_up() {
+  new_home
+  STAGE_DIR="$HOME_DIR/releases/.1.2.3.staging"
+  mkdir -p "$STAGE_DIR"
+  cleanup
+  [[ ! -e $STAGE_DIR ]]
+  STAGE_DIR=""
+}
+
+compatibility_launcher_follows_symlinks() {
+  new_home
+  mkdir -p "$HOME_DIR/releases/1.2.3/app"
+  cat > "$HOME_DIR/releases/1.2.3/app/winc" <<'SCRIPT'
+#!/bin/sh
+printf '1.2.3\n'
+SCRIPT
+  chmod +x "$HOME_DIR/releases/1.2.3/app/winc"
+  switch_to 1.2.3 ''
+  install_launcher
+  ln -s "$BIN_DIR/winc" "$tmp/linked-winc"
+  [[ $("$tmp/linked-winc" --version) == 1.2.3 ]]
+}
+
+global_channel_option_is_accepted() {
+  CHANNEL=stable
+  CHANNEL_SET=0
+  YES=0
+  main --channel beta help >/dev/null
+  [[ $CHANNEL == beta && $CHANNEL_SET == 1 ]]
+}
+
+check 'cleanup leaves a lock owned by another process' lock_is_only_removed_when_held
+check 'a failed install removes its staging directory' staging_directory_is_cleaned_up
+check 'the compatibility launcher resolves symlinks' compatibility_launcher_follows_symlinks
+check 'global options are accepted before the command' global_channel_option_is_accepted
+
 printf '%d tests passed\n' "$passed"

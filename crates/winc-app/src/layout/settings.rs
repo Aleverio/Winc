@@ -289,6 +289,8 @@ pub enum Setting {
     AddLspLanguage,
     /// 插件清单文件或目录，用逗号分隔（`plugins.paths`）。
     PluginPaths,
+    /// 重新读取插件清单并重启 WASM 插件，不需要重启应用。
+    ReloadPlugins,
     /// 是否启用一个插件（`plugins.enabled`）。
     PluginEnabled(&'static str),
     /// 运行一条插件命令。
@@ -474,6 +476,7 @@ impl Setting {
             | Setting::LspDetectNames(_)
             | Setting::AddLspLanguage => SettingsPage::Lsp,
             Setting::PluginPaths
+            | Setting::ReloadPlugins
             | Setting::PluginEnabled(_)
             | Setting::PluginCommand(_, _)
             | Setting::PluginValue(_, _, _)
@@ -587,6 +590,7 @@ impl Setting {
             Setting::LspDetectNames(id) => winc_syntax::find(id).map_or(id, |l| l.name),
             Setting::AddLspLanguage => t!("settings-lsp-add-current"),
             Setting::PluginPaths => t!("settings-plugin-paths"),
+            Setting::ReloadPlugins => t!("settings-plugin-reload"),
             Setting::PluginEnabled(name) => name,
             Setting::PluginCommand(_, title) => title,
             Setting::PluginValue(_, _, title) | Setting::PluginBool(_, _, title) => title,
@@ -692,6 +696,7 @@ impl Setting {
             Setting::LspServerEnv(_) => Some(t!("settings-lsp-server-env-desc")),
             Setting::LspServerCwd(_) => Some(t!("settings-lsp-server-cwd-desc")),
             Setting::PluginPaths => Some(t!("settings-plugin-paths-desc")),
+            Setting::ReloadPlugins => Some(t!("settings-plugin-reload-desc")),
             Setting::PluginEnabled(_) => Some(t!("settings-plugin-enabled-desc")),
             Setting::PluginCommand(_, _) => Some(t!("settings-plugin-command-desc")),
             Setting::PluginValue(_, _, _) => Some(t!("settings-plugin-setting-desc")),
@@ -825,7 +830,8 @@ impl Setting {
             Setting::AddLanguage
             | Setting::AddFixLanguage
             | Setting::AddLspLanguage
-            | Setting::PluginCommand(_, _) => SettingControl::Action,
+            | Setting::PluginCommand(_, _)
+            | Setting::ReloadPlugins => SettingControl::Action,
             Setting::KeySearch => SettingControl::Search,
             Setting::Version => SettingControl::Product,
             Setting::ReleaseNotes

@@ -96,7 +96,7 @@ async function main() {
   const directory = value("--dir");
   const version = workspaceVersion(process.cwd());
   const files = await assembleRelease({ version, tag, directory });
-  // A dry run exercises manifest/checksum generation without a GitHub write.
+  // A dry run exercises checksum generation without a GitHub write.
   if (args.includes("--dry-run")) {
     console.log(files.join("\n"));
     return;

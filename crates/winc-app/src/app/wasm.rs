@@ -177,6 +177,8 @@ pub(crate) struct WasmSetting {
     pub key: String,
     pub title: String,
     pub kind: PluginSettingKind,
+    /// Nilai bawaan dari deklarasi plugin, dipakai saat menampilkan dan menyimpan setting.
+    pub default: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -778,17 +780,21 @@ impl Manager {
             });
         }
         for setting in response.settings {
-            let kind = match setting.kind {
-                SettingKind::Bool { .. } => PluginSettingKind::Bool,
-                SettingKind::String { .. }
-                | SettingKind::Number { .. }
-                | SettingKind::Choice { .. } => PluginSettingKind::String,
+            let (kind, default) = match setting.kind {
+                SettingKind::Bool { default } => (PluginSettingKind::Bool, default.to_string()),
+                SettingKind::String { default } | SettingKind::Choice { default, .. } => {
+                    (PluginSettingKind::String, default)
+                }
+                SettingKind::Number { default, .. } => {
+                    (PluginSettingKind::String, default.to_string())
+                }
             };
             self.settings.push(WasmSetting {
                 plugin: plugin.to_owned(),
                 key: setting.key,
                 title: setting.title,
                 kind,
+                default,
             });
         }
         for item in response.status_items {

@@ -123,6 +123,28 @@ jobs:
         shell: pwsh
         run: ./release/runtime/tests/winctup.test.ps1
 
+  runtime-windows:
+    name: Runtime (Windows)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Windows runtime tests and launcher shim
+        shell: pwsh
+        run: |
+          ./release/runtime/tests/winctup.test.ps1
+          $homeDir = Join-Path $env:RUNNER_TEMP 'winct-shim-home'
+          $binDir = Join-Path $env:RUNNER_TEMP 'winct-shim-bin'
+          $runtimeDir = Join-Path $homeDir 'runtime'
+          New-Item -ItemType Directory -Force -Path $runtimeDir, $binDir | Out-Null
+          Copy-Item ./release/runtime/winctup.ps1 (Join-Path $runtimeDir 'winctup.ps1') -Force
+          . ./release/runtime/winctup.ps1 -HomeDir $homeDir -BinDir $binDir
+          Write-Launchers
+          & (Join-Path $binDir 'winctup.cmd') help -Channel beta
+          if ($LASTEXITCODE -ne 0) { throw "winctup.cmd failed with exit $LASTEXITCODE" }
+
   lint:
     name: lint (${{ matrix.name }})
     needs: changes

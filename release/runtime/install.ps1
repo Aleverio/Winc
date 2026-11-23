@@ -3,6 +3,8 @@
 One-command Winct bootstrap:
   irm https://raw.githubusercontent.com/Aleverio/Winc/dev/release/runtime/install.ps1 | iex
 
+`iex` cannot pass -Channel; set $env:WINCT_CHANNEL before bootstrapping instead.
+
 The runtime is downloaded and checked against CHECKSUMS before it is allowed to run.
 #>
 [CmdletBinding()]

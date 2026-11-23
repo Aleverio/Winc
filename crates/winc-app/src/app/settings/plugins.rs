@@ -127,15 +127,19 @@ impl App {
 
     /// 提交插件清单路径：按逗号和换行分开，重新读取清单并刷新本页。
     pub(super) fn settings_commit_plugin_paths(&mut self, value: Option<String>) {
-        self.config.plugin_paths = value
-            .map(|text| {
-                text.split([',', '\n'])
-                    .map(str::trim)
-                    .filter(|path| !path.is_empty())
-                    .map(str::to_owned)
-                    .collect()
-            })
-            .unwrap_or_default();
+        let mut paths: Vec<String> = Vec::new();
+        if let Some(text) = value {
+            for path in text
+                .split([',', '\n'])
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+            {
+                if !paths.iter().any(|known| known.as_str() == path) {
+                    paths.push(path.to_owned());
+                }
+            }
+        }
+        self.config.plugin_paths = paths;
         self.settings.editing = None;
         self.settings.editing_original = None;
         self.settings.error = None;
@@ -213,6 +217,13 @@ impl App {
             .find(|manifest| manifest.id == plugin)
             .and_then(|manifest| manifest.settings.iter().find(|item| item.key == key))
             .map(|item| item.default.clone())
+            .or_else(|| {
+                self.wasm
+                    .settings()
+                    .iter()
+                    .find(|item| item.plugin == plugin && item.key == key)
+                    .map(|item| item.default.clone())
+            })
             .unwrap_or_default()
     }
 

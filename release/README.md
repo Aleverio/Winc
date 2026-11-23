@@ -1,4 +1,4 @@
-# Releasing winc
+# Releasing Winct
 
 Changing `VERSION` on `dev` creates the annotated tag `v<version>` and explicitly dispatches the
 Release workflow on that tag. It builds four native targets and assembles one **draft** GitHub

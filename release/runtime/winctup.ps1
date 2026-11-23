@@ -44,6 +44,10 @@ $RawBase = "https://raw.githubusercontent.com/$Repo/$Ref/release/runtime"
 function Fail([string]$Message) { throw "winctup: $Message" }
 function Info([string]$Message) { Write-Host "winctup: $Message" }
 
+$keepSetting = if ($env:WINCT_KEEP_RELEASES) { $env:WINCT_KEEP_RELEASES } else { '3' }
+if ($keepSetting -notmatch '^\d+$') { Fail 'WINCT_KEEP_RELEASES must be a number' }
+$KEEP = [int]$keepSetting
+
 function Get-GitHubHeaders {
     $headers = @{ 'User-Agent' = 'winctup'; 'Accept' = 'application/vnd.github+json' }
     if ($env:WINCT_GITHUB_TOKEN) { $headers['Authorization'] = "Bearer $env:WINCT_GITHUB_TOKEN" }
@@ -67,20 +71,35 @@ function Test-Tag([string]$Tag, [string]$RequestedChannel) {
     return $Tag -match '^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$'
 }
 
+function Get-TagVersion([string]$Tag) {
+    if ($Tag -match '^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$') {
+        return [PSCustomObject]@{
+            Major = [int]$Matches[1]; Minor = [int]$Matches[2]; Patch = [int]$Matches[3]
+            Suffix = $Matches[4]
+        }
+    }
+    return $null
+}
+
 function Get-LatestTag([string]$RequestedChannel) {
     $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases?per_page=30" `
         -Headers (Get-GitHubHeaders) -TimeoutSec 60
-    if ($RequestedChannel -eq 'stable') {
-        $release = $releases | Where-Object {
-            (Test-Tag $_.tag_name $RequestedChannel) -and -not $_.draft -and -not $_.prerelease
-        } | Select-Object -First 1
-    } else {
-        $release = $releases | Where-Object {
-            (Test-Tag $_.tag_name $RequestedChannel) -and -not $_.draft
-        } | Select-Object -First 1
-    }
-    if (-not $release) { Fail "cannot resolve the latest $RequestedChannel release" }
-    return [string]$release.tag_name
+    $candidates = @($releases | Where-Object {
+        (Test-Tag ([string]$_.tag_name) $RequestedChannel) -and -not $_.draft -and
+        ($RequestedChannel -eq 'beta' -or -not $_.prerelease)
+    } | ForEach-Object {
+        $version = Get-TagVersion ([string]$_.tag_name)
+        if ($version) {
+            [PSCustomObject]@{
+                Tag = [string]$_.tag_name
+                Major = $version.Major; Minor = $version.Minor; Patch = $version.Patch
+                Suffix = $version.Suffix
+            }
+        }
+    })
+    if ($candidates.Count -eq 0) { Fail "cannot resolve the latest $RequestedChannel release" }
+    $latest = $candidates | Sort-Object -Property Major, Minor, Patch -Descending | Select-Object -First 1
+    return $latest.Tag
 }
 
 function Get-State([string]$Key) {
@@ -136,7 +155,7 @@ function Write-Launchers {
 setlocal EnableExtensions
 set "WINCT_HOME=__HOME__"
 for /f "usebackq delims=" %%v in ("%WINCT_HOME%\current") do set "WINCT_VERSION=%%v"
-"%WINCT_HOME%\releases\%WINCT_VERSION%\app\winc.exe" %*
+"%WINCT_HOME%\releases\%WINCT_VERSION%\winc.exe" %*
 exit /b %ERRORLEVEL%
 '@
     $content = $template.Replace('__HOME__', $HomeDir)
@@ -144,8 +163,8 @@ exit /b %ERRORLEVEL%
         [IO.File]::WriteAllText((Join-Path $BinDir $name), $content)
     }
 
-    # A command-shaped shim so `winctup status` works on Windows too. SHIFT leaves %* unchanged, so
-    # forward the remaining arguments explicitly.
+    # A command-shaped shim so `winctup status` works on Windows too. SHIFT moves %2 into %1, so
+    # forward %1..%9 after the shift; using %2..%9 would silently drop the first option.
     $runtimeTemplate = @'
 @echo off
 setlocal EnableExtensions
@@ -154,7 +173,7 @@ set "WINCT_BIN=__BIN__"
 if "%~1"=="" goto showhelp
 set "WINCT_CMD=%~1"
 shift
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%WINCT_HOME%\runtime\winctup.ps1" -HomeDir "%WINCT_HOME%" -BinDir "%WINCT_BIN%" -Command "%WINCT_CMD%" %2 %3 %4 %5 %6 %7 %8 %9
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%WINCT_HOME%\runtime\winctup.ps1" -HomeDir "%WINCT_HOME%" -BinDir "%WINCT_BIN%" -Command "%WINCT_CMD%" %1 %2 %3 %4 %5 %6 %7 %8 %9
 exit /b %ERRORLEVEL%
 :showhelp
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%WINCT_HOME%\runtime\winctup.ps1" -HomeDir "%WINCT_HOME%" -BinDir "%WINCT_BIN%" -Command help
@@ -175,10 +194,13 @@ function Prune-Releases([string]$Current, [string]$Previous) {
     $root = Join-Path $HomeDir 'releases'
     if (-not (Test-Path -LiteralPath $root)) { return }
     $entries = @(Get-ChildItem -LiteralPath $root -Directory | ForEach-Object {
-        if ($_.Name -match '^\d+\.\d+\.\d+$') {
-            [PSCustomObject]@{ Name = $_.Name; Version = [version]$_.Name; Path = $_.FullName }
+        if ($_.Name -match '^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?$') {
+            [PSCustomObject]@{
+                Name = $_.Name; Path = $_.FullName
+                Major = [int]$Matches[1]; Minor = [int]$Matches[2]; Patch = [int]$Matches[3]
+            }
         }
-    } | Sort-Object -Property Version)
+    } | Sort-Object -Property Major, Minor, Patch -Descending)
     $count = 0
     foreach ($entry in $entries) {
         if ($entry.Name -eq $Current -or $entry.Name -eq $Previous) { continue }
@@ -228,7 +250,8 @@ function Do-Install {
             if (-not (Test-Path -LiteralPath (Join-Path $stage 'winc.exe'))) {
                 Fail 'the portable archive has no winc.exe'
             }
-            & (Join-Path $stage 'winc.exe') --version | Out-Null
+            & (Join-Path $stage 'winc.exe') --version 2>$null | Out-Null
+            if ($LASTEXITCODE -ne 0) { Fail "smoke test failed for winc.exe (exit $LASTEXITCODE)" }
 
             $target = Join-Path $releasesRoot $version
             if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
@@ -253,7 +276,7 @@ function Do-Status {
     $installed = Get-State 'VERSION'
     $channel = Get-State 'CHANNEL'
     if (-not $channel) { $channel = 'stable' }
-    $latest = Get-LatestTag $channel
+    $latest = try { Get-LatestTag $channel } catch { 'unknown' }
     Write-Host "runtime:   winctup $RUNTIME_VERSION"
     Write-Host "channel:   $channel"
     Write-Host "installed: $(if ($installed) { $installed } else { 'none' })"
@@ -267,11 +290,13 @@ function Do-Rollback {
     try {
         $current = Get-State 'VERSION'
         $previous = Get-State 'PREVIOUS'
-        if (-not $previous -or -not (Test-Path -LiteralPath (Join-Path $HomeDir "releases\$previous\app\winc.exe"))) {
+        if (-not $previous -or -not (Test-Path -LiteralPath (Join-Path $HomeDir "releases\$previous\winc.exe"))) {
             Fail 'no previous release is available to roll back to'
         }
         Set-Current $previous
         Set-State 'PREVIOUS' $current
+        Set-State 'ARTIFACT' ''
+        Set-State 'INSTALLED_AT' ''
         Info "rolled back to Winct $previous"
     } finally {
         Exit-Lock $lock
@@ -292,9 +317,12 @@ function Do-SelfUpdate {
         }
         $runtimeDir = Join-Path $HomeDir 'runtime'
         New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
-        Copy-Item -LiteralPath (Join-Path $tmp 'CHECKSUMS') -Destination $runtimeDir -Force
-        foreach ($name in @('winctup.ps1', 'install.ps1')) {
-            Copy-Item -LiteralPath (Join-Path $tmp $name) -Destination $runtimeDir -Force
+        # Salin ke file sementara lalu pindahkan: menimpa script yang sedang jalan bisa gagal.
+        foreach ($name in @('CHECKSUMS', 'winctup.ps1', 'install.ps1')) {
+            $destination = Join-Path $runtimeDir $name
+            $staged = "$destination.tmp.$PID"
+            Copy-Item -LiteralPath (Join-Path $tmp $name) -Destination $staged -Force
+            Move-Item -LiteralPath $staged -Destination $destination -Force
         }
     } finally {
         Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
@@ -307,7 +335,12 @@ function Do-Uninstall {
     if ((Split-Path -Leaf $HomeDir) -notmatch '^winct(up)?$') {
         Fail "refusing to remove ${HomeDir}: WINCT_HOME must end in winct or winctup"
     }
-    Remove-Item -LiteralPath $HomeDir -Recurse -Force
+    $lock = Enter-Lock
+    try {
+        Remove-Item -LiteralPath $HomeDir -Recurse -Force
+    } finally {
+        Exit-Lock $lock
+    }
     foreach ($name in @('winct.cmd', 'winc.cmd', 'winctup.cmd')) {
         Remove-Item -LiteralPath (Join-Path $BinDir $name) -Force -ErrorAction SilentlyContinue
     }
@@ -341,7 +374,7 @@ Commands:
   doctor                          check the local environment
 
 Environment:
-  WINCT_RELEASE_REPO, WINCT_RUNTIME_REF, WINCT_CHANNEL, WINCT_HOME, WINCT_BIN
+  WINCT_RELEASE_REPO, WINCT_RUNTIME_REF, WINCT_CHANNEL, WINCT_HOME, WINCT_BIN, WINCT_KEEP_RELEASES
 '@ | Write-Host
 }
 

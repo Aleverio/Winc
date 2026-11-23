@@ -3,11 +3,11 @@
 [Desktop Entry]
 Type=Service
 MimeType=inode/directory;
-Actions=openInWinc;
+Actions=openInWinct;
 X-KDE-Priority=TopLevel
 
-[Desktop Action openInWinc]
-Name=Open in Winc
-Name[zh_CN]=在 Winc 中打开
+[Desktop Action openInWinct]
+Name=Open in Winct
+Name[zh_CN]=在 Winct 中打开
 Icon=winc
 Exec=winc %F

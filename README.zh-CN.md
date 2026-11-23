@@ -2,7 +2,7 @@
   <img src="./crates/winc-app/assets/icon.svg" alt="winc" width="128" />
 </p>
 
-<h1 align="center">Winc</h1>
+<h1 align="center">Winct</h1>
 
 <p align="center">
   更轻、更快、更顺手的桌面编辑器。
@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <a href="https://winc.si/#download"><img alt="下载 Winc" src="./.github/assets/download-zh.svg" /></a>
+  <a href="https://winc.si/#download"><img alt="下载 Winct" src="./.github/assets/download-zh.svg" /></a>
 </p>
 
 ## 概述
@@ -95,6 +95,23 @@ Winc 会把打开和编辑的文件同步给对应服务器，并为诊断范围
 主要在 macOS 上开发和测试。可从 [winc.si](https://winc.si/#download) 下载，所有版本见
 [GitHub Releases](https://github.com/DEEIX-AI/Winc/releases)。
 
+## 安装
+
+这个分支名为 **Winct**，通过 `winctup` 运行时安装。一条命令即可安装运行时和最新的稳定版；
+后续更新、回滚和运行时自更新都由同一个运行时处理：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Aleverio/Winc/dev/release/runtime/install.sh | bash
+```
+
+```powershell
+irm https://raw.githubusercontent.com/Aleverio/Winc/dev/release/runtime/install.ps1 | iex
+```
+
+把 `~/.local/bin`（或 `%LOCALAPPDATA%\winct\bin`）加入 `PATH`，然后使用 `winctup status`、
+`winctup update` 和 `winctup rollback`。架构、更新渠道和安全模型见
+[release/runtime/README.md](release/runtime/README.md)。原生安装包仍然可以在 Releases 页面获取。
+
 ## 命令行
 
 ```bash
@@ -104,7 +121,7 @@ winc --wait file        # 等标签关闭后再退出，例如作为 Git 的编�
 cargo build 2>&1 | winc -   # 读取标准输入
 ```
 
-Windows 安装包、Linux deb 包和 Arch 包会把 `winc` 加入 `PATH`；Windows 便携版不修改 `PATH`。macOS 请在菜单栏选择「Winc → 安装 winc 命令…」，或在命令面板中运行「Shell 命令：安装 winc 命令」；Linux AppImage 请使用命令面板。
+Windows 安装包、Linux deb 包和 Arch 包会把 `winc` 加入 `PATH`；Windows 便携版不修改 `PATH`。macOS 请在菜单栏选择「Winct → 安装 winc 命令…」，或在命令面板中运行「Shell 命令：安装 winc 命令」；Linux AppImage 请使用命令面板。
 
 在 macOS 上应用由系统启动，不继承 shell 的环境变量；需要保留时使用 `winc --new-instance`。
 

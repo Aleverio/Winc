@@ -58,8 +58,9 @@ bin directory is not on `PATH`.
 $WINCT_HOME                         # default: ~/.local/share/winct | %LOCALAPPDATA%\winct
 ├── runtime/                        # verified copy of runtime.sh / winctup.ps1 + CHECKSUMS
 ├── releases/
-│   ├── 1.2.3/app/                  # extracted, runnable build
-│   └── 1.2.2/app/                  # kept for rollback
+│   ├── 1.2.3/app/                  # Unix: extracted AppImage/DMG build
+│   ├── 1.2.3/winc.exe              # Windows: portable ZIP keeps winc.exe at the root
+│   └── 1.2.2/                      # kept for rollback (app/ on Unix, root on Windows)
 ├── cache/                          # downloads, cleaned after 7 days
 ├── current                         # symlink (Unix) or version file (Windows)
 ├── state                           # VERSION, PREVIOUS, CHANNEL, ARTIFACT, INSTALLED_AT

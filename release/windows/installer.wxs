@@ -169,19 +169,19 @@
             </Component>
             <?endforeach?>
           </Directory>
-          <!-- Explorer context menu: "Open with Winc" on the supported types, added under
-               SystemFileAssociations so their default program stays unchanged, and "Open in Winc" on
+          <!-- Explorer context menu: "Open with Winct" on the supported types, added under
+               SystemFileAssociations so their default program stays unchanged, and "Open in Winct" on
                a folder and on the empty space inside one (also the desktop), where %V is that folder.
                Windows 11 shows these under "Show more options". -->
           <Component Id="ContextMenu" Guid="*" Win64="yes">
-            <RegistryValue Root="HKLM" Key="Software\Classes\Directory\shell\winc" Value="Open in Winc" Type="string" KeyPath="yes"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\Directory\shell\winc" Value="Open in Winct" Type="string" KeyPath="yes"/>
             <RegistryValue Root="HKLM" Key="Software\Classes\Directory\shell\winc" Name="Icon" Value="[#WincExe],0" Type="string"/>
             <RegistryValue Root="HKLM" Key="Software\Classes\Directory\shell\winc\command" Value="&quot;[#WincExe]&quot; &quot;%V&quot;" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\Directory\Background\shell\winc" Value="Open in Winc" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\Directory\Background\shell\winc" Value="Open in Winct" Type="string"/>
             <RegistryValue Root="HKLM" Key="Software\Classes\Directory\Background\shell\winc" Name="Icon" Value="[#WincExe],0" Type="string"/>
             <RegistryValue Root="HKLM" Key="Software\Classes\Directory\Background\shell\winc\command" Value="&quot;[#WincExe]&quot; &quot;%V&quot;" Type="string"/>
             <?foreach Type in $(var.FileTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.$(var.Type)\shell\winc" Value="Open with Winc" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.$(var.Type)\shell\winc" Value="Open with Winct" Type="string"/>
             <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.$(var.Type)\shell\winc" Name="Icon" Value="[#WincExe],0" Type="string"/>
             <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.$(var.Type)\shell\winc\command" Value="&quot;[#WincExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>

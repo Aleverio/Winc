@@ -21,6 +21,9 @@ KEEP=${WINCT_KEEP_RELEASES:-3}
 YES=0
 ASSET_KIND=""
 TMP_DIR=""
+STAGE_DIR=""
+LOCK_HELD=0
+EXTRA_TMP=()
 
 CURL=(curl --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --silent --show-error
   --location --retry 3 --connect-timeout 15)
@@ -31,7 +34,14 @@ need() { command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"; }
 
 cleanup() {
   if [[ -n $TMP_DIR && -d $TMP_DIR ]]; then rm -rf -- "$TMP_DIR"; fi
-  if [[ -d $LOCK_DIR ]]; then rmdir "$LOCK_DIR" 2>/dev/null || true; fi
+  if [[ -n $STAGE_DIR && -d $STAGE_DIR ]]; then rm -rf -- "$STAGE_DIR"; fi
+  local extra
+  for extra in "${EXTRA_TMP[@]}"; do
+    [[ -e $extra ]] && rm -f -- "$extra"
+  done
+  if ((LOCK_HELD == 1)) && [[ -d $LOCK_DIR ]]; then
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+  fi
 }
 trap cleanup EXIT
 
@@ -83,9 +93,10 @@ acquire_lock() {
   local waited=0
   until mkdir "$LOCK_DIR" 2>/dev/null; do
     waited=$((waited + 1))
-    ((waited < 60)) || fail "another winctup process holds the lock"
+    ((waited < 600)) || fail "another winctup process holds the lock"
     sleep 1
   done
+  LOCK_HELD=1
 }
 
 # Stable means X.Y.Z only. Beta accepts a prerelease suffix from the same tag family.
@@ -108,9 +119,18 @@ latest_tag() {
   else
     json=$("${CURL[@]}" --max-time 60 -H 'Accept: application/vnd.github+json' \
       "https://api.github.com/repos/$REPO/releases?per_page=30")
-    tag=$(printf '%s\n' "$json" |
-      grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 |
-      sed 's/.*"\([^"]*\)"$/\1/' || true)
+    # GitHub mengembalikan rilis berdasarkan tanggal, bukan versi. Ambil tag dari objek level
+    # atas yang bukan draft, lalu urutkan sebagai versi supaya beta tidak tertukar.
+    tag=$(printf '%s\n' "$json" | awk '
+      /^  \{/ { tag = ""; draft = "false" }
+      /^  \},?$/ {
+        if (draft !~ /:[[:space:]]*true/ && tag != "") print tag
+        tag = ""; draft = "false"
+      }
+      /"tag_name"[[:space:]]*:/ { tag = $0 }
+      /"draft"[[:space:]]*:/ { draft = $0 }
+    ' | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' |
+      sort -V | tail -n 1 || true)
   fi
   valid_tag "$tag" "$channel" ||
     fail "cannot resolve the latest $channel release (got '$tag')"
@@ -192,7 +212,17 @@ EOF
   cat > "$BIN_DIR/winc" <<EOF
 #!/bin/sh
 set -eu
-exec "\$(dirname "\$0")/winct" "\$@"
+self=\$0
+while [ -L "\$self" ]; do
+  dir=\$(CDPATH= cd -P "\$(dirname "\$self")" && pwd)
+  target=\$(readlink "\$self")
+  case \$target in
+    /*) self=\$target ;;
+    *) self=\$dir/\$target ;;
+  esac
+done
+bin=\$(CDPATH= cd -P "\$(dirname "\$self")" && pwd)
+exec "\$bin/winct" "\$@"
 EOF
   chmod +x "$BIN_DIR/winct" "$BIN_DIR/winc"
 
@@ -206,21 +236,23 @@ Comment=Winct Editor - a lighter, faster desktop code editor
 Exec=$(shell_quote "$BIN_DIR/winct") %F
 Icon=$HOME_DIR/current/app/usr/share/icons/hicolor/256x256/apps/winc.png
 Terminal=false
-Categories=Development;IDE;
+Categories=Development;TextEditor;
 EOF
   fi
   info "launchers: $BIN_DIR/winct, $BIN_DIR/winc"
 }
 
 switch_to() {
-  local version=$1 previous=$2 link="$HOME_DIR/.current.new"
+  local version=$1 previous=$2 link="$HOME_DIR/.current.new" legacy=""
   if [[ -e $HOME_DIR/current && ! -L $HOME_DIR/current ]]; then
     # A pre-runtime install may have left a real directory here.
-    mv "$HOME_DIR/current" "$HOME_DIR/.current.legacy.$$" || fail "cannot move the old current/ directory"
+    legacy="$HOME_DIR/.current.legacy.$$"
+    mv "$HOME_DIR/current" "$legacy" || fail "cannot move the old current/ directory"
   fi
   rm -f "$link"
   ln -s "releases/$version/app" "$link"
   mv -f "$link" "$HOME_DIR/current"
+  [[ -z $legacy ]] || rm -rf -- "$legacy"
   set_state VERSION "$version"
   set_state PREVIOUS "$previous"
   set_state INSTALLED_AT "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -232,12 +264,12 @@ prune() {
   for entry in "$HOME_DIR"/releases/*; do
     [[ -d $entry ]] || continue
     name=${entry##*/}
-    [[ $name =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+    [[ $name =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || continue
     versions+=("$name")
   done
   if ((${#versions[@]})); then
     # Newest first: current and previous are always retained, older ones fill the remaining KEEP.
-    sorted=$(printf '%s\n' "${versions[@]}" | sort -t. -k1,1nr -k2,2nr -k3,3nr)
+    sorted=$(printf '%s\n' "${versions[@]}" | sort -Vr)
     while IFS= read -r name; do
       [[ -n $name ]] || continue
       if [[ $name == "$current" || $name == "$previous" ]]; then
@@ -285,6 +317,7 @@ do_install() {
   base="https://github.com/$REPO/releases/download/$tag"
   TMP_DIR=$(mktemp -d "$HOME_DIR/cache/.tmp.XXXXXX")
   stage="$HOME_DIR/releases/.$version.staging"
+  STAGE_DIR=$stage
   rm -rf "$stage"
   mkdir -p "$stage"
 
@@ -299,6 +332,7 @@ do_install() {
   extract "$TMP_DIR/$asset" "$stage"
   rm -rf -- "$HOME_DIR/releases/$version"
   mv "$stage" "$HOME_DIR/releases/$version"
+  STAGE_DIR=""
   switch_to "$version" "$old"
   set_state CHANNEL "$channel"
   set_state ARTIFACT "$asset"
@@ -314,7 +348,8 @@ do_status() {
   installed=$(read_state VERSION)
   channel=$(read_state CHANNEL)
   [[ -n $channel ]] || channel=stable
-  latest=$(latest_tag "$channel")
+  latest=$(latest_tag "$channel" 2>/dev/null || true)
+  [[ -n $latest ]] || latest=unknown
   printf 'runtime:   winctup %s\n' "$RUNTIME_VERSION"
   printf 'channel:   %s\n' "$channel"
   printf 'installed: %s\n' "${installed:-none}"
@@ -331,6 +366,8 @@ do_rollback() {
   [[ -n $previous && -d "$HOME_DIR/releases/$previous/app" ]] ||
     fail "no previous release is available to roll back to"
   switch_to "$previous" "$current"
+  set_state ARTIFACT ""
+  set_state INSTALLED_AT ""
   info "rolled back to Winct $previous"
 }
 
@@ -347,9 +384,16 @@ do_self_update() {
   actual=$(hash_file "$TMP_DIR/runtime.sh")
   [[ $actual == "$expected" ]] || fail "runtime.sh does not match CHECKSUMS"
   mkdir -p "$HOME_DIR/runtime"
-  cp "$TMP_DIR/runtime.sh" "$HOME_DIR/runtime/runtime.sh"
-  cp "$TMP_DIR/CHECKSUMS" "$HOME_DIR/runtime/CHECKSUMS"
-  chmod +x "$HOME_DIR/runtime/runtime.sh"
+  local new_runtime="$HOME_DIR/runtime/.runtime.sh.$$"
+  local new_checksums="$HOME_DIR/runtime/.CHECKSUMS.$$"
+  EXTRA_TMP=("$new_runtime" "$new_checksums")
+  cp "$TMP_DIR/runtime.sh" "$new_runtime"
+  cp "$TMP_DIR/CHECKSUMS" "$new_checksums"
+  chmod +x "$new_runtime"
+  # Tulis file sementara dulu: menimpa script yang sedang jalan bisa memotong eksekusinya.
+  mv -f "$new_runtime" "$HOME_DIR/runtime/runtime.sh"
+  mv -f "$new_checksums" "$HOME_DIR/runtime/CHECKSUMS"
+  EXTRA_TMP=()
   rm -rf -- "$TMP_DIR"
   TMP_DIR=""
   info "winctup runtime updated and verified"
@@ -359,6 +403,7 @@ do_uninstall() {
   ((YES == 1)) || fail "pass --yes to confirm uninstall"
   [[ ${HOME_DIR##*/} =~ ^winct(up)?$ ]] ||
     fail "refusing to remove $HOME_DIR: WINCT_HOME must end in winct or winctup"
+  acquire_lock
   rm -rf -- "$HOME_DIR"
   rm -f -- "$BIN_DIR/winct" "$BIN_DIR/winc" "$DESKTOP_DIR/winct.desktop"
   info "winctup and its releases were removed; application settings were kept"
@@ -401,9 +446,23 @@ EOF
 }
 
 main() {
-  local command=${1:-help}
-  [[ $command == -* ]] && { usage; return 0; }
-  shift || true
+  local command=""
+  # Opsi global diterima sebelum maupun sesudah perintah.
+  while (($#)) && [[ -z $command ]]; do
+    case $1 in
+      --channel)
+        (($# >= 2)) || fail "--channel needs a value"
+        CHANNEL=$2
+        CHANNEL_SET=1
+        shift 2
+        ;;
+      --yes) YES=1; shift ;;
+      -h|--help) usage; return 0 ;;
+      -*) usage; return 0 ;;
+      *) command=$1; shift ;;
+    esac
+  done
+  [[ -n $command ]] || { usage; return 0; }
   while (($#)); do
     case $1 in
       --channel)

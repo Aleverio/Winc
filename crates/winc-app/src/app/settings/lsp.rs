@@ -235,16 +235,18 @@ impl App {
         language: &'static str,
         value: Option<String>,
     ) {
-        let names: Vec<String> = value
-            .map(|value| {
-                value
-                    .split([',', ';'])
-                    .map(str::trim)
-                    .filter(|name| !name.is_empty())
-                    .map(str::to_owned)
-                    .collect()
-            })
-            .unwrap_or_default();
+        let mut names: Vec<String> = Vec::new();
+        if let Some(value) = value {
+            for name in value
+                .split([',', ';'])
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+            {
+                if !names.iter().any(|known| known.as_str() == name) {
+                    names.push(name.to_owned());
+                }
+            }
+        }
         if names.is_empty() {
             self.config.lsp_detect_names.remove(language);
         } else {

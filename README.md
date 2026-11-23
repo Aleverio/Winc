@@ -2,7 +2,7 @@
   <img src="./crates/winc-app/assets/icon.svg" alt="winc" width="128" />
 </p>
 
-<h1 align="center">Winc - Alverion's Fork</h1>
+<h1 align="center">Winct - Alverion's Fork</h1>
 
 <p align="center">
   An Alverion-maintained fork of Winc, with independent features and customizations.

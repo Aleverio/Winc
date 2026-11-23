@@ -154,9 +154,9 @@ impl SettingsPage {
                 },
             ],
             SettingsPage::Plugins => {
-                let mut items = vec![Setting::PluginPaths];
+                let mut sections = vec![plain(vec![Setting::PluginPaths, Setting::ReloadPlugins])];
                 for plugin in &languages.plugins {
-                    items.push(Setting::PluginEnabled(plugin.name));
+                    let mut items = vec![Setting::PluginEnabled(plugin.name)];
                     for &(command, title) in &plugin.commands {
                         items.push(Setting::PluginCommand(command, title));
                     }
@@ -170,8 +170,12 @@ impl SettingsPage {
                             }
                         });
                     }
+                    sections.push(Section {
+                        title: Some(plugin.name),
+                        items,
+                    });
                 }
-                vec![plain(items)]
+                sections
             }
             SettingsPage::Modules => vec![plain(vec![
                 Setting::GitModule,

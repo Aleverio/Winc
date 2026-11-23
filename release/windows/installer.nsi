@@ -41,9 +41,9 @@ LangString FileTypesText ${LANG_ENGLISH} "Lists Winct among the programs for sou
 LangString FileTypesText ${LANG_SIMPCHINESE} "把 Winct 列为源代码和文本文件的可选程序。设为默认程序的类型会显示各自的文档图标。Windows 可能会询问一次用哪个程序打开这些文件。"
 
 ; Explorer context menu labels, in the installer's language.
-LangString OpenFileVerb ${LANG_ENGLISH} "Open with Winct"
+LangString OpenFileVerb ${LANG_ENGLISH} "Open with Winctt"
 LangString OpenFileVerb ${LANG_SIMPCHINESE} "通过 Winct 打开"
-LangString OpenFolderVerb ${LANG_ENGLISH} "Open in Winct"
+LangString OpenFolderVerb ${LANG_ENGLISH} "Open in Winctt"
 LangString OpenFolderVerb ${LANG_SIMPCHINESE} "在 Winct 中打开"
 
 ; Types winc can open, listed under Applications\winc.exe\SupportedTypes: winc appears in
@@ -141,7 +141,7 @@ LangString OpenFolderVerb ${LANG_SIMPCHINESE} "在 Winct 中打开"
 ; The winc.<type> ProgID is not listed under any type. Earlier versions listed it in the type's
 ; OpenWithProgids, and a user who then chose winc as the default program has a choice that names
 ; this ProgID; keeping it keeps that choice working.
-; The verb under SystemFileAssociations adds "Open with Winc" to the type's context menu without
+; The verb under SystemFileAssociations adds "Open with Winct" to the type's context menu without
 ; changing its default program. Windows 11 shows it under "Show more options".
 ; The ProgID carries the type's own document icon. Explorer shows it for a type whose chosen program
 ; is this ProgID; a choice made through "Open with" names winc.exe instead and shows its icon.
@@ -177,7 +177,7 @@ LangString OpenFolderVerb ${LANG_SIMPCHINESE} "在 Winct 中打开"
   DeleteRegKey /ifempty HKCU "Software\Classes\SystemFileAssociations\.${Type}"
 !macroend
 
-; "Open in Winc" on a folder and on the empty space inside one (also the desktop); %V is that folder.
+; "Open in Winct" on a folder and on the empty space inside one (also the desktop); %V is that folder.
 !macro RegisterFolderVerb Key
   WriteRegStr HKCU "Software\Classes\${Key}\shell\winc" "" "$(OpenFolderVerb)"
   WriteRegStr HKCU "Software\Classes\${Key}\shell\winc" "Icon" "$INSTDIR\winc.exe,0"
