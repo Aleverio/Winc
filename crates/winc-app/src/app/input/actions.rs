@@ -122,6 +122,8 @@ impl App {
             OpenFile => self.pick(Pick::Open),
             OpenFolder => self.pick(Pick::OpenFolder),
             AddFolder => self.ask_add_folder(),
+            SaveProjectAs => self.ask_save_project(),
+            OpenProject => self.pick(Pick::OpenProject),
             RemoteConnect => self.open_remote_picker(),
             RemoteDisconnect => self.remote_disconnect(),
             OpenRecent => self.open_recent_folders(),
