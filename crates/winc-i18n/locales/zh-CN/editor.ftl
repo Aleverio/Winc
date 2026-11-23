@@ -123,6 +123,7 @@ editor-temp-file-failed = 无法创建临时文件
 editor-large-original-truncated = 原文件读取失败或已被截短，内容不完整
 editor-paste-cannot-copy = 无法复制此项
 editor-paste-into-itself = 无法复制到其自身内部
+editor-download-skipped-special = 不是普通文件，无法下载
 editor-open-binary = 此文件为二进制文件，无法打开
 editor-open-too-large = 文件过大（{ $size } MB），超过 { $limit } GB 的上限
 editor-unreadable-not-found = 文件不存在

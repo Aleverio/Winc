@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use winc_editor::Copying;
-use winc_editor::paste::CopyError;
+use winc_editor::paste::{CopyError, DownloadOutcome};
 use winc_i18n::t;
 
 use super::*;
@@ -151,36 +151,75 @@ impl App {
     ///
     /// 目录连同其中的内容一起下载；重名时不覆盖，副本改名（见 `winc_editor::paste::copy_into`）。
     pub(in crate::app) fn download(&mut self, paths: Vec<PathBuf>, dir: PathBuf) {
-        let copy = move |copying: &Copying| {
-            let copied = winc_editor::paste::copy_into(&paths, &dir, copying);
-            copy_outcome(copied, copying, |path, error| {
-                t!(
-                    "workspace-download-failed",
-                    name = winc_editor::display_name(path),
-                    error = error.to_string()
-                )
-            })
-        };
-        let done = |(done, failure), copying| UserEvent::Downloaded(done, failure, copying);
-        if let Some((done, failure)) = self.spawn_copy(true, true, copy, done) {
-            self.downloaded(done, failure);
+        let copy =
+            move |copying: &Copying| winc_editor::paste::download_into(&paths, &dir, copying);
+        let done = |outcome, copying| UserEvent::Downloaded(outcome, copying);
+        if let Some(outcome) = self.spawn_copy(true, true, copy, done) {
+            self.downloaded(outcome, false);
         }
     }
 
-    /// 下载结束：失败时提示原因，否则提示下载了什么，按钮在文件管理器中显示下载到的地方；
-    /// `done` 是下载好的各项（失败或取消之前下载好的也在内）。
-    pub(in crate::app) fn downloaded(&mut self, done: Vec<PathBuf>, failure: Option<String>) {
-        if let Some(message) = failure {
-            self.notify(NoticeKind::Error, message);
-        } else if let Some(last) = done.last().cloned() {
-            let message = match done.as_slice() {
-                [one] => t!(
-                    "workspace-download-done-one",
-                    name = winc_editor::display_name(one)
-                ),
-                many => t!("workspace-download-done-many", count = many.len()),
-            };
-            self.notify_with(NoticeKind::Done, message, NoticeAction::Reveal(last));
+    /// 下载结束：失败时提示原因及实际出错的子路径；跳过了不可下载项时用警告列出这些项；
+    /// 否则提示下载了什么，按钮在文件管理器中显示下载到的地方。
+    ///
+    /// 取消时不显示这些结果通知：`copy_finished` 已经闪过「已取消下载」，再报「已下载」（旧行为）
+    /// 会让人以为下载成功了。这个改变只为消除误导，不涉及跳过与报错的规则。
+    pub(in crate::app) fn downloaded(&mut self, outcome: DownloadOutcome, canceled: bool) {
+        let DownloadOutcome {
+            done,
+            skipped,
+            failed,
+        } = outcome;
+        if !canceled {
+            if let Some((name, error)) = failed {
+                // 真实 I/O 错误优先于跳过清单：若先跳过若干项后又在第四项失败，这里只报错误，
+                // 先前的跳过项不再另行提示。完整清单仍在 outcome.skipped 中。
+                self.notify(
+                    NoticeKind::Error,
+                    t!(
+                        "workspace-download-failed",
+                        name = name,
+                        error = error.to_string()
+                    ),
+                );
+            } else if !skipped.is_empty() {
+                let separator = match winc_i18n::locale() {
+                    winc_i18n::Locale::EnUs => ", ",
+                    winc_i18n::Locale::ZhCn => "、",
+                };
+                let paths = skipped
+                    .iter()
+                    .map(|item| {
+                        t!(
+                            "workspace-download-skipped-item",
+                            name = item.name.clone(),
+                            reason = item.reason.clone()
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(separator);
+                let message = t!(
+                    "workspace-download-skipped",
+                    done = done.len(),
+                    count = skipped.len(),
+                    paths = paths
+                );
+                match done.last().cloned() {
+                    Some(last) => {
+                        self.notify_with(NoticeKind::Warning, message, NoticeAction::Reveal(last))
+                    }
+                    None => self.notify(NoticeKind::Warning, message),
+                }
+            } else if let Some(last) = done.last().cloned() {
+                let message = match done.as_slice() {
+                    [one] => t!(
+                        "workspace-download-done-one",
+                        name = winc_editor::display_name(one)
+                    ),
+                    many => t!("workspace-download-done-many", count = many.len()),
+                };
+                self.notify_with(NoticeKind::Done, message, NoticeAction::Reveal(last));
+            }
         }
         self.request_redraw();
     }

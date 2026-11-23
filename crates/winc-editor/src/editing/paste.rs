@@ -7,7 +7,9 @@ use std::path::{Component, Path, PathBuf};
 
 use winc_i18n::t;
 
-use crate::workspace::copying::{Copying, copy_item};
+use crate::workspace::copying::{Copying, DownloadState, copy_item, download_item};
+
+pub use crate::workspace::copying::Skipped;
 
 /// 粘贴到 Markdown 时写成图片（`![…](…)`）的文件扩展名，小写；其他文件写成链接。
 ///
@@ -316,6 +318,16 @@ pub fn copy_into(
 
 /// 把 `source` 复制到目录 `dir` 中，重名时按 `naming` 取名，返回新路径。
 fn copy_one(source: &Path, dir: &Path, naming: Naming, copying: &Copying) -> io::Result<PathBuf> {
+    copy_one_with(source, dir, naming, copying, None)
+}
+
+fn copy_one_with(
+    source: &Path,
+    dir: &Path,
+    naming: Naming,
+    copying: &Copying,
+    state: Option<&mut DownloadState>,
+) -> io::Result<PathBuf> {
     let meta = winc_backend::fs::symlink_metadata(source)?;
     let name = source.file_name().ok_or_else(|| {
         io::Error::new(io::ErrorKind::InvalidInput, t!("editor-paste-cannot-copy"))
@@ -330,8 +342,49 @@ fn copy_one(source: &Path, dir: &Path, naming: Naming, copying: &Copying) -> io:
     }
 
     let target = free_path(dir, &name, meta.is_dir(), naming);
-    copy_item(source, &target, copy_symlink, copying)?;
+    match state {
+        Some(state) => download_item(source, &target, copy_symlink, copying, state)?,
+        None => copy_item(source, &target, copy_symlink, copying)?,
+    }
     Ok(target)
+}
+
+/// 一次下载的结果：`done` 是下载好的各项，`skipped` 是被跳过的项及原因，`failed` 是失败的那一项
+/// 的相对路径和原因（没有失败时为 `None`）。
+#[derive(Debug, Default)]
+pub struct DownloadOutcome {
+    /// 已下载好的各项的新路径。
+    pub done: Vec<PathBuf>,
+    /// 跳过而未下载的项及原因。
+    pub skipped: Vec<Skipped>,
+    /// 失败的那一项的相对路径和原因；没有失败时为 `None`。
+    pub failed: Option<(String, io::Error)>,
+}
+
+/// 把远端的 `sources` 下载到本机目录 `dir`，供文件树的「下载…」使用。
+///
+/// 顶层的非常规文件或失效符号链接照常报错；目录内部无法跨机传输的项跳过并记入结果，不再中断
+/// 整棵目录。重名规则同 [`copy_into`]，进度记入 `copying`，经它可以取消。
+#[must_use]
+pub fn download_into(sources: &[PathBuf], dir: &Path, copying: &Copying) -> DownloadOutcome {
+    let mut outcome = DownloadOutcome::default();
+    for source in sources {
+        let dir = match source.parent() {
+            Some(parent) if same(source, dir) => parent,
+            _ => dir,
+        };
+        let mut state = DownloadState::new(source);
+        match copy_one_with(source, dir, Naming::Copy, copying, Some(&mut state)) {
+            Ok(path) => outcome.done.push(path),
+            Err(error) => {
+                outcome.skipped.append(&mut state.skipped);
+                outcome.failed = Some((state.failed, error));
+                break;
+            }
+        }
+        outcome.skipped.append(&mut state.skipped);
+    }
+    outcome
 }
 
 /// 是否 `a` 和 `b` 指同一处（两边都能解析成真实路径时按真实路径比较）。

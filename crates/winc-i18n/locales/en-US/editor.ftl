@@ -144,6 +144,7 @@ editor-temp-file-failed = Couldn’t create a temporary file
 editor-large-original-truncated = Reading the original file failed or it was truncated; the content is incomplete
 editor-paste-cannot-copy = Can’t copy this item
 editor-paste-into-itself = Can’t copy an item into itself
+editor-download-skipped-special = not a regular file
 editor-open-binary = This file is binary and can’t be opened
 editor-open-too-large = The file is too large ({ $size } MB); the limit is { $limit } GB
 editor-unreadable-not-found = The file doesn’t exist
