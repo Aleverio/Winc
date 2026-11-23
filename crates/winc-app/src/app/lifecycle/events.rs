@@ -317,10 +317,9 @@ impl ApplicationHandler<UserEvent> for App {
                 self.place_traffic_lights();
                 self.relayout();
                 self.clamp_scroll();
-                // 拖动边缘或双击标题栏缩放时，窗口大小每改变一帧，winit 同步发出该事件，新的窗口
-                // 大小随这一帧的 Core Animation 事务提交。在此同步绘制，新画面在同一事务中提交，
-                // 与窗口大小同时显示。若只标记待重绘，绘制会推迟到之后的事件循环，其间显示上一帧
-                // 的画面（固定在左上角），画面与窗口大小不一致。
+                // 缩放时窗口大小每改变一帧，winit 同步发出该事件，新的窗口大小随这一帧的 Core
+                // Animation 事务提交。在此同步绘制，新画面在同一事务中提交；只标记待重绘则绘制推迟
+                // 到之后的事件循环，其间显示固定在左上角的上一帧画面。
                 self.request_redraw();
                 self.redraw();
             }
@@ -754,10 +753,9 @@ impl App {
         earliest(&mut wake, self.poll_browse(now));
         earliest(&mut wake, self.poll_search_dialog(now));
 
-        // 光标闪烁的定时唤醒需要同时满足：窗口有焦点、窗口可见（被完全遮挡时不绘制）、焦点位于
-        // 可输入位置、当前文档可以编辑文字（或光标在差异里）、没有进行中的输入法组字；图片预览和
-        // 无法打开的文件不显示光标。离上次输入超过 `BLINK_STOP` 后光标停在亮着的状态。
-        // Vim 模式的普通与可视模式不接受文字输入，块状光标仍然闪烁。
+        // 光标闪烁的定时唤醒需要同时满足：窗口有焦点且可见、焦点位于可输入位置、当前文档可以编辑文
+        // 字（或光标在差异里）、没有进行中的输入法组字；图片预览和无法打开的文件不显示光标。离上次
+        // 输入超过 `BLINK_STOP` 后光标停在亮着的状态；Vim 的普通与可视模式块状光标仍然闪烁。
         let typing = self.takes_text() || self.vim_caret().is_some();
 
         let blinking = now.duration_since(self.blink.epoch) < BLINK_STOP;

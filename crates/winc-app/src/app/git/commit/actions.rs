@@ -30,9 +30,9 @@ pub(crate) enum SyncState {
     InSync,
     /// 分支还没有上游：发布到远程。
     Publish,
-    /// 领先上游这么多个提交：推送。
+    /// 领先上游 `n` 个提交：推送。
     Push(u32),
-    /// 落后上游这么多个提交：拉取。
+    /// 落后上游 `n` 个提交：拉取。
     Pull(u32),
     /// 两边都有新提交：同步。
     Both {
@@ -58,7 +58,7 @@ pub(crate) enum PushIntent {
 /// 全部提交在「查看提交」打开的日志里。
 pub(crate) const PUSH_PREVIEW: usize = 8;
 
-/// 提交成功后按钮显示「✓ 已提交」的时长（经验值）。
+/// 提交成功后按钮显示「✓ 已提交」的时长（取自调参）。
 ///
 /// 短于状态栏提示的显示时长，足以让用户确认提交已完成。
 pub(in crate::app) const COMMITTED_SHOWN: Duration = Duration::from_millis(1600);
@@ -106,7 +106,7 @@ impl App {
     }
 
     /// 在后台同步（[`winc_editor::git::Git::sync`]）；需要强制推送而 `force` 为假时转为询问。
-    /// 确认强制推送以后，询问前一并提交了的其他仓库照样推送出去。
+    /// 确认强制推送以后，询问前一并提交了的其他仓库仍然推送出去。
     pub(in crate::app) fn run_git_sync(&mut self, force: bool) {
         let others = match force {
             true => std::mem::take(&mut self.git.commit.force_others),
@@ -462,7 +462,7 @@ impl App {
         self.git_commit_resumed();
     }
 
-    /// 开始或接着进行提交（暂存写完、整理或检查做完之后），「提交以后推送」的意图保留；
+    /// 开始或继续进行提交（暂存写完、整理或检查做完之后），「提交以后推送」的意图保留；
     /// 提交没有开始、也没有在等待时放弃该意图。
     pub(super) fn git_commit_resumed(&mut self) {
         self.commit_attempt();
@@ -481,7 +481,7 @@ impl App {
             self.git.commit.commit_queued = true;
             return;
         }
-        // 提交前先格式化、再检查新增的 TODO：都在后台进行，做完再接着提交（见
+        // 提交前先格式化、再检查新增的 TODO：都在后台进行，做完再随后提交（见
         // `App::reformatted`、`App::todo_checked`）。
         if self.reformat_first() || self.check_todo_first() {
             return;
@@ -967,7 +967,7 @@ impl App {
         self.git.commit.other_skipped = old.other_skipped;
         self.git.commit.other_heads = old.other_heads;
         self.git.commit.other_folds = old.other_folds;
-        // 写入其他仓库暂存区的操作按仓库的路径进行，与当前是哪个仓库无关：换仓库时接着做完，
+        // 写入其他仓库暂存区的操作按仓库的路径进行，与当前是哪个仓库无关：换仓库时继续做完，
         // 界面上已经按做完的结果显示了。
         self.git.commit.other_stage_queue = old.other_stage_queue;
         self.git.commit.other_stage_running = old.other_stage_running;

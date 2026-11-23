@@ -256,7 +256,7 @@ fn the_panel_toggle_closes_in_one_press_wherever_the_focus_is() {
     assert!(app.on_shortcut(toggle));
     assert_eq!(app.focus, Focus::Terminal);
 
-    // 终端应用优先时：⌘J 仍开关面板；其他系统上的 Ctrl+J 交给程序（换行），面板开关命令照常。
+    // 终端应用优先时：⌘J 仍开关面板；其他系统上的 Ctrl+J 交给程序（换行），面板开关命令不受影响。
     app.config.terminal_application_priority = Some(true);
     assert_eq!(app.binds(toggle), Os::CURRENT == Os::Mac);
     assert!(app.run_action(Action::ToggleTerminalPanel));

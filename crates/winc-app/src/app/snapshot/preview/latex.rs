@@ -178,7 +178,7 @@ fn fake_latexmk(dir: &std::path::Path) -> std::path::PathBuf {
         "#!/bin/sh".to_owned(),
         r#"for a in "$@"; do case "$a" in -outdir=*) out="${a#-outdir=}";; esac; done"#.to_owned(),
         r#"mkdir -p "$out""#.to_owned(),
-        // 像 `tectonic` 一样先在标准错误报告下载，停一下，测试能看到进度。
+        // 像 `tectonic` 一样先在标准错误报告下载，停顿，测试能看到进度。
         "echo 'note: downloading tcolorbox.sty' >&2".to_owned(),
         "sleep 0.3".to_owned(),
         format!(r#"cp '{d}/sample.pdf' "$out/main.pdf""#),
@@ -191,7 +191,7 @@ fn fake_latexmk(dir: &std::path::Path) -> std::path::PathBuf {
     script
 }
 
-/// 推进预览（开始编译），等后台的编译完成，期间照常绘制。
+/// 推进预览（开始编译），等后台的编译完成，期间仍然绘制。
 #[cfg(target_os = "macos")]
 fn wait_for_latex(app: &mut App) {
     app.advance_previews();
@@ -225,7 +225,7 @@ fn compiled_pdfs_replace_the_reading_view() {
     paint(&mut app);
     let id = app.editor.active().unwrap().id;
 
-    // 分栏：第一次编译时显示说明页（不先显示阅读视图），写着进行到哪一步；编译完换成 PDF。
+    // 分栏：第一次编译时显示说明页（不先显示阅读视图），显示进行到哪一步；编译完换成 PDF。
     app.set_preview_mode(PreviewMode::Split);
     paint(&mut app);
     assert!(app.latex_pdf().is_none() && app.latex_waiting());
@@ -528,7 +528,7 @@ fn shoot_latex_setting() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// 截图：第一次编译时的说明页，写着正在下载的宏包（`latex-waiting`）。
+/// 截图：第一次编译时的说明页，显示正在下载的宏包（`latex-waiting`）。
 #[cfg(target_os = "macos")]
 #[test]
 #[ignore = "截图，手动运行"]

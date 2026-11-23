@@ -86,7 +86,7 @@ fn a_git_directory_outside_the_folder_is_watched() {
     assert!(changes.git);
     assert!(changes.paths.is_empty(), "{:?}", changes.paths);
 
-    // 打开的目录里的 `.git` 本来就在监视之内，不另外监视。
+    // 打开的目录里的 `.git` 原本就在监视之内，不另外监视。
     watcher.watch_git_dir(Some(&linked.join(".git")));
     assert!(watcher.pending.lock().unwrap().git_dir.is_none());
 

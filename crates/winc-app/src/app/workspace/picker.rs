@@ -386,7 +386,7 @@ impl App {
         }
 
         // 最近打开过、文件表中没有的文件（被忽略或已删除）要看磁盘上是否还在，只看这几个；打开的
-        // 标签照常列出。远端的路径按 `may_be_file` 的规则，不阻塞界面。
+        // 标签仍然列出。远端的路径按 `may_be_file` 的规则，不阻塞界面。
         let index = &self.overlays.picker.index;
         let visited: Vec<&Path> = (self.history.files.iter())
             .map(PathBuf::as_path)

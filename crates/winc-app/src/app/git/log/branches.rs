@@ -170,7 +170,7 @@ impl App {
         self.relayout();
     }
 
-    /// 点了分支面板的第 `i` 行：「全部分支」不再按分支筛选；分支、标签只看它的提交，已经在看它
+    /// 点击分支面板的第 `i` 行：「全部分支」不再按分支筛选；分支、标签只看它的提交，已经在看它
     /// 时改回全部，按住 `⌘` 点时加上或去掉它；组、目录收起或展开（和分支选择器共用）。
     pub(super) fn press_log_branch_row(&mut self, i: usize) {
         let Some(row) = self.log_branch_rows().into_iter().nth(i) else {

@@ -2,7 +2,7 @@
 //!
 //! 提交视图标题行的「⋯」里有获取、拉取、推送、新建分支、新建工作树和储藏；每个分支另有操作菜单：
 //! 签出、在新工作树中签出、从这里新建分支、合并到当前分支、变基、删除。操作都在后台运行，同一时刻
-//! 只做一件，运行期间状态栏的分支名后面写着在做什么；做完在状态栏说结论（失败时右上角说原因）、
+//! 只做一件，运行期间状态栏的分支名后面显示在做什么；做完在状态栏说结论（失败时右上角说原因）、
 //! 刷新仓库状态，并重新读被改动过的文件。
 
 use std::path::{Path, PathBuf};
@@ -191,7 +191,7 @@ type QuestionChannel = (Sender<(u64, Question)>, Receiver<(u64, Question)>);
 
 /// 分支操作的状态。
 pub(crate) struct BranchState {
-    /// 正在做的事；状态栏的分支名后面写着它。
+    /// 正在做的事；状态栏的分支名后面显示它。
     pub running: Option<String>,
     /// 上一个操作成功后，同步控件显示对勾的时钟。
     pub finished: Option<Clock>,
@@ -386,7 +386,7 @@ pub(crate) fn local_name(branch: &Branch) -> &str {
 
 /// 储藏在菜单里的名字：git 记下的说明去掉「On main: 」这样的开头。
 ///
-/// 超过 40 个字符的截短并加省略号（经验值：菜单一行放得下的长度）。
+/// 超过 40 个字符的截短并加省略号（菜单一行放得下的长度）。
 pub(crate) fn stash_title(stash: &Stash) -> String {
     let message = stash
         .message

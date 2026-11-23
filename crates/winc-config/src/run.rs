@@ -31,7 +31,7 @@ pub struct RunConfig {
 impl RunConfig {
     /// 返回运行内容的原文：用户同意运行后记下，命令、参数、目录或环境变量改变时重新询问。
     ///
-    /// 名字不在其中。各部分前面写着种类和个数，每项前面写着长度：内容在相邻的项、参数与环境
+    /// 名字不在其中。各部分前面记有种类和个数，每项前面记有长度：内容在相邻的项、参数与环境
     /// 变量之间移动时原文不同。
     pub fn approval(&self) -> String {
         let mut text = String::new();
@@ -60,7 +60,7 @@ pub fn run_configs_path(root: &Path) -> PathBuf {
 
 /// 读取 `root` 的运行配置，返回可用的配置和遇到的问题。
 ///
-/// 文件不存在时两者都为空；单项无效时跳过该项，其余照常使用。远端主机上的目录没有运行配置：
+/// 文件不存在时两者都为空；单项无效时跳过该项，其余仍可使用。远端主机上的目录没有运行配置：
 /// 这里只读本机的文件，配置中的命令也只在本机的终端里运行。
 pub fn load_run_configs(root: &Path) -> (Vec<RunConfig>, Vec<String>) {
     if winc_backend::is_remote(root) {

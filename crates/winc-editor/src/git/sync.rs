@@ -52,7 +52,7 @@ const FORCE_IF_INCLUDES: (u32, u32) = (2, 30);
 const MERGE_AUTOSTASH: (u32, u32) = (2, 27);
 
 /// 解释 `pull.rebase`、`branch.<分支>.rebase` 的值：变基为 `Some(true)`，合并为
-/// `Some(false)`，认不出来时为 `None`。
+/// `Some(false)`，无法识别时为 `None`。
 fn rebase_value(value: &str) -> Option<bool> {
     match value.trim().to_ascii_lowercase().as_str() {
         "true" | "yes" | "on" | "1" | "merges" | "m" | "interactive" | "i" => Some(true),
@@ -74,11 +74,10 @@ pub(super) fn parse_version(output: &str) -> Option<(u32, u32)> {
 impl Git {
     /// 与当前分支的上游同步。
     ///
-    /// 先获取上游的最新状态。只落后时拉取，只领先时推送。两边都有新提交时，上游多出的提交
-    /// 若都可由本分支引用日志中的某条记录到达，`force` 时用 `--force-with-lease`（`git` 够新时再加
-    /// `--force-if-includes`）推送本地版本，
-    /// 否则返回 [`Synced::NeedsForce`]，不改动本地和上游。上游有本地从未有过的提交时先拉取再
-    /// 推送，拉取的方式 `rebase` 同 [`Git::pull`]。
+    /// 先获取上游的最新状态。只落后时拉取，只领先时推送。两边都有新提交时，上游多出的提交若都
+    /// 可由本分支引用日志中的某条记录到达，`force` 时用 `--force-with-lease`（`git` 够新时再加
+    /// `--force-if-includes`）推送本地版本，否则返回 [`Synced::NeedsForce`]，不改动本地和上游。
+    /// 上游有本地从未有过的提交时先拉取再推送，拉取的方式 `rebase` 同 [`Git::pull`]。
     ///
     /// # Errors
     ///
@@ -117,14 +116,12 @@ impl Git {
         Ok(Synced::Done(summary))
     }
 
-    /// 从上游拉取，返回 `git` 的结论：`rebase` 为真时变基，为假时合并，为 `None` 时按 Git 的
-    /// 配置（[`Git::pull_rebases`]）。
+    /// 从上游拉取：`rebase` 为真时变基，为假时合并，为 `None` 时按配置（[`Git::pull_rebases`]）。
     ///
     /// 未配置 `pull.rebase` 时 `git` 拒绝拉取分叉的分支，因此这时显式按合并方式拉取。未提交的更改
-    /// 由 `git` 先储藏、拉取完成后恢复（`--autostash`）：工作区有改动时拉取不会因此被拒绝；拉取
-    /// 产生冲突时，更改在合并或变基结束（继续或放弃）后恢复。恢复的结果见 [`Git::carried`]。
-    /// 2.27 以前的 `git` 合并时不接受 `--autostash`，这时不带：更改会被拉取的内容覆盖时 `git`
-    /// 拒绝拉取，更改不会丢失。
+    /// 由 `git` 先储藏、拉取完成后恢复（`--autostash`）；拉取产生冲突时，更改在合并或变基结束后
+    /// 恢复，结果见 [`Git::carried`]。2.27 以前的 `git` 合并时不接受 `--autostash`，这时不带：更改
+    /// 会被拉取的内容覆盖时 `git` 拒绝拉取，更改不会丢失。
     ///
     /// # Errors
     ///

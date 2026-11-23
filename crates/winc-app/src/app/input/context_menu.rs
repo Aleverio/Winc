@@ -65,7 +65,7 @@ const MENU_ICON: (f32, f32) = (15.0, 12.0);
 /// 弹出位置是第一项的左上角，因此菜单外框比内容高出此值。5 为 macOS 26 上的实测值。
 const MENU_TOP_PADDING: f32 = 5.0;
 
-/// 按钮下方弹出的菜单与按钮的间距（逻辑像素，经验值），所有按钮菜单（包括「⋯」）共用。
+/// 按钮下方弹出的菜单与按钮的间距（逻辑像素，取自调参），所有按钮菜单（包括「⋯」）共用。
 const MENU_GAP: f32 = 4.0;
 
 /// 弹出系统菜单的按钮。
@@ -546,7 +546,7 @@ pub enum MenuCommand {
     OpenImage,
 }
 
-/// 行尾菜单中可列出的行尾；CR 只在文件本来就是 CR 时才列出。
+/// 行尾菜单中可列出的行尾；CR 只在文件原本就是 CR 时才列出。
 const LINE_ENDINGS: [LineEnding; 3] = [LineEnding::Lf, LineEnding::CrLf, LineEnding::Cr];
 
 /// 缩进宽度菜单中列出的宽度范围，1 到 8（空格数，或一个 Tab 占的列数）。

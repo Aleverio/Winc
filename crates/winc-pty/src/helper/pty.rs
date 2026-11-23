@@ -103,7 +103,7 @@ fn set_flags(fd: RawFd, cloexec: bool, nonblock: bool) -> io::Result<()> {
     Ok(())
 }
 
-/// 启动失败且错误码是内核内部错误码时的最多重试次数（经验值）。
+/// 启动失败且错误码是内核内部错误码时的最多重试次数（次，取自调参）。
 const SPAWN_RETRIES: u32 = 5;
 
 impl Pty {
@@ -369,7 +369,7 @@ pub fn hang_up_job(job: Pid) {
 /// 结束前台作业 `job`（进程组号）；`session` 是它所在终端的会话号，不知道时为 `None`。
 ///
 /// 挂断之后到期才调用：这个号码已经给了别的会话里的程序（[`taken_over`]）时不发信号；不知道
-/// 会话号时无从分辨，照常发。
+/// 会话号时无从分辨，仍然发送。
 pub fn kill_job(job: Pid, session: Option<Pid>) {
     if session.is_none_or(|session| !taken_over(job, Some(session))) {
         signal_group(job, libc::SIGKILL);

@@ -58,10 +58,8 @@ pub fn repo_name(main: &Path) -> String {
 /// `main` 旁边的 `<仓库名>.worktrees/<分支名>`，同名目录已存在时加后缀。
 ///
 /// `main` 是子模块时按最外层的仓库算（[`worktree_anchor`]），目录名前面加上子模块的相对路径
-/// （`app.worktrees/libs-core-feat`）。
-///
-/// `folder` 对应配置项 `git.worktreeRoot`，开头的 `~/` 展开为 `home`，相对路径相对于 `main`。
-/// `home` 是 `main` 所在系统中用户的主目录（[`crate::wsl::home_dir`]）。
+/// （`app.worktrees/libs-core-feat`）。`folder` 对应配置项 `git.worktreeRoot`，开头的 `~/` 展开为
+/// `home`（`main` 所在系统中用户的主目录，[`crate::wsl::home_dir`]），相对路径相对于 `main`。
 pub fn worktree_dir(
     main: &Path,
     folder: Option<&str>,

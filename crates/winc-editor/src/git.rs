@@ -286,14 +286,14 @@ impl LogQuery {
     }
 
     /// 是否按路径筛选、父提交按路径改写（`--parents`）：每个提交的父提交是它往下最近一个也改过
-    /// 这些路径的提交，提交图照样连得起来。真正的父提交另外查（见 [`log::Details::base`]）。
+    /// 这些路径的提交，提交图仍然连得起来。真正的父提交另外查（见 [`log::Details::base`]）。
     pub fn rewrites_parents(&self) -> bool {
         !self.paths.is_empty() && self.path.is_none()
     }
 
     /// 是否按说明、分支或作者筛选过，或固定了一个提交。
     ///
-    /// 文件历史的文件不算：那本来就是该标签展示的内容。
+    /// 文件历史的文件不算：那原本就是该标签展示的内容。
     pub fn filtered(&self) -> bool {
         !self.text.trim().is_empty()
             || !self.branches.is_empty()
@@ -304,12 +304,12 @@ impl LogQuery {
     }
 }
 
-/// 日志最长的运行时间（30 秒，经验值）。
+/// 日志最长的运行时间（30 秒，取自调参）。
 ///
 /// 几十万个提交的仓库取一批也只要零点几秒。
 const LOG_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// 检查 macOS 开发者工具是否已安装的最长时间（5 秒，经验值）。
+/// 检查 macOS 开发者工具是否已安装的最长时间（5 秒，取自调参）。
 const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// 一个文件相对于某个版本的变化。
@@ -520,7 +520,7 @@ fn rebase_progress(git_dir: &Path) -> Option<(u32, u32)> {
     })
 }
 
-/// 仓库 `root` 的 `.git` 目录：工作树和子模块里 `.git` 是一个写着 `gitdir: <路径>` 的文件。
+/// 仓库 `root` 的 `.git` 目录：工作树和子模块里 `.git` 是一个内容为 `gitdir: <路径>` 的文件。
 fn git_dir(root: &Path) -> Option<PathBuf> {
     let dot = root.join(".git");
     if winc_backend::fs::is_dir(&dot) {
@@ -1324,7 +1324,7 @@ fn relative_all<'a>(
 const SCAN_DEEP_ENTRIES: usize = 65_536;
 /// [`scan_repositories`] 不进入的目录：依赖和构建产物，里面不会有用户自己的仓库，文件却很多。
 const SCAN_SKIPPED: [&str; 4] = ["node_modules", "target", "vendor", "__pycache__"];
-/// [`find_repositories`] 最多查看的目录项数（个，经验值）：放着大量文件的目录不拖慢打开。
+/// [`find_repositories`] 最多查看的目录项数（个，取自调参）：放着大量文件的目录不拖慢打开。
 const SCAN_ENTRIES: usize = 4096;
 
 /// 从 `dir` 往上找仓库的根目录：第一个含有 `.git`（目录，或工作树和子模块里的文件）的目录。

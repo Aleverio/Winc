@@ -37,7 +37,7 @@ pub(crate) fn tree_max_scroll(tree: Rect, rows: usize) -> f32 {
     (rows as f32 + 1.0) * TREE_ROW - tree.h
 }
 
-/// 滚动时固定在文件树顶部的目录层数上限（层，经验值）。
+/// 滚动时固定在文件树顶部的目录层数上限（层，取自调参）。
 ///
 /// 实际层数还受 `App::tree_sticky_max` 限制：不超过文件树高度的 40%，避免固定行占去过多的显示空间。
 const STICKY_MAX: usize = 7;
@@ -580,7 +580,7 @@ impl App {
 
     /// 滚动文件树，使第 `index` 个条目可见；已经可见时不动，`center` 为 `true` 时把该条目放到中间。
     ///
-    /// 条目滚到上方时，该条目的各级上级目录会固定在顶部，因此要停在这些固定行之下，不能被盖住。
+    /// 条目滚到上方时，该条目的各级上级目录会固定在顶部，因此要停在这些固定行之下，不能被遮住。
     pub(in crate::app) fn scroll_tree_to(&mut self, index: usize, center: bool) {
         let depth = self
             .editor
@@ -681,7 +681,7 @@ impl App {
         }
     }
 
-    /// 横向滚动到能看见第 `depth` 级缩进，右边至少留出 40 逻辑像素（经验值）显示名字。
+    /// 横向滚动到能看见第 `depth` 级缩进，右边至少留出 40 逻辑像素（取自调参）用于显示名字。
     fn reveal_tree_column(&mut self, depth: usize) {
         let tree = self.layout.tree;
         let indent = depth as f32 * TREE_INDENT;

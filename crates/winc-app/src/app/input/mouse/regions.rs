@@ -263,7 +263,7 @@ impl App {
         if let Some(index) = parts.row_at(y, self.overlays.picker.scroll)
             && index < self.overlays.picker.hits.len()
         {
-            // 分组标题点了没有反应。
+            // 分组标题点击没有反应。
             if self.picker_row_selectable(index) {
                 self.overlays.picker.selected = index;
                 self.picker_accept();
@@ -500,10 +500,9 @@ impl App {
         self.focus = Focus::Editor;
         self.ime.preedit.clear();
 
-        // 差异、图片、表格这类不显示文本的标签：点击只拿焦点，表格底部的工作表标签例外，
-        // 点它会换工作表。
-        // 文档中的文本看不见，在它上面放光标、转到定义都没有意义，放了光标还会把视图滚到看不见
-        // 的光标那里。
+        // 差异、图片、表格这类不显示文本的标签：点击只拿焦点，表格底部的工作表标签例外，点它会换工
+        // 作表。文档中的文本看不见，在它上面放光标、转到定义都没有意义，放了光标还会把视图滚到看不
+        // 见的光标那里。
         if !self.active_shows_text() {
             self.click_table(x, y);
             return;

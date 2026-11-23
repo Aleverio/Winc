@@ -276,7 +276,7 @@ impl App {
                 t!("workspace-close-save"),
             )
         } else {
-            // 文件过多时只列出前 `SHOWN` 个，避免提示框高度超过屏幕。`SHOWN` 的单位为个，是经验值。
+            // 文件过多时只列出前 `SHOWN` 个，避免提示框高度超过屏幕。`SHOWN` 的单位为个，取自调参。
             const SHOWN: usize = 10;
             let mut list = names.iter().take(SHOWN).cloned().collect::<Vec<_>>();
             if names.len() > SHOWN {
@@ -514,7 +514,7 @@ impl App {
     ///
     /// 未命名的文档无法重新打开，不记录；同一个文件只保留最近一次。
     fn remember_closed(&mut self, path: Option<PathBuf>, caret: usize) {
-        // 最多保留的已关闭标签数（个，经验值），超出时丢弃最早的。
+        // 最多保留的已关闭标签数（个，取自调参），超出时丢弃最早的。
         const MAX_CLOSED: usize = 20;
 
         let Some(path) = path else {

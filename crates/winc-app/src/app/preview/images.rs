@@ -259,13 +259,12 @@ impl App {
         None
     }
 
-    /// 提交后台任务，绘制 SVG `picture` 的一部分：整张图为 `size`（宽、高）时的 `region`
-    /// （左上角的横、纵坐标和宽、高），单位为物理像素。`base` 表示结果用作整张图的低分辨率
-    /// 位图。`picture` 不是 SVG 时不提交。
+    /// 提交后台任务，绘制 SVG `picture` 的一部分：整张图为 `size`（宽、高）时的 `region`（左上角的
+    /// 横、纵坐标和宽、高），单位为物理像素。`base` 表示结果用作整张图的低分辨率位图。`picture`
+    /// 不是 SVG 时不提交。
     ///
-    /// 拖动窗口边缘时 `size` 每帧都在变化。同一时刻只在后台绘制一张：已有绘制在进行时不提交，
-    /// 那一张完成后界面重绘，届时仍不符合的尺寸再提交。否则每帧一张，过时的绘制挤在共用的
-    /// 线程池里，排在 ⌘P、全局搜索之前。
+    /// 拖动窗口边缘时 `size` 每帧都在变化，因此同一时刻只在后台绘制一张：已有绘制在进行时不提交，
+    /// 那一张完成后界面重绘，届时仍不符合的尺寸再提交，避免过时的绘制挤满共用的线程池。
     pub(crate) fn render_picture(
         &mut self,
         id: DocumentId,
@@ -437,7 +436,7 @@ impl App {
 
     /// 当前标签换成 `mode` 显示（标签栏右端的三段切换）。
     pub(in crate::app) fn set_preview_mode(&mut self, mode: PreviewMode) {
-        // 换了显示方式，键盘先回到文字（只看预览时本来就对着预览）。
+        // 换了显示方式，键盘先回到文字（只看预览时原本就对着预览）。
         self.preview.markdown.focused = false;
         let top = self.leave_markdown_mode(mode);
         let Some(doc) = self.editor.active_mut() else {

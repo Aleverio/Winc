@@ -1,7 +1,7 @@
 //! PDF 的目录（书签，`/Outlines`）：各条的标题、层级和指向的页。
 //!
 //! 直接读文件里的对象（见 [`super::objects`]），不经过系统的 PDF 渲染器：Windows 的渲染器不提供
-//! 目录，各平台用同一份实现。文件损坏、加密或没有目录时返回空的目录，预览照常进行。
+//! 目录，各平台用同一份实现。文件损坏、加密或没有目录时返回空的目录，预览仍然进行。
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -90,7 +90,7 @@ impl Page {
 }
 
 impl Reader<'_> {
-    /// 从 `first` 起沿 `/Next` 读完同一层的各条，有下级的接着读下级；`seen` 防止循环引用。
+    /// 从 `first` 起沿 `/Next` 读完同一层的各条，有下级的再读下级；`seen` 防止循环引用。
     fn siblings(
         &self,
         first: Option<Obj>,
@@ -230,7 +230,7 @@ impl Reader<'_> {
             let Some(kid) = self.file.resolve(Some(kid)) else {
                 continue;
             };
-            // 不在这个节点的名字范围里：不下钻（没有 `/Limits` 时照样找）。
+            // 不在这个节点的名字范围里：不下钻（没有 `/Limits` 时仍然查找）。
             if let Some(Obj::Array(limits)) = self.file.resolve(kid.get(b"Limits"))
                 && let [Obj::Str(low), Obj::Str(high)] = &limits[..]
                 && (name < low.as_slice() || name > high.as_slice())

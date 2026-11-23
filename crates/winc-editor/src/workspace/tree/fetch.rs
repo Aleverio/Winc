@@ -10,10 +10,10 @@ use super::*;
 #[derive(Debug)]
 pub struct DirFetch {
     root: PathBuf,
-    /// 先读的目录；读到的子目录中已展开的（`expanded`）接着读，它们随后也要显示。
+    /// 先读的目录；读到的子目录中已展开的（`expanded`）继续读，它们随后也要显示。
     dirs: Vec<PathBuf>,
     expanded: HashSet<PathBuf>,
-    /// 是否接着读唯一的子目录：展开时它们合并显示为一行。
+    /// 是否继续读唯一的子目录：展开时它们合并显示为一行。
     chain: bool,
     /// 递归展开时最多找的目录数和目录项数；`None` 为不递归。
     limits: Option<(usize, usize)>,

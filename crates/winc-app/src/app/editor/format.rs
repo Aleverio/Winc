@@ -453,7 +453,7 @@ impl App {
             project,
         };
         // 远端的文件：选工具要读那台主机上的项目文件，在后台进行，选好后由
-        // [`App::poll_formatting`] 接着处理。
+        // [`App::poll_formatting`] 继续处理。
         if launch.remote {
             self.format.planning.push((id, save));
             let sender = self.format.planned.0.clone();
@@ -650,7 +650,7 @@ impl App {
 
     /// 接收后台线程送回的格式化结果。
     pub(in crate::app) fn poll_formatting(&mut self) {
-        // 后台选好了工具：接着询问、运行；期间又要求保存的一并保存。
+        // 后台选好了工具：随后询问、运行；期间又要求保存的一并保存。
         while let Ok((mut launch, plan)) = self.format.planned.1.try_recv() {
             let (task, id) = (launch.task, launch.id);
             let waiting = self.format.planning.iter().position(|p| p.0 == id);

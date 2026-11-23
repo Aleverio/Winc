@@ -102,7 +102,7 @@ pub(crate) enum Recent<'a> {
 }
 
 impl App {
-    /// 面板中第 `index` 项（`Picker::hits` 的元素）：最近目录之后接着是最近文件。
+    /// 面板中第 `index` 项（`Picker::hits` 的元素）：最近目录之后继续是最近文件。
     pub(crate) fn recent_entry(&self, index: usize) -> Option<Recent<'_>> {
         let folders = &self.state.recent;
         match index.checked_sub(folders.len()) {

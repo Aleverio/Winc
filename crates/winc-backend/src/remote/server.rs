@@ -4,7 +4,7 @@
 //! 输入结束（连接断开）时结束仍在运行的命令并返回，进程随之退出。请求中的路径是该主机上的
 //! 绝对路径。
 //!
-//! 文件操作在读取请求的线程上逐个执行；运行命令各用一个线程，其间其他请求照常应答。
+//! 文件操作在读取请求的线程上逐个执行；运行命令各用一个线程，其间其他请求仍然应答。
 
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -26,7 +26,7 @@ const DRAIN_POLL: Duration = Duration::from_millis(5);
 /// 一段输出的最大长度（字节，64 KiB）：与管道缓冲区的常见大小相同，一次读取即可取完。
 const CHUNK: usize = 64 << 10;
 /// 连接断开后等待运行中的命令结束的最长时间（秒）。命令已被强制结束，正常情况下立即退出；
-/// 超过该时间仍未退出时不再等待，进程照常结束。
+/// 超过该时间仍未退出时不再等待，进程仍然结束。
 const DRAIN: Duration = Duration::from_secs(2);
 /// 命令退出后等待其输出读完的时间（毫秒），与本机运行命令时相同。
 ///
@@ -231,7 +231,7 @@ pub fn serve(mut input: impl Read, output: impl Write + Send + 'static) -> io::R
 fn reply(output: &Output, id: u32, result: io::Result<Vec<u8>>) -> io::Result<()> {
     let (kind, payload) = match result {
         Ok(payload) if wire::fits_frame(&payload) => (kind::OK, payload),
-        // 应答装不进一帧是这一个请求的错误：照常应答，连接和其他请求不受影响。
+        // 应答装不进一帧是这一个请求的错误：仍然应答，连接和其他请求不受影响。
         Ok(_) => {
             let error = io::Error::new(io::ErrorKind::InvalidInput, "reply too large");
             (kind::ERROR, wire::encode_error(&error))
@@ -518,7 +518,7 @@ impl Upload {
     }
 
     /// 在目标所在的目录里建一个只有本进程能访问的临时文件并立即从目录中删除；`id` 是这次
-    /// 保存的请求号，用来区分同时进行的几次保存。与目标在同一个文件系统上：那里本来就要有
+    /// 保存的请求号，用来区分同时进行的几次保存。与目标在同一个文件系统上：那里原本就要有
     /// 放下这些内容的空间。
     fn spill(&self, id: u32) -> io::Result<std::fs::File> {
         use std::os::unix::fs::OpenOptionsExt;
@@ -847,7 +847,7 @@ fn exec(frame: &Frame, job: &Arc<Job>, output: &Output) -> io::Result<Vec<u8>> {
     input.finish()?;
     // 命令需要用户输入时运行服务进程自身来提问（`git` 和它启动的 `ssh` 各认一个变量）；
     // `SSH_ASKPASS_REQUIRE` 使 `ssh` 不依赖 `DISPLAY` 和控制终端。通道随命令结束而关闭。
-    // 通道建不起来（临时目录不可写）时命令照常运行，只是需要输入时会失败。
+    // 通道建不起来（临时目录不可写）时命令仍然运行，只是需要输入时会失败。
     let relay = ask
         .then(|| Relay::open(frame.id, job, output).ok())
         .flatten();

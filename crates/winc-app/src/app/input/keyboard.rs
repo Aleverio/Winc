@@ -18,7 +18,7 @@ use crate::field::{TextField, Unit};
 use crate::keymap::{self, Action, Context, Lookup, Os, Stroke};
 use crate::theme::KEYS_ROW;
 
-/// 文件树键入跳转的重置间隔（毫秒，经验值）。
+/// 文件树键入跳转的重置间隔（毫秒，取自调参）。
 ///
 /// 两次键入相隔超过该值时，重新从第一个字符开始匹配。该间隔足以连续键入文件名的前几个字符，
 /// 停顿后的新一次查找也不会接在旧字符之后。

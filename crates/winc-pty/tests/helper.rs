@@ -156,7 +156,7 @@ fn a_marked_banner_starts_a_block_that_ends_with_the_exit_code() {
     assert_eq!(block.exit, Some(3));
 }
 
-/// 停止结束忽略挂断的程序，到期强制结束；终端的内容保留，退出照常报告。
+/// 停止结束忽略挂断的程序，到期强制结束；终端的内容保留，退出仍然报告。
 #[test]
 fn stop_ends_the_program_and_keeps_the_terminal() {
     let mut c = Client::start();

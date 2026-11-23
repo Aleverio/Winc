@@ -141,7 +141,7 @@ impl App {
         true
     }
 
-    /// 收到提交前检查的结果：没有新增的 TODO 时接着提交；有时先确认。
+    /// 收到提交前检查的结果：没有新增的 TODO 时随后提交；有时先确认。
     pub(super) fn todo_checked(&mut self, count: usize, root: &Path) {
         self.git.commit.busy = false;
         if self.git.root.as_deref() != Some(root) {
@@ -252,7 +252,7 @@ impl App {
         let message = with_co_author(self.git.commit.message.text(), &author);
         let subject_end = message.find('\n').unwrap_or(message.len());
         self.git.commit.message.set_text(&message);
-        // 还没写首行时光标留在首行，接着写。
+        // 还没写首行时光标留在首行，继续写。
         let caret = if subject_end == 0 { 0 } else { message.len() };
         self.git.commit.message.set_caret(caret, false);
         self.focus = Focus::CommitMessage;

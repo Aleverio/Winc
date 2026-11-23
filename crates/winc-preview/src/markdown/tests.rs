@@ -310,7 +310,7 @@ fn front_matter_is_a_table_when_flat() {
     let texts = |row: &Vec<Inline>| row.iter().map(|c| c.text.clone()).collect::<Vec<_>>();
     assert_eq!(texts(&rows[0]), ["title", "tags"]);
     assert_eq!(texts(&rows[1]), ["Hello", "[a, b]"]);
-    // 有嵌套的照常是代码块。
+    // 有嵌套的仍然是代码块。
     let doc = parse("---\nauthor:\n  name: x\n---\n");
     assert!(matches!(&doc.blocks[0], Block::Code { lang, .. } if lang == "yaml"));
 }
@@ -744,7 +744,7 @@ fn highlight_leaves_addresses_shown_as_link_text_alone() {
             "{text}"
         );
     }
-    // 链接文字不是地址时照常高亮，网址之外的文字不受影响。
+    // 链接文字不是地址时仍然高亮，网址之外的文字不受影响。
     let doc = parse("[==a==](https://e.com) 与 ==b== https://e.com/?q==x==y");
     let inline = paragraph(&doc.blocks[0]);
     assert_eq!(inline.text, "a 与 b https://e.com/?q==x==y");

@@ -164,7 +164,7 @@ const MAX_VIM_HISTORY: usize = 100;
 
 /// 最多记录的项目自带工具选择数量（个）。
 ///
-/// 取 50（经验值），作用于工具选择和已信任仓库两项列表。
+/// 上限 50 取自调参，作用于工具选择和已信任仓库两项列表。
 const MAX_TOOL_CHOICES: usize = 50;
 
 /// 窗口没有最大化、全屏时的大小和位置，以及关闭时是否最大化。
@@ -720,10 +720,10 @@ impl State {
 
     /// 序列化为 `state.json` 的内容，末尾带一个换行符。
     ///
-    /// `last` 没有值，`previewMode` 为空，`recentFiles`、`otherWindows`、`signOffRepos`、`toolChoices`、
-    /// `approvedCommands`、`trustedRepos`、`vimMarks`、`vimCommands`、`vimSearches` 为空，
-    /// `commitTree`、`commitAllRepositories`、`pdfThumbnailsHidden`、`stayOutsideApplications`
-    /// 为假时省略对应的键。
+    /// `last` 没有值，`previewMode` 为空，`recentFiles`、`otherWindows`、`signOffRepos`、
+    /// `toolChoices`、`approvedCommands`、`trustedRepos`、`vimMarks`、`vimCommands`、`vimSearches`
+    /// 为空，`commitTree`、`commitAllRepositories`、`pdfThumbnailsHidden`、
+    /// `stayOutsideApplications` 为假时省略对应的键。
     pub fn to_json(&self) -> String {
         let path = |p: &PathBuf| Json::String(p.to_string_lossy().into_owned());
         let mut fields = vec![(
@@ -965,13 +965,11 @@ impl State {
 
     /// 读出 `path` 中现在的状态，用 `change` 修改后写回，返回修改后的状态和写入的结果。
     ///
-    /// 多个 winc 进程（各开一个目录）共用一个状态文件，每次写都重新读一遍再改，避免旧副本
-    /// 覆盖其他进程写入的最近列表、现场和书签；读改写期间锁住旁边的 `<文件>.lock`（建议锁），
-    /// 两个进程不会交错。锁文件打不开时仍然读改写。
+    /// 每次写都重新读一遍再改，避免多个 winc 进程共用状态文件时旧副本覆盖其他进程写入的内容；
+    /// 读改写期间锁住旁边的 `<文件>.lock`（建议锁），锁文件打不开时仍然读改写。
     ///
-    /// `current` 是调用方内存中的状态，文件读不出来时在它之上修改：读取失败（磁盘错误、
-    /// 没有权限）时不写回，文件中的记录不会被覆盖；内容损坏时把文件留存为同名、扩展名为
-    /// `damaged` 的文件，再写入修改后的 `current`。
+    /// `current` 是调用方内存中的状态，文件读不出来时在它之上修改：读取失败时不写回；内容损坏时
+    /// 把文件留存为同名、扩展名为 `damaged` 的文件，再写入修改后的 `current`。
     ///
     /// # Errors
     ///

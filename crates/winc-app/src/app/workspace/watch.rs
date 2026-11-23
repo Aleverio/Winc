@@ -18,7 +18,7 @@ use crate::app::tickets::Tickets;
 
 /// 收到文件变化通知后到开始处理之前的等待时间。
 ///
-/// 取 100 ms（经验值）：该值越大，合并的连续通知越多，界面反映变化的时间越晚。
+/// 取 100 ms：该值越大，合并的连续通知越多，界面反映变化的时间越晚。
 const SETTLE: Duration = Duration::from_millis(100);
 
 /// 后台返回的一次结果：文档、读取代号、结果。
@@ -67,15 +67,15 @@ impl Default for Rereads {
 /// 后台启动好的监视：目录和监视器，启动失败时为 `None`。
 pub(in crate::app) type Started = Arc<Mutex<Vec<(PathBuf, Option<Watcher>)>>>;
 
-/// 后台重读的一批目录：各目录的读取代号（按读取顺序）、目录内容，和读好后要接着做的事的编号。
+/// 后台重读的一批目录：各目录的读取代号（按读取顺序）、目录内容，和读好后要继续做的事的编号。
 type ScanBack = (Vec<u64>, DirListing, Option<u64>);
 
-/// 文件树重读完成后在界面线程上接着做的事（选中、展开到某一行）。
+/// 文件树重读完成后在界面线程上继续做的事（选中、展开到某一行）。
 type AfterScan = Box<dyn FnOnce(&mut App)>;
 
 /// 在后台重读的、文件树中被其他程序修改过的目录。
 ///
-/// 界面线程只挑出需要读取的目录，读好后再换进缓存。
+/// 界面线程只挑出需要读取的目录，读好后再换入缓存。
 pub(crate) struct TreeScans {
     /// 各目录最近一次发出的重读：同一个目录连续被修改时只采用最后一次，不同目录互不影响。
     pub(in crate::app) tickets: Tickets<PathBuf>,
@@ -83,7 +83,7 @@ pub(crate) struct TreeScans {
     pub(in crate::app) results: (mpsc::Sender<ScanBack>, mpsc::Receiver<ScanBack>),
     /// 等某一批重读读好后要做的事：编号、是否改为等下一批（这一批里有目录被更新的重读取代）。
     after: Vec<(u64, bool, AfterScan)>,
-    /// 已经发出过几件要接着做的事，用作编号。
+    /// 已经发出过几件要继续做的事，用作编号。
     issued: u64,
     /// 后台为展开、定位读好的目录的通道，和各自读好后要做的事（按编号）。
     fetched: (mpsc::Sender<FetchBack>, mpsc::Receiver<FetchBack>),
@@ -94,7 +94,7 @@ pub(crate) struct TreeScans {
     scroll_to_revealed: bool,
 }
 
-/// 后台为展开、定位读好的目录：要接着做的事的编号和读到的内容。
+/// 后台为展开、定位读好的目录：要继续做的事的编号和读到的内容。
 type FetchBack = (u64, winc_editor::DirFetched);
 
 /// 目录读好并放进文件树的缓存后要做的事，参数是递归展开的范围。
@@ -385,7 +385,7 @@ impl App {
         });
     }
 
-    /// 收取后台为展开、定位读好的目录（见 [`App::fetch_dirs_then`]），放进缓存后接着做该做的事。
+    /// 收取后台为展开、定位读好的目录（见 [`App::fetch_dirs_then`]），放进缓存后继续做该做的事。
     fn poll_tree_fetches(&mut self) {
         while let Ok((id, fetched)) = self.panels.tree.scans.fetched.1.try_recv() {
             let then = &mut self.panels.tree.scans.then;
@@ -418,7 +418,7 @@ impl App {
         self.panels.tree.scans.scroll_to_revealed = true;
     }
 
-    /// 收取后台重读完成的目录（见 [`TreeScans`]）并换进文件树；之后又发出过重读的目录不换。
+    /// 收取后台重读完成的目录（见 [`TreeScans`]）并换入文件树；之后又发出过重读的目录不换。
     pub(in crate::app) fn poll_tree_scans(&mut self) {
         let mut changed = false;
         let mut revealed = false;
@@ -443,7 +443,7 @@ impl App {
                 let message = winc_i18n::t!("workspace-open-folder-unreadable", name = name);
                 self.notify(NoticeKind::Error, message);
             }
-            // 这一批要接着做的事，连同之前改为等下一批的；有目录被取代时内容还不是最新的，再等。
+            // 这一批要继续做的事，连同之前改为等下一批的；有目录被取代时内容还不是最新的，再等。
             let after = std::mem::take(&mut self.panels.tree.scans.after);
             for (id, late, run) in after {
                 if (late || Some(id) == batch) && !superseded {
@@ -478,7 +478,7 @@ impl App {
     /// 收取后台检查、重读的结果（见 [`Rereads`]）。
     ///
     /// 只采用各文档最近一次发出的读取。读元数据后得知需要读取文件内容时再交给后台；读到的内容
-    /// 换进文档，期间文档被编辑过（或者换了路径）就不换，改为再检查一次磁盘，此时有未保存修改的
+    /// 换入文档，期间文档被编辑过（或者换了路径）就不换，改为再检查一次磁盘，此时有未保存修改的
     /// 文档会得出冲突。
     pub(in crate::app) fn poll_rereads(&mut self) {
         let mut report = DiskReport::default();

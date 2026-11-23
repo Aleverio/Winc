@@ -875,7 +875,7 @@ impl App {
                 }
             }
             FromHelper::Disconnected { tab: id } => {
-                // 面板收着、在看别的标签时看不到标签栏上的说明：提示一声，标签上留红点。
+                // 面板保存、在看别的标签时看不到标签栏上的说明：提示一声，标签上留红点。
                 let seen = t.open && t.index_of(id) == Some(t.active);
                 if let Some(tab) = t.by_id(id) {
                     tab.ended = Some(TabEnd::Disconnected);
@@ -1085,14 +1085,12 @@ pub(super) fn launch(
     }
 }
 
-/// 返回在远端主机上的目录 `at` 新建终端时的启动方式：在本机的终端里运行 `ssh`，登录后进入该
-/// 目录并换成那台主机上用户的登录 shell；启用了 shell 集成时一并注入（命令块、当前目录）。
+/// 返回在远端主机上的目录 `at` 新建终端时的启动方式：在本机的终端里运行 `ssh`，登录后进入该目录并换
+/// 成那台主机上用户的登录 shell；启用了 shell 集成时一并注入。
 ///
-/// 编辑器的连接可以复用时（见 `winc_backend::remote::shared`），终端里的 `ssh` 经它开会话，
-/// 不再登录；否则是另一条连接，需要口令时在终端里输入，为该主机指定了密钥文件时也用它。`-t` 分配
-/// 终端；`RemoteCommand=none` 使配置中为该主机设置的登录命令不与这里的命令冲突。远端的命令
-/// 先经用户的登录 shell 解释，写法只用各种 shell 共有的部分；目录包在单引号内。设置中的
-/// `shell` 是本机的命令，对远端的目录不适用。
+/// 编辑器的连接可以复用时，`ssh` 经它开会话，不再登录；否则是另一条连接，为该主机指定了密钥文件时也
+/// 用它。`RemoteCommand=none` 使配置中的登录命令不与这里的命令冲突。远端的命令先经用户的登录 shell
+/// 解释，写法只用各种 shell 共有的部分，目录包在单引号内；设置中的 `shell` 是本机的命令，不适用。
 fn remote_launch(
     at: &winc_backend::Location,
     integration: Integration,

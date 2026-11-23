@@ -13,9 +13,9 @@ mod xlsx;
 pub const MAX_ROWS: usize = 1_048_576;
 /// 每行最多读的列数（列）：xlsx 格式规定的列数上限，csv、tsv 取同一个值。
 pub const MAX_COLUMNS: usize = 16_384;
-/// 能读的 xlsx 文件的大小上限（字节，256 MiB，经验值）。
+/// 能读的 xlsx 文件的大小上限（字节，256 MiB）。
 ///
-/// 再大的工作簿解压后占用内存过多。
+/// 取自调参：再大的工作簿解压后占用内存过多。
 pub(crate) const MAX_FILE: u64 = 256 * 1024 * 1024;
 /// 一张工作表最多保存的单元格数（个，含行内的空单元格）。
 ///
@@ -370,7 +370,7 @@ pub fn load_delimited(path: &Path, tabs: bool) -> Result<Table, String> {
     })
 }
 
-/// 读分隔符文件时一次读取的字节数（字节，1 MiB）：远端的文件一次请求最多取回这么多。
+/// 读分隔符文件时一次读取的字节数（字节，1 MiB）：远端的文件一次请求最多取回该字节数。
 const READ_PIECE: u32 = 1 << 20;
 
 /// 取出 `bytes` 中能解码为 UTF-8 的部分并返回；无效的字节换成 U+FFFD。结尾不完整的一个字符

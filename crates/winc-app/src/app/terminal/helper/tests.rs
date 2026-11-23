@@ -113,7 +113,7 @@ fn a_remote_shell_gets_the_integration_once_its_scripts_are_there() {
     };
     let plain = "cd '/srv/app' && exec $SHELL -l";
     assert_eq!(command(Integration::Off, true), plain);
-    // 脚本还没有写到那台主机上：照常启动登录 shell。
+    // 脚本还没有写到那台主机上：仍然启动登录 shell。
     let on = |prompt, python| Integration::On { prompt, python };
     assert_eq!(command(on(true, true), false), plain);
     let integrated = command(on(false, true), true);

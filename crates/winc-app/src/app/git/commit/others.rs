@@ -48,7 +48,7 @@ pub(crate) enum OtherRow {
     Current,
     /// 另一个仓库的标题行：该仓库在仓库列表（`GitState::repositories`）中的下标。
     Repository(usize),
-    /// 没有更改的另一个仓库：只有这一行，写着它的分支和与上游的差异。
+    /// 没有更改的另一个仓库：只有这一行，显示它的分支和与上游的差异。
     Quiet(usize),
     /// 没有更改的各仓库一组的标题行；展开时其下每个仓库一行。
     QuietGroup,
@@ -169,11 +169,10 @@ impl App {
     /// 返回多仓库时当前仓库那一节以外的各行，按仓库列表的顺序；当前仓库的位置是一行
     /// [`OtherRow::Current`]，它的改动列表画在那一行下面。不列出其他仓库时为空。
     ///
-    /// 有更改的仓库一行标题，其下按组列出文件，两部分都有内容的文件在暂存区视图的两组中各列
-    /// 一次；折叠的仓库、组只有标题行。没有更改的仓库只有一行，状态尚未读到的仓库只有标题行。
+    /// 有更改的仓库一行标题，其下按组列出文件，两部分都有内容的文件在暂存区视图的两组中各列一次；
+    /// 折叠的仓库、组只有标题行。没有更改的仓库只有一行，状态尚未读到的仓库只有标题行。
     ///
-    /// 每帧要用好几次（排行、铺卡片、算滚动），按决定它的各项缓存（[`OtherRowsKey`]），没变时
-    /// 不再锁各仓库的状态重排。
+    /// 每帧要用多次，按决定它的各项缓存（[`OtherRowsKey`]），没变时不再锁各仓库的状态重排。
     pub(crate) fn commit_other_rows(&self) -> Vec<OtherRow> {
         if !self.commit_shows_others() {
             return Vec::new();
@@ -556,7 +555,7 @@ impl App {
         self.request_redraw();
     }
 
-    /// 点了其他仓库的标题行或文件：切换到该仓库，点的是文件时选中它并预览差异。
+    /// 点击其他仓库的标题行或文件：切换到该仓库，点的是文件时选中它并预览差异。
     pub(super) fn press_other(&mut self, target: CommitTarget) {
         let (repo, entry) = match target {
             CommitTarget::OtherRepository(repo) => (repo, None),
@@ -792,7 +791,7 @@ impl App {
         }
     }
 
-    /// 点了其他仓库的勾选框：文件的勾选框只管这一个文件；仓库、组标题的勾选框在其中全部勾上时
+    /// 点击其他仓库的勾选框：文件的勾选框只管这一个文件；仓库、组标题的勾选框在其中全部勾上时
     /// 取消全部，否则全部勾上。
     pub(super) fn press_other_check(&mut self, target: CommitTarget) {
         let paths = |status: &Status, entry: Option<usize>| -> Vec<PathBuf> {
@@ -910,7 +909,7 @@ impl App {
         self.git.commit.blocker(status, others)
     }
 
-    /// 点了其他仓库文件行或分组行行尾的「＋」「−」：界面立即变化，命令在后台按顺序执行。
+    /// 点击其他仓库文件行或分组行行尾的「＋」「−」：界面立即变化，命令在后台按顺序执行。
     ///
     /// 冲突中的文件不在这里处理：切换到该仓库解决后再暂存。
     pub(super) fn press_other_stage(&mut self, target: CommitTarget) {

@@ -22,7 +22,7 @@ pub(in crate::view) use overflow::{
 /// 视图切换里的图标比原大小略小（约占 13 逻辑像素，放在 22 逻辑像素的一段里四周留出 4.5）。
 const VIEW_ICON: f32 = 0.93;
 
-/// 结果行上悬停按钮左侧渐隐区域的宽度（逻辑像素，经验值）。
+/// 结果行上悬停按钮左侧渐隐区域的宽度（逻辑像素，取自调参）。
 ///
 /// 其下的文本在该区域内逐渐淡出，而不是被直接截断。
 const COVER_FADE: f32 = 20.0;
@@ -50,7 +50,8 @@ pub(super) fn draw_view_tabs(app: &App, frame: &mut Frame<'_>) {
     let track_bg = over(p.sidebar_bg, p.hover);
     let (raised, edge) = segment_colors(p, track_bg);
 
-    // 凸起的那一段：切换视图时从上一个视图的位置滑过来（`Sidebar::view_slide`），先绘制，图标压在上面。
+    // 凸起的那一段：切换视图时从上一个视图的位置滑过来（`Sidebar::view_slide`），先绘制，
+    // 图标压在上面。
     let at = |view: SidebarView| tabs.iter().find(|t| t.1 == view).map(|t| t.0);
     if let Some(to) = at(app.panels.sidebar.view) {
         let slot = match app
@@ -121,7 +122,7 @@ pub(in crate::view) fn segment_colors(p: &Palette, track: Color) -> (Color, Colo
 ///
 /// 具体几个改动写在悬停提示和列表的组标题里。
 ///
-/// 圆点放在图标（中心 ±7 逻辑像素）与按钮边（±14 逻辑像素）之间：压在图标上会盖住 Git 图标
+/// 圆点放在图标（中心 ±7 逻辑像素）与按钮边（±14 逻辑像素）之间：压在图标上会遮住 Git 图标
 /// 右上的提交标记。
 fn draw_change_dot(frame: &mut Frame<'_>, p: &Palette, button: Rect, ring: Color, clip: Rect) {
     let (cx, cy) = center(button);
@@ -970,7 +971,7 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
             let rect = app.hits.status.iter().find(|(_, i)| *i == item)?.0;
             Some((rect, with_key(t!("cmd-settings"), Some(Action::Settings))))
         }
-        // 分支选择器的拉取、推送、获取：写明会做什么（和谁差几个提交、推到哪儿）；不能用时写原因。
+        // 分支选择器的拉取、推送、获取：写明会做什么（和谁差几个提交、推到哪里）；不能用时写原因。
         Hover::PickerPart(
             part @ (crate::app::PickerPart::Pull
             | crate::app::PickerPart::Push

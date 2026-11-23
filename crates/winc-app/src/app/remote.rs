@@ -859,7 +859,7 @@ impl App {
     }
 
     /// 启动时调用：上次退出时开着的目录在远端主机上时，重新连接并打开它，标签按那个目录的
-    /// 现场恢复，返回是否开始了连接。连接在后台进行，窗口先显示开始页；需要口令时照常询问。
+    /// 现场恢复，返回是否开始了连接。连接在后台进行，窗口先显示开始页；需要口令时仍然询问。
     pub(crate) fn restore_remote_folder(&mut self) -> bool {
         let wanted = self.editor.root().is_none() && self.remote_enabled();
         let folder = self.state.last.clone().filter(|_| wanted);

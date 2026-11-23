@@ -52,7 +52,7 @@ pub(crate) struct RunConfigs {
     loads: u64,
     /// 后台读好的配置的通道：发送端交给工作线程，接收端由界面线程轮询。
     results: (mpsc::Sender<Loaded>, mpsc::Receiver<Loaded>),
-    /// 等配置读好后在界面线程上接着做的事（运行、打开菜单）。
+    /// 等配置读好后在界面线程上继续做的事（运行、打开菜单）。
     after: Vec<AfterLoad>,
 }
 
@@ -70,7 +70,7 @@ impl Default for RunConfigs {
     }
 }
 
-/// 运行配置读好后在界面线程上接着做的事。
+/// 运行配置读好后在界面线程上继续做的事。
 type AfterLoad = Box<dyn FnOnce(&mut App)>;
 
 /// 后台读好的运行配置。

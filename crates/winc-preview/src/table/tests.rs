@@ -192,7 +192,7 @@ fn number_formats_follow_the_format_code() {
     assert_eq!(classify("h:mm:ss"), date(false, true, true));
     assert_eq!(classify("yyyy-mm-dd hh:mm"), date(true, true, false));
     assert_eq!(classify("0.0%"), NumberFormat::Percent(1));
-    // 小数位数取自文件：位数极大的格式代码按上限处理，能照常写出。
+    // 小数位数取自文件：位数极大的格式代码按上限处理，能正常写出。
     let wide = classify(&format!("0.{}%", "0".repeat(100_000)));
     assert_eq!(wide, NumberFormat::Percent(30));
     assert!(super::xlsx::format_number(0.5, wide, false).starts_with("50.000"));
@@ -486,7 +486,7 @@ fn an_archive_stops_inflating_past_its_budget() {
     // 三个文件各 64 KiB，压缩后整个包不到 1 KiB：比例远超正常文档。
     assert!(bytes.len() < 1024, "{}", bytes.len());
 
-    // 默认的上限不低于 1 GiB：小的包照常全部读出。
+    // 默认的上限不低于 1 GiB：小的包仍能全部读出。
     let roomy = crate::zip::Archive::open(&bytes).unwrap();
     for name in ["a", "b", "c"] {
         assert_eq!(roomy.read(name).unwrap().unwrap().len(), part.len());

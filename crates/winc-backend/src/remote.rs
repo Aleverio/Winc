@@ -247,7 +247,7 @@ impl Link {
     /// 由本程序立即断开，不等对端收尾：等待中的请求随即失败，连接的结束不算意外中断。
     ///
     /// 子进程是进程组的组长时（见 [`Connection::deploy`]）连同它启动的进程一起结束：它们持有
-    /// 输出的管道，留着的话读取应答的线程等不到结束。
+    /// 输出的管道，不结束它们时读取应答的线程等不到结束。
     fn kill(&self) {
         self.shutting.store(true, Ordering::Relaxed);
         self.close();
@@ -933,9 +933,9 @@ impl Running {
         }
     }
 
-    /// 读走了 `count` 字节的标准输出：累计到半个 [`wire::WINDOW`] 时告诉对端可以再发这么多。
+    /// 读走了 `count` 字节的标准输出：累计到半个 [`wire::WINDOW`] 时告诉对端可以再发同样多的字节。
     ///
-    /// 攒到一半再发：每读一次就发一帧的话，帧数与读取的次数一样多。
+    /// 攒到一半再发：如果每读一次就发一帧，帧数与读取的次数一样多。
     fn release(&mut self, count: usize) {
         self.taken += count;
         if self.taken < wire::WINDOW / 2 || self.code.is_some() {
@@ -1329,7 +1329,7 @@ pub struct Ssh {
 /// 读取 `ssh` 生效配置最长的等待时间（5 秒）。
 ///
 /// `ssh -G` 不建立连接，通常在几十毫秒内结束；配置中的 `Match exec` 命令或主机名的规范化
-/// 可以使它等待。超过该时间按读不到配置处理，不补任何设置，连接照常进行。
+/// 可以使它等待。超过该时间按读不到配置处理，不补任何设置，连接仍然进行。
 const CONFIG_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// 运行 `command` 并返回它的标准输出；无法运行、以失败结束或超过 `timeout` 时返回 `None`，

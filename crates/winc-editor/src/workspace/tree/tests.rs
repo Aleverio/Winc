@@ -766,7 +766,7 @@ fn extra_folders_are_listed_as_top_level_rows() {
     let other = ws.add_folder(&base.join("other")).unwrap();
     assert_eq!(ws.extra_folders(), std::slice::from_ref(&other));
     assert!(ws.is_folder_row(&main) && ws.is_folder_row(&other));
-    // 文件夹自己的行不与唯一的子目录合并，其下的连续单子目录照常合并。
+    // 文件夹自己的行不与唯一的子目录合并，其下的连续单子目录仍然合并。
     assert_eq!(
         rows(&ws),
         [

@@ -132,7 +132,7 @@ impl App {
         true
     }
 
-    /// 提交前的整理做完了：说明整理了 `count` 个文件、`failed` 个没能整理而照原样提交，接着提交。
+    /// 提交前的整理做完了：说明整理了 `count` 个文件、`failed` 个没能整理而照原样提交，随后提交。
     pub(super) fn reformatted(&mut self, count: usize, failed: usize, root: &Path) {
         self.git.commit.busy = false;
         if self.git.root.as_deref() != Some(root) {

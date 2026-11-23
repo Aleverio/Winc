@@ -558,7 +558,7 @@ fn a_running_command_can_be_cancelled_and_does_not_block_other_requests() {
             remote::exec(&far, &sh("sleep 30 & sleep 30"), &cancelled)
         })
     };
-    // 命令运行期间，同一连接上的文件操作照常应答。
+    // 命令运行期间，同一连接上的文件操作仍然应答。
     std::thread::sleep(Duration::from_millis(100));
     let asked = Instant::now();
     assert_eq!(fs::read(far.join("file")).unwrap(), b"x");
@@ -706,7 +706,7 @@ fn the_server_is_uploaded_once_and_started_from_the_upload_directory() {
     assert!(std::fs::read(&installed).unwrap() == deploy.programs[0].content);
     // 等服务进程退出：它还在运行时程序文件不能改写。
     connection.close();
-    // 已有的程序残缺（字节数不符）：重新上传后照常启动。
+    // 已有的程序残缺（字节数不符）：重新上传后仍然启动。
     std::fs::write(&installed, "damaged").unwrap();
     std::fs::set_permissions(&installed, PermissionsExt::from_mode(0o700)).unwrap();
     drop(Connection::deploy(bootstrap(&deploy), &deploy, &remote::Abort::default()).unwrap());
@@ -951,7 +951,7 @@ fn common_operations_take_one_round_trip() {
     remote::disconnect(&target);
 }
 
-/// 一次查询的路径多到各应答合计超过一帧：分几次往返取回，一项不少，连接照常可用。
+/// 一次查询的路径多到各应答合计超过一帧：分几次往返取回，一项不少，连接仍然可用。
 #[test]
 fn file_information_for_many_paths_is_fetched_in_several_trips() {
     let target = connect("many-paths");
@@ -1022,7 +1022,7 @@ fn special_files_and_links_are_handled_like_on_this_machine() {
     let dir = scratch("special");
     let far = through(&target, &dir);
 
-    // 命名管道：打开它读取会一直等待另一端，这里直接报错，连接照常可用。
+    // 命名管道：打开它读取会一直等待另一端，这里直接报错，连接仍然可用。
     let made = Command::new("mkfifo").arg(dir.join("pipe")).status();
     if made.is_ok_and(|status| status.success()) {
         let error = fs::read(far.join("pipe")).unwrap_err();

@@ -507,7 +507,7 @@ impl Reader {
             let line: String = self.pending.drain(..=end).collect();
             last = self.line(line.trim()).or(last);
         }
-        // 页号接着印在同一行里，不等换行。
+        // 页号继续印在同一行里，不等换行。
         let page = |text: &str| {
             let at = text.rfind('[')?;
             let digits: String = text[at + 1..]

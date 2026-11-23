@@ -127,7 +127,7 @@ impl Terminal {
                     }
                     self.parser.advance(&mut self.emu, &bytes[..take]);
                     bytes = &bytes[take..];
-                    // 结束符照常交给 `vte`：ESC 也可能是下一个序列的开头。
+                    // 结束符仍然交给 `vte`：ESC 也可能是下一个序列的开头。
                     self.osc = match end {
                         Some(_) if len + take > SHRINK_OSC && bytes[0] == ESC => {
                             self.parser.advance(&mut self.emu, &bytes[..1]);

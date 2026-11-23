@@ -623,7 +623,7 @@ impl<'a> Lexer<'a> {
         let Ok(n) = text.parse::<i64>() else {
             return text.parse::<f64>().ok().map(Obj::Real);
         };
-        // 试着读 `代号 R`；不是时退回，整数照常返回。
+        // 试着读 `代号 R`；不是时退回，整数仍然返回。
         let back = self.pos;
         self.skip_space();
         let generation = self.peek().is_some_and(|b| b.is_ascii_digit()).then(|| {

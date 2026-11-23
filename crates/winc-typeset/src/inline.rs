@@ -563,7 +563,7 @@ impl Cx<'_, '_> {
                     end - start,
                     m.ascent + m.descent + pad * 2.0,
                 );
-                // 高亮底色（经验值）：深色主题用 30% 不透明的暗黄，浅色主题用浅黄。
+                // 高亮底色：深色主题用 30% 不透明的暗黄，浅色主题用浅黄。
                 let color = if self.dark {
                     Color::hex(0xbb8009).alpha(0.3)
                 } else {
@@ -769,7 +769,7 @@ fn no_break_after(c: char) -> bool {
 const MAX_IMAGE_AREA: f32 = 16_000_000.0;
 
 /// 返回把 `width` × `height`（逻辑像素，均不小于 1）按比例缩小到 [`MAX_IMAGE_AREA`] 以内的
-/// 大小，每边至少 1 像素；本来就在上限以内时原样返回。
+/// 大小，每边至少 1 像素；已在上限以内时原样返回。
 fn bounded(width: f32, height: f32) -> (f32, f32) {
     let shrink = (MAX_IMAGE_AREA / (width * height)).sqrt();
     if shrink >= 1.0 {

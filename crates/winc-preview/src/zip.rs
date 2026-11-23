@@ -152,7 +152,7 @@ impl<'a> Archive<'a> {
 
     /// 是否有读取因累计解压量超过上限而被拒绝。
     ///
-    /// 各格式把读不出的部件当作没有，文档照常显示；超过上限不是缺一个部件，整份文档按过大
+    /// 各格式把读不出的部件当作没有，文档仍然显示；超过上限不是缺一个部件，整份文档按过大
     /// 处理，调用方转换完后用它判断。
     pub(crate) fn exceeded(&self) -> bool {
         self.refused.load(std::sync::atomic::Ordering::Relaxed)

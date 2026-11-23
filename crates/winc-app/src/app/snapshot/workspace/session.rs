@@ -385,8 +385,8 @@ fn switching_folders_keeps_each_folders_tabs() {
     assert_eq!(names(&app), ["main.rs", "Cargo.toml"]);
     assert_eq!(app.editor.active().unwrap().name(), "Cargo.toml");
 
-    // 项目名菜单：最近的目录（不含当前目录）、新建窗口、打开目录、添加目录、关闭目录。菜单开着时项目名
-    // 按钮处于按下状态，关掉菜单后放开。
+    // 项目名菜单：最近的目录（不含当前目录）、新建窗口、打开目录、添加目录、关闭目录。
+    // 菜单开着时项目名按钮处于按下状态，关掉菜单后放开。
     app.open_project_menu();
     assert_eq!(
         app.overlays.menu_button,
@@ -994,7 +994,7 @@ fn a_large_file_from_the_command_line_is_read_after_the_window_opens() {
     let target = format!("{}:8:3", large.display());
     let args = crate::cli::parse([target.into(), small.into_os_string()]).unwrap();
 
-    // 大文件只开了标签，仍是当前标签；小文件照旧读好了。
+    // 大文件只开了标签，仍是当前标签；小文件仍然读好了。
     let mut editor = Editor::default();
     let opened = crate::open_targets(&mut editor, &args);
     assert!(opened.problems.is_empty());
@@ -1037,7 +1037,7 @@ fn restoring_at_launch_leaves_a_large_active_tab_to_the_window() {
     let editor = restored(1);
     assert_eq!(editor.active().unwrap().name(), "big.log");
     assert!(editor.active().unwrap().is_pending());
-    // 当前标签是普通文件：照旧立即读好，第一帧就有内容。
+    // 当前标签是普通文件：仍然立即读好，第一帧就有内容。
     let editor = restored(0);
     assert!(!editor.active().unwrap().is_pending());
 
@@ -1281,7 +1281,7 @@ fn a_tab_set_to_read_only_refuses_edits_until_cleared() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// 开了关闭前确认时，退出和关闭窗口先询问；取消不做任何改动，确认后照常退出。没开时直接退出。
+/// 开了关闭前确认时，退出和关闭窗口先询问；取消不做任何改动，确认后仍然退出。没开时直接退出。
 #[test]
 fn confirm_close_asks_before_quitting_or_closing_the_window() {
     use winit::keyboard::{Key, NamedKey};

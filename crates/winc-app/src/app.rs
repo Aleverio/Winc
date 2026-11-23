@@ -272,7 +272,7 @@ pub enum UserEvent {
     GitPushConfirmed(crate::app::git::commit::PushIntent, bool),
     /// 推送的确认框里选了「查看提交」：打开 Git 日志。
     GitShowLog,
-    /// Git 输出有了新的内容：开着的输出标签接着显示。
+    /// Git 输出有了新的内容：开着的输出标签继续显示。
     GitOutput,
     /// 提示框中确认提交已勾选的文件并推送。
     GitCommitAndPush,

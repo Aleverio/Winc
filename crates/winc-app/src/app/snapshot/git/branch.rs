@@ -284,7 +284,7 @@ fn the_branch_row_opens_the_picker_below_it_and_enter_switches() {
     let row = app.commit_parts().branch;
     assert_eq!(app.layout.picker.x, row.x);
     assert!(app.layout.picker.y >= row.bottom());
-    // 当前分支在最前；其余目录默认收起，当前分支不在目录里时目录都收着。
+    // 当前分支在最前；其余目录默认收起，当前分支不在目录里时目录都保存。
     assert_eq!(picker_labels(&app), ["main", "feature", "fix"]);
 
     // 搜索展开目录，回车切换并关闭。
@@ -842,7 +842,7 @@ fn pulling_keeps_uncommitted_changes_and_reports_a_conflicting_restore() {
     let _ = std::fs::remove_dir_all(&remote);
 }
 
-/// 侧栏收着时也能从状态栏打开分支选择器：面板在状态栏上方、窗口之内，搜索框下面是拉取、推送、
+/// 侧栏保存时也能从状态栏打开分支选择器：面板在状态栏上方、窗口之内，搜索框下面是拉取、推送、
 /// 获取一行，列表从它下面开始；按住 ⌥ 时拉取换成拉取并变基。
 #[test]
 fn the_status_bar_opens_the_branch_picker_with_the_sync_actions() {
@@ -915,7 +915,7 @@ fn the_switch_branch_command_opens_the_picker_where_it_can_be_seen() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// 截图：从状态栏打开的分支选择器（侧栏收着），搜索框下面是拉取、推送、获取
+/// 截图：从状态栏打开的分支选择器（侧栏保存），搜索框下面是拉取、推送、获取
 /// （`branch-picker-status`）。
 #[test]
 #[ignore = "截图，手动运行"]
@@ -1053,7 +1053,7 @@ fn folding_animates_the_rows_and_the_height() {
     assert!(app.layout.picker.h > closed && app.layout.picker.h < opened);
     shoot(&mut app, "branch-picker-fold");
 
-    // 再按一下鼠标：动画取消，直接到位。
+    // 再按一次鼠标：动画取消，直接到位。
     let inside = app.layout.picker;
     app.on_mouse_move(inside.x + 40.0, inside.y + 12.0);
     app.on_mouse_down(MouseButton::Left);

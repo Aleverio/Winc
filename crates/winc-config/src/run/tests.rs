@@ -30,7 +30,7 @@ fn every_field_is_read() {
     );
 }
 
-/// 无效的项和重名的项被跳过并报告，其余照常可用。
+/// 无效的项和重名的项被跳过并报告，其余仍可用。
 #[test]
 fn bad_entries_are_skipped_and_reported() {
     let (configs, problems) = parse(

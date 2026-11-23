@@ -173,10 +173,10 @@ impl Missing {
     }
 }
 
-/// 递归展开最多展开的目录数（个，经验值）：再多的行也无法浏览，读取也会明显卡住界面。
+/// 递归展开最多展开的目录数（个，取自调参）：再多的行也无法浏览，读取也会明显阻塞界面。
 pub const EXPAND_DIRS: usize = 1000;
 
-/// 递归展开最多查看的目录项数（个，经验值）：放着大量文件的目录不拖慢界面。
+/// 递归展开最多查看的目录项数（个，取自调参）：放着大量文件的目录不拖慢界面。
 const EXPAND_ENTRIES: usize = 50_000;
 
 /// 文件树中不显示的目录和文件名（按名字精确匹配），快速打开的文件索引同样跳过。
@@ -207,7 +207,7 @@ fn in_distro(name: &str, place: &crate::wsl::Location) -> String {
 pub(crate) fn walker(dir: &Path) -> WalkBuilder {
     let mut builder = WalkBuilder::new(dir);
     // `hidden(false)` 关闭 `ignore` 对以 `.` 开头的名字的过滤：`.github`、`.editorconfig`
-    // 照常收录，只有 [`HIDDEN`] 中的名字由 `filter_entry` 跳过。
+    // 仍然收录，只有 [`HIDDEN`] 中的名字由 `filter_entry` 跳过。
     builder
         .hidden(false)
         .parents(true)

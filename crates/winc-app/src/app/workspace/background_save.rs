@@ -85,7 +85,7 @@ impl App {
     /// `pending` 为真期间等待后台保存完成并逐个收取。
     ///
     /// 只剩远端的保存、而那些主机的连接都已中断或没有响应时不再等：网络停滞时保存不会返回，
-    /// 界面和退出不能一直等下去。没有写完的文档仍是未保存的，退出时照常写入备份。
+    /// 界面和退出不能一直等下去。没有写完的文档仍是未保存的，退出时仍然写入备份。
     fn wait_while_saving(&mut self, pending: impl Fn(&App) -> bool) {
         while pending(self) {
             match self.disk.saves.results.1.recv_timeout(STALL_CHECK) {

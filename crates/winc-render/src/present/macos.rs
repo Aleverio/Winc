@@ -32,7 +32,7 @@ const PIXEL_FORMAT_BGRA: u32 = u32::from_be_bytes(*b"BGRA");
 /// 呈现缓冲（surface）的最大块数（块）。
 ///
 /// 合成器占用屏幕上显示的一块，刚交出的一块要到下一次垂直同步才换上去，而绘制按刷新间隔排帧，
-/// 不与垂直同步对齐。只有两块时，动画中约三分之一的帧两块都被占用（经验值），此时只能把画面
+/// 不与垂直同步对齐。只有两块时，调参时观察到动画中约三分之一的帧两块都被占用，此时只能把画面
 /// 画进合成器正读的那块，可能读到画了一半的画面，整个窗口闪烁。取三块避免该冲突。
 const MAX_SURFACES: usize = 3;
 
@@ -43,7 +43,7 @@ const MAX_SURFACES: usize = 3;
 /// 并不划算：界面线程要多阻塞两帧以上，而且画进合成器占着的那块时可能读到画了一半的画面。
 const SURFACE_WAIT: Duration = Duration::from_millis(4);
 
-/// 停止绘制多久后把不在屏幕上的 surface 标成可清除（毫秒，经验值）。
+/// 停止绘制多久后把不在屏幕上的 surface 标成可清除（毫秒）。
 ///
 /// 可清除（purgeable volatile）的 surface 不计入进程内存，系统内存紧张时可以直接收回；内容被收回
 /// 也没关系，每帧先铺满底色、整个重画。该值取 100 ms：长于 60 Hz 下的帧间隔（16.7 ms），动画
@@ -308,7 +308,7 @@ impl Presenter {
     fn acquire(&mut self) -> Option<usize> {
         if self.surfaces.iter().all(Surface::in_use) {
             if self.surfaces.len() < MAX_SURFACES {
-                // 分配不到时这一帧不画，下一帧再试；已有的 surface 空闲后照常使用。
+                // 分配不到时这一帧不画，下一帧再试；已有的 surface 空闲后仍可使用。
                 match Surface::new(self.width, self.height) {
                     Some(surface) => self.surfaces.push(surface),
                     None if self.surfaces.is_empty() => return None,

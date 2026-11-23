@@ -17,9 +17,9 @@ use super::tab::{Point, Selection, Unit};
 use super::{App, Focus, Request};
 use crate::app::NoticeKind;
 
-/// 运行超过该时长的命令结束时提醒（毫秒，经验值）：更短的命令提醒过于频繁，反而打断操作。
+/// 运行超过该时长的命令结束时提醒（毫秒）：更短的命令提醒过于频繁，反而打断操作。
 const LONG_COMMAND: u32 = 10_000;
-/// F8 最多查看失败命令输出的行数（行，经验值）：只认输出开头这段里的报错位置，1 万行输出
+/// F8 最多查看失败命令输出的行数（行）：只认输出开头这段里的报错位置，1 万行输出
 /// 里的报错通常都在靠前的部分。
 const ERROR_LINES: u64 = 20_000;
 
@@ -289,7 +289,7 @@ impl App {
         self.request_redraw();
     }
 
-    /// 点了第 `block` 个块的色带：折起或展开它的输出；按住 ⇧ 时选中整块输出，之后可以 ⌘C 复制。
+    /// 点击第 `block` 个块的色带：折起或展开它的输出；按住 ⇧ 时选中整块输出，之后可以 ⌘C 复制。
     pub(in crate::app) fn click_terminal_band(&mut self, block: usize) {
         let shift = self.pointer.modifiers.shift_key();
         let Some(tab) = self.terminal.tab_mut() else {

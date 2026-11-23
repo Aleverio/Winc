@@ -29,11 +29,11 @@ use winc_pty::protocol::{
 
 /// 单次读取伪终端输出的缓冲大小（字节）。
 ///
-/// 64 KiB 是经验值：读得越大系统调用越少，每轮最多读 [`READ_BUDGET`] 的十六分之一。
+/// 取 [`READ_BUDGET`] 的十六分之一，每轮最多读 16 次。
 const READ_CHUNK: usize = 64 << 10;
 /// 每轮循环里一个终端最多读的字节数（字节）。
 ///
-/// 1 MiB 是经验值：刷屏的终端每轮最多占 16 次读，其他终端和主程序的消息仍能及时处理。
+/// 取自调参：刷屏的终端每轮最多占 16 次读（见 [`READ_CHUNK`]）。
 const READ_BUDGET: usize = 1 << 20;
 /// 待写进伪终端的字节上限（字节），16 MiB。
 ///
@@ -45,12 +45,11 @@ const MAX_PENDING_INPUT: usize = 16 << 20;
 const HISTORY_CHUNK: usize = 8 << 20;
 /// 同步输出（模式 2026）最多等待的时长。
 ///
-/// 150 ms 是经验值：期限一到就按已收到的内容发一帧，程序一直不关闭同步输出时屏幕也能更新。
+/// 期限一到就按已收到的内容发一帧；150 ms 取自调参。
 const SYNC_TIMEOUT: Duration = Duration::from_millis(150);
 /// 关掉终端后等进程组自己退出的时间，过了就发 SIGKILL。
 ///
-/// 500 ms 是经验值：响应 SIGHUP 的程序一般在一个轮询周期内退出，这段余量既够用，又不会让关闭
-/// 终端时界面长时间等待。
+/// 500 ms 取自调参：响应 SIGHUP 的程序一般在一个轮询周期内退出。
 const HANGUP_GRACE: Duration = Duration::from_millis(500);
 /// 关掉的终端里 shell 已经回收、前台作业还在时，检查前台作业是否退出的间隔。
 ///
@@ -62,8 +61,7 @@ const JOB_POLL: Duration = Duration::from_millis(50);
 const FINISH_WAIT: Duration = Duration::from_millis(2 * HANGUP_GRACE.as_millis() as u64);
 /// 前台进程名的最短查询间隔：发帧后最多按该间隔查询一次。
 ///
-/// 300 ms 是经验值：足以让标签名跟上命令切换，两次查询之间不再读进程信息，刷屏时不会每帧
-/// 都查。
+/// 300 ms 取自调参：两次查询之间不读进程信息，刷屏时不会每帧都查。
 const PROCESS_INTERVAL: Duration = Duration::from_millis(300);
 
 struct Tab {
@@ -528,7 +526,8 @@ impl Helper {
         if integration.is_some() && banner.is_empty() {
             python::activate(cwd, &path, &args, &mut env);
         }
-        // 集成脚本只适用于 Unix shell。Windows 上仅注入 WSL 发行版内的 shell，其他 shell 不提供命令块。
+        // 集成脚本只适用于 Unix shell。Windows 上仅注入 WSL 发行版内的 shell，
+        // 其他 shell 不提供命令块。
         #[cfg(unix)]
         let nonce = integration
             .and_then(|dir| integration::inject(&dir, &path, &mut args, &mut login, &mut env));

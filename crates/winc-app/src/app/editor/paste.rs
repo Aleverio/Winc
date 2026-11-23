@@ -67,10 +67,9 @@ impl App {
     /// 同 [`Self::copy_entry`]，一次放入 `paths` 里的各项（文件树里多选时）。
     ///
     /// 本机的文件放进系统剪贴板的文件列表。其中有远端的文件时，系统剪贴板放不下（见
-    /// [`Clipboard::set_files`](super::clipboard::Clipboard::set_files)）：改为写入它们在远端
-    /// 主机上的路径（每行一个），文件本身记在各窗口共用的 [`RemoteCopy`] 中，粘贴到文件树、
-    /// 编辑区时取用（见 [`Self::clipboard_files`]），粘贴到终端时得到路径。写不进剪贴板时说明
-    /// 原因，不提示已复制；返回是否放进了剪贴板。
+    /// [`Clipboard::set_files`](super::clipboard::Clipboard::set_files)）：改为写入它们在远端主机上
+    /// 的路径，文件本身记在各窗口共用的 [`RemoteCopy`] 中（见 [`Self::clipboard_files`]），粘贴到终
+    /// 端时得到路径。写不进剪贴板时说明原因；返回是否放进了剪贴板。
     pub(in crate::app) fn copy_entries(&mut self, paths: &[PathBuf]) -> bool {
         if paths.is_empty() {
             return false;

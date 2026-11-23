@@ -154,10 +154,9 @@ pub fn run() {
         .and_then(Path::parent)
         .map(|dir| dir.join("backups"));
 
-    // 已经有 winc 在运行：交给它打开并切到前台，本进程不再启动。
-    // 临时打开（`--wait`、`-`）要等标签关闭或读标准输入，总是自己打开；测量时、指定了
-    // `--new-instance` 时也不交出去。
-    // 读不了的目标现在就报告：之后可能交给其他进程，错误不再回到这个终端。
+    // 已经有 winc 在运行：交给它打开并切到前台，本进程不再启动。临时打开（`--wait`、`-`）要等标签关
+    // 闭或读标准输入，总是自己打开；测量时、指定了 `--new-instance` 时也不交出去。读不了的目标现在
+    // 就报告：之后可能交给其他进程，错误不再回到这个终端。
     let mut args = args;
     let failed = shell_command::report_unreadable(&mut args);
     if failed && args.targets.is_empty() {

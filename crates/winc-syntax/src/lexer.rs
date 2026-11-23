@@ -184,7 +184,7 @@ const RAW_STATES: [LineState; 3] = [LineState::Raw0, LineState::Raw1, LineState:
 
 /// 字符串插值的最大嵌套层数（层）。
 ///
-/// 经验值：实际代码很少超过 3 层。限制层数使递归深度与行长无关；超过时插值的开头按
+/// 取自调参：实际代码很少超过 3 层。层数有限使递归深度与行长无关；超过时插值的开头按
 /// 字符串内容处理。
 const MAX_TEMPLATE_DEPTH: u8 = 8;
 
@@ -1163,7 +1163,7 @@ impl Lexer<'_> {
         // Rust 的生命周期）按普通文本处理。
         if c == '\'' && !language.single_quote_string && language.code_tokens {
             // 反斜杠之后的字符被转义，不能作为收尾（如 `'\''`），因此从 `i + 3` 起查找收尾的
-            // 单引号，最远查到 `i + 12`（经验值，足以覆盖 `'\u{10FFFF}'` 这类较长的转义）。
+            // 单引号，最远查到 `i + 11`（`'\u{10FFFF}'` 的收尾单引号）。
             let end = if chars.get(i + 1) == Some(&'\\') {
                 (i + 3..n.min(i + 12))
                     .find(|&j| chars[j] == '\'')
