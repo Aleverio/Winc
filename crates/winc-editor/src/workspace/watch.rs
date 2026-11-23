@@ -151,6 +151,12 @@ impl Watcher {
         let pending = Arc::new(Mutex::new(Pending::default()));
         let shared = Arc::clone(&pending);
         let base = root.to_path_buf();
+        // `root` 是符号链接时，有的系统按它指向的真实路径报告变化：换回链接下的路径，文件树
+        // 中的各行都在链接下面。
+        let real = winc_config::files::canonicalize(root).ok();
+        let real = real.filter(|real| real != root);
+        // 监视真实路径：不跟随链接时，监视链接本身收不到它指向的目录中的变化。
+        let watched = real.clone().unwrap_or_else(|| root.to_path_buf());
 
         // 不跟随符号链接：文件树不展开链接到的目录，监视它们只会多占监视名额；链接指向上级
         // 目录时还会把整个上级目录树都监视上。
@@ -162,7 +168,16 @@ impl Watcher {
                     Ok(event) if event.need_rescan() => pending.rescan = true,
                     // 打开、读取文件不算变化。
                     Ok(event) if matches!(event.kind, EventKind::Access(_)) => return,
-                    Ok(event) => pending.add_paths(&base, event.paths),
+                    Ok(event) => {
+                        let below = |path: PathBuf| match &real {
+                            Some(real) => match path.strip_prefix(real) {
+                                Ok(rest) if !path.starts_with(&base) => base.join(rest),
+                                _ => path,
+                            },
+                            None => path,
+                        };
+                        pending.add_paths(&base, event.paths.into_iter().map(below));
+                    }
                     Err(_) => pending.rescan = true,
                 }
                 if pending.wake_due() {
@@ -172,7 +187,7 @@ impl Watcher {
             },
             config,
         )?;
-        inner.watch(root, RecursiveMode::Recursive)?;
+        inner.watch(&watched, RecursiveMode::Recursive)?;
         Ok(Watcher {
             root: root.to_path_buf(),
             pending,

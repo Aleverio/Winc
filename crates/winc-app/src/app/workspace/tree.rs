@@ -269,6 +269,8 @@ impl App {
             removed,
             clock,
         });
+        // 展开或收起的可能是链接目录：它们各自监视。
+        self.watch_extra_folders();
         self.request_redraw();
     }
 

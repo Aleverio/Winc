@@ -105,7 +105,8 @@ fn damaged(path: &str) -> String {
 }
 
 /// 读工作表时用到的、工作簿级的公共数据。
-struct Context {
+#[derive(Default)]
+pub(super) struct Context {
     /// 共享字符串表。
     shared: Vec<String>,
     /// 各单元格样式（按样式序号）的数字格式。
@@ -215,6 +216,18 @@ fn builtin(id: u32) -> NumberFormat {
     }
 }
 
+/// 不计入比例的空单元格数（个），见 [`PADDING_RATIO`]。
+///
+/// 取 2²⁴ 个，结束位置共占 64 MiB：较小的工作表不论多稀疏都完整读取。
+const PADDING_BASE: usize = 1 << 24;
+
+/// 超过 [`PADDING_BASE`] 之后，每个有内容的单元格允许多保存的空单元格数（个）。
+///
+/// 一行里靠后的单元格之前的空单元格都要保存，各占 4 字节，而文件里不占任何字节：只在最后
+/// 一列写一个单元格的行，一行 35 字节就要求 64 KiB。取自调参：15 相当于每 16 列只有 1 列有
+/// 内容，比这更稀疏的大表读到上限为止并标记为没有读完。
+const PADDING_RATIO: usize = 15;
+
 /// 一张工作表最多读取的合并区域数（个）。
 ///
 /// 预览在绘制每一帧、测量每一列时都要在合并区域中查找，耗时与个数成正比。取自调参：1 万个
@@ -294,7 +307,7 @@ struct Cell {
 ///
 /// 行、单元格通常按行号、列号升序写出，逐行追加；行号小于已有行数的行先记下，读完后放回
 /// 所在的位置。
-fn worksheet(xml: &str, name: String, context: &Context) -> Option<Sheet> {
+pub(super) fn worksheet(xml: &str, name: String, context: &Context) -> Option<Sheet> {
     let mut rows = Rows::default();
     let mut truncated = false;
     let mut late: BTreeMap<usize, Vec<String>> = BTreeMap::new();
@@ -305,7 +318,17 @@ fn worksheet(xml: &str, name: String, context: &Context) -> Option<Sheet> {
     let (mut row, mut next_row, mut next_column) = (None, 0usize, 0usize);
     let mut cell: Option<Cell> = None;
     let (mut in_value, mut in_inline, mut in_text, mut phonetic) = (false, false, false, 0usize);
+    // 已保存的有内容的单元格数和空单元格数，见 `PADDING_BASE`。
+    let (mut filled, mut padding, mut sparse) = (0usize, 0usize, false);
     let mut end_row = |index: usize, cells: &mut [String], rows: &mut Rows| {
+        let written = cells.iter().filter(|cell| !cell.is_empty()).count();
+        filled += written;
+        padding += cells.len() - written;
+        // 空单元格远多于有内容的：之后的行不再读，工作表记为没有读完。
+        sparse |= padding > PADDING_BASE + PADDING_RATIO * filled;
+        if sparse {
+            return;
+        }
         if index < rows.len() {
             late.insert(index, cells.to_vec());
             return;
@@ -433,7 +456,7 @@ fn worksheet(xml: &str, name: String, context: &Context) -> Option<Sheet> {
     if !tokens.well_formed() {
         return None;
     }
-    let mut sheet = rows.finish(name, truncated);
+    let mut sheet = rows.finish(name, truncated || sparse);
     if !late.is_empty() {
         sheet = sheet.with_rows(&late);
     }

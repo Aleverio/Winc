@@ -16,7 +16,7 @@ const MAX_LISTING: usize = 64 << 20;
 
 /// 列出文件最长的运行时间（60 秒）：`git status` 上限的两倍，清单还要经连接传回本机。
 ///
-/// 超过该时间视为远端的命令失去响应，按没有文件处理。
+/// 超过该时间视为远端的命令失去响应，结果是 [`TimedOut`]。
 const LIST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// 返回在远端运行 `git` 的命令，调用方继续追加参数。
@@ -25,6 +25,10 @@ const LIST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 fn git() -> Exec {
     Exec::new("git").arg("-c").arg("core.fsmonitor=false")
 }
+
+/// 列出文件的命令运行超过 [`LIST_TIMEOUT`]，已被结束。
+#[derive(Debug)]
+pub(crate) struct TimedOut;
 
 /// 只列出含有某段文字的文件。
 pub(crate) struct Containing<'a> {
@@ -38,15 +42,20 @@ pub(crate) struct Containing<'a> {
 ///
 /// `ignored` 为真时也列出被忽略规则排除的文件。`containing` 给出时只列出含有那段文字的
 /// 文件：由远端的 `grep` 判断，结果可能多列（例如二进制文件），不会少列。`stop` 返回真时结束
-/// 命令并返回空表。名字不是有效 UTF-8、或含 [`HIDDEN`] 中的名字的路径不列出。
+/// 命令并返回空表，超时则返回 [`TimedOut`]。名字不是有效 UTF-8、或含 [`HIDDEN`] 中的名字的
+/// 路径不列出。
 pub(crate) fn list(
     root: &Path,
     ignored: bool,
     containing: Option<&Containing<'_>>,
     stop: &dyn Fn() -> bool,
-) -> Vec<String> {
+) -> Result<Vec<String>, TimedOut> {
     let deadline = std::time::Instant::now() + LIST_TIMEOUT;
-    let stop = || stop() || std::time::Instant::now() >= deadline;
+    let late = std::cell::Cell::new(false);
+    let stop = || {
+        late.set(late.get() || std::time::Instant::now() >= deadline);
+        late.get() || stop()
+    };
     let run = |command: Exec| exec(root, &command.limit(MAX_LISTING), &stop).ok();
     // `git grep` 没有匹配时以 1 退出，输出为空；其余非零的退出码是没能运行（不是仓库等）。
     let from_git = |command: Exec| {
@@ -106,13 +115,17 @@ pub(crate) fn list(
             }
         }
     };
-    if stop() {
-        return Vec::new();
+    if late.get() {
+        return Err(TimedOut);
     }
-    (listing.split(|&byte| byte == separator))
+    if stop() {
+        return Ok(Vec::new());
+    }
+    let files = (listing.split(|&byte| byte == separator))
         .filter_map(|path| std::str::from_utf8(path).ok())
         .map(|path| path.strip_prefix("./").unwrap_or(path))
         .filter(|path| !path.is_empty() && !path.split('/').any(|part| HIDDEN.contains(&part)))
         .map(str::to_owned)
-        .collect()
+        .collect();
+    Ok(files)
 }

@@ -425,8 +425,8 @@ fn draw_summary(app: &App, frame: &mut Frame<'_>, parts: &PanelParts) {
     } else if searching && total == 0 {
         (t!("workspace-search-searching").to_owned(), p.text_dim)
     } else {
-        // 截断了，或有行因正则回溯过多而放弃查找：计数是下限。
-        let more = if engine.is_truncated() || engine.gave_up() {
+        // 截断了、有行因正则回溯过多而放弃查找，或远端没能列出文件：计数是下限。
+        let more = if engine.is_truncated() || engine.gave_up() || engine.timed_out() {
             "+"
         } else {
             ""
@@ -459,6 +459,16 @@ fn draw_summary(app: &App, frame: &mut Frame<'_>, parts: &PanelParts) {
 /// 绘制结果列表：每个文件一行（箭头、图标、文件名、所在目录、匹配数），其下每处匹配一行。
 fn draw_results(app: &mut App, frame: &mut Frame<'_>, parts: &PanelParts) {
     let area = parts.results;
+    if app.no_search_results() && app.panels.global.engine.timed_out() {
+        draw_empty_state(
+            app,
+            frame,
+            (area, sidebar_span(app)),
+            t!("workspace-search-remote-timeout"),
+            Some(t!("workspace-search-remote-timeout-hint")),
+        );
+        return;
+    }
     if app.no_search_results() {
         draw_empty_state(
             app,

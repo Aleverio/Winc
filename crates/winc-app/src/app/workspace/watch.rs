@@ -224,10 +224,12 @@ impl App {
 
     /// 使附加目录的监视与工作区一致：新添加的开始监视，已移除的停止。
     ///
-    /// 没有事件循环（测试中）时不监视。监视启动失败的目录在窗口重新获得焦点时由 `check_disk`
-    /// 检查。
+    /// 文件树中展开了的链接目录同样各自监视：打开的目录的监视不跟随符号链接，链接指向的目录
+    /// 只在用户展开它时才监视。没有事件循环（测试中）时不监视。监视启动失败的目录在窗口重新
+    /// 获得焦点时由 `check_disk` 检查。
     pub(in crate::app) fn watch_extra_folders(&mut self) {
-        let folders = self.extra_folders();
+        let mut folders = self.extra_folders();
+        folders.extend(self.expanded_links());
         (self.disk.extra_watchers).retain(|watcher| folders.iter().any(|f| f == watcher.root()));
         let Some(proxy) = self.link.proxy.clone() else {
             return;

@@ -304,6 +304,38 @@ fn compiled_pdfs_replace_the_reading_view() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn a_declined_latexmkrc_can_be_asked_about_again() {
+    use winit::keyboard::{Key, NamedKey};
+    let dir = sample_folder("latex-rc-skipped");
+    let main = dir.join("main.tex");
+    let text = "\\documentclass{article}\n\\begin{document}\n正文\n\\oops\n\\end{document}\n";
+    std::fs::write(&main, text).unwrap();
+    std::fs::write(dir.join("latexmkrc"), "$pdf_mode = 5;\n").unwrap();
+    let mut app = app_with(&main, false);
+    app.config.latex_path = Some(fake_latexmk(&dir).display().to_string());
+    paint(&mut app);
+    let id = app.editor.active().unwrap().id;
+    app.set_preview_mode(PreviewMode::Split);
+    paint(&mut app);
+
+    // 第一次编译没有运行它，编译完询问；取消后同一份内容不再自动询问。
+    wait_for_latex(&mut app);
+    assert!(app.overlays.alert.is_some());
+    assert!(app.alert_key(&Key::Named(NamedKey::Escape), false));
+    app.latex_saved(id);
+    wait_for_latex(&mut app);
+    assert!(app.overlays.alert.is_none());
+
+    // 错误列表的末尾留有再问一次的入口。
+    assert!(app.latex_rc_skipped());
+    app.open_latex_problems();
+    app.run_menu_command(MenuCommand::LatexRunRc);
+    assert!(app.overlays.alert.is_some());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn without_tex_the_reading_view_stays() {
     let dir = sample_folder("latex-missing");

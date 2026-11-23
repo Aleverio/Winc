@@ -150,6 +150,7 @@ enum Message {
 struct Job {
     cancel: Arc<AtomicBool>,
     truncated: Arc<AtomicBool>,
+    timed_out: Arc<AtomicBool>,
     receiver: Receiver<Message>,
     /// 后台重新搜索一批文件时的请求；为 `None` 时是从头开始的整体搜索。
     refresh: Option<Refresh>,
@@ -193,6 +194,8 @@ pub struct ProjectSearch {
     wake: Option<Arc<dyn Fn() + Send + Sync>>,
     total: usize,
     truncated: bool,
+    /// 见 [`Self::timed_out`]。
+    timed_out: bool,
     error: Option<SearchError>,
     job: Option<Job>,
     /// 结果每变化一次加 1，界面据此判断是否需要重新排列结果列表。
@@ -290,6 +293,7 @@ impl ProjectSearch {
         self.wake = None;
         self.total = 0;
         self.truncated = false;
+        self.timed_out = false;
         self.error = None;
     }
 
@@ -348,6 +352,7 @@ impl ProjectSearch {
                 files, mut found, ..
             } = job.refresh.take().expect("刚刚检查过");
             self.truncated |= job.truncated.load(Relaxed);
+            self.timed_out |= job.timed_out.load(Relaxed);
             self.job = None;
             // 搜索期间已经单独重新搜索过的文件（见 `refresh_file`）不在 `files` 中，丢弃它们
             // 在后台读到的、可能已经过时的结果。
@@ -364,6 +369,7 @@ impl ProjectSearch {
 
         if done && let Some(job) = self.job.take() {
             self.truncated = job.truncated.load(Relaxed);
+            self.timed_out = job.timed_out.load(Relaxed);
             self.version += 1;
             changed = true;
         }
@@ -394,6 +400,11 @@ impl ProjectSearch {
     /// 是否因结果达到 [`MAX_RESULTS`] 而停止搜索，即结果不全。
     pub fn is_truncated(&self) -> bool {
         self.truncated
+    }
+
+    /// 是否有远端的目录没能在限定时间内列出文件，其中的文件没有被搜索到。
+    pub fn timed_out(&self) -> bool {
+        self.timed_out
     }
 
     /// 是否有行因正则回溯过多而放弃查找，此时结果可能不全。

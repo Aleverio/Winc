@@ -117,6 +117,8 @@ struct Build {
     next: usize,
     /// 编译没能完成又读不出错误时的原因。
     failure: Option<String>,
+    /// 最近一次编译没有运行的项目 `latexmkrc`。
+    skipped_rc: Option<ProjectRcFile>,
 }
 
 /// 项目中的一份 `latexmkrc`：所在的目录和内容。
@@ -383,11 +385,12 @@ impl App {
             build.progress = None;
             build.done = true;
             changed = true;
-            if let Some(rc) = built.unread_rc
-                && !latex.asked.contains(&rc)
+            build.skipped_rc = built.unread_rc;
+            if let Some(rc) = &build.skipped_rc
+                && !latex.asked.contains(rc)
             {
                 latex.asked.push(rc.clone());
-                ask = Some((built.doc, rc));
+                ask = Some((built.doc, rc.clone()));
             }
             let (Some(job), Some(compiled)) = (built.job, built.compiled) else {
                 // 没有 TeX 或主文件时不提示。
@@ -447,7 +450,9 @@ impl App {
             return Some((label, false));
         }
         match (build.problems.len(), &build.failure) {
-            (0, None) => None,
+            (0, None) => {
+                (build.skipped_rc.as_ref()).map(|_| (t!("latex-rc-skipped").to_owned(), false))
+            }
             (0, Some(_)) => Some((t!("latex-failed").to_owned(), true)),
             (n, _) => Some((t!("latex-problems", count = n), true)),
         }
@@ -501,9 +506,29 @@ impl App {
     pub(crate) fn latex_status_tip(&self) -> Option<String> {
         let (id, _) = self.latex_doc()?;
         let build = self.preview.latex.builds.get(&id)?;
-        match build.problems.is_empty() {
-            true => build.failure.clone(),
-            false => Some(t!("latex-problems-tip").to_owned()),
+        match (build.problems.is_empty(), &build.failure) {
+            (false, _) => Some(t!("latex-problems-tip").to_owned()),
+            (true, Some(failure)) => Some(failure.clone()),
+            (true, None) => {
+                (build.skipped_rc.as_ref()).map(|_| t!("latex-rc-skipped-tip").to_owned())
+            }
+        }
+    }
+
+    /// 当前标签最近一次编译是否有没运行的项目 `latexmkrc`；编译状态据此可以点击。
+    pub(crate) fn latex_rc_skipped(&self) -> bool {
+        let build = (self.latex_doc()).and_then(|(id, _)| self.preview.latex.builds.get(&id));
+        build.is_some_and(|b| b.running.is_none() && b.skipped_rc.is_some())
+    }
+
+    /// 再问一次要不要运行当前标签最近一次编译没有运行的 `latexmkrc`。
+    pub(in crate::app) fn ask_skipped_latex_rc(&mut self) {
+        let Some((doc, _)) = self.latex_doc() else {
+            return;
+        };
+        let build = self.preview.latex.builds.get(&doc);
+        if let Some((dir, text)) = build.and_then(|b| b.skipped_rc.clone()) {
+            self.ask_latex_rc(doc, dir, text);
         }
     }
 
@@ -532,9 +557,12 @@ impl App {
         }
     }
 
-    /// 在编译状态下方列出各处错误。
+    /// 在编译状态下方列出各处错误；没有错误而有没运行的 `latexmkrc` 时直接询问要不要运行。
     pub(in crate::app) fn open_latex_problems(&mut self) {
         if self.latex_problem_count() == 0 {
+            if self.latex_rc_skipped() {
+                self.ask_skipped_latex_rc();
+            }
             return;
         }
         let bar = self.hits.latex_status;

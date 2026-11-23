@@ -165,6 +165,8 @@ pub enum MenuCommand {
     ShowTab(usize),
     /// LaTeX 编译的错误列表：打开出错的文件并跳到那一行，参数为第几个错误。
     LatexProblem(usize),
+    /// LaTeX 编译的错误列表：询问要不要运行项目中没有运行的 `latexmkrc`。
+    LatexRunRc,
     /// 选中第几个运行配置。
     RunSelect(usize),
     /// 用第几个 shell 新建终端。
@@ -602,6 +604,7 @@ impl MenuCommand {
             MenuCommand::CloseAll => t!("cmd-close-all-tabs"),
             MenuCommand::RevealInTree => t!("menu-reveal-in-tree"),
             MenuCommand::RunEdit => t!("cmd-edit-run-configurations"),
+            MenuCommand::LatexRunRc => t!("latex-rc-run"),
             MenuCommand::OpenRecent(_)
             | MenuCommand::ImportKeymap(_)
             | MenuCommand::ShowTab(_)

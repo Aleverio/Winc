@@ -292,31 +292,53 @@ fn pdf_mode(rc: &str) -> Option<Engine> {
     }
 }
 
-/// 返回用户自己的 `latexmkrc`（主目录和配置目录中的），只含存在的文件。
+/// 系统级 `latexmkrc` 所在的目录，顺序与 `latexmk` 查找的相同。
+const SYSTEM_RC_DIRS: &[&str] = if cfg!(windows) {
+    &["C:/latexmk"]
+} else {
+    &[
+        "/etc",
+        "/opt/local/share/latexmk",
+        "/usr/local/share/latexmk",
+        "/usr/local/lib/latexmk",
+    ]
+};
+
+/// 返回系统级和用户自己的 `latexmkrc`，按 `latexmk` 读取的顺序；两级各取存在的第一个。
 ///
-/// 不读取项目的配置文件时（`-norc`）用户自己的也不再读取，因此逐个以 `-r` 传给 `latexmk`。
+/// 不读取项目的配置文件时（`-norc`）这两级也不再读取，因此逐个以 `-r` 传给 `latexmk`。
+/// 环境变量 `LATEXMKRCSYS` 指定了系统级的文件时只用它。
 #[allow(clippy::disallowed_methods, reason = "只访问本机：编译只在本机进行")]
-fn user_rc_files() -> Vec<PathBuf> {
+fn own_rc_files() -> Vec<PathBuf> {
+    /// 返回 `files` 中存在的第一个。
+    fn first(files: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
+        files.into_iter().find(|file| file.is_file())
+    }
     let var = |key: &str| std::env::var_os(key).filter(|v| !v.is_empty());
-    let home = var(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from);
-    let config = var("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| home.as_ref().map(|home| home.join(".config")));
-    let files = [
+    let var = |key: &str| var(key).map(PathBuf::from);
+    let system =
+        match var("LATEXMKRCSYS") {
+            Some(file) => first([file]),
+            None => first(["LatexMk", "latexmkrc"].iter().flat_map(|name| {
+                (SYSTEM_RC_DIRS.iter()).map(move |dir| Path::new(dir).join(name))
+            })),
+        };
+    let home = var("HOME").or_else(|| var("USERPROFILE"));
+    let config = var("XDG_CONFIG_HOME").or_else(|| home.as_ref().map(|home| home.join(".config")));
+    let user = [
         config.map(|config| config.join("latexmk/latexmkrc")),
         home.map(|home| home.join(".latexmkrc")),
     ];
-    files
+    system
         .into_iter()
-        .flatten()
-        .filter(|f| f.is_file())
+        .chain(first(user.into_iter().flatten()))
         .collect()
 }
 
 /// 返回编译 `root` 的命令；`rc` 是主文件所在目录中的 `latexmkrc`，没有时为 `None`。
 ///
 /// 用户同意过的 `latexmkrc` 由 `latexmk` 读取，其中设了 `$pdf_mode` 时不指定引擎。没有同意的
-/// 不读取（`-norc`），只沿用其中 `$pdf_mode` 选的引擎，用户自己的配置文件另行传入。
+/// 不读取（`-norc`），只沿用其中 `$pdf_mode` 选的引擎，系统级和用户自己的配置文件另行传入。
 pub fn job(
     tool: &Toolchain,
     root: &Path,
@@ -338,7 +360,7 @@ pub fn job(
             let reads_rc = rc.is_none_or(|rc| rc.run);
             if !reads_rc {
                 args.push("-norc".into());
-                for file in user_rc_files() {
+                for file in own_rc_files() {
                     args.extend(["-r".into(), file.into_os_string()]);
                 }
             }

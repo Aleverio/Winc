@@ -19,9 +19,9 @@ pub const MAX_COLUMNS: usize = 16_384;
 pub(crate) const MAX_FILE: u64 = 256 * 1024 * 1024;
 /// 一张工作表最多保存的单元格数（个，含行内的空单元格）。
 ///
-/// 每个单元格记一个 4 字节的结束位置。只在很靠后的列上有内容的行，前面的空单元格都要记：
-/// 不限制时几十 MB 的文件可以要求数十 GB。取 2²⁴ 个，结束位置共占 64 MiB。
-pub(crate) const MAX_CELLS: usize = 1 << 24;
+/// 每个单元格记一个 4 字节的结束位置，取 2²⁸ 个，结束位置共占 1 GiB，与 [`MAX_TEXT`] 相同；
+/// 行数、列数上限以内的表格（例如 100 万行、200 列）都在其内。
+pub(crate) const MAX_CELLS: usize = 1 << 28;
 /// 一张工作表的文字总量的上限（字节，1 GiB）。
 ///
 /// 共享字符串在每个引用它的单元格里各存一份，文字总量可以远超文件的大小；结束位置以 `u32`
@@ -93,6 +93,8 @@ pub struct Sheet {
 #[derive(Default)]
 pub(crate) struct Rows {
     sheet: Sheet,
+    /// 是否已到上限：之后的单元格一律不收，不让靠后的单元格填进被丢弃的单元格的位置。
+    full: bool,
 }
 
 impl Rows {
@@ -110,7 +112,8 @@ impl Rows {
     /// 丢弃并记下截断。
     pub(crate) fn push(&mut self, cell: &str) {
         let end = self.sheet.text.len() + cell.len();
-        if self.sheet.ends.len() >= MAX_CELLS || end > MAX_TEXT {
+        self.full |= self.sheet.ends.len() >= MAX_CELLS || end > MAX_TEXT;
+        if self.full {
             self.sheet.truncated = true;
             return;
         }

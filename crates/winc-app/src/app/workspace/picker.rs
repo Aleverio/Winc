@@ -136,6 +136,11 @@ impl App {
         self.overlays.picker.vim_list = None;
         self.overlays.picker.remote = None;
         self.overlays.picker.open = true;
+        // 上一次没能列出远端的文件：打开面板时重试。
+        let index = &mut self.overlays.picker.index;
+        if index.timed_out() && index.is_ready() {
+            index.refresh();
+        }
         self.overlays.picker.doc = self.editor.active().map(|d| d.id);
         self.overlays.picker.input.set_text("");
         self.overlays.picker.selected = 0;

@@ -366,18 +366,28 @@ fn the_pull_reader_reports_malformed_xml() {
     }
 }
 
-/// 只在很靠后的列上有内容的行要记下前面的空单元格：单元格数有上限，超出时记为截断。
+/// 只在最后一列有内容的行：空单元格的数量有上限，超出后不再读，工作表记为没有读完；有内容的
+/// 单元格再多也完整读取。
 #[test]
-fn a_sheet_keeps_a_bounded_number_of_cells() {
-    let mut rows = Rows::default();
-    for _ in 0..MAX_CELLS {
-        rows.push("");
-    }
-    rows.push("kept?");
-    rows.end_row();
-    let sheet = rows.finish(String::new(), false);
-    assert!(sheet.truncated);
-    assert!(sheet.text.is_empty());
+fn rows_with_one_distant_cell_are_read_up_to_the_padding_limit() {
+    let sheet = |rows: usize, cell: &str| {
+        let row = format!("<row>{cell}</row>");
+        let xml = format!(
+            "<worksheet><sheetData>{}</sheetData></worksheet>",
+            row.repeat(rows)
+        );
+        let context = xlsx::Context::default();
+        xlsx::worksheet(&xml, String::new(), &context).unwrap()
+    };
+    // 每行 16383 个空单元格：一千多行就超过上限。
+    let sparse = sheet(2000, "<c r=\"XFD1\"><v>1</v></c>");
+    assert!(sparse.truncated);
+    assert!(sparse.row_count() < 1100, "{}", sparse.row_count());
+    // 每行 20 个有内容的单元格，一共 100 万个：不受空单元格的上限影响。
+    let cells = "<c><v>1</v></c>".repeat(20);
+    let dense = sheet(50_000, &cells);
+    assert!(!dense.truncated);
+    assert_eq!((dense.row_count(), dense.columns), (50_000, 20));
 }
 
 /// 工作簿把同一个工作表文件列了两次：只读一次。

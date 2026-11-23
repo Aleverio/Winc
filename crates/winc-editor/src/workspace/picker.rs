@@ -62,6 +62,8 @@ struct Files {
     names: Vec<u32>,
     /// 文件太多、只收录了浅层目录时，收录的层数（从 1 起）；全部收录时为 `None`。
     layers: Option<usize>,
+    /// 有远端的目录没能在限定时间内列出文件，其中的文件不在表中。
+    timed_out: bool,
     /// 遍历过的目录（相对路径，不含根目录）。
     ///
     /// 被忽略的、因太深而未收录的目录不在其中，
@@ -483,6 +485,11 @@ impl FileIndex {
         if let Some(cancel) = &self.cancel {
             cancel.store(true, Ordering::Relaxed);
         }
+    }
+
+    /// 是否有远端的目录没能在限定时间内列出文件；此时文件表不全，[`Self::refresh`] 会重试。
+    pub fn timed_out(&self) -> bool {
+        self.files.timed_out
     }
 
     /// 重新遍历目录。

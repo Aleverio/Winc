@@ -382,3 +382,23 @@ fn dropping_the_watcher_lets_the_helper_exit_on_its_own() {
     assert!(eventually(|| marker.exists()));
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// 监视一个指向目录的符号链接：其中的变化按链接下的路径报告，文件树按这个路径刷新。
+#[cfg(unix)]
+#[test]
+fn changes_below_a_watched_link_are_reported_under_the_link() {
+    let dir = scratch("linked-folder");
+    let (real, link) = (dir.join("elsewhere"), dir.join("project/link"));
+    fs::create_dir_all(&real).unwrap();
+    fs::create_dir_all(dir.join("project")).unwrap();
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+
+    let (sender, woken) = mpsc::channel();
+    let watcher = Watcher::start(&link, move || {
+        let _ = sender.send(());
+    })
+    .unwrap();
+    fs::write(real.join("ready.txt"), "x").unwrap();
+    wait_for(&watcher, &woken, &[&link.join("ready.txt")]);
+    let _ = fs::remove_dir_all(&dir);
+}
