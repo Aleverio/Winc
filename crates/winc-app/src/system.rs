@@ -233,10 +233,8 @@ pub fn move_to_trash(path: &Path) -> io::Result<()> {
 
 /// 在文件管理器中显示并选中 `path`。
 ///
-/// Windows 上经 shell 的 `SHOpenFolderAndSelectItems` 请默认的文件管理器选中它，替换了资源管理器
-/// 的第三方文件管理器（如 Directory Opus）也能接管；调用失败时退回资源管理器。macOS 以外的
-/// Unix 平台上经 D-Bus 的 `org.freedesktop.FileManager1` 接口请桌面的文件管理器选中它；没有该
-/// 服务时只打开所在的目录。`path` 不存在时打开其父目录。
+/// Windows 上经 shell 的 `SHOpenFolderAndSelectItems`，macOS 以外的 Unix 平台上经 D-Bus 的
+/// `org.freedesktop.FileManager1` 接口；失败时只打开所在的目录。`path` 不存在时打开其父目录。
 ///
 /// # Errors
 ///
