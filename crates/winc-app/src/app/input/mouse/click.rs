@@ -500,7 +500,7 @@ impl App {
     ///
     /// 当前点击由触摸点按产生时取 [`touch::TAP_SLOP`]，容纳两次落指之间的位置偏差；
     /// 鼠标点击取 4 逻辑像素，容纳按下与松开之间指针的轻微移动。
-    fn repeat_slop(&self) -> f32 {
+    pub(super) fn repeat_slop(&self) -> f32 {
         if self.touch.tapping {
             touch::TAP_SLOP
         } else {
