@@ -919,6 +919,8 @@ impl App {
             && !(self.overlays.picker.open && self.layout.picker.contains(x, y))
             && !self.over_corner_card(x, y)
             && x < self.layout.editor.right() - SCROLLBAR_HIT
+            // 底边的水平滚动条只在行宽超出编辑区时出现，按命中结果判断。
+            && !matches!(self.target_at(x, y), Target::Scrollbar(..))
             || self.over_diff_text(x, y)
                 && x < self.layout.editor.right() - SCROLLBAR_HIT
                 && matches!(self.target_at(x, y), Target::Editor);
