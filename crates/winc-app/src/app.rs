@@ -179,8 +179,7 @@ pub enum UserEvent {
     /// 应用内更新的状态发生变化。
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     UpdateState(crate::winc::UpdateState),
-    /// X11、Wayland 上系统的深浅色外观变了（见 `crate::color_scheme`）；属于整个应用，由应用层交给
-    /// 每个窗口。
+    /// X11、Wayland 上系统的深浅色外观变了，交给每个窗口（见 `crate::color_scheme`）。
     #[cfg_attr(not(all(unix, not(target_os = "macos"))), allow(dead_code))]
     SystemThemeChanged(Theme),
     /// 右键菜单中选中一项，参数是 `AppKit` 菜单项的编号（`tag`）。

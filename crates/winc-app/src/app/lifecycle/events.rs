@@ -50,9 +50,7 @@ impl ApplicationHandler<UserEvent> for App {
         let placed = frame.map(|frame| place(&frame, &screens(event_loop)));
         let (width, height) =
             placed.map_or((DEFAULT_WIDTH, DEFAULT_HEIGHT), |p| (p.width, p.height));
-        // 能在建窗口之前定下的外观交给窗口。X11、Wayland 上总能定下：窗口外观只决定系统标题栏的
-        // 深浅，与界面一致（见 `App::set_theme`）；交给 `None` 时 winit 在 Wayland 上会自行同步
-        // 查询门户。
+        // 建窗口之前能定下的外观；X11、Wayland 上总能定下。
         let theme = forced_theme(&self.theme_choice).or_else(|| self.system_theme());
         let mut attributes = Window::default_attributes()
             .with_title(title)
@@ -127,8 +125,7 @@ impl ApplicationHandler<UserEvent> for App {
             crate::macos::make_invisible(&window);
         }
 
-        // macOS、Windows 上没有固定主题时，窗口建好以后才能查询系统当前的外观，取不到时为深色。
-        // 此后系统切换外观时由 `system_theme_changed` 跟随。
+        // macOS、Windows 上没有固定主题时，窗口建好后才能查询系统外观。
         let theme = theme.or_else(|| window.theme()).unwrap_or(Theme::Dark);
         self.palette = self.theme_palette(theme == Theme::Dark);
 

@@ -89,15 +89,12 @@ impl App {
     /// 应用主题选择：`Auto` 交由系统决定，`Dark`、`Light` 固定为指定外观。
     pub(in crate::app) fn apply_theme(&mut self, choice: ThemeChoice) {
         self.theme_choice = choice;
-        // 同步窗口外观：系统菜单、提示框和面板按窗口外观显示深浅，需与界面配色一致。X11、Wayland
-        // 上窗口外观由 `set_theme` 同步。
+        // 系统菜单、提示框和面板按窗口外观显示深浅。
         #[cfg(not(all(unix, not(target_os = "macos"))))]
         if let Some(window) = &self.window.handle {
             window.set_theme(forced_theme(&choice));
         }
 
-        // 改为跟随系统：先查询一次当前外观，此后由 `system_theme_changed` 跟随；无从查询时保持
-        // 现在的外观。
         let current = if self.palette.dark {
             Theme::Dark
         } else {
@@ -107,24 +104,23 @@ impl App {
         self.set_theme(theme.unwrap_or(current));
     }
 
-    /// 跟随系统时此刻的外观：系统当前的外观，取不到时为深色；还没有窗口、无从查询时返回 `None`。
+    /// 系统当前的外观，取不到时为深色；还没有窗口时返回 `None`。
     #[cfg(not(all(unix, not(target_os = "macos"))))]
     pub(in crate::app) fn system_theme(&self) -> Option<Theme> {
         let window = self.window.handle.as_ref()?;
         Some(window.theme().unwrap_or(Theme::Dark))
     }
 
-    /// 跟随系统时此刻的外观：门户报告的系统外观（见 `crate::color_scheme`），取不到时为深色。
-    ///
-    /// X11、Wayland 上 `winit` 取不到系统外观；读取门户不需要窗口，还没有窗口时也有结果。
+    /// 门户报告的系统外观（见 `crate::color_scheme`），取不到时为深色。
     #[cfg(all(unix, not(target_os = "macos")))]
     pub(in crate::app) fn system_theme(&self) -> Option<Theme> {
         Some(crate::color_scheme::current().unwrap_or(Theme::Dark))
     }
 
-    /// 系统的外观变成了 `theme`：没有固定主题时跟随。
+    /// 系统的外观变成了 `theme`：没有固定主题且深浅不同时跟随。
     pub(crate) fn system_theme_changed(&mut self, theme: Theme) {
-        if forced_theme(&self.theme_choice).is_none() {
+        if forced_theme(&self.theme_choice).is_none() && self.palette.dark != (theme == Theme::Dark)
+        {
             self.set_theme(theme);
         }
     }
@@ -147,7 +143,7 @@ impl App {
     /// 切到 `theme`：换成对应的主题，终端跟着换配色，并重新摆放标题栏按钮。
     pub(in crate::app) fn set_theme(&mut self, theme: Theme) {
         self.palette = self.theme_palette(theme == Theme::Dark);
-        // X11、Wayland 上窗口不跟随系统外观，窗口外观只决定系统标题栏的深浅：与界面一致。
+        // 系统标题栏的深浅。
         #[cfg(all(unix, not(target_os = "macos")))]
         if let Some(window) = &self.window.handle {
             window.set_theme(Some(theme));

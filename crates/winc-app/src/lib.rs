@@ -228,8 +228,7 @@ pub fn run() {
         }
     };
 
-    // X11、Wayland 上系统的外观由门户读取（见 `color_scheme`）：尽早开始，建首个窗口时多半已经
-    // 读到。外观属于整个应用，变化交给应用层分给各窗口。
+    // X11、Wayland 上经门户读取系统的外观，在建窗口之前开始。
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         let proxy = event_loop.create_proxy();
