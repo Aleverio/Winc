@@ -742,6 +742,15 @@ impl App {
             return;
         }
 
+        // 「快捷键」页没有设置行：按键交给页内的搜索框。
+        if self.settings.selected.page() == crate::layout::SettingsPage::Keys
+            && !self.settings_searching()
+        {
+            self.focus = Focus::KeySearch;
+            self.on_key_search_keys(event, base, cmd);
+            return;
+        }
+
         match &event.logical_key {
             Key::Named(NamedKey::Escape) => self.close_settings(),
             Key::Named(NamedKey::ArrowDown) => self.settings_move(true),
@@ -850,6 +859,11 @@ impl App {
             Key::Named(NamedKey::Tab) => {}
             _ if cmd && matches!(base, "," | "w") => self.close_settings(),
             _ if cmd && base == "v" => self.paste(),
+            _ if cmd && base == "f" => {
+                self.settings.keys_query.select_all();
+                self.reset_blink();
+                self.request_redraw();
+            }
             _ => self.on_key_field(event, base, cmd),
         }
     }
