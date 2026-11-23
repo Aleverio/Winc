@@ -254,8 +254,8 @@ pub enum UserEvent {
     Outline,
     /// 后台的提交、回滚已完成，或已取得上一次提交的信息。
     GitCommit,
-    /// 确认框中确认回滚参数中的文件。
-    GitRollback(Vec<PathBuf>),
+    /// 确认框中已确认的回滚：要回滚的文件和回滚的目标。
+    GitRollback(Vec<PathBuf>, crate::app::git::commit::RollbackTo),
     /// 确认框中确认中止进行中的合并、变基等操作。
     GitAbort,
     /// 确认框里选了跳过：跳过变基、拣选等操作停着的这个提交。

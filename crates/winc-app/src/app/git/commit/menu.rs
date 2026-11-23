@@ -298,7 +298,7 @@ impl App {
                 let tracked = entries.filter(|e| !e.untracked() && !e.conflicted());
                 let paths: Vec<PathBuf> = tracked.map(|e| e.path.clone()).collect();
                 if !paths.is_empty() {
-                    self.confirm_rollback(paths);
+                    self.confirm_commit_rollback(paths);
                 }
             }
             MenuCommand::LogNewTag => {
@@ -347,7 +347,7 @@ impl App {
                     }
                     self.focus = Focus::Editor;
                 }
-                MenuCommand::GitRollbackFile => self.confirm_rollback(paths),
+                MenuCommand::GitRollbackFile => self.confirm_commit_rollback(paths),
                 MenuCommand::GitStashFiles => self.ask_stash_files(paths),
                 MenuCommand::CommitCheck(on) => self.set_commit_checked(&paths, on),
                 MenuCommand::CopyPath => self.copy_paths(&paths, false),
@@ -364,7 +364,7 @@ impl App {
                     self.focus = Focus::Editor;
                 }
             }
-            MenuCommand::GitRollbackFile => self.confirm_rollback(vec![path]),
+            MenuCommand::GitRollbackFile => self.confirm_commit_rollback(vec![path]),
             MenuCommand::GitStashFiles => self.ask_stash_files(vec![path]),
             MenuCommand::CommitCheck(on) => self.set_commit_checked(&[path], on),
             MenuCommand::GitIgnore(kind) => self.git_ignore(&path, kind),

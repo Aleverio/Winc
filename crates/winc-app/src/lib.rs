@@ -256,9 +256,6 @@ pub fn run() {
     app.git.commit.set_flat(!state.commit_tree);
     let sort = crate::app::CommitSort::from_key(&state.commit_sort);
     app.git.commit.set_sort(sort);
-    app.git
-        .commit
-        .set_staging(app.config.git_staging_area == Some(true));
     app.editor.diff_unified = app.config.diff_inline == Some(true);
     app.state = state;
     app.restore_text_places();

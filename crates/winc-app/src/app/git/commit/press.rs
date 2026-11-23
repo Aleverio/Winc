@@ -246,7 +246,7 @@ impl App {
             }
             CommitTarget::RevertFile(i) => {
                 if let Some(path) = self.commit_entry(i).map(|e| e.path.clone()) {
-                    self.confirm_rollback(vec![path]);
+                    self.confirm_commit_rollback(vec![path]);
                 }
             }
             CommitTarget::StageFile(i, on) => {

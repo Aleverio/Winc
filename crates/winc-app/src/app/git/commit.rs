@@ -2,16 +2,17 @@
 //!
 //! 视图自上而下是标题行、分支行、说明条（合并、变基暂停时才有）、改动列表、储藏（有储藏时）、
 //! 上一次提交（未推送时可撤销），最下面是提交卡片（提交信息 2 至 8 行，「修改上次提交」和「提交
-//! ⌄」）；列表分「冲突」「更改」「未跟踪的文件」三组。提交只含勾选的文件（`git commit --only`），
-//! 冲突未解决时拒绝提交；选中文件时在预览标签里打开差异。绘制在 `view/git/commit.rs`，点击区域见
-//! `commit_hits`。
+//! ⌄」）。勾选式（默认）分「冲突」「更改」「未跟踪的文件」三组，提交勾选的文件；暂存区视图分
+//! 「冲突」「暂存的更改」「更改」三组，提交暂存区的内容。冲突未解决时拒绝提交；选中文件时在预览
+//! 标签中打开差异。
+//! 绘制在 `view/git/commit.rs`，点击区域见 `commit_hits`。
 
 mod actions;
 mod compose;
 mod ignore;
 mod reformat;
 pub(in crate::app) use actions::COMMITTED_SHOWN;
-pub(crate) use actions::{PUSH_PREVIEW, PushIntent, SyncState};
+pub(crate) use actions::{PUSH_PREVIEW, PushIntent, RollbackTo, SyncState};
 pub(crate) use compose::{AUTHOR_COMMITS, OWN_MESSAGES};
 pub use ignore::IgnoreKind;
 mod list;
@@ -174,13 +175,13 @@ pub(crate) enum CommitName {
 /// 改动列表里的一组。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CommitGroup {
-    /// 已跟踪文件的改动和已暂存的新文件，默认勾上。
+    /// 暂存区视图中为未暂存的更改（含未跟踪的文件），勾选式下为已跟踪文件的更改，默认勾选。
     Changes,
     /// 合并、拣选、变基时有冲突的文件。
     ///
     /// 冲突须先于其他改动处理，因此单独成组并排在最上方，不与普通改动混排。
     Conflicts,
-    /// 未跟踪的文件（状态字母 U）：默认不勾，只有勾上才随提交加入仓库。
+    /// 未跟踪的文件，仅勾选式下有；默认不勾选，勾选后随提交加入仓库。
     Untracked,
     /// 暂存区中有内容的文件；只在暂存区视图中有。只暂存了一部分的文件同时列在「更改」一组。
     Staged,
@@ -213,20 +214,17 @@ impl CommitGroup {
         self as usize
     }
 
-    /// `entry` 是否属于这一组；`staging` 表示是否在暂存区视图中。
+    /// `entry` 是否属于这一组；`staging` 表示是否为暂存区视图。
     ///
-    /// 暂存区视图中「更改」一组只含有未暂存改动的文件，全部暂存的文件只在「已暂存的更改」中；
-    /// 勾选式下没有「已暂存的更改」，已跟踪文件的改动都在「更改」中。
+    /// 暂存区视图中，部分暂存的文件同时属于「暂存的更改」和「更改」。
     pub fn holds(self, entry: &Entry, staging: bool) -> bool {
         let plain = !entry.conflicted();
         match self {
             CommitGroup::Conflicts => entry.conflicted(),
             CommitGroup::Staged => staging && plain && entry.staged.is_some(),
-            CommitGroup::Changes if staging => {
-                plain && !entry.untracked() && entry.unstaged.is_some()
-            }
+            CommitGroup::Changes if staging => plain && entry.unstaged.is_some(),
             CommitGroup::Changes => plain && !entry.untracked(),
-            CommitGroup::Untracked => plain && entry.untracked(),
+            CommitGroup::Untracked => !staging && plain && entry.untracked(),
         }
     }
 }
@@ -520,7 +518,7 @@ pub enum CommitTarget {
     Group(CommitGroup),
     /// 组标题的勾选框：整组勾上或取消。
     GroupCheck(CommitGroup),
-    /// 悬停组标题时右端的「回滚」按钮：回滚这一组里勾上的文件（先确认）。
+    /// 组标题上的回滚按钮：暂存区视图中回滚「更改」到暂存区，勾选式下回滚勾选的文件。
     GroupRevert(CommitGroup),
     /// 储藏一组的标题：收起或展开。
     Stashes,
@@ -762,7 +760,7 @@ pub(crate) struct CommitState {
     draft: Option<String>,
     /// 各位置写了一半的提交信息：切换仓库、工作树时不丢。
     drafts: HashMap<PathBuf, String>,
-    /// 是否显示暂存区：为真时各项的状态取自暂存区，列表分出「已暂存的更改」一组；为假（默认）
+    /// 是否显示暂存区：为真时各项的状态取自暂存区，列表分出「暂存的更改」一组；为假（默认）
     /// 时是勾选式，勾选记在下面几项中，提交时才写入暂存区。
     staging: bool,
     /// 勾选式下的勾选，提交时才写入暂存区。
