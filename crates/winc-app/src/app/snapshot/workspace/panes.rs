@@ -380,7 +380,7 @@ fn the_tab_menu_counts_only_the_tabs_of_its_pane() {
     let dir = sample_folder("panes-tab-menu");
     let mut app = app_with(&dir.join("short.rs"), false);
     app.open_path(&dir.join("src/main.rs"));
-    // 右边只有 main.rs，左边留着已保存的 short.rs。
+    // 右侧窗格只有未保存的 main.rs，左侧窗格保留已保存的 short.rs。
     app.run_action(Action::MoveToSplitRight);
     app.run(Command::Insert("// x\n".into()));
     paint(&mut app);
@@ -409,7 +409,7 @@ fn a_stale_selection_stays_within_its_pane() {
     app.open_path(&dir.join("src/main.rs"));
     let short = app.editor.tabs()[0].id;
     let main = app.editor.tabs()[1].id;
-    // 右边也开着 short.rs；回到左边，选中两个标签，再关掉左边的 short.rs。
+    // 右侧窗格同样打开 short.rs；在左侧窗格选中两个标签后，关闭其中的 short.rs。
     app.activate_tab(0);
     app.run_action(Action::SplitRight);
     paint(&mut app);

@@ -99,6 +99,8 @@ struct ParkedPane {
     /// 只用其中 [`PANE_AREAS`] 的部分。
     scrollbars: Scrollbars,
     preview: PanePreview,
+    /// 上一次画出的标签栏控件：标签、新建和列表按钮、预览切换与浏览器按钮。
+    controls: Vec<Rect>,
 }
 
 impl ParkedPane {
@@ -110,6 +112,7 @@ impl ParkedPane {
             hits: Vec::new(),
             scrollbars: Scrollbars::default(),
             preview: PanePreview::default(),
+            controls: Vec::new(),
         }
     }
 }
@@ -262,6 +265,7 @@ impl App {
         std::mem::swap(&mut self.hits.tabs, &mut parked.hits);
         (self.scroll.bars).exchange(&mut parked.scrollbars, &PANE_AREAS);
         self.preview.exchange(&mut parked.preview);
+        parked.controls.clear();
     }
 
     /// 把前台窗格的标签栏、滚动条和预览存入窗格 `id`，前台换上空白的。
@@ -347,7 +351,7 @@ impl App {
         for pane in self.background_panes() {
             self.focus = Focus::Tree;
             let inside = !dragging && under == Some(pane);
-            self.with_pane(pane, |app| {
+            let controls = self.with_pane(pane, |app| {
                 elsewhere |= inside;
                 app.pointer.hover = if inside {
                     app.hover_at(x, y)
@@ -358,7 +362,11 @@ impl App {
                 app.panes.drawing_background = true;
                 draw(app, false);
                 app.panes.drawing_background = false;
+                (app.editor.panes.focused == pane).then(|| app.tab_bar_controls())
             });
+            if let Some(parked) = self.panes.parked.iter_mut().find(|p| p.id == pane) {
+                parked.controls = controls.unwrap_or_default();
+            }
         }
         let fx = &mut self.motion.module_fx;
         (fx.preview, fx.browser, fx.preview_mode) = buttons;
@@ -662,6 +670,16 @@ impl App {
         (self.panes.dividers.iter())
             .find(|d| grip(d).contains(x, y))
             .map(|d| d.index)
+    }
+
+    /// 前台以外各窗格上一次画出的标签栏控件。
+    pub(in crate::app) fn background_tab_controls(&self) -> impl Iterator<Item = Rect> + '_ {
+        (self.panes.parked.iter()).flat_map(|p| p.controls.iter().copied())
+    }
+
+    /// 各窗格分隔线的拖动范围。
+    pub(in crate::app) fn pane_divider_grips(&self) -> impl Iterator<Item = Rect> + '_ {
+        self.panes.dividers.iter().map(grip)
     }
 
     /// 正被悬停或拖动的窗格分隔线。
