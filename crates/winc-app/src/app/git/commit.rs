@@ -2,9 +2,9 @@
 //!
 //! 视图自上而下是标题行、分支行、说明条（合并、变基暂停时才有）、改动列表、储藏（有储藏时）、
 //! 上一次提交（未推送时可撤销），最下面是提交卡片（提交信息 2 至 8 行，「修改上次提交」和「提交
-//! ⌄」）；默认是勾选式，列表分「冲突」「更改」「未跟踪的文件」三组，只提交勾选的文件。
-//! 开启暂存区布局后分「暂存的更改」「更改」两组，未跟踪的文件放在「更改」中，冲突单列在最上方。
-//! 暂存区布局中有暂存内容时提交暂存区；冲突未解决时拒绝提交。选中文件时在预览标签里打开差异。
+//! ⌄」）。勾选式（默认）分「冲突」「更改」「未跟踪的文件」三组，提交勾选的文件；暂存区视图分
+//! 「冲突」「暂存的更改」「更改」三组，提交暂存区的内容。冲突未解决时拒绝提交；选中文件时在预览
+//! 标签中打开差异。
 //! 绘制在 `view/git/commit.rs`，点击区域见 `commit_hits`。
 
 mod actions;
@@ -12,7 +12,7 @@ mod compose;
 mod ignore;
 mod reformat;
 pub(in crate::app) use actions::COMMITTED_SHOWN;
-pub(crate) use actions::{PUSH_PREVIEW, PushIntent, SyncState};
+pub(crate) use actions::{PUSH_PREVIEW, PushIntent, RollbackTo, SyncState};
 pub(crate) use compose::{AUTHOR_COMMITS, OWN_MESSAGES};
 pub use ignore::IgnoreKind;
 mod list;
@@ -175,13 +175,13 @@ pub(crate) enum CommitName {
 /// 改动列表里的一组。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CommitGroup {
-    /// 未暂存的改动，含未跟踪的文件；勾选式下是已跟踪文件的改动和已暂存的新文件。
+    /// 暂存区视图中为未暂存的更改（含未跟踪的文件），勾选式下为已跟踪文件的更改，默认勾选。
     Changes,
     /// 合并、拣选、变基时有冲突的文件。
     ///
     /// 冲突须先于其他改动处理，因此单独成组并排在最上方，不与普通改动混排。
     Conflicts,
-    /// 勾选式下未跟踪的文件（状态字母 U）：默认不勾，只有勾上才随提交加入仓库。
+    /// 未跟踪的文件，仅勾选式下有；默认不勾选，勾选后随提交加入仓库。
     Untracked,
     /// 暂存区中有内容的文件；只在暂存区视图中有。只暂存了一部分的文件同时列在「更改」一组。
     Staged,
@@ -214,10 +214,9 @@ impl CommitGroup {
         self as usize
     }
 
-    /// `entry` 是否属于这一组；`staging` 表示是否在暂存区视图中。
+    /// `entry` 是否属于这一组；`staging` 表示是否为暂存区视图。
     ///
-    /// 暂存区视图中「更改」含未暂存改动和未跟踪的文件，全部暂存的文件只在「暂存的更改」中；
-    /// 勾选式下没有「暂存的更改」，已跟踪文件的改动在「更改」中，未跟踪的文件单独成组。
+    /// 暂存区视图中，部分暂存的文件同时属于「暂存的更改」和「更改」。
     pub fn holds(self, entry: &Entry, staging: bool) -> bool {
         let plain = !entry.conflicted();
         match self {
@@ -519,7 +518,7 @@ pub enum CommitTarget {
     Group(CommitGroup),
     /// 组标题的勾选框：整组勾上或取消。
     GroupCheck(CommitGroup),
-    /// 悬停组标题时右端的「回滚」按钮：暂存区视图中回滚整组，勾选式下回滚勾上的文件（先确认）。
+    /// 组标题上的回滚按钮：暂存区视图中回滚「更改」到暂存区，勾选式下回滚勾选的文件。
     GroupRevert(CommitGroup),
     /// 储藏一组的标题：收起或展开。
     Stashes,

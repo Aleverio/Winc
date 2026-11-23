@@ -488,7 +488,7 @@ impl App {
             | UserEvent::Wrapped) => self.finished(done),
             UserEvent::Rediffed => self.poll_rediffs(),
             UserEvent::Outline => self.poll_outline(),
-            UserEvent::GitRollback(paths) => self.git_rollback(paths),
+            UserEvent::GitRollback(paths, to) => self.git_rollback(paths, to),
             UserEvent::GitSkip => {
                 self.run_branch_command(crate::app::input::context_menu::MenuCommand::GitSkip);
             }

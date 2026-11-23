@@ -492,6 +492,31 @@ fn files_staged_in_the_terminal_show_as_checked_and_commit_the_index() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// 暂存区视图中暂存区为空时提交按钮显示「提交全部」，否则显示暂存的文件数；修改上次提交时不显示
+/// 范围，游离 `HEAD` 时照常显示。
+#[test]
+fn the_commit_button_says_commit_all_until_something_is_staged() {
+    let Some((mut app, root)) = git_app("git-commit-scope-staging", false) else {
+        return;
+    };
+    app.git.commit.set_staging(true);
+    app.run_action(Action::ShowCommit);
+    paint(&mut app);
+    assert_eq!(app.commit_scope(), Some(CommitScope::All(1)));
+    app.press_commit(CommitTarget::StageFile(0, true));
+    assert_eq!(app.commit_scope(), Some(CommitScope::Staged(1)));
+
+    app.git.commit.amend = true;
+    assert_eq!(app.commit_scope(), None);
+    app.git.commit.amend = false;
+
+    git_in(&root, &["checkout", "-q", "--detach"]);
+    app.git_refresh();
+    assert_eq!(app.commit_scope(), Some(CommitScope::Staged(1)));
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// 截图：暂存区视图（`commit-staging-*`），有已暂存、只暂存了一部分、未暂存和未跟踪的文件，鼠标
 /// 停在「更改」中的一行上，行尾是「回滚」「暂存」。
 #[test]
@@ -530,6 +555,58 @@ fn shoot_staging_view() {
         shoot(&mut app, &format!("commit-staging-{theme}"));
         let _ = std::fs::remove_dir_all(&dir);
     }
+}
+
+/// 「暂存全部更改」在暂存区视图中包含未跟踪的文件，勾选式下不包含。
+#[test]
+fn stage_all_matches_the_changes_group() {
+    let Some((mut app, root)) = git_app("git-stage-all-untracked", false) else {
+        return;
+    };
+    let new = root.join("src/new.rs");
+    app.run_action(Action::GitStageAll);
+    assert!(staged_diff(&root).contains("src/main.rs"));
+    assert!(!staged_diff(&root).contains("src/new.rs"));
+    app.run_action(Action::GitUnstageAll);
+
+    app.git.commit.set_staging(true);
+    app.run_action(Action::GitStageAll);
+    assert_eq!(file_state(&app, &new), Some(true));
+    let status = app.git.status.as_ref().unwrap();
+    assert!(status.entries.iter().all(|e| e.unstaged.is_none()));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// 设置中的「暂存区布局」与提交视图「⋯」菜单中的同名项是同一开关，切换后提交视图立即更新。
+#[test]
+fn the_staging_area_setting_and_the_menu_item_are_one_switch() {
+    use crate::app::input::context_menu::MenuCommand::CommitStagingArea;
+    use crate::layout::{Setting, SettingsPage};
+    let Some((mut app, root)) = git_app("git-staging-setting", false) else {
+        return;
+    };
+    app.run_action(Action::ShowCommit);
+    assert_eq!(Setting::GitStagingArea.page(), SettingsPage::Git);
+    assert!(!app.switch_on(Setting::GitStagingArea));
+    assert!(!app.git.commit.staging() && !app.menu_checked(CommitStagingArea));
+
+    app.run_commit_more_command(CommitStagingArea);
+    assert!(app.git.commit.staging() && app.menu_checked(CommitStagingArea));
+    assert_eq!(app.config.git_staging_area, Some(true));
+    let groups = |app: &App| -> Vec<CommitRow> {
+        let rows = app.commit_rows();
+        let titles = rows.iter().filter(|r| matches!(r, CommitRow::Group(_)));
+        titles.cloned().collect()
+    };
+    // 暂存区为空：只有「更改」一组（含未跟踪的文件），按钮为「提交全部」。
+    assert_eq!(app.commit_scope(), Some(CommitScope::All(1)));
+    assert_eq!(groups(&app), [CommitRow::Group(CommitGroup::Changes)]);
+
+    app.settings_toggle(Setting::GitStagingArea);
+    assert!(!app.git.commit.staging() && !app.menu_checked(CommitStagingArea));
+    assert_eq!(app.config.git_staging_area, Some(false));
+    assert_eq!(app.commit_scope(), Some(CommitScope::Staged(1)));
+    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// 暂存区视图的树形显示：目录行悬停时行尾是加号（「已暂存的更改」一组里是减号），暂存或取消
@@ -595,50 +672,61 @@ fn folders_stage_and_unstage_everything_under_them() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// 暂存区视图中回滚「更改」只放弃未暂存的更改，未跟踪的文件移到废纸篓；「暂存的更改」没有回滚
+/// 按钮。
 #[test]
-fn group_rollback_does_not_skip_unstaged_files_beside_partly_staged_ones() {
+fn rolling_back_changes_keeps_what_is_staged() {
     let Some((mut app, root)) = git_app("git-staging-group-rollback", false) else {
         return;
     };
     app.settings_toggle(Setting::GitStagingArea);
     app.trash = |path| std::fs::remove_file(path);
     let main = root.join("src/main.rs");
+    let added = root.join("src/added.rs");
     let config = root.join("src/config.rs");
     let new = root.join("src/new.rs");
-    let before = head_main(&root);
     let before_config = std::fs::read_to_string(&config).unwrap();
     std::fs::write(&main, "staged\n").unwrap();
-    git_in(&root, &["add", "src/main.rs"]);
+    std::fs::write(&added, "first\n").unwrap();
+    git_in(&root, &["add", "src/main.rs", "src/added.rs"]);
     std::fs::write(&main, "staged\nnot staged\n").unwrap();
+    std::fs::write(&added, "first\nsecond\n").unwrap();
     std::fs::write(&config, "pub struct Updated;\n").unwrap();
     app.git_refresh();
     app.run_action(Action::ShowCommit);
     paint(&mut app);
+    let hover = |app: &mut App, group: CommitGroup| {
+        let target = CommitTarget::Group(group);
+        let rect = app
+            .hits
+            .commit
+            .iter()
+            .find(|(_, t)| *t == target)
+            .unwrap()
+            .0;
+        app.on_mouse_move(rect.x + 40.0, rect.y + 4.0);
+        paint(app);
+    };
+    let shown = |app: &App, target: CommitTarget| app.hits.commit.iter().any(|(_, t)| *t == target);
 
-    let group = app
-        .hits
-        .commit
-        .iter()
-        .find(|(_, t)| *t == CommitTarget::Group(CommitGroup::Changes))
-        .unwrap()
-        .0;
-    app.on_mouse_move(group.x + 40.0, group.y + 4.0);
-    paint(&mut app);
-    if std::env::var_os("WINC_SNAPSHOT_DIR").is_some() {
-        shoot(&mut app, "git-staging-group-actions");
-    }
-    let revert = app
-        .hits
-        .commit
-        .iter()
-        .find(|(_, t)| *t == CommitTarget::GroupRevert(CommitGroup::Changes))
-        .unwrap()
-        .0;
-    click(&mut app, (revert.x + 4.0, revert.y + 4.0));
+    hover(&mut app, CommitGroup::Staged);
+    assert!(shown(&app, CommitTarget::GroupStage(CommitGroup::Staged)));
+    assert!(!shown(&app, CommitTarget::GroupRevert(CommitGroup::Staged)));
+    hover(&mut app, CommitGroup::Changes);
+    assert!(shown(&app, CommitTarget::GroupStage(CommitGroup::Changes)));
+    assert!(shown(&app, CommitTarget::GroupRevert(CommitGroup::Changes)));
+    app.press_commit(CommitTarget::GroupRevert(CommitGroup::Changes));
 
-    assert_eq!(std::fs::read_to_string(&main).unwrap(), before);
+    assert_eq!(std::fs::read_to_string(&main).unwrap(), "staged\n");
+    assert_eq!(std::fs::read_to_string(&added).unwrap(), "first\n");
     assert_eq!(std::fs::read_to_string(&config).unwrap(), before_config);
     assert!(!new.exists());
-    assert!(app.git.status.as_ref().unwrap().entries.is_empty());
-    std::fs::remove_dir_all(&root).unwrap();
+    let diff = staged_diff(&root);
+    assert!(
+        diff.contains("+staged") && diff.contains("+first"),
+        "{diff}"
+    );
+    let status = app.git.status.as_ref().unwrap();
+    assert!(status.entries.iter().all(|e| e.unstaged.is_none()));
+    let _ = std::fs::remove_dir_all(&root);
 }

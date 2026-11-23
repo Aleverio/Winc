@@ -10,6 +10,15 @@ use crate::app::NoticeKind;
 use crate::app::git::branch::{Then, keep_changes};
 use crate::app::lifecycle::notice::NoticeAction;
 
+/// 回滚的目标。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RollbackTo {
+    /// `HEAD`：放弃暂存区和工作区中的更改。
+    Head,
+    /// 暂存区：只放弃工作区中的更改。
+    Index,
+}
+
 /// 分支行右端同步控件的状态。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SyncState {
@@ -621,8 +630,7 @@ impl App {
         self.run_branch_command(crate::app::input::context_menu::MenuCommand::GitSkip);
     }
 
-    /// 回滚前先确认（系统确认框）：暂存区视图中回滚组 `group` 的全部文件，勾选式下只回滚
-    /// 这一组里勾上的文件。
+    /// 确认后回滚组 `group`：暂存区视图中为组内全部文件，勾选式下为勾选的文件。
     pub(super) fn ask_rollback(&mut self, group: CommitGroup) {
         let Some(status) = self.git.status.as_ref() else {
             return;
@@ -638,12 +646,37 @@ impl App {
         if paths.is_empty() && !staging {
             self.flash(t!("git-rollback-nothing-checked"));
         } else if !paths.is_empty() {
-            self.confirm_rollback(paths);
+            self.confirm_commit_rollback(paths);
         }
     }
 
-    /// 先请用户确认，确认后回滚 `paths`。
+    /// 确认后回滚提交视图中的 `paths`。
+    ///
+    /// 暂存区视图中回滚到暂存区，略过没有未暂存更改的文件；勾选式下回滚到 `HEAD`。
+    pub(in crate::app) fn confirm_commit_rollback(&mut self, paths: Vec<PathBuf>) {
+        if !self.git.commit.staging() {
+            self.confirm_rollback(paths);
+            return;
+        }
+        let entries = self.git.status.iter().flat_map(|s| &s.entries);
+        let unstaged: Vec<PathBuf> = entries
+            .filter(|e| e.unstaged.is_some() && !e.conflicted() && paths.contains(&e.path))
+            .map(|e| e.path.clone())
+            .collect();
+        if unstaged.is_empty() {
+            self.flash(t!("git-rollback-nothing-unstaged"));
+            return;
+        }
+        self.confirm_rollback_to(unstaged, RollbackTo::Index);
+    }
+
+    /// 确认后把 `paths` 回滚到 `HEAD`。
     pub(in crate::app) fn confirm_rollback(&mut self, paths: Vec<PathBuf>) {
+        self.confirm_rollback_to(paths, RollbackTo::Head);
+    }
+
+    /// 确认后把 `paths` 回滚到 `to`。
+    fn confirm_rollback_to(&mut self, paths: Vec<PathBuf>, to: RollbackTo) {
         let message = match paths.as_slice() {
             [one] => {
                 let name = winc_editor::display_name(one);
@@ -654,26 +687,27 @@ impl App {
         if self.window.handle.is_some() {
             // 远端主机上没有废纸篓：未跟踪的文件直接删除。
             let remote = paths.iter().any(|path| winc_backend::is_remote(path));
-            let detail = if remote {
-                t!("git-rollback-confirm-detail-remote")
-            } else {
-                t!("git-rollback-confirm-detail")
+            let detail = match (to, remote) {
+                (RollbackTo::Head, false) => t!("git-rollback-confirm-detail"),
+                (RollbackTo::Head, true) => t!("git-rollback-confirm-detail-remote"),
+                (RollbackTo::Index, false) => t!("git-rollback-confirm-detail-index"),
+                (RollbackTo::Index, true) => t!("git-rollback-confirm-detail-index-remote"),
             };
             let button = t!("git-rollback-confirm-button");
             self.show_confirm(&message, detail, button, move |ok| {
-                ok.then(|| UserEvent::GitRollback(paths.clone()))
+                ok.then(|| UserEvent::GitRollback(paths.clone(), to))
             });
             return;
         }
         // 没有窗口（测试中）时直接回滚。
-        self.git_rollback(paths);
+        self.git_rollback(paths, to);
     }
 
-    /// 回滚 `paths`：已跟踪的恢复成 `HEAD` 里的内容，新加入版本管理的从暂存区移除并移到废纸篓，
-    /// 未跟踪的移到废纸篓。
+    /// 把 `paths` 回滚到 `to`，未跟踪的文件移到废纸篓。
     ///
-    /// 打开着的文档由目录监视仍然重新读取。
-    pub(in crate::app) fn git_rollback(&mut self, paths: Vec<PathBuf>) {
+    /// 回滚到 `HEAD` 时，新加入版本管理的文件从暂存区移除并移到废纸篓。已打开的文档由目录监视
+    /// 重新读取。
+    pub(in crate::app) fn git_rollback(&mut self, paths: Vec<PathBuf>, to: RollbackTo) {
         let Some(status) = self.git.status.as_ref() else {
             return;
         };
@@ -683,6 +717,8 @@ impl App {
         for entry in status.entries.iter().filter(|e| paths.contains(&e.path)) {
             if entry.untracked() {
                 trash.push(entry.path.clone());
+            } else if to == RollbackTo::Index {
+                restore.push(entry.path.clone());
             } else if entry.staged == Some(winc_editor::git::Change::Added) {
                 added.push(entry.path.clone());
                 trash.push(entry.path.clone());
@@ -731,7 +767,10 @@ impl App {
         self.git.commit.busy = true;
         self.run_git_job(move |git, root| {
             let result = git
-                .and_then(|git| git.rollback(root, &restore, &added))
+                .and_then(|git| match to {
+                    RollbackTo::Head => git.rollback(root, &restore, &added),
+                    RollbackTo::Index => git.discard_unstaged(root, &restore),
+                })
                 .map(|()| count);
             let _ = sender.send(Outcome::RolledBack(result, root.to_path_buf()));
         });

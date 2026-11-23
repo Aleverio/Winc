@@ -1,11 +1,27 @@
 //! 暂存、提交和回滚。
 //!
 //! [`Git::unstage`]、[`Git::stage_content`] 改写暂存区，[`Git::commit`] 提交暂存区的内容，
-//! [`Git::rollback`] 把文件恢复成 `HEAD` 里的内容。
+//! [`Git::rollback`] 把文件恢复为 `HEAD` 中的版本，[`Git::discard_unstaged`] 把工作区恢复为暂存区
+//! 中的版本。
 
 use super::*;
 
 impl Git {
+    /// 把已跟踪的 `paths` 在工作区中恢复为暂存区中的版本（`git restore --worktree`）。
+    ///
+    /// # Errors
+    ///
+    /// `git` 报错时返回它的说明。
+    pub fn discard_unstaged(&self, root: &Path, paths: &[PathBuf]) -> Result<(), String> {
+        self.require_trust(root)?;
+        let mut command = self.command(root);
+        command
+            .args(["restore", "--worktree", "--"])
+            .args(relative_all(root, paths));
+        self.run(&mut command, STATUS_TIMEOUT, &Cancel::default())
+            .map(drop)
+    }
+
     /// 回滚已跟踪的 `paths`：暂存区和工作区都恢复成 `HEAD` 里的内容（`git restore`）。
     ///
     /// `added` 是 `HEAD` 里没有、新加入版本管理的文件，只从暂存区移除，工作区里的文件由调用方处理。

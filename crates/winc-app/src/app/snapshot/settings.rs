@@ -1223,6 +1223,12 @@ fn the_git_page_is_listed_only_when_the_module_is_on() {
     assert!(app.switch_on(Setting::GitTree));
     app.settings_toggle(Setting::GitTree);
     assert!(app.git.commit.flat() && !app.state.commit_tree);
+    // 配置文件中打开「暂存区布局」后，提交视图随之切换。
+    assert!(!app.git.commit.staging());
+    let mut config = app.config.clone();
+    config.git_staging_area = Some(true);
+    app.adopt_config(config);
+    assert!(app.git.commit.staging());
 
     // 配置文件中关闭 Git 模块：不再列出该页，停在该页时改到模块页。
     let mut config = app.config.clone();

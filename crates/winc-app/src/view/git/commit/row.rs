@@ -140,7 +140,26 @@ pub(super) fn draw_row(
     }
 }
 
-/// 画分组的标题行：箭头、勾选框、标题和文件数，悬停时显示回滚及暂存、取消暂存按钮。
+/// 组标题悬停时右端的两个按钮，位置同文件行的按钮；返回 `None` 时显示文件数。
+///
+/// 冲突组没有按钮：回滚会丢失解决到一半的内容。
+fn group_actions(
+    group: CommitGroup,
+    staging: bool,
+    checked: bool,
+) -> Option<[Option<CommitTarget>; 2]> {
+    match (group, staging) {
+        (CommitGroup::Conflicts, _) => None,
+        (CommitGroup::Staged, true) => Some([None, Some(CommitTarget::GroupStage(group))]),
+        (_, true) => Some([
+            Some(CommitTarget::GroupRevert(group)),
+            Some(CommitTarget::GroupStage(group)),
+        ]),
+        (_, false) => checked.then_some([None, Some(CommitTarget::GroupRevert(group))]),
+    }
+}
+
+/// 画分组的标题行：箭头、勾选框、标题和文件数，悬停时文件数换成按钮（见 [`group_actions`]）。
 fn draw_group_row(
     app: &App,
     frame: &mut Frame<'_>,
@@ -187,18 +206,13 @@ fn draw_group_row(
         p.text_muted,
         list,
     );
-    // 悬停时右端显示回滚，暂存区视图在旁边另加暂存、取消暂存。冲突组没有这些操作，以免丢掉
-    // 解决到一半的内容；勾选式下仍只回滚勾上的文件。
-    let staging = r.staging;
-    let acts = hovered && group != CommitGroup::Conflicts && (staging || state.is_some());
-    if acts {
+    let actions = group_actions(group, r.staging, state.is_some()).filter(|_| hovered);
+    if let Some(actions) = actions {
         let (first, last) = file_actions(band);
-        let revert = if staging { first } else { last };
-        let actions = [
-            Some((revert, CommitTarget::GroupRevert(group))),
-            staging.then_some((last, CommitTarget::GroupStage(group))),
-        ];
-        for (rect, target) in actions.into_iter().flatten() {
+        for (rect, target) in [first, last].into_iter().zip(actions) {
+            let Some(target) = target else {
+                continue;
+            };
             let on = app.pointer.hover == Hover::Commit(target);
             draw_button(frame, p, rect, list, on, false);
             let color = if on { p.text } else { p.text_muted };

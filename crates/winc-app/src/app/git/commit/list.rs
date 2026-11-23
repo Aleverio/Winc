@@ -459,7 +459,7 @@ impl App {
                     self.focus = Focus::Editor;
                 }
             }
-            _ => self.confirm_rollback(paths),
+            _ => self.confirm_commit_rollback(paths),
         }
         self.request_redraw();
         true
@@ -584,7 +584,7 @@ impl App {
             Key::Named(NamedKey::Backspace | NamedKey::Delete) => {
                 let paths = self.commit_selection();
                 if !paths.is_empty() {
-                    self.confirm_rollback(paths);
+                    self.confirm_commit_rollback(paths);
                 }
             }
             Key::Named(NamedKey::Enter) => {

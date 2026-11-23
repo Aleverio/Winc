@@ -206,6 +206,7 @@ fn git_layout_tree_applies_to_other_repositories() {
     let _ = std::fs::remove_dir_all(&folder);
 }
 
+/// 暂存区视图按暂存区和工作区分组；切换视图只改变分组，不改变仓库状态。
 #[test]
 fn staging_groups_partition_index_and_worktree_changes() {
     use crate::app::CommitGroup::{Changes, Conflicts, Staged, Untracked};
