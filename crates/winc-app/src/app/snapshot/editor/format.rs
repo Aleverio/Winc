@@ -53,6 +53,45 @@ fn use_reindent(app: &mut App, dir: &Path) {
         .insert("rust".to_owned(), format!("'{}'", tool.display()));
 }
 
+pub(in crate::app::snapshot) fn empty_tool_bin() -> PathBuf {
+    let bin = std::env::temp_dir().join("winc-test-empty-bin");
+    let _ = std::fs::create_dir_all(&bin);
+    // Sediakan command dasar yang dipakai script/fake tool, tapi jangan
+    // expose prettier/biome/npm/npx dari sistem.
+    for name in [
+        "cat", "chmod", "cp", "echo", "env", "false", "grep", "head", "ln", "ls", "mkdir", "mv",
+        "printf", "pwd", "rm", "sed", "sh", "sleep", "tail", "test", "touch", "tr", "true",
+        "uname", "wc",
+    ] {
+        let dst = bin.join(name);
+        if dst.exists() {
+            continue;
+        }
+        for dir in ["/usr/bin", "/bin"] {
+            let src = Path::new(dir).join(name);
+            if src.exists() {
+                #[cfg(unix)]
+                {
+                    let _ = std::os::unix::fs::symlink(&src, &dst);
+                }
+                break;
+            }
+        }
+    }
+    bin
+}
+
+/// Isolasi deteksi tool global (prettier/biome/dll) supaya test tidak
+/// bergantung environment mesin. Tools yang memang dibutuhkan test tetap
+/// dipanggil lewat path absolut di config.
+pub(in crate::app::snapshot) fn without_path_tools(app: &mut App) {
+    let bin = empty_tool_bin();
+    app.format.formatter = winc_editor::format::Formatter::with_vars(vec![(
+        std::ffi::OsString::from("PATH"),
+        bin.into_os_string(),
+    )]);
+}
+
 fn text(app: &App) -> String {
     app.editor
         .active()
@@ -230,6 +269,7 @@ fn closing_the_tab_stops_the_tool() {
 fn failures_explain_themselves_and_leave_the_text_alone() {
     let dir = format_folder("format-fail");
     let mut app = app_with(&dir, false);
+    without_path_tools(&mut app);
     app.open_path(&dir.join("src/main.rs"));
     let before = text(&app);
     let tool = fake_tool(
@@ -305,7 +345,7 @@ fn failures_explain_themselves_and_leave_the_text_alone() {
     // 安装了排在候选列表后面的 Biome：改用 Biome。
     let biome = fake_tool(&dir.join("bin"), "biome", "tr a-z A-Z");
     warm_up(&biome);
-    let path = std::env::join_paths([dir.join("bin"), "/usr/bin".into(), "/bin".into()]).unwrap();
+    let path = std::env::join_paths([dir.join("bin"), empty_tool_bin()]).unwrap();
     app.format.formatter = Formatter::with_vars(vec![("PATH".into(), path)]);
     app.open_path(&dir.join("app.js"));
     app.format_active();
@@ -356,6 +396,7 @@ fn project_tools_run_only_after_asking() {
     std::fs::write(dir.join(".prettierrc"), "{}").unwrap();
     fake_tool(&dir.join("node_modules/.bin"), "prettier", "sed 's/$/;/'");
     let mut app = app_with(&dir, false);
+    without_path_tools(&mut app);
     app.open_path(&dir.join("app.js"));
 
     // 尚未询问用户：不运行项目中的工具（测试中无法弹出确认框），并提示原因。
@@ -535,6 +576,7 @@ fn project_enabling_format_on_save_asks_first() {
 fn saving_formats_first_and_always_saves() {
     let dir = format_folder("format-save");
     let mut app = app_with(&dir, false);
+    without_path_tools(&mut app);
     app.open_path(&dir.join("src/main.rs"));
     use_reindent(&mut app, &dir);
     let on_disk = || std::fs::read_to_string(dir.join("src/main.rs")).unwrap();

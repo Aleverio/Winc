@@ -67,9 +67,31 @@ fn settings_font_name_is_checked_and_can_be_abandoned() {
         ))
     );
 
-    // 字体列表中逐个检查，写明第一个找不到的字体（第一项是系统中已安装的任一字族）。
-    if let Some(family) = winc_render::installed_fonts().first() {
-        let list = format!("{}, 绝对不存在的字体 ZZZ, 另一个 YYY", family.name);
+    // 字体列表中逐个检查，写明第一个找不到的字体。Gunakan font yang benar-benar
+    // bisa dipakai di mesin ini, bukan sekadar terdaftar di fontconfig (mis. icomoon).
+    // Cari font yang benar-benar lolos commit di UI, bukan sekadar lolos check statis
+    // atau terdaftar dengan nama aneh di fontconfig.
+    let usable = winc_render::installed_fonts().into_iter().find(|family| {
+        let name = family.name.trim();
+        if name.is_empty() || name.chars().any(char::is_control) {
+            return false;
+        }
+        if crate::app::lifecycle::appearance::unusable_font(&Some(name.to_owned())).is_some() {
+            return false;
+        }
+        app.settings_start_editing(Setting::EditorFont);
+        app.edit_field(|f| {
+            f.select_all();
+            f.insert(name)
+        });
+        app.settings_commit_field();
+        let ok = app.settings.error.is_none() && app.settings.editing.is_none();
+        // Kembalikan ke state editing untuk alur test asli.
+        app.settings_start_editing(Setting::EditorFont);
+        ok
+    });
+    if let Some(family) = usable {
+        let list = format!("{}, 绝对不存在的字体 ZZZ, 另一个 YYY", family.name.trim());
         app.edit_field(|f| {
             f.select_all();
             f.insert(&list)

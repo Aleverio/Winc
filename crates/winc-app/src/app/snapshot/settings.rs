@@ -599,12 +599,18 @@ fn settings_body_scrolls_when_the_window_is_short() {
     app.layout.window.h = 280.0;
     let body = app.settings_layout().body;
     app.on_mouse_move(body.x + 20.0, body.y + 20.0);
-    app.on_wheel(MouseScrollDelta::PixelDelta(PhysicalPosition::new(
-        0.0, -2000.0,
-    )));
     let max = app.settings_layout().max_scroll();
     assert!(max > 0.0);
-    assert_eq!(app.settings.scroll, max);
+    // Mouse wheel can be turned into a short glide; send enough notches to reach the end.
+    for _ in 0..30 {
+        app.on_wheel(MouseScrollDelta::PixelDelta(PhysicalPosition::new(
+            0.0, -120.0,
+        )));
+        if (app.settings.scroll - max).abs() < 0.5 {
+            break;
+        }
+    }
+    assert!((app.settings.scroll - max).abs() < 0.5);
 
     let _ = std::fs::remove_dir_all(&dir);
 }
