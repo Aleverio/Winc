@@ -78,11 +78,40 @@ impl App {
 
     /// 隐藏窗口（macOS 上关闭窗口时）：应用留在程序坞中，点击图标时由 [`App::show_window`]
     /// 重新显示。
+    ///
+    /// 全屏的窗口不直接隐藏，否则留下黑色的全屏空间：还有别的窗口时它随后被关掉，由系统退出
+    /// 全屏；否则先退出全屏，完成后再隐藏（[`App::finish_hiding`]）。
     pub(super) fn hide_window(&mut self) {
+        self.window.hidden = true;
+        #[cfg(target_os = "macos")]
+        if let Some(window) = (self.window.handle.as_ref()).filter(|w| w.fullscreen().is_some())
+            && (self.link.shared.others() || self.link.traffic_lights.is_some())
+        {
+            if !self.link.shared.others() {
+                window.set_fullscreen(None);
+                self.window.hide_after_fullscreen = true;
+            }
+            return;
+        }
         if let Some(window) = &self.window.handle {
             window.set_visible(false);
         }
-        self.window.hidden = true;
+    }
+
+    /// 关闭时开始的退出全屏已经完成：隐藏窗口（见 [`App::hide_window`]）。
+    #[cfg(target_os = "macos")]
+    pub(in crate::app) fn finish_hiding(&mut self) {
+        let windowed =
+            (self.link.traffic_lights.as_ref()).is_none_or(crate::macos::TrafficLights::windowed);
+        if !self.window.hide_after_fullscreen || !windowed {
+            return;
+        }
+        self.window.hide_after_fullscreen = false;
+        if self.window.hidden
+            && let Some(window) = &self.window.handle
+        {
+            window.set_visible(false);
+        }
     }
 
     /// 打开 `targets` 里的文件（目录跳过：已经是本窗口的目录），`文件:行:列` 跳到该位置，再把
@@ -218,6 +247,10 @@ impl App {
             return;
         }
         self.window.hidden = false;
+        #[cfg(target_os = "macos")]
+        {
+            self.window.hide_after_fullscreen = false;
+        }
         // 关着时系统当它看不见；显示之前先画好一帧，不等 `Occluded(false)`。
         self.set_occluded(false);
         self.relayout();
@@ -887,6 +920,9 @@ pub struct WindowState {
     pub(in crate::app) frame_due: Option<Instant>,
     /// 窗口是否完全不可见（被遮挡、最小化或位于其他桌面）；不可见时不绘制，窗口画面标记为可清除。
     pub(in crate::app) occluded: bool,
+    /// 关闭时窗口处于全屏：退出全屏完成后再隐藏（见 `App::hide_window`）。
+    #[cfg(target_os = "macos")]
+    pub(in crate::app) hide_after_fullscreen: bool,
 }
 
 impl Default for WindowState {
@@ -899,6 +935,8 @@ impl Default for WindowState {
             frame: None,
             frame_due: None,
             occluded: false,
+            #[cfg(target_os = "macos")]
+            hide_after_fullscreen: false,
         }
     }
 }

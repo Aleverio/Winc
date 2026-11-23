@@ -584,6 +584,8 @@ impl App {
             #[cfg(not(target_os = "macos"))]
             UserEvent::OfferMoveToApplications | UserEvent::MoveToApplications(..) => {}
             UserEvent::TrafficLightsMoved => {
+                #[cfg(target_os = "macos")]
+                self.finish_hiding();
                 self.relayout();
                 self.request_redraw();
             }
