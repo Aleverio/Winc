@@ -1207,11 +1207,9 @@ impl App {
                 Pick::SaveProject => t!("cmd-save-project-as"),
                 Pick::Download(_) => t!("menu-download"),
             };
-            // 对话框的标题不带省略号；挂在窗口上，打开期间窗口不响应。
+            // 对话框的标题不带省略号；打开期间窗口不响应（`DialogOwner`）。
             let mut dialog = rfd::FileDialog::new().set_title(title.trim_end_matches('…'));
-            if let Some(window) = &self.window.handle {
-                dialog = dialog.set_parent(&**window);
-            }
+            let main = (self.window.handle.as_deref()).and_then(crate::windows::MainWindow::of);
             if let Some(dir) = &dir {
                 dialog = dialog.set_directory(dir);
             }
@@ -1228,6 +1226,10 @@ impl App {
                     let home = winc_editor::wsl::home_dir(&root);
                     dialog = dialog.set_directory(home.unwrap_or(root));
                 }
+                let owner = main.and_then(crate::windows::DialogOwner::new);
+                if let Some(owner) = &owner {
+                    dialog = dialog.set_parent(owner);
+                }
                 let path = match &kind {
                     Pick::Open | Pick::BackgroundImage | Pick::KeyFile | Pick::OpenProject => {
                         dialog.pick_file()
@@ -1239,6 +1241,7 @@ impl App {
                     | Pick::Download(_) => dialog.pick_folder(),
                     Pick::SaveAs(_) | Pick::SaveProject => dialog.set_file_name(&name).save_file(),
                 };
+                drop(owner);
                 let _ = proxy.send_event(UserEvent::Picked(kind, path));
             });
         }
