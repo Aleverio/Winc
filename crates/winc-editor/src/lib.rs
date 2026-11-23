@@ -653,6 +653,19 @@ impl Editor {
         Ok(())
     }
 
+    /// 同 [`Editor::open_folder`]，但不在调用的线程上读目录（见 [`Workspace::open_later`]）：
+    /// 文件树先是空的，由调用方把待读的目录交给后台。
+    ///
+    /// # Errors
+    ///
+    /// 目录不存在时返回 `std::io::Error`。
+    pub fn open_folder_later(&mut self, path: &Path) -> std::io::Result<()> {
+        self.workspace = Some(Workspace::open_later(path)?);
+        self.bookmarks.clear();
+        self.folds.clear();
+        Ok(())
+    }
+
     fn allocate_id(&mut self) -> DocumentId {
         self.next_id += 1;
         DocumentId(self.next_id)

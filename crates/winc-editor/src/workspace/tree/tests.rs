@@ -849,3 +849,34 @@ fn created_and_renamed_entries_stay_below_their_folder() {
     assert_eq!(below(base, &base.join("ui/../../a")), None);
     assert_eq!(below(base, Path::new("/elsewhere/a.rs")), None);
 }
+
+/// 交给后台读的打开方式：先是空的，顶层和要展开到的各级目录由后台读好换入后才显示；都读好
+/// 以后展开目录就地读。读不出打开的目录本身时报告一次。
+#[test]
+fn a_folder_opened_for_the_background_fills_in_when_read() {
+    let dir = crate::test_util::scratch("tree-open-later");
+    std::fs::create_dir_all(dir.join("src/deep")).unwrap();
+    std::fs::create_dir_all(dir.join("other")).unwrap();
+    std::fs::write(dir.join("src/deep/a.rs"), "").unwrap();
+    std::fs::write(dir.join("other/b.rs"), "").unwrap();
+
+    let mut ws = Workspace::open_later(&dir).unwrap();
+    assert!(ws.rows().is_empty());
+    let file = ws.root.join("src/deep/a.rs");
+    ws.reveal(&file);
+    assert!(ws.rows().is_empty() && ws.selected.is_none());
+    // 待读的目录一批一批地读：换入后新露出的目录下一批再读。
+    while let Some(scan) = ws.take_missing() {
+        let listing = scan.run();
+        ws.apply_scan(listing);
+    }
+    assert_eq!(ws.selected_entry().map(|e| e.path.clone()), Some(file));
+    assert!(!ws.take_open_failure());
+
+    // 此后展开别的目录就地读，不再等后台。
+    let other = ws.rows().iter().position(|e| e.name == "other").unwrap();
+    ws.toggle(other);
+    assert!(ws.rows().iter().any(|e| e.name == "b.rs"));
+    assert!(ws.take_missing().is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}

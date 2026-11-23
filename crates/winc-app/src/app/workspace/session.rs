@@ -144,7 +144,12 @@ impl App {
         if let Some(index) = self.startup_file_index() {
             self.discard_tab(self.editor.documents[index].id);
         }
-        if let Err(e) = self.editor.open_folder(path) {
+        // 有事件循环时目录交给后台读：它可能在很慢的磁盘或网络盘上。测试中就地读。
+        let opened = match self.link.proxy {
+            Some(_) => self.editor.open_folder_later(path),
+            None => self.editor.open_folder(path),
+        };
+        if let Err(e) = opened {
             let name = winc_editor::display_name(path);
             self.notify(
                 NoticeKind::Error,
@@ -518,6 +523,12 @@ impl App {
         self.state = state;
         if changed {
             self.sync_system_recents();
+            // 开始页、菜单和选择面板按序号记着最近列表里的项：列表变了，画面上的还是旧的。
+            // 清掉可点击的区域，重绘之前的点击不会落到另一项上。
+            self.hits.clear();
+            if self.overlays.picker.open && self.overlays.picker.folders {
+                self.picker_refresh();
+            }
         }
         self.request_redraw();
     }

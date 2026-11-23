@@ -415,6 +415,7 @@ workspace-drop-to-open = 将文件或目录拖到窗口中即可打开
 workspace-picker-unavailable = 系统中无可用的选择面板。请安装 xdg-desktop-portal，或将文件、目录拖到窗口中打开
 workspace-picker-failed = 无法打开选择面板：{ $error }
 workspace-open-folder-failed = 无法打开目录「{ $name }」：{ $error }
+workspace-open-folder-unreadable = 无法读取「{ $name }」中的内容
 workspace-recent-missing = 未找到「{ $path }」，已从最近列表中移除
 workspace-folder-missing = 未找到「{ $path }」
 workspace-jump-list-recent = 最近打开的目录

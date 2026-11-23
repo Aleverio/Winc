@@ -275,6 +275,11 @@ impl Pty {
         None
     }
 
+    /// 返回会话号：Windows 上没有会话，只用于与其他平台的实现保持相同的签名。
+    pub fn session(&self) -> Pid {
+        0
+    }
+
     /// 返回前台程序：Windows 上不查询，总是 `None`，标签名跟随标题。
     pub fn foreground(&self) -> Option<(Pid, String)> {
         None
@@ -299,7 +304,7 @@ impl Drop for Pty {
 pub fn hang_up_job(_job: Pid) {}
 
 /// 结束前台作业（进程组）：Windows 上没有前台进程组，调用时什么也不做。
-pub fn kill_job(_job: Pid) {}
+pub fn kill_job(_job: Pid, _session: Option<Pid>) {}
 
 /// 返回前台作业（进程组）中是否还有进程：Windows 上没有前台进程组，总是返回 `false`。
 pub fn job_alive(_job: Pid) -> bool {

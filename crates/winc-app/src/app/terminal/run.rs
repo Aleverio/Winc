@@ -3,7 +3,7 @@
 //!
 //! 每个配置最多对应一个标签：再次运行时新标签替换旧标签。程序退出后标签保留，便于查看输出；运行
 //! 配置的标签不随现场恢复。没有配置文件时列出从项目文件识别出的命令，不写文件。配置和项目文件都来自
-//! 仓库，内容不可信：每个配置第一次运行前和内容改变后都要用户确认（[`RunConfig::fingerprint`]），
+//! 仓库，内容不可信：每个配置第一次运行前和内容改变后都要用户确认（[`RunConfig::approval`]），
 //! 只由用户的操作触发运行。
 
 use std::path::{Path, PathBuf};
@@ -361,7 +361,7 @@ impl App {
             return;
         };
         let key = trust_key(root, &config);
-        let trusted = self.state.trusted_repo(&key) == Some(config.fingerprint());
+        let trusted = self.state.command_approved(&key, &config.approval());
         // 没有窗口（测试）时无法询问，也不会有用户的操作触发运行。
         if trusted || self.window.handle.is_none() {
             self.start_run(config);
@@ -399,8 +399,8 @@ impl App {
     pub(crate) fn approved_run(&mut self, config: RunConfig) {
         if let Some(root) = self.editor.root() {
             let key = trust_key(root, &config);
-            let fingerprint = config.fingerprint();
-            self.update_state(move |state| state.trust_repo(&key, fingerprint));
+            let approval = config.approval();
+            self.update_state(move |state| state.approve_command_only(&key, &approval));
         }
         self.start_run(config);
     }
@@ -552,17 +552,17 @@ impl App {
         }
     }
 
-    /// 记下当前文件中所有配置的指纹。
+    /// 记下当前文件中所有配置的内容，运行时不再询问。
     fn trust_run_configs(&mut self) {
         let Some(root) = self.editor.root().map(Path::to_path_buf) else {
             return;
         };
-        let trusted: Vec<(PathBuf, u64)> = (self.run.list.iter())
-            .map(|config| (trust_key(&root, config), config.fingerprint()))
+        let trusted: Vec<(PathBuf, String)> = (self.run.list.iter())
+            .map(|config| (trust_key(&root, config), config.approval()))
             .collect();
         self.update_state(move |state| {
-            for (key, fingerprint) in &trusted {
-                state.trust_repo(key, *fingerprint);
+            for (key, approval) in &trusted {
+                state.approve_command_only(key, approval);
             }
         });
     }

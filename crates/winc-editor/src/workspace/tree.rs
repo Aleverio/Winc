@@ -156,6 +156,10 @@ struct Missing {
     chains: HashSet<PathBuf>,
     /// 要选中、但所在目录尚未读好的路径（见 [`Workspace::reveal`]）。
     reveal: Option<PathBuf>,
+    /// 刚打开、各目录都交给后台读（见 [`Workspace::open_later`]）：要显示的目录都读好后为假。
+    deferring: bool,
+    /// 后台没能读出打开的目录本身，还没有告诉调用方（见 [`Workspace::take_open_failure`]）。
+    unreadable: bool,
 }
 
 impl Missing {
@@ -250,6 +254,28 @@ impl Workspace {
     ///
     /// 目录不存在、没有读权限，或读取顶层目录失败时返回对应的 `std::io::Error`。
     pub fn open(root: &Path) -> io::Result<Self> {
+        Self::open_with(root, false)
+    }
+
+    /// 同 [`Workspace::open`]，但不在调用的线程上读目录：顶层和恢复展开的各级目录先是空的，
+    /// 记为待读（[`Workspace::take_missing`]），由调用方交给后台读好后换入。
+    ///
+    /// 界面线程上用它打开目录：目录可能在很慢的磁盘或网络盘上。读不出打开的目录本身时由
+    /// [`Workspace::take_open_failure`] 报告。
+    ///
+    /// # Errors
+    ///
+    /// 目录不存在时返回对应的 `std::io::Error`。
+    pub fn open_later(root: &Path) -> io::Result<Self> {
+        Self::open_with(root, true)
+    }
+
+    /// 后台是否没能读出打开的目录本身（没有权限等）；只报告一次。
+    pub fn take_open_failure(&mut self) -> bool {
+        std::mem::take(&mut self.missing.unreadable)
+    }
+
+    fn open_with(root: &Path, later: bool) -> io::Result<Self> {
         let root = winc_config::files::canonicalize(root)?;
         let name = root.file_name().map_or_else(
             || root.display().to_string(),
@@ -279,7 +305,10 @@ impl Workspace {
             compact: true,
             expanded: HashSet::from([root]),
             children: HashMap::new(),
-            missing: Missing::default(),
+            missing: Missing {
+                deferring: later,
+                ..Missing::default()
+            },
             rows: Vec::new(),
         };
         workspace.rebuild();
@@ -426,7 +455,7 @@ impl Workspace {
 
         // 远端的目录由后台读取：各级上级目录的路径已经知道，一起要，不必等上一级读好才发现
         // 下一级。
-        let remote = winc_backend::is_remote(&self.root);
+        let remote = winc_backend::is_remote(&self.root) || self.missing.deferring;
         for component in relative.parent().into_iter().flat_map(Path::components) {
             current.push(component);
             self.expanded.insert(current.clone());
@@ -805,8 +834,9 @@ impl Workspace {
 
 /// 返回目录 `dir` 的内容；未缓存时先读取并写入 `cache`，无法读取的目录按空目录处理。
 ///
-/// 当前线程不能等待读取时（界面线程上的远端目录）不写入缓存，把目录记入 `missing`，这次按空
-/// 目录处理，读好后由 [`Workspace::apply_scan`] 换入。
+/// 当前线程不能等待读取时（界面线程上的远端目录），或工作区刚打开、目录都交给后台读时
+/// （[`Workspace::open_later`]）不写入缓存，把目录记入 `missing`，这次按空目录处理，读好后由
+/// [`Workspace::apply_scan`] 换入。
 fn cached_children(
     cache: &mut HashMap<PathBuf, Rc<[DirEntry]>>,
     missing: &mut Missing,
@@ -814,6 +844,10 @@ fn cached_children(
 ) -> Rc<[DirEntry]> {
     if let Some(children) = cache.get(dir) {
         return Rc::clone(children);
+    }
+    if missing.deferring {
+        missing.want(dir.to_path_buf());
+        return Rc::from([]);
     }
     let children: Rc<[DirEntry]> = match list_dir(dir) {
         Ok(children) => children.into(),

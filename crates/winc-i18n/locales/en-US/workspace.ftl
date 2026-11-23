@@ -497,6 +497,7 @@ workspace-drop-to-open = Drag a file or folder into the window to open it
 workspace-picker-unavailable = No file chooser is available. Install xdg-desktop-portal, or drag files and folders into the window to open them
 workspace-picker-failed = Couldn’t open the file chooser: { $error }
 workspace-open-folder-failed = Couldn’t open folder “{ $name }”: { $error }
+workspace-open-folder-unreadable = Couldn’t read the contents of “{ $name }”
 workspace-recent-missing = Couldn’t find “{ $path }”; removed it from the recent list
 workspace-folder-missing = Couldn’t find “{ $path }”
 workspace-jump-list-recent = Recent Folders

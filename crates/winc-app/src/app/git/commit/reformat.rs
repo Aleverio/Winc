@@ -144,7 +144,8 @@ impl App {
             let message = t!("git-commit-reformat-failed", count = failed);
             self.notify(NoticeKind::Warning, message);
         } else if count > 0 {
-            self.flash(t!("git-commit-reformatted", count = count));
+            let message = t!("git-commit-reformatted", count = count);
+            self.notify(NoticeKind::Done, message);
         }
         self.git.commit.reformat_passed = true;
         self.git_commit_resumed();

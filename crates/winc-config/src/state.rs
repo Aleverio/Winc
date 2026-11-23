@@ -1099,6 +1099,13 @@ impl State {
         self.approved_commands.truncate(MAX_TOOL_CHOICES);
     }
 
+    /// 记录用户同意运行 `folder` 名下内容为 `command` 的那一项，取代它此前同意过的内容：
+    /// 用于一个键只对应一项的情形（运行配置按名字各记一项）。
+    pub fn approve_command_only(&mut self, folder: &Path, command: &str) {
+        self.approved_commands.retain(|(p, _)| p != folder);
+        self.approve_command(folder, command);
+    }
+
     /// 返回用户信任 Git 仓库 `root` 的配置时记下的指纹；没有信任过时返回 `None`。
     pub fn trusted_repo(&self, root: &Path) -> Option<u64> {
         self.trusted_repos

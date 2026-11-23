@@ -362,8 +362,15 @@ impl App {
                 superseded |= !current;
                 current
             });
+            let mut unreadable = None;
             if let Some(ws) = &mut self.editor.workspace {
                 changed |= ws.apply_scan(listing);
+                unreadable = ws.take_open_failure().then(|| ws.name.clone());
+            }
+            // 刚打开的目录读不出来（没有权限等）：文件树是空的，说明原因。
+            if let Some(name) = unreadable {
+                let message = winc_i18n::t!("workspace-open-folder-unreadable", name = name);
+                self.notify(NoticeKind::Error, message);
             }
             // 这一批要接着做的事，连同之前改为等下一批的；有目录被取代时内容还不是最新的，再等。
             let after = std::mem::take(&mut self.panels.tree.scans.after);

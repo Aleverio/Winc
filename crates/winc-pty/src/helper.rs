@@ -81,6 +81,8 @@ struct Tab {
     pasting: Option<bool>,
     /// 是否读到了结尾（从端都关了）。
     eof: bool,
+    /// 读到了、这一轮的工作量用完时还没交给终端仿真的输出，下一轮先处理。
+    unfed: Vec<u8>,
     /// 开始等待同步输出结束的时刻；不在同步中时为 `None`。
     sync_since: Option<Instant>,
     /// 上次查到的前台进程（进程号、名字），用于发现前台程序的变化；名字用于发现同一进程的 `exec`。
@@ -254,7 +256,10 @@ impl Helper {
         self.flush()?;
         // 唤醒只在后台线程读到新的字节时发生：这一轮没有取完的（消息一次读一块，输出有每轮
         // 的上限）留到下一轮，不等下一次唤醒。
-        let unread = |tab: &Tab| !tab.eof && tab.pty.as_ref().is_some_and(pty::Pty::has_output);
+        let unread = |tab: &Tab| {
+            let waiting = !tab.eof && tab.pty.as_ref().is_some_and(pty::Pty::has_output);
+            waiting || !tab.unfed.is_empty()
+        };
         if pty::stdin_pending() || self.tabs.values().any(unread) {
             pty::wake();
         }
@@ -298,7 +303,8 @@ impl Helper {
         }
         for (fd, id) in fds[2..].iter().zip(ids) {
             if let Some(tab) = self.tabs.get_mut(&id) {
-                if fd.revents & (libc::POLLIN | libc::POLLHUP | libc::POLLERR) != 0 {
+                let readable = fd.revents & (libc::POLLIN | libc::POLLHUP | libc::POLLERR) != 0;
+                if readable || !tab.unfed.is_empty() {
                     read_output(tab, &mut self.buf);
                 }
                 if fd.revents & libc::POLLOUT != 0 {
@@ -336,7 +342,10 @@ impl Helper {
         let processes = (self.tabs.values())
             .filter(|t| t.process_due)
             .map(|t| t.process_checked.map_or(now, |at| at + PROCESS_INTERVAL));
+        // 上一轮没处理完的输出：不等新的输出，马上再来一轮。
+        let unfed = (self.tabs.values().any(|t| !t.unfed.is_empty())).then_some(now);
         match sync
+            .chain(unfed)
             .chain(kills)
             .chain(stops)
             .chain(jobs)
@@ -580,6 +589,7 @@ impl Helper {
                         credit: true,
                         pasting: None,
                         eof: false,
+                        unfed: Vec::new(),
                         sync_since: None,
                         process: None,
                         process_checked: None,
@@ -660,7 +670,7 @@ impl Helper {
             if closing.kill_at.is_some_and(|at| now >= at) {
                 closing.pty.kill(closing.reaped);
                 if let Some(job) = closing.job {
-                    pty::kill_job(job);
+                    pty::kill_job(job, Some(closing.pty.session()));
                 }
                 closing.kill_at = None;
             }
@@ -673,7 +683,7 @@ impl Helper {
                     pty.kill(false);
                 }
                 if let Some(job) = job {
-                    pty::kill_job(job);
+                    pty::kill_job(job, tab.pty.as_ref().map(pty::Pty::session));
                 }
                 tab.stopping = None;
             }
@@ -846,10 +856,40 @@ fn pollfd(fd: i32, events: libc::c_short) -> libc::pollfd {
     }
 }
 
-/// 把伪终端里现有的输出交给终端仿真，一次最多读 [`READ_BUDGET`]。
+/// 一次交给终端仿真的输出的大小（字节，4 KiB）：每交一段核对一次这一轮的工作量。
+///
+/// 重复序列几个字节就能写满一屏，工作量只有处理过才知道；一段里全是这种序列时最多超出
+/// 约五百屏的写入，再小则核对的次数增多。
+const FEED_PIECE: usize = 4 << 10;
+
+/// 把 `bytes` 一段一段交给终端仿真 `term`，这一轮的工作量 `total` 达到 [`READ_BUDGET`] 时
+/// 停下，返回交出去的字节数。工作量是字节数加上重复序列写入的格数。
+fn feed(term: &mut Terminal, bytes: &[u8], total: &mut usize) -> usize {
+    let mut fed = 0;
+    for piece in bytes.chunks(FEED_PIECE) {
+        if *total >= READ_BUDGET {
+            break;
+        }
+        term.feed(piece);
+        fed += piece.len();
+        *total += piece.len() + term.take_work();
+    }
+    fed
+}
+
+/// 把伪终端里现有的输出交给终端仿真，一轮的工作量最多 [`READ_BUDGET`]；读到了还没处理的
+/// 留在 [`Tab::unfed`]，下一轮先处理。
 fn read_output(tab: &mut Tab, buf: &mut [u8]) {
-    let Some(pty) = &tab.pty else { return };
     let mut total = 0;
+    if !tab.unfed.is_empty() {
+        let pending = std::mem::take(&mut tab.unfed);
+        let fed = feed(&mut tab.term, &pending, &mut total);
+        if fed < pending.len() {
+            tab.unfed = pending[fed..].to_vec();
+            return;
+        }
+    }
+    let Some(pty) = &tab.pty else { return };
     while total < READ_BUDGET {
         match pty.read(buf) {
             Ok(0) => {
@@ -859,8 +899,8 @@ fn read_output(tab: &mut Tab, buf: &mut [u8]) {
                 break;
             }
             Ok(n) => {
-                tab.term.feed(&buf[..n]);
-                total += n;
+                let fed = feed(&mut tab.term, &buf[..n], &mut total);
+                tab.unfed.extend_from_slice(&buf[fed..n]);
             }
             Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
             Err(_) => break,

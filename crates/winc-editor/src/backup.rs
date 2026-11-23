@@ -397,8 +397,20 @@ impl Editor {
     /// 文件现在无法打开或只读（例如被替换成二进制文件）时，内容放进一个新的未命名标签，不会丢失；
     /// 备份的正文读不出来（文件损坏、不是 UTF-8 文本）时不恢复，返回 `None`，备份文件保留不变。
     pub fn restore_backup(&mut self, backup: &Backup) -> Option<(usize, bool)> {
-        // 正文在这里才读，读完这一个备份就释放，不和其他备份的正文同时留在内存里。
-        let text = backup.text().ok()?;
+        self.restore_backup_with(backup, None)
+    }
+
+    /// 同 [`Editor::restore_backup`]；`text` 是调用方已经读好的正文，没有时在这里读。
+    pub fn restore_backup_with(
+        &mut self,
+        backup: &Backup,
+        text: Option<String>,
+    ) -> Option<(usize, bool)> {
+        // 没有读好的正文在这里才读，读完这一个备份就释放，不和其他备份的正文同时留在内存里。
+        let text = match text {
+            Some(text) => text,
+            None => backup.text().ok()?,
+        };
         let index = match &backup.path {
             Some(path) if path.exists() => Some(self.open(path)),
             Some(path) => {
