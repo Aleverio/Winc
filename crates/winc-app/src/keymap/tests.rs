@@ -50,6 +50,23 @@ fn terminal_switching_uses_one_key_set_and_leaves_program_paging() {
     }
 }
 
+/// VS Code 方案中切到第 N 个标签页：macOS 上是 Ctrl+数字，其他系统上是 Alt+数字。IDEA 本身
+/// 没有对应的默认键，IDEA 方案不绑定。
+#[test]
+fn numbered_tab_keys_follow_vscode() {
+    for os in ALL_OS {
+        let mods = if os == Os::Mac { Mods::CTRL } else { Mods::ALT };
+        for (index, action) in Action::TAB_FOCUS.into_iter().enumerate() {
+            assert_eq!(action.tab_index(), Some(index));
+            assert!(ACTIONS.contains(&action));
+            let key = KeyCode::Char(char::from(b'1' + index as u8));
+            assert_eq!(runs(os, mods, key, Context::Editor), Some(action));
+            let idea = Preset::Idea.bindings(os);
+            assert!(!idea.iter().any(|binding| binding.action == action));
+        }
+    }
+}
+
 #[test]
 fn terminal_clipboard_keys_follow_each_system() {
     use Action::{TerminalCopy, TerminalPaste};

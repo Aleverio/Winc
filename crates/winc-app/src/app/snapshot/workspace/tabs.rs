@@ -79,6 +79,27 @@ fn tabs_fit_their_names() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// 「转到第 N 个标签页」按标签栏的顺序切换；没有第 N 个标签页时不切换。
+#[test]
+fn numbered_tab_commands_switch_by_position() {
+    use crate::keymap::Action;
+    let dir = search_folder("tab-numbers");
+    let mut app = app_with(&dir.join("src/main.rs"), false);
+    app.open_path(&dir.join("src/config.rs"));
+    app.open_path(&dir.join("Cargo.toml"));
+    let active = |app: &App| app.editor.active().map(|d| d.name().into_owned());
+
+    app.focus = Focus::Terminal;
+    app.run_action(Action::FocusTab1);
+    assert_eq!(active(&app).as_deref(), Some("main.rs"));
+    assert_eq!(app.focus, Focus::Editor);
+    app.run_action(Action::FocusTab3);
+    assert_eq!(active(&app).as_deref(), Some("Cargo.toml"));
+    app.run_action(Action::FocusTab9);
+    assert_eq!(active(&app).as_deref(), Some("Cargo.toml"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn dragging_a_tab_reorders_the_tabs() {
     let dir = search_folder("tabs-drag");

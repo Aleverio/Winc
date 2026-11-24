@@ -157,6 +157,12 @@ impl App {
             PreviousTerminalPane => self.cycle_terminal_pane(false),
             NextTab => self.cycle_tab(true),
             PreviousTab => self.cycle_tab(false),
+            FocusTab1 | FocusTab2 | FocusTab3 | FocusTab4 | FocusTab5 | FocusTab6 | FocusTab7
+            | FocusTab8 | FocusTab9 => {
+                if let Some(index) = action.tab_index() {
+                    self.focus_tab_number(index);
+                }
+            }
             CloseFolder => self.close_folder(),
             // 只有一个窗口，关闭窗口就是退出，未保存的内容按退出的流程备份或询问。
             CloseWindow => self.request_close_window(),

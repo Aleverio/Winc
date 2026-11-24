@@ -49,6 +49,15 @@ pub enum Action {
     ReopenClosed,
     NextTab,
     PreviousTab,
+    FocusTab1,
+    FocusTab2,
+    FocusTab3,
+    FocusTab4,
+    FocusTab5,
+    FocusTab6,
+    FocusTab7,
+    FocusTab8,
+    FocusTab9,
     SplitRight,
     SplitDown,
     MoveToSplitRight,
@@ -407,6 +416,24 @@ impl Action {
         Self::FocusTerminal9,
     ];
 
+    /// 按顺序切到编辑区第 1 至第 9 个标签页的命令，供数字键绑定和编号查询共用。
+    pub const TAB_FOCUS: [Self; 9] = [
+        Self::FocusTab1,
+        Self::FocusTab2,
+        Self::FocusTab3,
+        Self::FocusTab4,
+        Self::FocusTab5,
+        Self::FocusTab6,
+        Self::FocusTab7,
+        Self::FocusTab8,
+        Self::FocusTab9,
+    ];
+
+    /// 返回切换标签页命令的标签下标（从 0 起），其他命令返回 `None`。
+    pub fn tab_index(self) -> Option<usize> {
+        Self::TAB_FOCUS.iter().position(|action| *action == self)
+    }
+
     /// 返回终端聚焦命令的标签下标（从 0 起），其他命令返回 `None`。
     pub fn terminal_index(self) -> Option<usize> {
         Self::TERMINAL_FOCUS
@@ -449,6 +476,15 @@ impl Action {
             ReopenClosed => t!("cmd-reopen-closed"),
             NextTab => t!("cmd-next-tab"),
             PreviousTab => t!("cmd-previous-tab"),
+            FocusTab1 => t!("cmd-tab-1"),
+            FocusTab2 => t!("cmd-tab-2"),
+            FocusTab3 => t!("cmd-tab-3"),
+            FocusTab4 => t!("cmd-tab-4"),
+            FocusTab5 => t!("cmd-tab-5"),
+            FocusTab6 => t!("cmd-tab-6"),
+            FocusTab7 => t!("cmd-tab-7"),
+            FocusTab8 => t!("cmd-tab-8"),
+            FocusTab9 => t!("cmd-tab-9"),
             SplitRight => t!("cmd-split-right"),
             SplitDown => t!("cmd-split-down"),
             MoveToSplitRight => t!("cmd-move-to-split-right"),
@@ -745,9 +781,12 @@ impl Action {
             | UninstallShellCommand => Group::General,
             NewFile | OpenFile | OpenFolder | OpenProject | AddFolder | SaveProjectAs
             | RemoteConnect | RemoteDisconnect | Save | SaveAs | CloseTab | CloseOtherTabs
-            | CloseAllTabs | ReopenClosed | NextTab | PreviousTab | CloseFolder | CloseWindow
-            | CopyPath | CopyRelativePath | RevealInFinder | CopyActivePath | CopyKeyPath
-            | RevealActiveFile | OpenInTerminal | Quit => Group::File,
+            | CloseAllTabs | ReopenClosed | NextTab | PreviousTab | FocusTab1 | FocusTab2
+            | FocusTab3 | FocusTab4 | FocusTab5 | FocusTab6 | FocusTab7 | FocusTab8 | FocusTab9
+            | CloseFolder | CloseWindow | CopyPath | CopyRelativePath | RevealInFinder
+            | CopyActivePath | CopyKeyPath | RevealActiveFile | OpenInTerminal | Quit => {
+                Group::File
+            }
             NewWindow | OpenRecent | CopyReference | CopyAbsoluteReference => Group::File,
             Undo
             | Redo

@@ -742,6 +742,13 @@ impl App {
         }
     }
 
+    /// 切到当前窗格的第 `index` 个标签页（从 0 起）；没有这个标签页时不做处理。
+    pub(in crate::app) fn focus_tab_number(&mut self, index: usize) {
+        if index < self.editor.tab_count() {
+            self.activate_tab(index);
+        }
+    }
+
     /// 保存当前文档（`⌘S`）。
     ///
     /// 未命名的文档和仍在读取的标准输入标签弹出「另存为」面板；开启了「保存时格式化」时先格式化
