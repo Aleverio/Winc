@@ -12,6 +12,7 @@ mod scratch;
 // 格式化的测试用 sh 脚本冒充格式化工具。
 #[cfg(unix)]
 pub(super) mod format;
+mod http;
 pub(super) mod navigation;
 pub(super) mod paste;
 pub(super) mod scrollbar;

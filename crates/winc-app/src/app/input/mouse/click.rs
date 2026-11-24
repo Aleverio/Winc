@@ -344,6 +344,9 @@ impl App {
             Target::Start(action) => self.run_start_action(action),
             Target::Sticky(row) => self.click_sticky(row, x),
             Target::Folded(line) => self.click_folded(line),
+            Target::HttpRun(line) => {
+                self.send_http_request(Some(line));
+            }
             Target::LongLine(line) => {
                 self.focus = Focus::Editor;
                 self.show_whole_line(line);

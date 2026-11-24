@@ -483,6 +483,35 @@ pub fn spin_turn() -> f32 {
     start.elapsed().as_secs_f32() * crate::theme::SPIN_SPEED
 }
 
+/// 运行（实心三角形，宽 7、高 8）：行号栏这类窄处的运行按钮，描边的 [`play`] 在其中显得拥挤。
+///
+/// 三角形的重心在宽度的三分之一处，整体右移宽度的六分之一，看起来位于 `(cx, cy)` 的正中。
+pub fn play_solid(frame: &mut Frame<'_>, (cx, cy): (f32, f32), color: Color, clip: Rect) {
+    let (w, h) = (7.0, 8.0);
+    let left = cx - w / 2.0 + w / 6.0;
+    let points = [(left, cy - h / 2.0), (left + w, cy), (left, cy + h / 2.0)];
+    frame.polygon(&points, color, clip);
+}
+
+/// 绘制按 `turn`（圈数，可为任意实数）顺时针转动的四分之三圆弧，表示操作正在进行，半径为
+/// `radius`（逻辑像素）。
+pub fn spinner(
+    frame: &mut Frame<'_>,
+    (cx, cy): (f32, f32),
+    radius: f32,
+    turn: f32,
+    color: Color,
+    clip: Rect,
+) {
+    // 起点映射到 -π 至 π 之间，原因见 [`refresh_turned`]。
+    let mut angle = turn.rem_euclid(1.0) * 2.0 * PI;
+    if angle >= PI {
+        angle -= 2.0 * PI;
+    }
+    let arc = Stroke::Arc(cx, cy, radius, angle, angle + 1.5 * PI);
+    frame.stroke(&[arc], RING_STROKE, color, clip);
+}
+
 /// 绘制按 `turn`（圈数，可为任意实数）顺时针旋转后的「刷新」图标，表示操作正在进行。
 pub fn refresh_turned(
     frame: &mut Frame<'_>,

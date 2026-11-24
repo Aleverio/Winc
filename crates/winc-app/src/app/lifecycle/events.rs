@@ -656,6 +656,7 @@ impl App {
             }
             UserEvent::Delete(paths, permanent) => self.delete_entries(&paths, permanent),
             UserEvent::Formatted => self.poll_formatting(),
+            UserEvent::HttpDone => self.poll_http(),
             UserEvent::ToolChoice(answer) => self.answer_tool_choice(*answer),
             UserEvent::GitTrust(root, fingerprint, trusted) => {
                 self.answer_git_trust(&root, fingerprint, trusted);

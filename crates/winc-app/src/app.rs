@@ -201,6 +201,8 @@ pub enum UserEvent {
     AttachFolder(PathBuf),
     /// 后台格式化已有结果。
     Formatted,
+    /// 后台发送的 `.http` 请求已有结果。
+    HttpDone,
     /// 提示框中回答了是否允许运行项目自带的格式化工具。
     ToolChoice(Box<ToolAnswer>),
     /// 确认框中同意运行参数所指的运行配置。
@@ -598,6 +600,8 @@ pub enum Hover {
     Gutter,
     /// 已折叠行末尾的 `⋯`，参数是行号（从 0 起）。
     Folded(usize),
+    /// `.http` 文件行号栏中发送请求的按钮，参数是请求行的行号（从 0 起）。
+    HttpRun(usize),
     /// 超长行截断说明中的「显示整行」，参数是行号（从 0 起）。
     LongLine(usize),
     /// 滚动条的可点击区域。
@@ -1033,6 +1037,8 @@ pub struct App {
 
     /// 保存时格式化和修复的状态。
     pub format: FormatState,
+    /// `.http` 请求文件中正在发送的请求和各文档的请求行。
+    pub(crate) http: editor::http::HttpState,
     /// Git 模块：仓库状态、文件树装饰，以及提交、日志、追溯、分支、合并各视图的状态。
     ///
     /// 模块关闭时为空。

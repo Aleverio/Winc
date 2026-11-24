@@ -562,6 +562,7 @@ impl App {
             RunConfiguration => self.run_current_config(),
             StopConfiguration => self.stop_current_config(),
             EditRunConfigurations => self.edit_run_configs(),
+            SendHttpRequest => return self.send_http_request(None),
             ClearTerminal => self.clear_terminal(),
             TerminalCopy => self.terminal_copy(false),
             TerminalPaste => self.terminal_paste(),
@@ -624,6 +625,8 @@ impl App {
             }
             action if action.markdown_only() && !self.markdown_keys() => return false,
             Action::EditRunConfigurations if self.editor.root().is_none() => return false,
+            // 只在 `.http` 请求文件中可用；其余文件中同一个键执行其他命令。
+            Action::SendHttpRequest if !self.active_is_http() => return false,
             // 窗格的命令只在有东西可拆、可换时可用，否则同一个键执行其他命令或交给终端。
             Action::SplitRight | Action::SplitDown if self.editor.active.is_none() => {
                 return false;

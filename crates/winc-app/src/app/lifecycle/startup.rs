@@ -213,6 +213,7 @@ impl App {
             setup: Default::default(),
             settings: SettingsState::default(),
             format: FormatState::new(formatter()),
+            http: Default::default(),
             git: {
                 let mut git = git::GitState::default();
                 git.commit.set_compact(compact);

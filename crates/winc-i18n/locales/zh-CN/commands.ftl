@@ -261,6 +261,7 @@ cmd-enable-terminal = 终端：启用内置终端
 cmd-run-configuration = 运行当前配置
 cmd-stop-configuration = 停止当前配置
 cmd-edit-run-configurations = 编辑运行配置
+cmd-send-http-request = 发送请求
 cmd-clear-terminal = 终端：清除
 cmd-terminal-copy = 终端：复制
 cmd-terminal-paste = 终端：粘贴

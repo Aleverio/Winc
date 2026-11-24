@@ -168,6 +168,8 @@ fn detects_common_languages_and_names() {
         ("Index.ets", "ArkTS"),
         ("Index.ETS", "ArkTS"),
         ("paper.tex", "LaTeX"),
+        ("api.http", "HTTP"),
+        ("api.rest", "HTTP"),
         ("Dockerfile.dev", "Dockerfile"),
         (".env.staging", "Dotenv"),
         ("BUILD.bazel", "Python"),

@@ -805,6 +805,7 @@ pub(super) const VSCODE: &[PresetRow] = &[
     ),
     row(ResetZoom, Everywhere, &["cmd+numpad0"], &["ctrl+numpad0"]),
     row(RunConfiguration, Global, &["ctrl+f5"], &["ctrl+f5"]),
+    row(SendHttpRequest, Editor, &["alt+cmd+r"], &["ctrl+alt+r"]),
     // macOS 上与系统文本框相同的 `⌃` 字母键。
     row(CursorLineStart, Editor, &["ctrl+a", "ctrl+shift+a"], &[]),
     row(CursorLineEnd, Editor, &["ctrl+e", "ctrl+shift+e"], &[]),

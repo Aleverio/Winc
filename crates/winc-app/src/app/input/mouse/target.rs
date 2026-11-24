@@ -265,6 +265,7 @@ impl App {
             Target::Start(action) => Hover::Start(action),
             Target::Sticky(row) => Hover::Sticky(row.depth),
             Target::Folded(line) => Hover::Folded(line),
+            Target::HttpRun(line) => Hover::HttpRun(line),
             Target::LongLine(line) => Hover::LongLine(line),
             Target::Blame(line) => Hover::Blame(line),
             Target::ChangeMark(hunk) => Hover::ChangeMark(hunk),
@@ -525,6 +526,9 @@ impl App {
         }
         if let Some(hunk) = self.change_mark_at(x, y) {
             return Target::ChangeMark(hunk);
+        }
+        if let Some(line) = hit(&self.hits.http_runs, x, y) {
+            return Target::HttpRun(line);
         }
         if self.editor.active.is_some()
             && self.active_shows_text()
@@ -1135,6 +1139,8 @@ pub(super) enum Target {
     Blame(usize),
     /// 行号栏上标出的改动，参数为改动块的序号。
     ChangeMark(usize),
+    /// `.http` 文件行号栏中发送请求的按钮，参数为请求行的行号（从 0 起）。
+    HttpRun(usize),
     /// 行号栏（包含折叠箭头）。
     Gutter,
     /// 日志详情中的文字。

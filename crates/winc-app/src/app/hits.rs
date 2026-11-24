@@ -114,6 +114,8 @@ pub struct Hits {
     pub(crate) keys_parts: Vec<(Rect, crate::layout::SettingsPart)>,
     /// 标签页切换列表中各行的位置和行号（见 `SwitchList::rows`）。
     pub(crate) tab_switch: Vec<(Rect, usize)>,
+    /// `.http` 文件行号栏中发送请求的按钮的位置和请求行的行号（从 0 起）。
+    pub(crate) http_runs: Vec<(Rect, usize)>,
 }
 
 impl Hits {
@@ -168,6 +170,7 @@ impl Hits {
             reset_links,
             keys_parts,
             tab_switch,
+            http_runs,
         } = self;
         start.clear();
         *suggest_card = None;
@@ -215,5 +218,6 @@ impl Hits {
         reset_links.clear();
         keys_parts.clear();
         tab_switch.clear();
+        http_runs.clear();
     }
 }

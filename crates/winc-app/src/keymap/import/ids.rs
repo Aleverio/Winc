@@ -172,6 +172,7 @@ const IDS: &[(Action, &[&str], &[&str])] = &[
     (FocusTab7, &[], &["workbench.action.openEditorAtIndex7"]),
     (FocusTab8, &[], &["workbench.action.openEditorAtIndex8"]),
     (FocusTab9, &[], &["workbench.action.openEditorAtIndex9"]),
+    (SendHttpRequest, &[], &["rest-client.request"]),
     (
         SwitchTab,
         &["Switcher"],

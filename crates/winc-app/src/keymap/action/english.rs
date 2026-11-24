@@ -264,6 +264,7 @@ impl Action {
             RunConfiguration => "Run Configuration",
             StopConfiguration => "Stop Configuration",
             EditRunConfigurations => "Edit Run Configurations",
+            SendHttpRequest => "Rest Client: Send Request",
             ClearTerminal => "Terminal: Clear",
             TerminalCopy => "Terminal: Copy",
             TerminalPaste => "Terminal: Paste",

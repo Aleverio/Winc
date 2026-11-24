@@ -34,6 +34,7 @@ impl Screen<'_> {
             guide_indent,
             folded_hits,
             long_hits,
+            http_hits,
             ime_cursor,
             caret,
         } = scratch;
@@ -139,6 +140,7 @@ impl Screen<'_> {
         self.draw_change_marks(frame, &row);
         self.draw_blame(frame, &row);
         self.draw_bookmark(frame, &row);
+        self.draw_http_run(frame, &row, http_hits);
         self.draw_fold_arrow(frame, &row);
         self.draw_guides(frame, &row, guide_indent);
         self.draw_marks(frame, &row);

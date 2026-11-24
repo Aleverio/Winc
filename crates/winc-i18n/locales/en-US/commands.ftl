@@ -261,6 +261,7 @@ cmd-enable-terminal = Terminal: Enable Built-in Terminal
 cmd-run-configuration = Run Current Configuration
 cmd-stop-configuration = Stop Current Configuration
 cmd-edit-run-configurations = Edit Run Configurations
+cmd-send-http-request = Send Request
 cmd-clear-terminal = Terminal: Clear
 cmd-terminal-copy = Terminal: Copy
 cmd-terminal-paste = Terminal: Paste

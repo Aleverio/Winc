@@ -263,6 +263,7 @@ pub const ACTIONS: &[Action] = {
         RunConfiguration,
         StopConfiguration,
         EditRunConfigurations,
+        SendHttpRequest,
         NewTerminal,
         ClearTerminal,
         TerminalCopy,

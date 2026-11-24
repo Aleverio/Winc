@@ -456,6 +456,7 @@ impl App {
         settle(&mut self.terminal.motion, |m| m.clock);
         settle(&mut self.terminal.grow, |c| *c);
         settle(&mut self.preview.markdown.motion, |m| m.clock);
+        settle(&mut self.http.finished, |f| f.clock);
         self.status.motion.settle();
     }
 
@@ -581,6 +582,7 @@ impl App {
             || self.overlays.tooltip.leaving.is_some()
             || self.tooltip_fading_in()
             || (self.disk.loads.bar).is_some_and(|b| b.clock.is_some())
+            || self.http_animating()
             || ((self.git.branch.running.is_some()
                 || self.git.branch.finished.is_some()
                 || self.commit_refreshing())

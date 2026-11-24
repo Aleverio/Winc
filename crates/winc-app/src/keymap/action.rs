@@ -353,6 +353,8 @@ pub enum Action {
     StopConfiguration,
     /// 打开运行配置文件。
     EditRunConfigurations,
+    /// 发送 `.http` 文件中光标所在的请求（见 `App::send_http_request`）。
+    SendHttpRequest,
     ClearTerminal,
     /// 复制终端的选区。
     TerminalCopy,
@@ -710,6 +712,7 @@ impl Action {
             ToggleTerminalPanel => t!("cmd-toggle-terminal-panel"),
             EnableTerminal => t!("cmd-enable-terminal"),
             RunConfiguration => t!("cmd-run-configuration"),
+            SendHttpRequest => t!("cmd-send-http-request"),
             StopConfiguration => t!("cmd-stop-configuration"),
             EditRunConfigurations => t!("cmd-edit-run-configurations"),
             ClearTerminal => t!("cmd-clear-terminal"),
@@ -977,6 +980,7 @@ impl Action {
             | RunConfiguration
             | StopConfiguration
             | EditRunConfigurations
+            | SendHttpRequest
             | ClearTerminal
             | TerminalCopy
             | TerminalPaste
