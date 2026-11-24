@@ -401,6 +401,7 @@ impl App {
             motion.settle();
         }
         self.finish_diff_fold(false);
+        self.finish_combined_fold(false);
         settle(&mut self.scroll.glide, |g| g.clock);
         self.scroll.pane_glides.retain(|g| !g.clock.done());
         settle(&mut self.overlays.picker.motion, |m| m.clock);
@@ -532,6 +533,7 @@ impl App {
             || self.panels.global.rows_moving()
             || self.motion.fold_motion.is_some()
             || self.motion.diff_fold.is_some()
+            || self.git.combined.as_ref().is_some_and(|t| t.folding())
             || self.motion.caret_motion.is_some_and(|m| m.moving())
             || self.scroll.glide.is_some()
             || self.scroll.wheel.glide.is_some()

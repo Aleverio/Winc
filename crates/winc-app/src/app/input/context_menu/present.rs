@@ -168,6 +168,9 @@ impl App {
             MenuTarget::Terminal(block)
         } else if self.markdown_context_target(x, y) {
             MenuTarget::Markdown
+        } else if self.combined_active() && self.layout.editor.contains(x, y) {
+            // 「未提交的更改」中段头、工具栏上没有菜单；差异上的菜单由那一段弹出。
+            return;
         } else if let Some(id) = self.editor_context_target(x, y) {
             MenuTarget::Editor(id)
         } else {

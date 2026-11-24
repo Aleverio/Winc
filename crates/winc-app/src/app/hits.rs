@@ -53,6 +53,8 @@ pub struct Hits {
     pub(crate) terminal: Vec<(Rect, crate::app::terminal::HeaderHit)>,
     /// 分栏时各栏标签栏上的按钮，按栏的排列顺序；正在用的一栏的同时在 `terminal` 里。
     pub(crate) terminal_groups: Vec<Vec<(Rect, crate::app::terminal::HeaderHit)>>,
+    /// 「未提交的更改」标签上可以点的地方，绘制时记下。
+    pub(crate) combined: Vec<(Rect, crate::app::git::combined::CombinedHit)>,
     /// 卡片上可点击的控件，绘制时更新。
     pub(crate) changes: Vec<(Rect, ChangeTarget)>,
     /// 卡片的位置，绘制时更新；点击卡片外部时关闭卡片。
@@ -147,6 +149,7 @@ impl Hits {
             merge_card,
             terminal,
             terminal_groups,
+            combined,
             changes,
             changes_card,
             notice_card,
@@ -200,6 +203,7 @@ impl Hits {
         *merge_card = None;
         terminal.clear();
         terminal_groups.clear();
+        combined.clear();
         changes.clear();
         *changes_card = None;
         *notice_card = None;

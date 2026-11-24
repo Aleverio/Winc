@@ -509,6 +509,7 @@ impl App {
             UserEvent::ReleaseNotes(notes) => self.show_release_notes(notes),
             done @ (UserEvent::GitStatus
             | UserEvent::GitContent
+            | UserEvent::GitCombined
             | UserEvent::GitCommit
             | UserEvent::GitBase
             | UserEvent::GitOperated

@@ -40,6 +40,10 @@ impl App {
     /// 左键按在关闭按钮上、或中键按在标签上之后，松开时鼠标仍在同一个标签上才关闭该标签；
     /// 左键按在窗口按钮上之后，松开时鼠标仍在同一个按钮上才执行该按钮。
     pub(in crate::app) fn on_mouse_up(&mut self, button: MouseButton) {
+        // 「未提交的更改」中按下时交给了某一段：松开也交给它。
+        if self.combined_mouse_up(button) {
+            return;
+        }
         // 拖动标签时悬停目标被清除，松开后重新判断鼠标下方的部件。
         let was_tab = self.tab_dragging();
         self.pointer.drag_scrolled_at = None;

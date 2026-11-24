@@ -286,6 +286,10 @@ pub enum Action {
     /// 切换差异的单栏显示和并排显示。
     ToggleDiffLayout,
     GitShowChanges,
+    /// 打开「未提交的更改」标签：所有未提交的更改按文件依次排在一个标签里。
+    GitShowAllChanges,
+    /// 点击提交视图中的文件时是否在「未提交的更改」标签中查看（`git.combinedDiff`）。
+    GitToggleCombinedDiff,
     /// 更改列表：显示选中文件的差异，焦点移到差异上。
     ChangesShowDiff,
     /// 更改列表：在编辑区打开选中的文件。
@@ -678,6 +682,8 @@ impl Action {
             PreviousDiffFile => t!("cmd-previous-diff-file"),
             ToggleDiffLayout => t!("cmd-toggle-diff-layout"),
             GitShowChanges => t!("cmd-git-show-changes"),
+            GitShowAllChanges => t!("cmd-git-show-all-changes"),
+            GitToggleCombinedDiff => t!("cmd-git-toggle-combined-diff"),
             ChangesShowDiff => t!("cmd-changes-show-diff"),
             ChangesOpenSource => t!("cmd-changes-open-source"),
             ChangesRollback => t!("cmd-changes-rollback"),
@@ -945,6 +951,8 @@ impl Action {
             | PreviousDiffFile
             | ToggleDiffLayout
             | GitShowChanges
+            | GitShowAllChanges
+            | GitToggleCombinedDiff
             | ChangesShowDiff
             | ChangesOpenSource
             | ChangesRollback
@@ -1154,6 +1162,8 @@ impl Action {
     pub fn module(self) -> Option<Module> {
         match self {
             Action::GitShowChanges
+            | Action::GitShowAllChanges
+            | Action::GitToggleCombinedDiff
             | Action::ChangesShowDiff
             | Action::ChangesOpenSource
             | Action::ChangesRollback

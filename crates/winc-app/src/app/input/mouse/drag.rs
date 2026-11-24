@@ -34,6 +34,10 @@ impl App {
         if self.alert_mouse_move(x, y) || self.popup_mouse_move(x, y) {
             return;
         }
+        // 「未提交的更改」中在某一段的差异上：交给那一段（按着鼠标时交给按下的那一段）。
+        if self.combined_takes_pointer(x, y) && self.combined_mouse_move(x, y) {
+            return;
+        }
         // 对话框和设置浮层覆盖整个窗口：下方的按钮和文件树不响应悬停，只判断浮层内的各部分。
         if self.overlays.form_dialog.is_some() {
             self.hover_form_dialog(x, y);

@@ -226,6 +226,8 @@ pub const ACTIONS: &[Action] = {
         ToggleReadOnlyAll,
         ShowCommit,
         GitShowChanges,
+        GitShowAllChanges,
+        GitToggleCombinedDiff,
         ChangesShowDiff,
         ChangesOpenSource,
         ChangesRollback,

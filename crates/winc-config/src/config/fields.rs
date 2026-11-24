@@ -683,6 +683,7 @@ const GIT: &[Field] = &[
     bool_field!("inlineBlame", git_inline_blame),
     bool_field!("autoFetch", git_auto_fetch),
     bool_field!("stagingArea", git_staging_area),
+    bool_field!("combinedDiff", git_combined_diff),
     Field {
         key: "repositoryScanDepth",
         read: |config, value, name, problems| {

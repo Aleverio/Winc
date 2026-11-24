@@ -28,6 +28,11 @@ impl App {
             return;
         }
 
+        // 「未提交的更改」中点在某一段的差异上：交给那一段，按差异标签处理。
+        if self.combined_takes_pointer(x, y) && self.combined_mouse_down(button) {
+            return;
+        }
+
         // 点在前台以外的窗格里：先把它换到前台，这次按下按它的位置处理。
         if let Some(pane) = self.background_pane_at(x, y)
             && self.pane_divider_at(x, y).is_none()
@@ -289,6 +294,8 @@ impl App {
                 }
             }
             Target::Diff(target) => self.press_diff(target),
+            Target::Combined(target) => self.press_combined(target),
+            Target::CombinedBody => {}
             Target::Log(crate::app::git::log::LogTarget::AuthorEdge) => {
                 let double = self.click_count(x, y) == 2;
                 self.press_log_author_edge(x, double);

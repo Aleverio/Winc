@@ -853,3 +853,15 @@ git-merge-side-result = Result
 git-rebase-hint = ↑↓ select · { $alt }↑↓ move · P R E S F D set action
 git-merge-conflict-title = Conflict { $index } of { $count }
 git-merge-edit-conflict = Edit Manually
+git-combined-title = Uncommitted Changes
+git-combined-no-text-change = No text changes
+git-combined-comparing = Comparing…
+git-combined-empty = No uncommitted changes
+git-combined-files = { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
+git-combined-open-file = Open File
+git-combined-open-diff = Open in Diff Tab
+git-combined-previous = Previous Change
+git-combined-next = Next Change

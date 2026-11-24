@@ -216,6 +216,9 @@ pub enum Setting {
     GitTree,
     /// 提交视图显示暂存区（`git.stagingArea`）；关闭时用勾选决定提交的内容。
     GitStagingArea,
+    /// 点击提交视图中的文件时在「未提交的更改」标签中查看（`git.combinedDiff`）；与差异标题栏
+    /// 和「未提交的更改」工具栏上的按钮是同一个开关。
+    GitCombinedDiff,
     /// 点击工作树时在哪个窗口打开它（`git.openWorktree`）。
     GitOpenWorktree,
     /// 拉取、同步时合并还是变基（`git.pull`）。
@@ -335,6 +338,7 @@ impl Setting {
             S::GitPath | S::GitOpenWorktree | S::GitStagingArea | S::GitTree | S::DiffInline => {
                 SettingsPage::Git
             }
+            S::GitCombinedDiff => SettingsPage::Git,
             S::GitInlineBlame | S::GitPullMode | S::GitConfirmPush | S::GitAutoFetch => {
                 SettingsPage::Git
             }
@@ -432,6 +436,7 @@ impl Setting {
             S::GitInlineBlame => "git.inlineBlame",
             S::GitAutoFetch => "git.autoFetch",
             S::GitStagingArea => "git.stagingArea",
+            S::GitCombinedDiff => "git.combinedDiff",
             S::GitOpenWorktree => "git.openWorktree",
             S::GitPullMode => "git.pull",
             S::GitPath => "git.path",
@@ -537,6 +542,7 @@ impl Setting {
             Setting::GitAutoFetch => t!("settings-git-auto-fetch"),
             Setting::GitTree => t!("settings-git-tree"),
             Setting::GitStagingArea => t!("settings-git-staging-area"),
+            Setting::GitCombinedDiff => t!("settings-git-combined-diff"),
             Setting::GitOpenWorktree => t!("settings-git-open-worktree"),
             Setting::GitPullMode => t!("settings-git-pull"),
             Setting::GitPath => t!("settings-git-path"),
@@ -627,6 +633,7 @@ impl Setting {
             Setting::GitAutoFetch => Some(t!("settings-git-auto-fetch-desc")),
             Setting::GitTree => Some(t!("settings-git-tree-desc")),
             Setting::GitStagingArea => Some(t!("settings-git-staging-area-desc")),
+            Setting::GitCombinedDiff => Some(t!("settings-git-combined-diff-desc")),
             Setting::GitOpenWorktree => Some(t!("settings-git-open-worktree-desc")),
             Setting::GitPullMode => Some(t!("settings-git-pull-desc")),
             Setting::GitPath => Some(t!("settings-git-path-desc")),
@@ -705,6 +712,7 @@ impl Setting {
             | Setting::GitAutoFetch
             | Setting::GitTree
             | Setting::GitStagingArea
+            | Setting::GitCombinedDiff
             | Setting::ExplorerMenu
             | Setting::FileAssociations
             | Setting::TerminalModule

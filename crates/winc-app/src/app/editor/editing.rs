@@ -267,6 +267,10 @@ impl App {
 
     /// 返回当前文档的显示行数；已折叠的行不计入。
     pub(in crate::app) fn row_count(&self) -> usize {
+        // 「未提交的更改」标签的内容不在文档里，按各段的总长算。
+        if self.combined_active() {
+            return self.combined_rows();
+        }
         self.editor.active().map_or(0, |d| d.row_count())
     }
 
@@ -299,6 +303,9 @@ impl App {
         // 日志标签：滚动条位于左侧提交列表的右边缘，详情栏不使用该滚动条。
         if self.log_active() {
             return self.log_parts().list;
+        }
+        if self.combined_active() {
+            return self.combined_parts().body;
         }
         if self.hex_active() {
             return self.hex_parts().body;

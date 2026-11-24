@@ -345,6 +345,18 @@ impl App {
             self.log_key(event.key);
             return;
         }
+        // 「未提交的更改」：当前段里有光标或选区时按键交给它，否则滚动整个标签。
+        if self.combined_active() {
+            if self.combined_caret()
+                && self
+                    .in_combined_current(|app| app.on_key_editor(event, cmd))
+                    .is_some()
+            {
+                return;
+            }
+            self.diff_key(event.key, cmd);
+            return;
+        }
         if self.hex_active() {
             self.hex_key(event.key, cmd);
             return;

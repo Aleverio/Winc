@@ -414,6 +414,7 @@ fn round_trips_through_json() {
         git_inline_blame: Some(false),
         git_auto_fetch: Some(true),
         git_staging_area: Some(true),
+        git_combined_diff: Some(true),
         repository_scan_depth: Some(4),
         git_worktree_root: Some("~/worktrees".to_string()),
         git_open_worktree: Some(WorktreeOpen::NewWindow),

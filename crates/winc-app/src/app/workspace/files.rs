@@ -435,7 +435,8 @@ impl App {
 
     /// 当前标签的编辑区是否显示文本（不是图片、无法打开的文件或 SVG、Markdown 的预览）。
     pub(in crate::app) fn active_shows_text(&self) -> bool {
-        self.editor.active().is_some_and(|d| d.shows_text())
+        // 「未提交的更改」下面是一个空文档，显示的是各段的差异，不是它的文字。
+        self.editor.active().is_some_and(|d| d.shows_text()) && !self.combined_active()
     }
 
     /// 执行无法打开的文件在编辑区中的按钮操作 `action`。

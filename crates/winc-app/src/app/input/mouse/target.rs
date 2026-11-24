@@ -264,6 +264,8 @@ impl App {
             Target::Tree(row) => row.map_or(Hover::None, Hover::TreeRow),
             Target::Placeholder(action) => Hover::Placeholder(action),
             Target::Diff(target) => Hover::Diff(target),
+            Target::Combined(target) => Hover::Combined(target),
+            Target::CombinedBody => Hover::None,
             Target::Log(target) => Hover::Log(target),
             Target::Start(action) => Hover::Start(action),
             Target::Sticky(row) => Hover::Sticky(row.depth),
@@ -302,6 +304,17 @@ impl App {
     pub(in crate::app) fn over_editor_text(&self) -> bool {
         let (x, y) = self.pointer.mouse;
         self.active_shows_text() && matches!(self.target_at(x, y), Target::Editor)
+    }
+
+    /// 鼠标在 `(x, y)` 时交不交给「未提交的更改」中的段：落在某一段的正文上，上面没有面板、
+    /// 对话框、查找栏、滚动条等；按着鼠标拖动时一直交给按下的那一段。
+    pub(in crate::app) fn combined_takes_pointer(&self, x: f32, y: f32) -> bool {
+        if self.combined_dragging() {
+            return true;
+        }
+        !self.settings.open
+            && self.overlays.form_dialog.is_none()
+            && matches!(self.target_at(x, y), Target::CombinedBody | Target::Diff(_))
     }
 
     pub(super) fn target_at(&self, x: f32, y: f32) -> Target {
@@ -513,6 +526,17 @@ impl App {
         }
         if let Some(target) = hit(&self.hits.diff, x, y) {
             return Target::Diff(target);
+        }
+        if let Some(target) = hit(&self.hits.combined, x, y) {
+            return Target::Combined(target);
+        }
+        // 「未提交的更改」标签下面是一个空文档：点在别处不落到它上面。在某一段的部件上时按
+        // 差异的部件悬停（显示行勾选框、加深展开按钮）。
+        if self.combined_active() && self.layout.editor.contains(x, y) {
+            return match self.combined_section_target(x, y) {
+                Some(target) => Target::Diff(target),
+                None => Target::CombinedBody,
+            };
         }
         if let Some(target) = hit(&self.hits.log, x, y) {
             return Target::Log(target);
@@ -1196,6 +1220,10 @@ pub(super) enum Target {
     Minimap,
     /// 终端面板标签栏上的按钮。
     TerminalHeader(crate::app::terminal::HeaderHit),
+    /// 「未提交的更改」标签上的段头、按钮。
+    Combined(crate::app::git::combined::CombinedHit),
+    /// 「未提交的更改」标签里没有可点的东西的地方。
+    CombinedBody,
     /// 终端中命令块的色带与吸顶的命令行。
     TerminalBlock(crate::app::terminal::BlockHit),
     None,

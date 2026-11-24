@@ -1117,6 +1117,35 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
             app.commit_parts().commit_menu,
             t!("workspace-tip-commit-menu").to_owned(),
         )),
+        Hover::Combined(hit) => {
+            use crate::app::git::combined::CombinedHit;
+            let rect = app.hits.combined.iter().find(|(_, h)| *h == hit)?.0;
+            let tip = match hit {
+                CombinedHit::OpenFile(_) => t!("git-combined-open-file").to_owned(),
+                CombinedHit::OpenDiff(_) => t!("git-combined-open-diff").to_owned(),
+                CombinedHit::Previous => with_key(
+                    t!("git-combined-previous"),
+                    Some(Action::PreviousDifference),
+                ),
+                CombinedHit::Next => {
+                    with_key(t!("git-combined-next"), Some(Action::NextDifference))
+                }
+                CombinedHit::Collapse if app.combined_collapses() => {
+                    t!("workspace-tip-expand-unchanged").to_owned()
+                }
+                CombinedHit::Collapse => t!("workspace-tip-collapse-unchanged").to_owned(),
+                CombinedHit::Layout if app.editor.diff_unified => {
+                    t!("workspace-tip-diff-side-by-side").to_owned()
+                }
+                CombinedHit::Layout => t!("workspace-tip-diff-inline").to_owned(),
+                CombinedHit::View => with_key(
+                    t!("settings-git-combined-diff"),
+                    Some(Action::GitToggleCombinedDiff),
+                ),
+                CombinedHit::Header(_) => return None,
+            };
+            Some((rect, tip))
+        }
         Hover::Commit(target) => {
             let rect = app
                 .commit_parts()
@@ -1187,7 +1216,11 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
             Some((rect, label))
         }
         Hover::Diff(target) => {
-            let rect = app.hits.diff.iter().find(|(_, t)| *t == target)?.0;
+            // 「未提交的更改」中是鼠标下那一段的部件。
+            let rect = match app.combined_hovered_hit(target) {
+                Some(rect) => rect,
+                None => app.hits.diff.iter().find(|(_, t)| *t == target)?.0,
+            };
             let label = match target {
                 DiffTarget::Previous => with_key(
                     t!("workspace-tip-previous-change"),
@@ -1205,7 +1238,10 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
                     with_key(t!("workspace-tip-next-file"), Some(Action::NextDiffFile))
                 }
                 DiffTarget::OpenFile => t!("workspace-tip-open-file").to_owned(),
-                DiffTarget::Blame(side, line) => app.diff_blame_tip(side, line)?,
+                DiffTarget::Blame(side, line) => match app.combined_tab().and_then(|t| t.hovered) {
+                    Some(i) if app.combined_active() => app.combined_blame_tip(i, side, line)?,
+                    _ => app.diff_blame_tip(side, line)?,
+                },
                 DiffTarget::Layout if app.editor.diff_unified => {
                     t!("workspace-tip-diff-side-by-side").to_owned()
                 }
@@ -1226,6 +1262,10 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
                 ),
                 DiffTarget::Include(_) => t!("workspace-tip-include-change").to_owned(),
                 DiffTarget::IncludeLine(..) => t!("workspace-tip-include-line").to_owned(),
+                DiffTarget::Combined => with_key(
+                    t!("settings-git-combined-diff"),
+                    Some(Action::GitToggleCombinedDiff),
+                ),
                 _ if app.editor.active()?.diff.as_deref()?.collapses() => {
                     t!("workspace-tip-expand-unchanged").to_owned()
                 }

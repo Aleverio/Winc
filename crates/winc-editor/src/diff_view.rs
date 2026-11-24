@@ -254,7 +254,7 @@ impl Compared {
     }
 }
 
-/// 单栏时滚动位置与各侧显示行之间的换算表。
+/// 单栏时（以及并排且两侧按改动对齐时）滚动位置与各侧显示行之间的换算表。
 ///
 /// 从差异中取出后单独持有：绘制时需要同时修改差异两侧的着色状态。
 #[derive(Debug, Clone)]
@@ -276,6 +276,18 @@ impl UnifiedMap {
             };
             return start + before + row - from[side];
         }
+        let (at, last) = i
+            .checked_sub(1)
+            .map_or((0.0, 0.0), |i| (self.0[i].0, self.0[i].1[side]));
+        at + row - last
+    }
+
+    /// 并排且两侧按改动对齐时（见 [`DiffView::aligned`]），第 `side` 侧显示行 `row` 的位置。
+    ///
+    /// 每段改动占两侧中较多的行数，两侧都从这一段的开头排起，较短的一侧在下面留空；改动之外
+    /// 两侧逐行对应。
+    pub fn aligned_pos(&self, side: usize, row: f64) -> f64 {
+        let i = self.0.partition_point(|k| k.1[side] <= row);
         let (at, last) = i
             .checked_sub(1)
             .map_or((0.0, 0.0), |i| (self.0[i].0, self.0[i].1[side]));
@@ -369,6 +381,10 @@ pub struct DiffView {
     pub panel_shown: f32,
     /// 左、右两侧是否显示逐行追溯一栏（只有设置了 [`DiffSide::blame`] 的一侧能显示）。
     pub blamed: [bool; 2],
+    /// 并排时两侧是否按改动对齐（见 [`UnifiedMap::aligned_pos`]），而不是在视口中线对齐。
+    ///
+    /// 多个文件的差异上下排在一起时用：每段改动在较短的一侧留空，整段内容不随滚动错位。
+    pub aligned: bool,
 }
 
 /// 差异标题栏上方的提交说明条的内容。
@@ -419,6 +435,7 @@ impl DiffView {
             panel: 0.0,
             panel_shown: 1.0,
             blamed: [false; 2],
+            aligned: false,
         };
         view.layout();
         view
@@ -712,6 +729,26 @@ impl DiffView {
             self.unified = on;
             self.layout();
         }
+    }
+
+    /// 两侧按改动对齐时（[`DiffView::aligned`]），第 `side` 侧落在位置 `from..to` 之间的
+    /// 显示行（含露出一部分的行）。
+    pub fn aligned_rows(&self, side: usize, from: f64, to: f64) -> Range<usize> {
+        let map = self.unified_map();
+        let at = |row: usize| map.aligned_pos(side, row as f64);
+        let len = self.rows[side].len();
+        // 位置随行号递增：二分找第一个下沿超过 `from` 的行。
+        let (mut start, mut hi) = (0, len);
+        while start < hi {
+            let mid = (start + hi) / 2;
+            if at(mid) + 1.0 <= from {
+                start = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+        let end = (start..len).find(|&row| at(row) >= to).unwrap_or(len);
+        start..end
     }
 
     /// 返回单栏时滚动位置与各侧显示行之间的换算表。

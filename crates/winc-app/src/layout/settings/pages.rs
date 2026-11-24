@@ -247,7 +247,7 @@ impl SettingsPage {
                 ),
                 group(
                     t!("settings-group-diff"),
-                    vec![S::DiffInline, S::GitInlineBlame],
+                    vec![S::GitCombinedDiff, S::DiffInline, S::GitInlineBlame],
                 ),
                 group(
                     t!("settings-group-remote"),

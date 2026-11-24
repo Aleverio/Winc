@@ -24,6 +24,12 @@ impl App {
         if !self.action_available(action) {
             return false;
         }
+        // 「未提交的更改」中编辑的命令（复制、粘贴、撤销等）交给当前段，按差异标签处理。
+        if action.group() == crate::keymap::Group::Edit
+            && let Some(done) = self.in_combined_current(|app| app.run_action(action))
+        {
+            return done;
+        }
         if action == Copy && self.vim_side_copy() {
             return true;
         }
@@ -482,13 +488,18 @@ impl App {
             // 差异标签里在两侧的改动之间跳；普通文件里在行号栏标出的改动之间跳。
             NextDifference | PreviousDifference => {
                 let forward = action == NextDifference;
-                if self.editor.active().is_some_and(|d| d.diff.is_some()) {
+                if self.combined_active() {
+                    self.step_combined_change(forward);
+                } else if self.editor.active().is_some_and(|d| d.diff.is_some()) {
                     self.jump_difference(forward);
                 } else if self.jump_conflict(forward) {
                     // 有合并冲突的文件里先在冲突之间跳。
                 } else if !self.jump_change(forward) {
                     return false;
                 }
+            }
+            NextDiffFile | PreviousDiffFile if self.combined_active() => {
+                self.step_combined_file(action == NextDiffFile);
             }
             NextDiffFile | PreviousDiffFile => {
                 if !self.editor.active().is_some_and(|d| d.diff.is_some()) {
@@ -503,6 +514,8 @@ impl App {
                 self.settings_toggle(crate::layout::Setting::DiffInline);
             }
             GitShowChanges => self.git_show_changes(),
+            GitShowAllChanges => self.open_combined(None),
+            GitToggleCombinedDiff => self.toggle_combined_diff(),
             ChangesShowDiff | ChangesOpenSource | ChangesRollback => {
                 return self.run_changes_action(action);
             }

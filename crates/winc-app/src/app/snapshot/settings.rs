@@ -1205,6 +1205,7 @@ fn the_git_page_is_listed_only_when_the_module_is_on() {
         Setting::GitOpenWorktree,
         Setting::GitStagingArea,
         Setting::GitTree,
+        Setting::GitCombinedDiff,
         Setting::DiffInline,
         Setting::GitInlineBlame,
         Setting::GitPullMode,

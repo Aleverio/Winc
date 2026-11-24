@@ -43,11 +43,11 @@ pub(super) struct Prepared {
 }
 
 /// 发起比较时编辑器中该文件的快照。
-struct Snapshot {
+pub(super) struct Snapshot {
     /// 发起比较时的文本。
     text: Rope,
     /// 发起比较时的文档版本号，记进差异视图（`DiffView::source`）。
-    revision: u64,
+    pub(super) revision: u64,
     /// 文档的编码，左侧内容按该编码解码。
     encoding: Encoding,
     /// 发起比较时文档是否有未保存的修改。
@@ -66,9 +66,16 @@ pub(super) struct DiffTab {
     pub(super) kind: DiffKind,
 }
 
+impl DiffTab {
+    /// 文件 `path` 的差异标签：左侧取自提交 `oid`，比较 `kind`。
+    pub(super) fn new(path: PathBuf, oid: Option<String>, kind: DiffKind) -> DiffTab {
+        DiffTab { path, oid, kind }
+    }
+}
+
 /// 在后台准备一个文件的差异 `kind`：左侧是 `HEAD`（「更改」时是暂存区）中的版本，右侧是编辑器
 /// 中的快照，未打开时读取磁盘（「暂存的更改」时是暂存区中的版本，只读）。
-fn prepare(
+pub(super) fn prepare(
     git: &Git,
     root: &Path,
     path: &Path,
@@ -190,7 +197,7 @@ fn prepare(
 }
 
 /// 返回差异标签的标题：分开显示的两种差异按所在的组注明，与侧栏的组名相同。
-fn diff_title(path: &Path, kind: DiffKind) -> String {
+pub(super) fn diff_title(path: &Path, kind: DiffKind) -> String {
     let name = winc_editor::display_name(path);
     match kind {
         DiffKind::Whole => t!("git-diff-title", name = name),
@@ -200,6 +207,31 @@ fn diff_title(path: &Path, kind: DiffKind) -> String {
 }
 
 impl App {
+    /// 编辑器中打开着的 `path` 的快照，比较时右侧用它（含未保存的修改）；没有打开时为
+    /// `Ok(None)`，读磁盘。
+    ///
+    /// 打开的是大文件时为 `Err`：不比较，整体读入字符串会超出内存预算。
+    pub(super) fn editor_snapshot(&self, path: &Path) -> Result<Option<Snapshot>, ()> {
+        let canonical = winc_editor::canonical_path(path);
+        let doc = self
+            .editor
+            .documents
+            .iter()
+            .find(|d| d.path.as_deref() == Some(canonical.as_path()) && d.holds_file_text());
+        if doc.is_some_and(|d| d.is_large()) {
+            return Err(());
+        }
+        Ok(doc.and_then(|d| {
+            Some(Snapshot {
+                text: d.text().rope()?.clone(),
+                revision: d.revision,
+                encoding: d.encoding,
+                dirty: d.is_dirty(),
+                language: d.highlighter.language(),
+            })
+        }))
+    }
+
     /// 当前标签是 Git 差异时比较的两份内容；其他标签为 [`DiffKind::Whole`]。
     pub(crate) fn active_diff_kind(&self) -> DiffKind {
         let tab = (self.editor.active()).and_then(|d| self.git.diff_tabs.get(&d.id));
@@ -215,12 +247,20 @@ impl App {
         self.fetch_changes(&path, Target::Open);
     }
 
-    /// 在提交视图的预览标签中打开 `path` 的改动；依次查看多个文件时只占用一个标签。
+    /// 在提交视图的预览标签中打开 `path` 的改动；依次查看多个文件时只占用一个标签。开着「合并
+    /// 差异视图」时改为滚到「未提交的更改」标签中这个文件那一段。
     ///
     /// 暂存区视图中按选中的一行所在的组，分别显示暂存的更改和未暂存的更改（见 [`DiffKind`]）。
     pub(in crate::app) fn git_preview_changes(&mut self, path: &Path) {
-        self.git.preview_seq += 1;
         let kind = self.commit_diff_kind(path);
+        // 合并差异视图（`git.combinedDiff`）：滚到这个文件那一段，焦点留在列表里。
+        if self.config.git_combined_diff == Some(true) {
+            let focus = self.focus;
+            self.open_combined(Some((path.to_path_buf(), kind)));
+            self.focus = focus;
+            return;
+        }
+        self.git.preview_seq += 1;
         self.fetch_diff(path, Target::Preview(self.git.preview_seq), kind);
     }
 
@@ -285,29 +325,13 @@ impl App {
             }
         };
 
-        // 文件已在编辑器中打开时使用其快照；大文件不比较，整体读入字符串会超出内存预算。
-        let canonical = winc_editor::canonical_path(&path);
-        let doc = self
-            .editor
-            .documents
-            .iter()
-            .find(|d| d.path.as_deref() == Some(canonical.as_path()) && d.holds_file_text());
-        if doc.is_some_and(|d| d.is_large()) {
+        let Ok(snapshot) = self.editor_snapshot(&path) else {
             if !matches!(target, Target::Refresh(_)) {
                 let name = winc_editor::display_name(&path).into_owned();
                 self.flash(t!("git-diff-too-large", name = name));
             }
             return;
-        }
-        let snapshot = doc.and_then(|d| {
-            Some(Snapshot {
-                text: d.text().rope()?.clone(),
-                revision: d.revision,
-                encoding: d.encoding,
-                dirty: d.is_dirty(),
-                language: d.highlighter.language(),
-            })
-        });
+        };
 
         let oid = self.git.status.as_ref().and_then(|s| s.oid.clone());
         let sender = self.git.prepared.0.clone();

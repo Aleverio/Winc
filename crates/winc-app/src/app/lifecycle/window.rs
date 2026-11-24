@@ -393,6 +393,7 @@ impl App {
         }
         self.sync_wrap();
         self.sync_terminal();
+        self.prepare_combined();
     }
 
     /// 在编辑区里放置随当前标签变化的部分：标签栏右端的按钮、分栏预览、合并的两侧、缩略图。
@@ -472,7 +473,7 @@ impl App {
                 && doc.diff.is_none()
                 && doc.log.is_none()
                 && doc.preview_mode() != winc_editor::PreviewMode::Preview
-        });
+        }) && !self.combined_active();
         let l = &mut self.layout;
         if self.config.minimap != Some(true) || !shows_code || l.editor.w < MINIMAP_MIN {
             return;

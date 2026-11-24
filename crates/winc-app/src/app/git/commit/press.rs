@@ -96,7 +96,9 @@ impl App {
                 self.git_refresh();
             }
             CommitTarget::More => {
-                let rect = self.commit_parts().tools[2].0;
+                let tools = self.commit_parts().tools;
+                let more = tools.iter().find(|(_, t)| *t == CommitTarget::More);
+                let rect = more.map_or(Rect::default(), |(rect, _)| *rect);
                 self.open_button_menu(
                     MenuButton::CommitMore,
                     MenuTarget::CommitMore,

@@ -49,6 +49,7 @@ impl App {
             Setting::GitAutoFetch => self.config.git_auto_fetch == Some(true),
             Setting::GitTree => !self.git.commit.flat(),
             Setting::GitStagingArea => self.config.git_staging_area == Some(true),
+            Setting::GitCombinedDiff => self.config.git_combined_diff == Some(true),
             Setting::TerminalModule => self.terminal_enabled(),
             Setting::RemoteModule => self.remote_enabled(),
             Setting::ExplorerMenu => self.settings.integration.menu,
@@ -132,6 +133,7 @@ impl App {
                 winc_editor::proxy::follow_system_proxy(on);
             }
             Setting::GitStagingArea => self.config.git_staging_area = Some(on),
+            Setting::GitCombinedDiff => self.config.git_combined_diff = Some(on),
             Setting::GitInlineBlame => self.config.git_inline_blame = Some(on),
             Setting::GitAutoFetch => self.config.git_auto_fetch = Some(on),
             Setting::TerminalModule => self.config.terminal_enabled = Some(on),
@@ -178,6 +180,9 @@ impl App {
         }
         if setting == Setting::GitStagingArea {
             self.apply_staging_view();
+        }
+        if setting == Setting::GitCombinedDiff {
+            self.apply_combined_view();
         }
         // 关闭预览标签时，现有的预览标签成为普通标签。
         if setting == Setting::PreviewOnClick && !on {

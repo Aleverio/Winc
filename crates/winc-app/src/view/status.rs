@@ -349,7 +349,9 @@ pub(super) fn draw_status(app: &mut App, frame: &mut Frame<'_>) {
 
     let doc = app.editor.active();
     // 无法显示文本的文件没有光标、编码等信息；仍在读取中的文件这些信息也尚不可用。
-    let shown = doc.filter(|d| d.shows_text() && !d.is_pending());
+    // 「未提交的更改」标签下面是一个空文档，没有光标、编码和语言可说。
+    let combined = app.combined_active();
+    let shown = doc.filter(|d| d.shows_text() && !d.is_pending() && !combined);
     let mut right = bar.right() - 14.0;
     let mut status_hits = Vec::new();
 

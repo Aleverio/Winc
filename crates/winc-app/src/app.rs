@@ -257,6 +257,8 @@ pub enum UserEvent {
     GitStatus,
     /// 后台已取得某个文件在 Git 中的版本，可以打开差异。
     GitContent,
+    /// 后台比较完了「未提交的更改」标签中的一段。
+    GitCombined,
     /// 后台已重新比较完一个差异标签。
     Rediffed,
     /// 后台已提取完大纲的符号。
@@ -575,6 +577,8 @@ pub enum Hover {
     TerminalSplit(usize),
     /// 终端分栏之间第几条分隔线（见 `App::terminal_group_split_at`）。
     TerminalGroupSplit(usize),
+    /// 「未提交的更改」标签上的段头、按钮。
+    Combined(git::combined::CombinedHit),
     /// 终端面板标签栏上的标签、关闭按钮、「+」和位置按钮。
     TerminalHeader(terminal::HeaderHit),
     /// 终端中命令块的色带与吸顶的命令行。
@@ -690,6 +694,15 @@ impl Hover {
                 )
                 | Hover::Blame(_)
                 | Hover::PickerPart(PickerPart::Pull | PickerPart::Push | PickerPart::Fetch)
+                | Hover::Combined(
+                    git::combined::CombinedHit::OpenFile(_)
+                        | git::combined::CombinedHit::OpenDiff(_)
+                        | git::combined::CombinedHit::Previous
+                        | git::combined::CombinedHit::Next
+                        | git::combined::CombinedHit::Collapse
+                        | git::combined::CombinedHit::Layout
+                        | git::combined::CombinedHit::View
+                )
                 | Hover::Commit(
                     CommitTarget::Log
                         | CommitTarget::Sync
@@ -709,7 +722,8 @@ impl Hover {
                         | CommitTarget::DirStage(..)
                 )
                 | Hover::Diff(
-                    DiffTarget::Previous
+                    DiffTarget::Combined
+                        | DiffTarget::Previous
                         | DiffTarget::Next
                         | DiffTarget::PreviousFile
                         | DiffTarget::NextFile
@@ -1186,6 +1200,7 @@ impl App {
         match done {
             UserEvent::GitStatus => self.poll_git(),
             UserEvent::GitContent => self.poll_git_content(),
+            UserEvent::GitCombined => self.poll_combined(),
             UserEvent::GitCommit => self.poll_commit(),
             UserEvent::GitBase => self.poll_bases(),
             UserEvent::GitOperated => self.poll_branch_ops(),

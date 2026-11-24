@@ -269,6 +269,9 @@ pub struct Config {
     /// 提交视图是否使用暂存区视图（按暂存区分组，提交暂存区的内容），默认为否，用勾选决定提交的
     /// 内容。
     pub git_staging_area: Option<bool>,
+    /// 点击提交视图中的文件时，是否在「未提交的更改」标签中连续显示所有更改并定位到该文件，默认
+    /// 为否，打开这个文件的差异。
+    pub git_combined_diff: Option<bool>,
     /// 在打开的目录下查找仓库的层数，默认见 [`Config::REPOSITORY_SCAN_DEPTH`]，可用范围见
     /// [`Config::REPOSITORY_SCAN_DEPTH_RANGE`]。
     pub repository_scan_depth: Option<usize>,

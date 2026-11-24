@@ -8,6 +8,7 @@
 pub(crate) mod blame;
 pub(crate) mod branch;
 pub(super) mod changes;
+pub(crate) mod combined;
 pub(super) mod commit;
 mod diffs;
 pub(super) mod fetch;
@@ -230,6 +231,8 @@ pub(crate) struct GitState {
     logs_outdated: bool,
     /// 已打开的 Git 差异标签；状态刷新后按需原地更新，标签关闭时移除。
     diff_tabs: HashMap<DocumentId, DiffTab>,
+    /// 「未提交的更改」标签；没有打开时为 `None`。
+    pub(crate) combined: Option<combined::CombinedTab>,
     /// 最近一次切换文件时的（差异标签，切换到的文件）。
     stepped: Option<(DocumentId, PathBuf)>,
     /// 最近一次预览请求的序号。
@@ -324,6 +327,7 @@ impl Default for GitState {
             refs_wanted: false,
             logs_outdated: false,
             diff_tabs: HashMap::new(),
+            combined: None,
             stepped: None,
             preview_seq: 0,
             asked_trust: Vec::new(),
@@ -1026,6 +1030,7 @@ impl App {
             }
             if refreshed {
                 self.refresh_git_diffs();
+                self.refresh_combined();
                 self.sync_index_texts();
                 self.prefill_merge_message();
             }
@@ -1137,6 +1142,9 @@ impl App {
         self.git.log.forget(id);
         self.git.changes.forget_document(id);
         self.git.diff_tabs.remove(&id);
+        if self.git.combined.as_ref().is_some_and(|t| t.doc == id) {
+            self.git.combined = None;
+        }
         if let Some(path) = path
             && !self
                 .editor

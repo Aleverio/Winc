@@ -226,6 +226,8 @@ impl Action {
             PreviousDiffFile => "Go to Previous File in Diff",
             ToggleDiffLayout => "Toggle Inline Diff",
             GitShowChanges => "Git: Open Changes",
+            GitShowAllChanges => "Git: Show Uncommitted Changes",
+            GitToggleCombinedDiff => "Git: Toggle Combined Diff View",
             ChangesShowDiff => "Git: Show Diff of Selected Change",
             ChangesOpenSource => "Git: Open Selected Change",
             ChangesRollback => "Git: Roll Back Selected Changes",
