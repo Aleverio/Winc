@@ -385,7 +385,8 @@ impl App {
             return Target::Panel(hover);
         }
         // 跳转条绘制在查找条之上（窄窗口中两者会重叠）；正在输入名称的行位于文件树中。
-        if (self.bars.goto_input.is_some() && self.prompt_bar().contains(x, y))
+        if (self.bars.goto_input.is_some()
+            && self.hits.prompt_bar.is_some_and(|r| r.contains(x, y)))
             || self.name_input_rect().is_some_and(|r| r.contains(x, y))
         {
             return Target::Prompt;
@@ -919,26 +920,13 @@ impl App {
             return;
         }
 
-        // 差异两侧和 Markdown 预览按最上层的目标判断：滚动条、折叠的一段、标题列表、工具栏、
-        // 盖在上面的卡片和面板，以及链接处不显示文本光标；拖选期间一直显示。
-        let in_text = self.editor.active.is_some()
-            && self.active_shows_text()
-            && !matches!(
-                self.pointer.hover,
-                Hover::TreeRow(_)
-                    | Hover::Sticky(_)
-                    | Hover::Folded(_)
-                    | Hover::LongLine(_)
-                    | Hover::Scrollbar(_)
-            )
-            && self.layout.text.contains(x, y)
-            && !self.layout.search.contains(x, y)
-            && !(self.overlays.picker.open && self.layout.picker.contains(x, y))
-            && !self.over_corner_card(x, y)
+        // 源代码、差异、Markdown 预览和日志详情仅在最上层的目标为文字时显示文本光标；拖选差异、
+        // 预览和日志详情期间保持显示。
+        let target = self.target_at(x, y);
+        let in_text = (self.active_shows_text() && self.layout.text.contains(x, y)
+            || self.over_diff_text(x, y))
             && x < self.layout.editor.right() - SCROLLBAR_HIT
-            || self.over_diff_text(x, y)
-                && x < self.layout.editor.right() - SCROLLBAR_HIT
-                && matches!(self.target_at(x, y), Target::Editor);
+            && matches!(target, Target::Editor);
         // 日志详情中可选择的文字上（不含可点击的提交号和文件）显示文本光标。
         let in_field = self.field_at(x, y).is_some()
             || matches!(
@@ -949,11 +937,8 @@ impl App {
                     | Drag::DiffSelectRead { .. }
                     | Drag::DiffColumns { .. }
             )
-            || (self.preview.markdown.area.contains(x, y)
-                && matches!(self.target_at(x, y), Target::MarkdownText(None)))
-            || (self.log_active()
-                && crate::layout::hit(&self.hits.log, x, y).is_none()
-                && self.log_text_at(x, y, false).is_some());
+            || matches!(target, Target::MarkdownText(None))
+            || (matches!(target, Target::LogText) && self.log_text_at(x, y, false).is_some());
 
         let icon = if let Hover::ResizeEdge(direction) = self.pointer.hover {
             resize_cursor(direction)
@@ -1025,7 +1010,7 @@ impl App {
             CursorIcon::Pointer
         } else if matches!(self.pointer.drag, Drag::Picture { .. }) {
             CursorIcon::Grabbing
-        } else if self.picture_pannable() && matches!(self.target_at(x, y), Target::Picture) {
+        } else if self.picture_pannable() && matches!(target, Target::Picture) {
             // 图片超出预览区域时可以按住拖动。
             CursorIcon::Grab
         } else if in_text || in_field {
