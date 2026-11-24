@@ -191,8 +191,8 @@ impl SectionFold {
 }
 
 impl App {
-    /// 测试中直接改「未提交的更改」的状态（例如换掉过渡的时钟）。
-    #[cfg(test)]
+    /// 测试中直接改「未提交的更改」的状态（例如换掉过渡的时钟）；Git 的测试只在 Unix 上编译。
+    #[cfg(all(test, unix))]
     pub(crate) fn combined_tab_mut_for_test(&mut self) -> &mut CombinedTab {
         self.git.combined.as_mut().expect("开着「未提交的更改」")
     }

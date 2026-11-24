@@ -42,11 +42,11 @@ use winc_i18n::t;
 
 use super::diff::worktree_title;
 pub(crate) use diffs::DiffKind;
-// 测试按 `crate::app::git::Target` 打开差异。
+// Git 的测试（只在 Unix 上编译）按 `crate::app::git::Target` 打开差异。
 use super::{App, Focus, UserEvent};
 use crate::app::NoticeKind;
 use crate::layout::SidebarView;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(super) use diffs::Target;
 use diffs::{DiffTab, Prepared};
 
