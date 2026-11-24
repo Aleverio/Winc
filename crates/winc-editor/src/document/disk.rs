@@ -1227,7 +1227,7 @@ fn write_rope(
         });
     }
     let bytes = charset::encode_with(&rope.to_string(), encoding, origin).map_err(|c| {
-        let (char, encoding) = (c.to_string(), encoding.label());
+        let (char, encoding) = (c.to_string(), charset::label(encoding));
         let message = t!(
             "editor-encoding-unencodable",
             char = char,

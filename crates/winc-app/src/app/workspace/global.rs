@@ -728,8 +728,8 @@ impl App {
             ));
         } else if g.engine.gave_up() {
             self.flash(t!("editor-replace-all-gave-up"));
-        } else if g.engine.timed_out() {
-            self.flash(t!("workspace-replace-all-remote-timeout"));
+        } else if g.engine.remote_failed() {
+            self.flash(t!("workspace-replace-all-remote-failed"));
         } else if g.engine.total() == 0 {
             self.flash(t!("workspace-replace-all-nothing"));
         } else {

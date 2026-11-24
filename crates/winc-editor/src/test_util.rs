@@ -37,6 +37,8 @@ pub(crate) fn scratch(name: &str) -> PathBuf {
 pub(crate) fn loopback(name: &str) -> winc_backend::Target {
     use winc_backend::remote;
 
+    // 对端在本进程内，没有服务进程的程序可以运行：搜索改在对端的线程上进行。
+    remote::register_builtin(winc_search::host::COMMAND, winc_search::host::run);
     let (requests, to_server) = std::io::pipe().unwrap();
     let (replies, from_server) = std::io::pipe().unwrap();
     std::thread::spawn(move || {

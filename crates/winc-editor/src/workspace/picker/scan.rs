@@ -424,7 +424,7 @@ pub(super) fn relative_path(relative: &Path) -> Option<String> {
 /// 顺序收录前 `limit` 个。超时没有列出时文件表为空，并记下超时。
 fn collect_remote(root: &Path, limit: usize, cancel: &AtomicBool) -> Files {
     let stop = || cancel.load(Ordering::Relaxed);
-    let Ok(listing) = crate::workspace::remote_files::list(root, false, None, &stop) else {
+    let Ok(listing) = crate::workspace::remote_files::list(root, false, &stop) else {
         return Files {
             timed_out: true,
             ..Files::default()
