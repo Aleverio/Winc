@@ -20,7 +20,7 @@ tag.
 | `.github/workflows/release-{prepare,macos,linux,windows}.yml` | Reusable jobs called by `release.yml` |
 | `.github/actions/build-setup/` | Shared source check and toolchain setup; pins the release Rust version |
 | `release/macos/` | `package.sh` (app, dmg, appcast), `verify.sh`, and Apple signing setup |
-| `release/linux/` | `package.sh` (AppImage and deb), pinned packaging tools, desktop entry and AppRun |
+| `release/linux/` | `package.sh` (AppImage and deb), the glibc baseline (`baseline.*`), pinned packaging tools, desktop entry and AppRun |
 | `release/linux/arch/` | Arch package recipe, repository staging and installer template |
 | `release/windows/` | `package.ps1` (NSIS, MSI, portable zip), `sign.ps1`, `verify.ps1`, installer templates |
 | `release/common/` | Shared by all platforms: version, build config, update signing, asset staging, publication |
@@ -30,7 +30,7 @@ tag.
 
 The release version is the single line of the `VERSION` file at the repository root. To prepare a
 version, edit that file, commit it, then merge into `main`. The program reads the same file at
-compile time through the `winc-version` crate.
+compile time through the `winct-version` crate.
 
 The crates themselves carry no version: Cargo hashes a package's version into its build
 artifacts, so a version in `Cargo.toml` would rebuild every crate from scratch on each release and
@@ -51,19 +51,19 @@ organization **Secrets**, not Variables or committed files.
 
 | Secrets | Purpose |
 | --- | --- |
-| `WINC_UPDATE_PRIVATE_KEY` | Required: contents of a current Sparkle exported key file, base64 encoding a 32-byte Ed25519 seed |
+| `WINCT_UPDATE_PRIVATE_KEY` | Required: contents of a current Sparkle exported key file, base64 encoding a 32-byte Ed25519 seed |
 | `SIGN_AND_NOTARIZE_SCRIPT_URL`, `SIGN_AND_NOTARIZE_BASE_URL`, `SIGN_AND_NOTARIZE_API_TOKEN`, `SIGN_AND_NOTARIZE_HELPER_URL` | Optional external Apple signing provider; configure all four together |
 | `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD` | Optional local Apple Developer ID provider; certificate is a base64-encoded P12 |
 | `WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD` | Optional Windows Authenticode provider; certificate is a base64-encoded PFX |
 
-The four external signing Secrets already configured for Winc retain their original names and
+The four external signing Secrets already configured for Winct retain their original names and
 meaning. A complete external provider takes priority over local Apple credentials. Partial provider
 configuration fails; with no Apple provider, packages are ad-hoc signed. Without a Windows
 certificate, installers are unsigned. Updater signatures remain mandatory on every platform.
 
-`WINC_UPDATE_PRIVATE_KEY` is a **Sparkle seed** that signs every update package and appcast. Store
+`WINCT_UPDATE_PRIVATE_KEY` is a **Sparkle seed** that signs every update package and appcast. Store
 it in this repository's Secrets; it is never shared with other projects. With the pinned Sparkle
-tools, generate a dedicated Winc key and export it using
+tools, generate a dedicated Winct key and export it using
 `generate_keys --account com.deeix.winc`, followed by
 `generate_keys --account com.deeix.winc -x <private-key-file>`. Alternatively, Node.js can generate
 the required random 32-byte seed on any platform:
@@ -76,16 +76,17 @@ Use the output as the Secret; save a secure backup and never commit or log it. O
 Sparkle exports are rejected.
 Keep this key across releases: an installed application trusts the public key embedded in its build.
 
-The build derives `WINC_UPDATE_PUBLIC_KEY` from that seed and `WINC_UPDATE_CHANNELS` from the
+The build derives `WINCT_UPDATE_PUBLIC_KEY` from that seed and `WINCT_UPDATE_CHANNELS` from the
 version (see below). Neither needs a repository Variable.
 
 ## Artifacts and updates
 
-| Platform | Release filenames, prefixed with `Winc-<version>-` |
+| Platform | Release filenames, prefixed with `Winct-<version>-` |
 | --- | --- |
 | macOS Apple silicon | `macos-arm64.dmg` |
 | macOS Intel | `macos-x64.dmg` |
 | Linux x86_64 | `linux-x64.AppImage`, `linux-x64.deb`, `linux-x64.rpm` |
+| Linux ARM64 | `linux-arm64.AppImage`, `linux-arm64.deb`, `linux-arm64.rpm` |
 | Windows x86_64 | `windows-x64-setup.exe`, `windows-x64.msi`, `windows-x64-portable.zip` |
 
 All packages include the terminal helper. macOS containers use the same final app and retain the
@@ -97,8 +98,9 @@ release sorts after its betas.
 Stable `X.Y.Z` releases also include `winc-<version>-1-x86_64.pkg.tar.zst` built from the same Linux
 binaries. The Arch package is updated with `pacman -U` through the update script below.
 
-Each release also has four signed appcasts for the in-app updater: `appcast-macos-arm64.xml`,
-`appcast-macos-x86_64.xml`, `appcast-linux.xml`, and `appcast-windows.xml`. They list the dmg, the
+Each release also has five signed appcasts for the in-app updater: `appcast-macos-arm64.xml`,
+`appcast-macos-x86_64.xml`, `appcast-linux.xml` (x86_64), `appcast-linux-arm64.xml`, and
+`appcast-windows.xml`. They list the dmg, the
 AppImage, and the NSIS and MSI installers, each with its EdDSA signature; the deb, the rpm and the
 portable zip are downloads only. The portable zip is the payload used by `winctup`, which updates it
 itself. Installs that cannot update themselves (deb, rpm and the Arch package) still read their
@@ -121,8 +123,8 @@ four signed appcasts to a fixed GitHub Release for that channel:
 
 | Version | Channel URL built into the app |
 | --- | --- |
-| Release, such as `1.2.0` | `https://github.com/<owner>/<repo>/releases/download/winc-update-feed-stable` |
-| Prerelease, such as `1.2.0-beta.1` | `https://github.com/<owner>/<repo>/releases/download/winc-update-feed-beta` |
+| Release, such as `1.2.0` | `https://github.com/<owner>/<repo>/releases/download/winct-update-feed-stable` |
+| Prerelease, such as `1.2.0-beta.1` | `https://github.com/<owner>/<repo>/releases/download/winct-update-feed-beta` |
 
 The app reads `<channel URL>/appcast-<platform>.xml`. Each signed appcast points to the immutable,
 versioned installer asset in the published `v<version>` release. The feed workflow updates the
@@ -130,20 +132,20 @@ stable or beta feed only after the release is public. Re-run it manually with a 
 `release_tag` to retry a failed feed publication. Repositories distributing public app builds must
 be public so the app can download releases without GitHub authentication.
 
-The update key is required. Add `WINC_UPDATE_PRIVATE_KEY` under **Settings → Secrets and variables
+The update key is required. Add `WINCT_UPDATE_PRIVATE_KEY` under **Settings → Secrets and variables
 → Actions**; keep the same key across versions because installed builds trust its derived public
 key. `release/common/config.mjs` embeds that public key and the matching GitHub update-channel URL
 into each release build. Builds without both values do not check for updates. Portable Windows,
 deb, and Arch installations are not self-updating.
 
 The in-app release notes are not part of a channel. The app reads
-`https://winc.si/releases/notes/<language>.md` (`en.md`, `zh-cn.md`) when the user opens them;
+`https://github.com/Aleverio/Winc/releases/notes/<language>.md` (`en.md`, `zh-cn.md`) when the user opens them;
 winc.si generates these files from its changelog. Each release starts with a `## <version> · <date>`
-line, which the app uses to pick the releases to show (`crates/winc-app/src/release_notes.rs`).
+line, which the app uses to pick the releases to show (`crates/winct-app/src/release_notes.rs`).
 
 Windows NSIS installations are per-user; MSI installations are per-machine and use the fixed
 UpgradeCode `00FDC6A5-D527-59AE-B4A5-E051B25222F3`. Do not change it between releases. Each installer
-writes `winc-installation` beside the executable. The updater selects the matching NSIS/MSI
+writes `winct-installation` beside the executable. The updater selects the matching NSIS/MSI
 enclosure, verifies its signature, waits for the app to exit, installs silently, and restarts only
 when requested. MSI updates request elevation when required. Portable Windows and deb installations
 continue to use manual or package-manager updates.
@@ -151,30 +153,30 @@ continue to use manual or package-manager updates.
 ### Arch repository
 
 The **Release · Sign Arch repository** workflow stages `deeix-ai-winc` after a stable GitHub
-Release is published. The Arch repository itself is still deployed under `https://winc.si`. In the
+Release is published. The Arch repository itself is still deployed under `https://github.com/Aleverio/Winc`. In the
 repository's **Settings → Secrets and variables → Actions**, add the following repository secrets.
 
 | Name | Value |
 | --- | --- |
-| `WINC_ARCH_SIGNING_PRIVATE_KEY` | Passphrase-protected OpenPGP signing key exported with `gpg --armor --export-secret-keys <fingerprint>` |
-| `WINC_ARCH_SIGNING_PASSPHRASE` | Passphrase for the Arch signing key |
-| `WINC_ARCH_SIGNING_FINGERPRINT` | Full 40-digit uppercase fingerprint without spaces |
+| `WINCT_ARCH_SIGNING_PRIVATE_KEY` | Passphrase-protected OpenPGP signing key exported with `gpg --armor --export-secret-keys <fingerprint>` |
+| `WINCT_ARCH_SIGNING_PASSPHRASE` | Passphrase for the Arch signing key |
+| `WINCT_ARCH_SIGNING_FINGERPRINT` | Full 40-digit uppercase fingerprint without spaces |
 
-After signing succeeds, download `winc-arch-repo-<tag>.zip` from the release's Assets and deploy its
-contents under `https://winc.si/releases/arch/`. Deploy releases in version order. Upload the
+After signing succeeds, download `winct-arch-repo-<tag>.zip` from the release's Assets and deploy its
+contents under `https://github.com/Aleverio/Winc/releases/`. Deploy releases in version order. Upload the
 versioned package and its signature before publishing the indexes and matching signatures together.
 Use the generated installer and publish the full fingerprint on the download page after verifying
 the first deployment.
 
 For local signing, set the same fingerprint and run `bash release/linux/arch/prepare-repo.sh --tag
-v1.2.3 --out target/winc-arch-v1.2.3` on an Arch machine with the signing key and an authenticated `gh`.
+v1.2.3 --out target/winct-arch-v1.2.3` on an Arch machine with the signing key and an authenticated `gh`.
 
 On x86_64 Arch Linux or CachyOS, download and run the installer to configure the signed repository
-and install Winc. The installer runs a full system upgrade and prompts for confirmation.
+and install Winct. The installer runs a full system upgrade and prompts for confirmation.
 
 ```bash
 curl --proto '=https' --tlsv1.2 -fL -o install-arch.sh \
-  https://winc.si/releases/arch/install-arch.sh
+  https://github.com/Aleverio/Winc/releases/install-arch.sh
 sudo bash ./install-arch.sh
 ```
 
@@ -194,18 +196,19 @@ curl -fsSL https://raw.githubusercontent.com/Aleverio/Winc/dev/release/linux/arc
 sudo bash /tmp/update-arch.sh
 ```
 
-Set `WINC_RELEASE_REPO=owner/repo` to update from another fork. The script targets
+Set `WINCT_RELEASE_REPO=owner/repo` to update from another fork. The script targets
 `release/linux/arch/update-arch.sh` on the `dev` branch, so keep that path stable. After an update
 the package has no repository origin, so later updates must use the script again.
 
 ## Verification and publication
 
 Before uploading, macOS checks both container contents, architectures, minimum system versions,
-signatures and notarization where configured. Linux checks the AppImage for bundled Wayland
-libraries, inspects the deb, and installs the stable Arch package in a clean container. Windows checks
+signatures and notarization where configured. Linux checks the newest glibc symbol the programs
+need, the AppImage for bundled Wayland libraries, inspects the deb, installs the rpm in clean
+containers, and installs the stable Arch package in a clean container. Windows checks
 signatures and exercises NSIS/MSI installation and the update launcher using paths containing spaces.
 
-The single publication job requires all four verified target artifacts. It refuses missing,
+The single publication job requires all five verified target artifacts. It refuses missing,
 duplicate or unexpected assets, multiple drafts for the tag, and replacing an already published
 Release. Retrying a draft replaces the same expected asset names. Publishing remains a manual
 action after reviewing the draft, release notes and checksums.

@@ -1,0 +1,215 @@
+//! 在后台保存文档（见 winct-editor 的 `Document::begin_save`）。
+//!
+//! [`App::write_document_with`] 传入 `background` 时走后台，`⌘S` 和自动保存不会阻塞界面。关闭标签、
+//! 关闭窗口、退出、提交和合并之前的保存需要立即知道结果，仍在界面线程上完成，开始之前先等该文档在
+//! 后台的那次保存完成（[`App::wait_for_save`]），两次写入不会颠倒。后台保存期间不同步磁盘，否则
+//! 自己写出的文件会被当成其他程序的修改而报冲突，此时文档仍算未保存。
+
+use std::collections::{HashMap, HashSet};
+use std::sync::mpsc;
+
+use winct_editor::{SaveJob, Saved};
+
+use super::*;
+
+/// 后台保存完成的结果：文档、成功时是否不提示、保存结果。
+type Done = (DocumentId, bool, Saved);
+
+/// 等待后台保存期间检查远端连接是否还有响应的间隔（毫秒）。
+const STALL_CHECK: std::time::Duration = std::time::Duration::from_millis(250);
+
+/// 在后台保存的文档。
+pub(crate) struct BackgroundSaves {
+    /// 正在后台保存的文档：同一个文档同一时刻只保存一次。
+    pub(in crate::app) running: HashSet<DocumentId>,
+    /// 保存期间又请求保存的文档，以及那次请求是否不提示：本次保存完成后再保存一次。
+    pub(in crate::app) again: HashMap<DocumentId, bool>,
+    results: (mpsc::Sender<Done>, mpsc::Receiver<Done>),
+}
+
+impl Default for BackgroundSaves {
+    fn default() -> Self {
+        Self {
+            running: HashSet::new(),
+            again: HashMap::new(),
+            results: mpsc::channel(),
+        }
+    }
+}
+
+impl App {
+    /// 文档 `id` 是否正在后台保存。
+    pub(in crate::app) fn saving(&self, id: DocumentId) -> bool {
+        self.disk.saves.running.contains(&id)
+    }
+
+    /// 在后台写出 `job`（文档 `id` 的保存），完成后由 [`App::poll_saves`] 收取。
+    pub(in crate::app) fn save_in_background(&mut self, id: DocumentId, job: SaveJob, quiet: bool) {
+        self.disk.saves.running.insert(id);
+        let sender = self.disk.saves.results.0.clone();
+        let save = move || {
+            let _ = sender.send((id, quiet, job.run()));
+        };
+        // 远端的文件与改名、移动、删除在同一个线程上按顺序执行。
+        let remote = (self.editor.document(id))
+            .and_then(|doc| doc.path.as_deref())
+            .is_some_and(winct_backend::is_remote);
+        if remote {
+            self.spawn_ordered_then(UserEvent::Saved, save);
+        } else {
+            self.spawn_then(UserEvent::Saved, save);
+        }
+    }
+
+    /// 收取后台保存完成的文档。
+    pub(in crate::app) fn poll_saves(&mut self) {
+        while let Ok(done) = self.disk.saves.results.1.try_recv() {
+            self.saved_in_background(done);
+        }
+    }
+
+    /// 等文档 `id` 在后台的那次保存完成（没有正在保存时立即返回）；等待期间完成的其他文档一并收取。
+    ///
+    /// 远端的连接没有响应时不再等，见 [`App::wait_while_saving`]。
+    pub(in crate::app) fn wait_for_save(&mut self, id: DocumentId) {
+        self.wait_while_saving(|app| app.saving(id));
+    }
+
+    /// 等待所有后台保存完成：关闭、退出之前未保存的状态必须准确。
+    ///
+    /// 远端的连接没有响应时不再等，见 [`App::wait_while_saving`]。
+    pub(in crate::app) fn wait_for_saves(&mut self) {
+        self.wait_while_saving(|app| !app.disk.saves.running.is_empty());
+    }
+
+    /// `pending` 为真期间等待后台保存完成并逐个收取。
+    ///
+    /// 只剩远端的保存、而那些主机的连接都已中断或没有响应时不再等：网络停滞时保存不会返回，
+    /// 界面和退出不能一直等下去。没有写完的文档仍是未保存的，退出时仍然写入备份。
+    fn wait_while_saving(&mut self, pending: impl Fn(&App) -> bool) {
+        while pending(self) {
+            match self.disk.saves.results.1.recv_timeout(STALL_CHECK) {
+                Ok(done) => self.saved_in_background(done),
+                Err(mpsc::RecvTimeoutError::Timeout) if self.saves_stalled() => return,
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => return,
+            }
+        }
+    }
+
+    /// 是否正在后台保存的文档都在连接已中断或没有响应的远端主机上。
+    fn saves_stalled(&self) -> bool {
+        use winct_backend::remote;
+        self.disk.saves.running.iter().all(|id| {
+            let path = self
+                .editor
+                .document(*id)
+                .and_then(|doc| doc.path.as_deref());
+            let target = path.and_then(winct_backend::locate).map(|at| at.target);
+            target.is_some_and(|t| !remote::is_connected(&t) || remote::is_stalled(&t))
+        })
+    }
+
+    fn saved_in_background(&mut self, (id, quiet, saved): Done) {
+        self.disk.saves.running.remove(&id);
+        let Some(doc) = self.editor.document_mut(id) else {
+            return;
+        };
+        let name = doc.name().into_owned();
+        let path = doc.path.clone();
+        match doc.finish_save(saved) {
+            Ok(()) => {
+                if !quiet {
+                    self.flash(winct_i18n::t!("workspace-saved", name = name));
+                }
+                self.blame_saved(id);
+                self.latex_saved(id);
+                self.run_file_saved(id);
+                self.wasm_document_saved(id.0);
+                self.request_redraw();
+            }
+            Err(e) => self.save_failed(id, &name, &e),
+        }
+        // 后台保存期间没有同步磁盘：现在补一次，期间其他程序确实修改过就报冲突。
+        if let Some(path) = path {
+            self.sync_documents(|p| p == path);
+        }
+        if let Some(quiet) = self.disk.saves.again.remove(&id)
+            && self.editor.document(id).is_some_and(|d| d.is_dirty())
+        {
+            self.write_document_with(id, None, quiet, true);
+        }
+    }
+
+    /// 保存文档 `id`（名为 `name`）失败，原因为 `error`：提示原因；本机的文件被系统拒绝写入时，
+    /// 提示条上带「以管理员身份重试…」（[`App::save_as_admin`]）。大文件不带。
+    pub(in crate::app) fn save_failed(
+        &mut self,
+        id: DocumentId,
+        name: &str,
+        error: &std::io::Error,
+    ) {
+        let message = winct_i18n::t!(
+            "workspace-save-failed",
+            name = name,
+            error = error.to_string()
+        );
+        let doc = self.editor.document(id).filter(|doc| !doc.is_large());
+        let path = doc.and_then(|doc| doc.path.as_deref());
+        if path.is_some_and(|path| crate::elevated::can_retry(path, error)) {
+            self.notify_with(NoticeKind::Error, message, NoticeAction::SaveAsAdmin(id));
+        } else {
+            self.notify(NoticeKind::Error, message);
+        }
+    }
+
+    /// 以管理员身份保存文档 `id`：内容按文档的编码写进只有当前用户能访问的临时文件，再经系统的
+    /// 授权对话框由 winc 自身的写入进程写进原文件（见 `crate::elevated`）。授权和写入在单独的
+    /// 线程上等待，结果和普通的后台保存一样经 [`App::poll_saves`] 收取。
+    ///
+    /// 与普通保存一样，文件已被其他程序修改时不写，切到该标签由冲突卡片决定。
+    pub(in crate::app) fn save_as_admin(&mut self, id: DocumentId) {
+        if self.saving(id) {
+            return;
+        }
+        let Some(doc) = self.editor.document_mut(id) else {
+            return;
+        };
+        let name = doc.name().into_owned();
+        if doc.check_overwrite() {
+            if let Some(index) = self.editor.index_of(id) {
+                self.activate_tab(index);
+            }
+            self.notify(
+                NoticeKind::Error,
+                winct_i18n::t!("workspace-save-conflict", name = name),
+            );
+            return;
+        }
+        let Some(doc) = self.editor.document_mut(id) else {
+            return;
+        };
+        let started = crate::elevated::private_dir().and_then(|dir| {
+            let copy = dir.join("content");
+            match doc.begin_handed_save(&copy) {
+                Ok(handed) => Ok((dir, copy, handed)),
+                Err(e) => {
+                    let _ = winct_backend::fs::remove_all(&dir);
+                    Err(e)
+                }
+            }
+        });
+        let (dir, copy, handed) = match started {
+            Ok(started) => started,
+            Err(e) => return self.save_failed(id, &name, &e),
+        };
+        self.disk.saves.running.insert(id);
+        let sender = self.disk.saves.results.0.clone();
+        let owner = crate::elevated::Owner::of(self.window.handle.as_deref());
+        self.spawn_blocking_then(UserEvent::Saved, move || {
+            let result = crate::elevated::write(&copy, handed.target(), owner);
+            let _ = winct_backend::fs::remove_all(&dir);
+            let _ = sender.send((id, false, handed.finish(result)));
+        });
+    }
+}

@@ -94,7 +94,7 @@ verify_app() {
   executable="$(plutil -extract CFBundleExecutable raw -o - "$plist")" || fail "$plist has no CFBundleExecutable"
 
   # The app itself and the terminal helper (the terminal helper).
-  for binary in "$app/Contents/MacOS/$executable" "$app/Contents/MacOS/winc-pty"; do
+  for binary in "$app/Contents/MacOS/$executable" "$app/Contents/MacOS/winct-pty"; do
     [[ -f "$binary" ]] || fail "$binary is missing"
     archs="$(lipo -archs "$binary" 2>/dev/null)" || fail "$binary is not a Mach-O executable"
     [[ "$archs" == "$arch" ]] || fail "$binary is built for '$archs', expected $arch"
@@ -105,7 +105,7 @@ verify_app() {
   done
 
   # The remote server for each Linux architecture, uploaded to hosts on connection.
-  for binary in winc-server-Linux-x86_64 winc-server-Linux-aarch64; do
+  for binary in winct-server-Linux-x86_64 winct-server-Linux-aarch64; do
     [[ -f "$app/Contents/Resources/$binary" ]] || fail "$binary is missing from Resources"
   done
 

@@ -12,26 +12,30 @@ fn member(name: &str, dir: &str, deps: &[&str]) -> Member {
 
 #[test]
 fn changes_pull_in_the_crates_that_depend_on_them() {
-    // 依赖链为 `winc-core` ← `winc-editor` ← {`winc-app`, `xtask`}；`winc-render` 不依赖任何包。
+    // 依赖链为 `winct-core` ← `winct-editor` ← {`winct-app`, `xtask`}；`winct-render` 不依赖任何包。
     let members = [
-        member("winc-app", "crates/winc-app", &["winc-editor", "winc-core"]),
-        member("winc-core", "crates/winc-core", &[]),
-        member("winc-editor", "crates/winc-editor", &["winc-core"]),
-        member("winc-render", "crates/winc-render", &[]),
-        member("xtask", "xtask", &["winc-editor"]),
+        member(
+            "winct-app",
+            "crates/winct-app",
+            &["winct-editor", "winct-core"],
+        ),
+        member("winct-core", "crates/winct-core", &[]),
+        member("winct-editor", "crates/winct-editor", &["winct-core"]),
+        member("winct-render", "crates/winct-render", &[]),
+        member("xtask", "xtask", &["winct-editor"]),
     ];
     let affected = |files: &[&str]| {
         let files: Vec<PathBuf> = files.iter().map(PathBuf::from).collect();
         affected(&members, &files)
     };
     assert_eq!(
-        affected(&["crates/winc-render/src/lib.rs"]),
-        ["winc-render"]
+        affected(&["crates/winct-render/src/lib.rs"]),
+        ["winct-render"]
     );
-    assert_eq!(affected(&["crates/winc-app/src/app.rs"]), ["winc-app"]);
+    assert_eq!(affected(&["crates/winct-app/src/app.rs"]), ["winct-app"]);
     assert_eq!(
-        affected(&["crates/winc-core/src/text.rs"]),
-        ["winc-app", "winc-core", "winc-editor", "xtask"]
+        affected(&["crates/winct-core/src/text.rs"]),
+        ["winct-app", "winct-core", "winct-editor", "xtask"]
     );
     assert!(affected(&["docs/GIT.md"]).is_empty());
     // 根目录的 `Cargo.lock`、`VERSION` 变了时全部 5 个包都要测。
@@ -44,8 +48,8 @@ fn workspace_dependencies_follow_the_layers() {
     let members = members(&root()).unwrap();
     assert_eq!(layer_violations(&members), Vec::<String>::new());
     // 未登记的依赖会被报告。
-    let extra = [member("winc-core", "crates/winc-core", &["winc-render"])];
-    assert_eq!(layer_violations(&extra), ["winc-core → winc-render"]);
+    let extra = [member("winct-core", "crates/winct-core", &["winct-render"])];
+    assert_eq!(layer_violations(&extra), ["winct-core → winct-render"]);
 }
 
 #[test]
@@ -77,7 +81,7 @@ fn crate_clippy_configs_repeat_the_root_settings() {
     assert_eq!(missing_settings(&base, &copy), ["a = 1"]);
 }
 
-/// `winc-app` 的逻辑层（`app/`）只在帧入口调用绘制层，并以字段持有绘制缓存的类型。
+/// `winct-app` 的逻辑层（`app/`）只在帧入口调用绘制层，并以字段持有绘制缓存的类型。
 #[test]
 fn app_logic_does_not_reference_the_view() {
     const ALLOWED: [&str; 5] = [
@@ -120,14 +124,14 @@ fn app_logic_does_not_reference_the_view() {
             }
         }
     }
-    let src = root().join("crates/winc-app/src");
+    let src = root().join("crates/winct-app/src");
     let mut found = Vec::new();
     scan(&src.join("app"), &mut found);
     scan_file(&src.join("app.rs"), &mut found);
     assert_eq!(found, Vec::<String>::new());
 }
 
-/// `winc-app` 只在滚动模块（`app/scroll/`）中写入编辑区的滚动位置 `scroll_line`：赋值、复合赋值
+/// `winct-app` 只在滚动模块（`app/scroll/`）中写入编辑区的滚动位置 `scroll_line`：赋值、复合赋值
 /// 和可变借用都算写入。
 #[test]
 fn scroll_line_is_written_only_by_the_scroll_module() {
@@ -178,7 +182,7 @@ fn scroll_line_is_written_only_by_the_scroll_module() {
     assert!(!writes("(Some(at), _) if at == doc.scroll_line => {"));
     assert!(!writes("let row = doc.scroll_line + 1.0;"));
 
-    let src = root().join("crates/winc-app/src");
+    let src = root().join("crates/winct-app/src");
     let mut found = Vec::new();
     scan(&src, &src.join("app/scroll"), &mut found);
     assert_eq!(found, Vec::<String>::new());

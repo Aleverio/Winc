@@ -23,67 +23,75 @@ struct Member {
 
 /// 各 crate 允许依赖的 workspace 内的包；未列出的 crate 不允许依赖任何内部包。
 ///
-/// 依赖只能指向更底层的 crate：`winc-backend` 不依赖任何内部包，`winc-core`、`winc-render`
-/// 只依赖两者共用的 `winc-emoji`，彼此不依赖；`winc-editor` 不依赖窗口与渲染，只有 `winc-app`
+/// 依赖只能指向更底层的 crate：`winct-backend` 不依赖任何内部包，`winct-core`、`winct-render`
+/// 只依赖两者共用的 `winct-emoji`，彼此不依赖；`winct-editor` 不依赖窗口与渲染，只有 `winct-app`
 /// 同时依赖编辑器与渲染层。新增内部依赖时必须在此登记。
 const LAYERS: &[(&str, &[&str])] = &[
-    ("winc", &["winc-app"]),
+    ("winc", &["winct-app"]),
     (
-        "winc-app",
+        "winct-app",
         &[
-            "winc-backend",
-            "winc-config",
-            "winc-core",
-            "winc-editor",
-            "winc-emoji",
-            "winc-i18n",
-            "winc-plugin",
-            "winc-plugin-api",
-            "winc-preview",
-            "winc-pty",
-            "winc-render",
-            "winc-syntax",
-            "winc-typeset",
-            "winc-version",
-            "winc-vim",
+            "winct-backend",
+            "winct-config",
+            "winct-core",
+            "winct-editor",
+            "winct-emoji",
+            "winct-i18n",
+            "winct-plugin",
+            "winct-plugin-api",
+            "winct-preview",
+            "winct-pty",
+            "winct-render",
+            "winct-syntax",
+            "winct-typeset",
+            "winct-version",
+            "winct-vim",
         ],
     ),
     (
-        "winc-editor",
+        "winct-editor",
         &[
-            "winc-backend",
-            "winc-config",
-            "winc-core",
-            "winc-i18n",
-            "winc-preview",
-            "winc-syntax",
+            "winct-backend",
+            "winct-config",
+            "winct-core",
+            "winct-i18n",
+            "winct-preview",
+            "winct-syntax",
         ],
     ),
     (
-        "winc-typeset",
+        "winct-typeset",
         &[
-            "winc-emoji",
-            "winc-i18n",
-            "winc-preview",
-            "winc-render",
-            "winc-syntax",
+            "winct-emoji",
+            "winct-i18n",
+            "winct-preview",
+            "winct-render",
+            "winct-syntax",
         ],
     ),
-    ("winc-config", &["winc-backend", "winc-i18n", "winc-syntax"]),
-    ("winc-plugin", &["winc-plugin-api"]),
-    ("winc-plugin-api", &[]),
-    ("winc-preview", &["winc-backend", "winc-i18n"]),
-    ("winc-syntax", &["winc-core"]),
-    ("winc-vim", &["winc-core"]),
-    ("winc-pty", &["winc-emoji", "winc-version"]),
-    ("winc-core", &["winc-emoji"]),
-    ("winc-render", &["winc-emoji"]),
-    ("winc-server", &["winc-backend", "winc-watch"]),
+    (
+        "winct-config",
+        &["winct-backend", "winct-i18n", "winct-syntax"],
+    ),
+    ("winct-plugin", &["winct-plugin-api"]),
+    ("winct-plugin-api", &[]),
+    ("winct-preview", &["winct-backend", "winct-i18n"]),
+    ("winct-syntax", &["winct-core"]),
+    ("winct-vim", &["winct-core"]),
+    ("winct-pty", &["winct-emoji", "winct-version"]),
+    ("winct-core", &["winct-emoji"]),
+    ("winct-render", &["winct-emoji"]),
+    ("winct-server", &["winct-backend", "winct-watch"]),
     // 仅测试依赖。
-    ("winc-watch", &["winc-config"]),
+    ("winct-watch", &["winct-config"]),
     (
         "xtask",
-        &["winc-config", "winc-preview", "winc-version", "winc-vim"],
+        &[
+            "winct-config",
+            "winct-preview",
+            "winct-version",
+            "winct-vim",
+        ],
     ),
 ];
 
@@ -268,8 +276,8 @@ fn changed_files(root: &Path, base: Option<&str>) -> Result<Vec<PathBuf>, String
 
 /// 返回要测的包：改动的文件所在的包，以及直接、间接依赖这些包的包。
 ///
-/// 根目录的 `Cargo.toml`、`Cargo.lock`、`VERSION`、`.cargo/`、`rust-toolchain.toml` 变了时全部要测；
-/// 不属于任何包的文档文件不算。
+/// 根目录的 `Cargo.toml`、`Cargo.lock`、`VERSION`、`.cargo/`、`rust-toolchain.toml` 变了时
+/// 全部要测；不属于任何包的文档文件不算。
 fn affected(members: &[Member], changed: &[PathBuf]) -> Vec<String> {
     let global = [
         "Cargo.toml",
@@ -393,7 +401,7 @@ pub fn test(args: &[String]) -> Result<bool, String> {
 
 /// `cargo xtask tidy`：删除 `target/debug/deps` 中已没有被任何可执行文件引用的 `.rcgu.o`。
 ///
-/// 仅在 macOS 上执行，其他平台直接返回。当前的可执行文件引用的目标文件保留，崩溃时的调用栈和
+/// 仅在 macOS 上执行，其他平台直接返回。当前的可执行文件引用的目标文件保留，进程中止时的调用栈和
 /// 调试器需要使用。
 ///
 /// # Errors

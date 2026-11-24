@@ -1,6 +1,6 @@
 //! `cargo xtask vim-fixtures`：用本机的 `vim` 执行对照测试的用例，录制执行结果。
 //!
-//! 用例写在 `crates/winc-vim/fixtures/*.cases` 中。每个用例启动一个不加载任何配置的 `vim` 进程，
+//! 用例写在 `crates/winct-vim/fixtures/*.cases` 中。每个用例启动一个不加载任何配置的 `vim` 进程，
 //! 以 `feedkeys(…, "tx")` 送入按键，结果文本、光标与寄存器写入同名的 `.rec` 文件；测试只读取
 //! `.rec` 文件。无界面执行结束时 `vim` 自动离开插入模式，录制结果不含最终的模式；按键出错后
 //! 余下的按键仍然执行。
@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use winc_vim::fixture::{self, Case, Position, Register, RegisterKind, State};
-use winc_vim::{Code, Key, notation};
+use winct_vim::fixture::{self, Case, Position, Register, RegisterKind, State};
+use winct_vim::{Code, Key, notation};
 
 use crate::root;
 
@@ -39,7 +39,7 @@ const HEADER: &str =
 ///
 /// 带 `--check` 时不写文件，只比较录制结果与现有的 `.rec` 文件，不一致时返回 `Ok(false)`。
 /// 带 `--full` 时生成全部组合并录制到 `target/vim-fixtures-full`，用于开发时的完整核对：
-/// `WINC_VIM_FIXTURES=target/vim-fixtures-full cargo test -p winc-vim --test fixtures`。
+/// `WINCT_VIM_FIXTURES=target/vim-fixtures-full cargo test -p winct-vim --test fixtures`。
 ///
 /// # Errors
 ///
@@ -58,11 +58,11 @@ pub fn fixtures(args: &[String]) -> Result<bool, String> {
         }
     }
 
-    // 全部组合不放进仓库：写到 `target` 下，核对时以环境变量 `WINC_VIM_FIXTURES` 指向该目录。
+    // 全部组合不放进仓库：写到 `target` 下，核对时以环境变量 `WINCT_VIM_FIXTURES` 指向该目录。
     let dir = if full {
         root().join("target/vim-fixtures-full")
     } else {
-        root().join("crates/winc-vim/fixtures")
+        root().join("crates/winct-vim/fixtures")
     };
     std::fs::create_dir_all(&dir).map_err(|e| format!("无法创建 {}：{e}", dir.display()))?;
     // 生成的用例先写成用例文件，再与手写的用例文件一并录制。
@@ -183,7 +183,7 @@ impl Vim {
     /// 创建临时目录；`index` 区分同一进程中的各个录制线程。
     fn new(program: &str, index: usize) -> Result<Self, String> {
         let dir =
-            std::env::temp_dir().join(format!("winc-vim-fixtures-{}-{index}", std::process::id()));
+            std::env::temp_dir().join(format!("winct-vim-fixtures-{}-{index}", std::process::id()));
         std::fs::create_dir_all(&dir).map_err(|e| format!("无法创建 {}：{e}", dir.display()))?;
         Ok(Self {
             program: program.to_owned(),

@@ -1,4 +1,4 @@
-# Places the pinned conpty.dll and OpenConsole.exe in a directory, normally beside winc-pty.exe.
+# Places the pinned conpty.dll and OpenConsole.exe in a directory, normally beside winct-pty.exe.
 # They come from Microsoft's NuGet package and are not committed to this repository.
 param([Parameter(Mandatory)][string]$Destination)
 $ErrorActionPreference = 'Stop'

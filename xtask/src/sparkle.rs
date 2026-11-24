@@ -1,7 +1,7 @@
 //! 应用内更新用的 Sparkle：下载固定版本、校验、放进应用包，以及 `Info.plist` 里的更新配置。
 //!
 //! 发布包按 [`VERSION`] 和 `SHA256` 固定，下载到 `target/sparkle/<版本>/`，校验不通过时不解压。
-//! 更新通道和公钥取自环境变量 `WINC_UPDATE_CHANNELS`、`WINC_UPDATE_PUBLIC_KEY`；两者缺一时
+//! 更新通道和公钥取自环境变量 `WINCT_UPDATE_CHANNELS`、`WINCT_UPDATE_PUBLIC_KEY`；两者缺一时
 //! 应用不检查更新，应用包中仍然包含框架。
 
 use std::path::{Path, PathBuf};
@@ -91,7 +91,7 @@ pub struct UpdateConfig {
 }
 
 impl UpdateConfig {
-    /// 创建从环境变量 `WINC_UPDATE_CHANNELS`、`WINC_UPDATE_PUBLIC_KEY` 读到的更新配置。
+    /// 创建从环境变量 `WINCT_UPDATE_CHANNELS`、`WINCT_UPDATE_PUBLIC_KEY` 读到的更新配置。
     ///
     /// 变量未设置时对应项为空。
     pub fn load() -> UpdateConfig {
@@ -111,14 +111,14 @@ impl UpdateConfig {
                     .unwrap_or_default()
             })
         };
-        let channels = value("WINC_UPDATE_CHANNELS")
+        let channels = value("WINCT_UPDATE_CHANNELS")
             .split_whitespace()
             .filter_map(|pair| pair.split_once('='))
             .map(|(name, base)| (name.to_owned(), base.trim_end_matches('/').to_owned()))
             .collect();
         UpdateConfig {
             channels,
-            public_key: value("WINC_UPDATE_PUBLIC_KEY"),
+            public_key: value("WINCT_UPDATE_PUBLIC_KEY"),
         }
     }
 
@@ -129,10 +129,9 @@ impl UpdateConfig {
 
     /// 返回写进 `Info.plist` 的更新配置项；更新未启用时返回空字符串。
     ///
-    /// 应用按时自行检查（`SUEnableAutomaticChecks` 为 false），检查时同时请求各通道的 appcast。
-    /// 只安装与公钥签名匹配的更新，appcast 本身也必须签名（`SURequireSignedFeed`），解压前
-    /// 校验（`SUVerifyUpdateBeforeExtraction`），不提供自动下载并安装的选项
-    /// （`SUAllowsAutomaticUpdates`）。
+    /// 应用按时自行检查（`SUEnableAutomaticChecks` 为 false），同时请求各通道的 appcast。只安装
+    /// 与公钥签名匹配的更新，appcast 本身也必须签名（`SURequireSignedFeed`），解压前校验
+    /// （`SUVerifyUpdateBeforeExtraction`），不自动下载并安装（`SUAllowsAutomaticUpdates`）。
     ///
     /// `arch` 是应用的架构，取 `arm64` 或 `x86_64`；两种架构各有一份 appcast，见 [`feed_url`]。
     pub fn plist_entries(&self, arch: &str) -> String {
@@ -157,7 +156,7 @@ impl UpdateConfig {
              \t<key>SUPublicEDKey</key>\n\t<string>{}</string>\n\
              \t<key>SURequireSignedFeed</key>\n\t<true/>\n\
              \t<key>SUVerifyUpdateBeforeExtraction</key>\n\t<true/>\n\
-             \t<key>WincUpdateFeeds</key>\n\t<array>\n{feeds}\t</array>\n",
+             \t<key>WinctUpdateFeeds</key>\n\t<array>\n{feeds}\t</array>\n",
             xml_escape(&first),
             xml_escape(&self.public_key),
         )

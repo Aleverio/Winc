@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="./crates/winc-app/assets/icon.svg" alt="winc" width="128" />
+  <img src="./crates/winct-app/assets/icon.svg" alt="winc" width="128" />
 </p>
 
 <h1 align="center">Winct - Alverion's Fork</h1>
 
 <p align="center">
-  An Alverion-maintained fork of Winc, with independent features and customizations.
+  An Alverion-maintained fork of Winct (now Winct), with independent features and customizations.
 </p>
 
 <p align="center">
@@ -13,23 +13,23 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/DEEIX-AI/Winc"><img alt="Upstream project" src="https://img.shields.io/badge/Upstream-DEEIX--AI%2FWinc-black" /></a>
+  <a href="https://github.com/DEEIX-AI/Winc"><img alt="Upstream project" src="https://img.shields.io/badge/Upstream-DEEIX--AI%2FWinct-black" /></a>
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue" /></a>
   <img alt="Rust" src="https://img.shields.io/badge/Rust-2024-b7410e" />
   <img alt="Platforms" src="https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux%20%7C%20Windows-555" />
 </p>
 
 <p align="center">
-  <a href="https://github.com/Aleverio/Winc/releases"><img alt="Download Alverion's Winc builds" src="./.github/assets/download-en.svg" /></a>
+  <a href="https://github.com/Aleverio/Winc/releases"><img alt="Download Alverion's Winct builds" src="./.github/assets/download-en.svg" /></a>
 </p>
 
 > **About this fork:** This is Alverion's independent fork of the original
-> [Winc project by DEEIX-AI](https://github.com/DEEIX-AI/Winc). The upstream authors and project
+> [Original Winct project by DEEIX-AI](https://github.com/DEEIX-AI/Winc). The upstream authors and project
 > remain credited; this fork focuses on Alverion's additions and customizations.
 
 ## Overview
 
-Based on Winc's Rust editor and rendering engine, this fork keeps the upstream editing experience
+Based on Winct's Rust editor and rendering engine, this fork keeps the upstream editing experience
 while developing additional features independently. The upstream project reports a 0.1-second
 startup and 52 MB of memory with 100,000 lines open; those figures are upstream measurements, not
 benchmarks of Alverion's changes.
@@ -50,7 +50,7 @@ This fork adds a more configurable language-server workflow:
 - See LSP connection status in the status bar.
 - View server diagnostics as underlines on the affected text, with line, column, and message details.
 
-These are Alverion's fork changes; the original Winc project and its authors are credited above.
+These are Alverion's fork changes; the original Winct project and its authors are credited above.
 
 ## Features
 
@@ -109,11 +109,11 @@ configuration file:
 }
 ```
 
-Winc sends opened and edited files to the selected server, underlines reported diagnostics, and
+Winct sends opened and edited files to the selected server, underlines reported diagnostics, and
 shows their line and column when you click the diagnostic count in the status bar. Use **Show
 Hover** (Ctrl/Cmd+K, Ctrl/Cmd+I) to request hover information.
 Navigation, signature help, completion, quick fixes, and formatting depend on the selected server's
-advertised capabilities; when navigation returns no location, Winc falls back to its lightweight
+advertised capabilities; when navigation returns no location, Winct falls back to its lightweight
 local search.
 Use **F12** for definition, **Shift+F12** for references, **Alt+F12** for declaration,
 **Ctrl/Cmd+F12** for implementation, and **Ctrl/Cmd+Shift+F12** for type definition.
@@ -128,8 +128,8 @@ Use **F12** for definition, **Shift+F12** for references, **Alt+F12** for declar
 
 Document changes are sent incrementally after the initial open. Servers are closed when documents
 leave their workspace or are no longer eligible for synchronization. LSP is currently disabled for
-documents Winc classifies as large (over 16 MiB); this preserves the editor's large-file memory
-behavior. Whole-document LSP formatting is used when Winc cannot select an external formatter;
+documents Winct classifies as large (over 16 MiB); this preserves the editor's large-file memory
+behavior. Whole-document LSP formatting is used when Winct cannot select an external formatter;
 formatting selected text still requires an external formatter. Invoke signature help with
 **Ctrl+Shift+Space**, or completion with **Ctrl+Space**; trigger-character completion is not
 automatic yet.
@@ -142,21 +142,21 @@ and memory behavior. To compare cold and incremental Tree-sitter update latency 
 source file, run:
 
 ```sh
-cargo test -p winc-syntax --lib tree_sitter_update_benchmark -- --ignored --nocapture
+cargo test -p winct-syntax --lib tree_sitter_update_benchmark -- --ignored --nocapture
 ```
 
 This benchmark measures parse plus token collection, not allocations separately; timings depend on
 build mode and machine. Two recent Windows release-mode runs on the generated 182,780-byte Rust
 source measured cold medians of 266–276 ms and incremental medians of 203–221 ms. Tree-sitter
 currently handles Rust, Python, JavaScript, TypeScript/TSX, and JSON up to 256 KiB; other languages
-and larger files use Winc's line-based lexer. This single-language benchmark does not justify
+and larger files use Winct's line-based lexer. This single-language benchmark does not justify
 expanding grammar coverage or changing the large-file cutoff; compare representative sources and
 repeatable release-build measurements before doing either.
 
 Alverion's builds and releases for this fork are published on
 [this repository's GitHub Releases page](https://github.com/Aleverio/Winc/releases) when available.
 For the original project, visit [DEEIX-AI/Winc](https://github.com/DEEIX-AI/Winc) or
-[winc.si](https://winc.si).
+[winc.si](https://github.com/Aleverio/Winc).
 
 ## Install
 
@@ -218,22 +218,22 @@ The workspace is split into crates by responsibility:
 
 | Crate | Responsibility |
 | --- | --- |
-| `winc-core` | Text, editing, undo, and diffing, independent of the interface |
-| `winc-syntax` | Lexers for syntax highlighting |
-| `winc-editor` | Editor logic: documents, file tree, search, Git, and formatting |
-| `winc-vim` | Vim mode without the interface: key notation, the command table, parsing, and evaluation |
-| `winc-backend` | File system access for local paths and for paths on remote hosts |
-| `winc-server` | The server process that runs on a remote host and serves file operations over SSH |
-| `winc-watch` | Watches folders on the machine that holds them (WSL distributions, remote hosts) |
-| `winc-render` | Rendering: glyphs, rasterization, and presentation |
-| `winc-preview` | Previews for images, SVG, Markdown, PDF, Word documents, and spreadsheets |
-| `winc-typeset` | Layout for the Markdown preview |
-| `winc-pty` | Terminal emulation and the pseudo-terminal helper process |
-| `winc-config` | Configuration and state files |
-| `winc-i18n` | Interface strings (Fluent bundles) |
-| `winc-version` | The product version, read from the `VERSION` file |
-| `winc-app` | The application: windows, events, and views |
-| `winc` | The executable's entry point, which only calls into `winc-app` |
+| `winct-core` | Text, editing, undo, and diffing, independent of the interface |
+| `winct-syntax` | Lexers for syntax highlighting |
+| `winct-editor` | Editor logic: documents, file tree, search, Git, and formatting |
+| `winct-vim` | Vim mode without the interface: key notation, the command table, parsing, and evaluation |
+| `winct-backend` | File system access for local paths and for paths on remote hosts |
+| `winct-server` | The server process that runs on a remote host and serves file operations over SSH |
+| `winct-watch` | Watches folders on the machine that holds them (WSL distributions, remote hosts) |
+| `winct-render` | Rendering: glyphs, rasterization, and presentation |
+| `winct-preview` | Previews for images, SVG, Markdown, PDF, Word documents, and spreadsheets |
+| `winct-typeset` | Layout for the Markdown preview |
+| `winct-pty` | Terminal emulation and the pseudo-terminal helper process |
+| `winct-config` | Configuration and state files |
+| `winct-i18n` | Interface strings (Fluent bundles) |
+| `winct-version` | The product version, read from the `VERSION` file |
+| `winct-app` | The application: windows, events, and views |
+| `winc` | The executable's entry point, which only calls into `winct-app` |
 | `xtask` | Development automation: tests, benchmarks, and packaging |
 
 ## Contributing
@@ -251,7 +251,7 @@ vulnerability, see [SECURITY.md](.github/SECURITY.md).
 ## Links
 
 - [Rust](https://www.rust-lang.org)
-- [Original Winc website](https://winc.si)
+- [Original Winct website](https://github.com/Aleverio/Winc)
 
 ## License
 

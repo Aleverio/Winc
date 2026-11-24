@@ -3,9 +3,9 @@
 import { createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
 
 export function signingKey(env = process.env) {
-  const encoded = (env.WINC_UPDATE_PRIVATE_KEY ?? "").trim();
+  const encoded = (env.WINCT_UPDATE_PRIVATE_KEY ?? "").trim();
   if (!/^[A-Za-z0-9+/]{43}=$/.test(encoded)) {
-    throw new Error("WINC_UPDATE_PRIVATE_KEY must be a base64-encoded 32-byte Sparkle seed");
+    throw new Error("WINCT_UPDATE_PRIVATE_KEY must be a base64-encoded 32-byte Sparkle seed");
   }
   const seed = Buffer.from(encoded, "base64");
   if (seed.length !== 32 || seed.toString("base64") !== encoded) throw new Error("Invalid Sparkle seed");

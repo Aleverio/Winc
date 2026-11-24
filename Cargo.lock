@@ -4107,14 +4107,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "winc"
+name = "winct"
 version = "0.0.0"
 dependencies = [
- "winc-app",
+ "winct-app",
 ]
 
 [[package]]
-name = "winc-app"
+name = "winct-app"
 version = "0.0.0"
 dependencies = [
  "arboard",
@@ -4130,25 +4130,26 @@ dependencies = [
  "roxmltree",
  "security-framework",
  "serde_json",
+ "sha2",
  "tokio",
  "unicode-segmentation",
  "wayland-backend",
  "wayland-client",
  "wayland-protocols",
- "winc-backend",
- "winc-config",
- "winc-core",
- "winc-editor",
- "winc-emoji",
- "winc-i18n",
- "winc-plugin",
- "winc-preview",
- "winc-pty",
- "winc-render",
- "winc-syntax",
- "winc-typeset",
- "winc-version",
- "winc-vim",
+ "winct-backend",
+ "winct-config",
+ "winct-core",
+ "winct-editor",
+ "winct-emoji",
+ "winct-i18n",
+ "winct-plugin",
+ "winct-preview",
+ "winct-pty",
+ "winct-render",
+ "winct-syntax",
+ "winct-typeset",
+ "winct-version",
+ "winct-vim",
  "windows",
  "windows-core",
  "windows-sys 0.59.0",
@@ -4158,33 +4159,33 @@ dependencies = [
 ]
 
 [[package]]
-name = "winc-backend"
+name = "winct-backend"
 version = "0.0.0"
 dependencies = [
  "libc",
 ]
 
 [[package]]
-name = "winc-config"
+name = "winct-config"
 version = "0.0.0"
 dependencies = [
- "winc-backend",
- "winc-i18n",
- "winc-syntax",
+ "winct-backend",
+ "winct-i18n",
+ "winct-syntax",
 ]
 
 [[package]]
-name = "winc-core"
+name = "winct-core"
 version = "0.0.0"
 dependencies = [
  "ropey",
  "unicode-segmentation",
  "unicode-width",
- "winc-emoji",
+ "winct-emoji",
 ]
 
 [[package]]
-name = "winc-editor"
+name = "winct-editor"
 version = "0.0.0"
 dependencies = [
  "chardetng",
@@ -4198,20 +4199,20 @@ dependencies = [
  "regex",
  "regex-syntax",
  "ropey",
- "winc-backend",
- "winc-config",
- "winc-core",
- "winc-i18n",
- "winc-preview",
- "winc-syntax",
+ "winct-backend",
+ "winct-config",
+ "winct-core",
+ "winct-i18n",
+ "winct-preview",
+ "winct-syntax",
 ]
 
 [[package]]
-name = "winc-emoji"
+name = "winct-emoji"
 version = "0.0.0"
 
 [[package]]
-name = "winc-i18n"
+name = "winct-i18n"
 version = "0.0.0"
 dependencies = [
  "fluent-bundle",
@@ -4221,7 +4222,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "winc-plugin"
+name = "winct-plugin"
 version = "0.0.0"
 dependencies = [
  "anyhow",
@@ -4229,11 +4230,11 @@ dependencies = [
  "serde_json",
  "wasmtime",
  "wat",
- "winc-plugin-api",
+ "winct-plugin-api",
 ]
 
 [[package]]
-name = "winc-plugin-api"
+name = "winct-plugin-api"
 version = "0.0.0"
 dependencies = [
  "serde",
@@ -4241,7 +4242,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "winc-preview"
+name = "winct-preview"
 version = "0.0.0"
 dependencies = [
  "gif",
@@ -4253,27 +4254,27 @@ dependencies = [
  "png",
  "pulldown-cmark",
  "roxmltree",
- "winc-backend",
- "winc-i18n",
+ "winct-backend",
+ "winct-i18n",
  "windows",
  "zeno",
  "zune-jpeg",
 ]
 
 [[package]]
-name = "winc-pty"
+name = "winct-pty"
 version = "0.0.0"
 dependencies = [
  "libc",
  "unicode-width",
  "vte",
- "winc-emoji",
- "winc-version",
+ "winct-emoji",
+ "winct-version",
  "windows-sys 0.59.0",
 ]
 
 [[package]]
-name = "winc-render"
+name = "winct-render"
 version = "0.0.0"
 dependencies = [
  "libc",
@@ -4286,21 +4287,21 @@ dependencies = [
  "objc2-quartz-core 0.3.2",
  "softbuffer",
  "swash",
- "winc-emoji",
+ "winct-emoji",
  "windows-sys 0.59.0",
  "winit",
 ]
 
 [[package]]
-name = "winc-server"
+name = "winct-server"
 version = "0.0.0"
 dependencies = [
- "winc-backend",
- "winc-watch",
+ "winct-backend",
+ "winct-watch",
 ]
 
 [[package]]
-name = "winc-syntax"
+name = "winct-syntax"
 version = "0.0.0"
 dependencies = [
  "ropey",
@@ -4310,40 +4311,40 @@ dependencies = [
  "tree-sitter-python",
  "tree-sitter-rust",
  "tree-sitter-typescript",
- "winc-core",
+ "winct-core",
 ]
 
 [[package]]
-name = "winc-typeset"
+name = "winct-typeset"
 version = "0.0.0"
 dependencies = [
- "winc-emoji",
- "winc-i18n",
- "winc-preview",
- "winc-render",
- "winc-syntax",
+ "winct-emoji",
+ "winct-i18n",
+ "winct-preview",
+ "winct-render",
+ "winct-syntax",
 ]
 
 [[package]]
-name = "winc-version"
+name = "winct-version"
 version = "0.0.0"
 
 [[package]]
-name = "winc-vim"
+name = "winct-vim"
 version = "0.0.0"
 dependencies = [
  "fancy-regex",
  "regex",
  "ropey",
- "winc-core",
+ "winct-core",
 ]
 
 [[package]]
-name = "winc-watch"
+name = "winct-watch"
 version = "0.0.0"
 dependencies = [
  "notify",
- "winc-config",
+ "winct-config",
 ]
 
 [[package]]
@@ -4774,10 +4775,10 @@ name = "xtask"
 version = "0.0.0"
 dependencies = [
  "png",
- "winc-config",
- "winc-preview",
- "winc-version",
- "winc-vim",
+ "winct-config",
+ "winct-preview",
+ "winct-version",
+ "winct-vim",
 ]
 
 [[package]]

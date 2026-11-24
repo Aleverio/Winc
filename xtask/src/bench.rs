@@ -230,7 +230,7 @@ fn epoch_ms() -> f64 {
         .map_or(0.0, |d| d.as_secs_f64() * 1000.0)
 }
 
-/// 返回从 winc 的输出里取到的 `WINC <key>=<value>` 中的数值。
+/// 返回从 winc 的输出里取到的 `WINCT <key>=<value>` 中的数值。
 fn field(output: &str, key: &str) -> Option<f64> {
     output
         .split_whitespace()
@@ -246,7 +246,7 @@ fn startup_once(exe: &Path, file: &Path) -> Result<f64, String> {
     let started = epoch_ms();
     let output = Command::new(exe)
         .arg(file)
-        .env("WINC_BENCH", "startup")
+        .env("WINCT_BENCH", "startup")
         .stderr(Stdio::null())
         .output()
         .map_err(|e| e.to_string())?;
@@ -265,7 +265,7 @@ fn startup_once(exe: &Path, file: &Path) -> Result<f64, String> {
 fn scroll_once(exe: &Path, file: &Path, mode: &str) -> Result<(f64, f64), String> {
     let output = Command::new(exe)
         .arg(file)
-        .env("WINC_BENCH", mode)
+        .env("WINCT_BENCH", mode)
         .stderr(Stdio::null())
         .output()
         .map_err(|e| e.to_string())?;
@@ -275,7 +275,7 @@ fn scroll_once(exe: &Path, file: &Path, mode: &str) -> Result<(f64, f64), String
     Ok((p50, p95))
 }
 
-/// 以滚轮测量模式打开 `file`，返回 winc 的输出（含 `WINC wheel_frames=…` 一行）。
+/// 以滚轮测量模式打开 `file`，返回 winc 的输出（含 `WINCT wheel_frames=…` 一行）。
 ///
 /// # Errors
 ///
@@ -283,7 +283,7 @@ fn scroll_once(exe: &Path, file: &Path, mode: &str) -> Result<(f64, f64), String
 fn wheel_once(exe: &Path, file: &Path) -> Result<String, String> {
     let output = Command::new(exe)
         .arg(file)
-        .env("WINC_BENCH", "wheel")
+        .env("WINCT_BENCH", "wheel")
         .stderr(Stdio::null())
         .output()
         .map_err(|e| e.to_string())?;
@@ -300,7 +300,7 @@ fn wheel_once(exe: &Path, file: &Path) -> Result<String, String> {
 fn progress_once(exe: &Path, file: &Path, mode: &str) -> Result<(f64, f64), String> {
     let output = Command::new(exe)
         .arg(file)
-        .env("WINC_BENCH", mode)
+        .env("WINCT_BENCH", mode)
         .stderr(Stdio::null())
         .output()
         .map_err(|e| e.to_string())?;
@@ -310,7 +310,7 @@ fn progress_once(exe: &Path, file: &Path, mode: &str) -> Result<(f64, f64), Stri
     Ok((ms, frames))
 }
 
-/// 以测量模式 `mode`（即传给 `WINC_BENCH` 的值）打开 `path`，等 2.5 秒后采样。
+/// 以测量模式 `mode`（即传给 `WINCT_BENCH` 的值）打开 `path`，等 2.5 秒后采样。
 ///
 /// 返回（物理内存 MB，RSS MB）；不在 macOS 上时返回 `None`。
 ///
@@ -324,7 +324,7 @@ fn memory_once(exe: &Path, path: &Path, mode: &str) -> Result<Option<(f64, f64)>
 
     let mut child = Command::new(exe)
         .arg(path)
-        .env("WINC_BENCH", mode)
+        .env("WINCT_BENCH", mode)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()

@@ -7,26 +7,26 @@ import { publicKey } from "./update-signing.mjs";
 
 test("stable updates use a fixed GitHub release feed", () => {
   assert.equal(channelOf("1.2.3"), "stable");
-  assert.equal(updateFeedTag("1.2.3"), "winc-update-feed-stable");
+  assert.equal(updateFeedTag("1.2.3"), "winct-update-feed-stable");
   assert.equal(
     channelBase("1.2.3", "Aleverio/Winc"),
-    "https://github.com/Aleverio/Winc/releases/download/winc-update-feed-stable",
+    "https://github.com/Aleverio/Winc/releases/download/winct-update-feed-stable",
   );
 });
 
 test("prerelease updates use a separate fixed feed", () => {
   assert.equal(channelOf("1.2.3-beta.1"), "beta");
-  assert.equal(updateFeedTag("1.2.3-beta.1"), "winc-update-feed-beta");
+  assert.equal(updateFeedTag("1.2.3-beta.1"), "winct-update-feed-beta");
   assert.equal(
     channelBase("1.2.3-beta.1", "Aleverio/Winc"),
-    "https://github.com/Aleverio/Winc/releases/download/winc-update-feed-beta",
+    "https://github.com/Aleverio/Winc/releases/download/winct-update-feed-beta",
   );
 });
 
 test("installer URLs point to immutable versioned release assets", () => {
   assert.equal(
-    releaseAssetUrl("1.2.3", "Winc-1.2.3-windows-x64-setup.exe", "Aleverio/Winc"),
-    "https://github.com/Aleverio/Winc/releases/download/v1.2.3/Winc-1.2.3-windows-x64-setup.exe",
+    releaseAssetUrl("1.2.3", "Winct-1.2.3-windows-x64-setup.exe", "Aleverio/Winc"),
+    "https://github.com/Aleverio/Winc/releases/download/v1.2.3/Winct-1.2.3-windows-x64-setup.exe",
   );
 });
 
@@ -39,7 +39,7 @@ test("release configuration embeds the channel URL and matching public key", () 
   });
   assert.equal(
     config.updateChannels,
-    "beta=https://github.com/Aleverio/Winc/releases/download/winc-update-feed-beta",
+    "beta=https://github.com/Aleverio/Winc/releases/download/winct-update-feed-beta",
   );
   assert.equal(config.updatePublicKey, publicKey(privateKey));
 });

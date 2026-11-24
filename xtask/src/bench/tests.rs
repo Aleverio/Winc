@@ -1,4 +1,4 @@
-//! 基准输出的解析测试：`footprint` 的单位换算与 `WINC` 字段的提取。
+//! 基准输出的解析测试：`footprint` 的单位换算与 `WINCT` 字段的提取。
 
 use super::*;
 
@@ -17,7 +17,7 @@ fn parses_footprint_units() {
 
 #[test]
 fn parses_bench_fields() {
-    let out = "WINC main_entry_epoch_ms=10.5\nWINC scroll_frames=300 p50_ms=1.59 p95_ms=2.57 max_ms=3.49\n";
+    let out = "WINCT main_entry_epoch_ms=10.5\nWINCT scroll_frames=300 p50_ms=1.59 p95_ms=2.57 max_ms=3.49\n";
     assert_eq!(field(out, "main_entry_epoch_ms"), Some(10.5));
     assert_eq!(field(out, "p95_ms"), Some(2.57));
     assert_eq!(field(out, "missing"), None);

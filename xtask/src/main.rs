@@ -35,6 +35,8 @@ mod feed;
 #[cfg(test)]
 mod file_types;
 mod icons;
+#[cfg(test)]
+mod linux_baseline;
 mod samples;
 mod server;
 mod sparkle;
@@ -138,8 +140,10 @@ fn appcast(platform: feed::Platform, args: &[String], package: &str) -> Result<b
         ));
     };
     let files: Vec<PathBuf> = args[3..].iter().map(PathBuf::from).collect();
-    feed::write(platform, Path::new(out), base, &files).map(|path| {
-        println!("{}", path.display());
+    feed::write(platform, Path::new(out), base, &files).map(|written| {
+        for path in written {
+            println!("{}", path.display());
+        }
         true
     })
 }
@@ -152,7 +156,7 @@ fn root() -> PathBuf {
         .to_path_buf()
 }
 
-/// 构建 release 版的主程序 `winc-app` 和终端模块的辅助进程 `winc-pty`。
+/// 构建 release 版的主程序 `winct-app` 和终端模块的辅助进程 `winct-pty`。
 ///
 /// `targets` 为空时构建本机架构，否则构建列出的各个目标（如 `aarch64-apple-darwin`）。构建带
 /// `--locked`，依赖版本与 `Cargo.lock` 一致。
@@ -169,7 +173,7 @@ fn build_release(targets: &[&str]) -> Result<(), String> {
             "-p",
             "winc",
             "-p",
-            "winc-pty",
+            "winct-pty",
         ])
         .args(targets.iter().flat_map(|t| ["--target", t]))
         .current_dir(root())

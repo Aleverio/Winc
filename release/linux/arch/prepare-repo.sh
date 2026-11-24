@@ -15,19 +15,19 @@ done
   fail '用法：bash prepare-repo.sh --tag v<稳定版版本> --out <新目录>'
 [[ ! -e $out && ! -L $out ]] || fail "输出路径已存在 $out"
 
-fingerprint=${WINC_ARCH_SIGNING_FINGERPRINT:-}
-[[ $fingerprint =~ ^[0-9A-F]{40}$ ]] || fail '请设置 WINC_ARCH_SIGNING_FINGERPRINT 为 40 位大写十六进制公钥指纹'
+fingerprint=${WINCT_ARCH_SIGNING_FINGERPRINT:-}
+[[ $fingerprint =~ ^[0-9A-F]{40}$ ]] || fail '请设置 WINCT_ARCH_SIGNING_FINGERPRINT 为 40 位大写十六进制公钥指纹'
 github_repo=github.com/DEEIX-AI/Winc
 repo=deeix-ai-winc
 version=${tag#v}-1
 package="winc-$version-x86_64.pkg.tar.zst"
-base_url=https://winc.si/releases/arch/x86_64
+base_url=https://github.com/Aleverio/Winc/releases/x86_64
 
 parent=$(dirname -- "$out")
 mkdir -p -- "$parent"
 parent=$(cd -- "$parent" && pwd -P)
 out="$parent/$(basename -- "$out")"
-workdir=$(mktemp -d -- "$parent/.winc-arch.XXXXXXXX")
+workdir=$(mktemp -d -- "$parent/.winct-arch.XXXXXXXX")
 trap 'rm -rf -- "$workdir"' EXIT
 stage="$workdir/arch"
 mkdir -p -- "$stage/x86_64"
@@ -49,10 +49,10 @@ gh release download "$tag" --repo "$github_repo" --dir "$stage/x86_64" \
      $(awk -F ' = ' '$1 == "arch" {print $2}' <<< "$metadata") == x86_64 ]] ||
     fail "$package 的包名、版本或架构不符"
 
-  gpg --batch --armor --export-options export-minimal --export "$fingerprint" > ../winc-arch.asc
+  gpg --batch --armor --export-options export-minimal --export "$fingerprint" > ../winct-arch.asc
   mkdir -m 0700 "$workdir/verify"
   verify_gpg=(gpg --no-options --homedir "$workdir/verify" --batch --no-auto-key-retrieve --no-auto-key-import)
-  "${verify_gpg[@]}" --import ../winc-arch.asc
+  "${verify_gpg[@]}" --import ../winct-arch.asc
   exported=$("${verify_gpg[@]}" --with-colons --list-keys |
     awk -F: '$1 == "pub" {primary=1} $1 == "fpr" && primary {print $10; primary=0}')
   [[ $exported == "$fingerprint" ]] || fail '导出的公钥指纹不符'
@@ -95,7 +95,7 @@ gh release download "$tag" --repo "$github_repo" --dir "$stage/x86_64" \
   rm -- SHA256SUMS
 )
 
-sed "s/@WINC_ARCH_SIGNING_FINGERPRINT@/$fingerprint/" \
+sed "s/@WINCT_ARCH_SIGNING_FINGERPRINT@/$fingerprint/" \
   "$(dirname "$0")/install-arch.sh" > "$stage/install-arch.sh"
 bash -n "$stage/install-arch.sh"
 mv --no-clobber --no-target-directory -- "$stage" "$out"

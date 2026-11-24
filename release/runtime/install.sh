@@ -8,10 +8,10 @@
 # it, so every later install, update and self-update uses authenticated bytes from the repository.
 set -euo pipefail
 
-REPO=${WINCT_RELEASE_REPO:-Aleverio/Winc}
-REF=${WINCT_RUNTIME_REF:-dev}
+REPO=${WINCTT_RELEASE_REPO:-Aleverio/Winc}
+REF=${WINCTT_RUNTIME_REF:-dev}
 RAW_BASE="https://raw.githubusercontent.com/$REPO/$REF/release/runtime"
-HOME_DIR=${WINCT_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/winct}
+HOME_DIR=${WINCTT_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/winct}
 TMP_DIR=""
 
 fail() { printf 'winctup bootstrap: %s\n' "$*" >&2; exit 1; }
@@ -28,8 +28,8 @@ hash_file() {
 for command in curl awk mktemp; do
   command -v "$command" >/dev/null 2>&1 || fail "missing command: $command"
 done
-[[ $REPO =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "WINCT_RELEASE_REPO must be owner/repo"
-[[ $REF =~ ^[A-Za-z0-9._/-]+$ ]] || fail "WINCT_RUNTIME_REF has an invalid character"
+[[ $REPO =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "WINCTT_RELEASE_REPO must be owner/repo"
+[[ $REF =~ ^[A-Za-z0-9._/-]+$ ]] || fail "WINCTT_RUNTIME_REF has an invalid character"
 
 TMP_DIR=$(mktemp -d)
 curl_args=(curl --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --silent --show-error

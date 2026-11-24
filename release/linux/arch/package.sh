@@ -13,9 +13,10 @@ fi
 release_dir="target/$target/release"
 workdir=$(mktemp -d)
 trap 'rm -rf -- "$workdir"' EXIT
-install -m755 "$release_dir/winc" "$release_dir/winc-pty" \
-  target/remote-server/winc-server-Linux-x86_64 target/remote-server/winc-server-Linux-aarch64 -t "$workdir"
-install -m644 release/linux/arch/PKGBUILD release/linux/winc.desktop release/linux/winc-url-handler.desktop \
+install -m755 "$release_dir/winc" "$release_dir/winct-pty" \
+  target/remote-server/winct-server-Linux-x86_64 target/remote-server/winct-server-Linux-aarch64 -t "$workdir"
+install -m644 release/linux/arch/PKGBUILD release/linux/winc.desktop release/linux/winct-url-handler.desktop \
+  release/linux/winc.xml crates/winct-app/assets/file-icons/project.svg \
   "$release_dir/bundle/icons/winc.png" LICENSE NOTICE -t "$workdir"
 install -m644 release/linux/file-manager/* -t "$workdir"
 
@@ -23,7 +24,7 @@ image=archlinux:base-devel
 package="winc-$version-1-x86_64.pkg.tar.zst"
 # 宿主机已经编译完毕。打包容器只封装文件，运行依赖由下方的安装验证检查。
 docker run --rm --network none --user "$(id -u):$(id -g)" \
-  --env HOME=/work --env "WINC_ARCH_VERSION=$version" \
+  --env HOME=/work --env "WINCT_ARCH_VERSION=$version" \
   --volume "$workdir:/work" --workdir /work "$image" \
   makepkg --nodeps --nosign
 
@@ -32,12 +33,14 @@ docker run --rm --volume "$workdir:/work:ro" "$image" bash -euc '
   pacman -U --noconfirm "/work/$1"
   test "$(pacman -Q winc)" = "winc $2-1"
   test "$(winc --version)" = "winc $2"
-  test -x /usr/bin/winc-pty
-  test -f /usr/lib/winc/winc-server-Linux-x86_64
-  test -f /usr/lib/winc/winc-server-Linux-aarch64
-  test -f /usr/share/kio/servicemenus/winc-open-folder.desktop
-  grep -qx "MimeType=x-scheme-handler/winc;" /usr/share/applications/winc-url-handler.desktop
-  test -f /usr/share/nemo/actions/winc-open-current-folder.nemo_action
+  test -x /usr/bin/winct-pty
+  test -f /usr/lib/winc/winct-server-Linux-x86_64
+  test -f /usr/lib/winc/winct-server-Linux-aarch64
+  test -f /usr/share/kio/servicemenus/winct-open-folder.desktop
+  grep -qx "MimeType=x-scheme-handler/winc;" /usr/share/applications/winct-url-handler.desktop
+  test -f /usr/share/mime/packages/winc.xml
+  test -f /usr/share/icons/hicolor/scalable/mimetypes/application-x-winct-project.svg
+  test -f /usr/share/nemo/actions/winct-open-current-folder.nemo_action
 ' bash "$package" "$version"
 
 install -Dm644 "$workdir/$package" "$release_dir/bundle/arch/$package"

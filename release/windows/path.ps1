@@ -27,4 +27,4 @@ try {
     $key.Close()
 }
 # Deleting an absent variable changes nothing and tells running programs to reread the environment.
-[Environment]::SetEnvironmentVariable('WINC_PATH_CHANGED', $null, 'User')
+[Environment]::SetEnvironmentVariable('WINCT_PATH_CHANGED', $null, 'User')

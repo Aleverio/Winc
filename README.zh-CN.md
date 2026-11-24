@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./crates/winc-app/assets/icon.svg" alt="winc" width="128" />
+  <img src="./crates/winct-app/assets/icon.svg" alt="winc" width="128" />
 </p>
 
 <h1 align="center">Winct</h1>
@@ -13,14 +13,14 @@
 </p>
 
 <p align="center">
-  <a href="https://winc.si"><img alt="Website" src="https://img.shields.io/badge/Website-winc.si-black" /></a>
+  <a href="https://github.com/Aleverio/Winc"><img alt="Website" src="https://img.shields.io/badge/Website-winc.si-black" /></a>
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue" /></a>
   <img alt="Rust" src="https://img.shields.io/badge/Rust-2024-b7410e" />
   <img alt="Platforms" src="https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux%20%7C%20Windows-555" />
 </p>
 
 <p align="center">
-  <a href="https://winc.si/#download"><img alt="下载 Winct" src="./.github/assets/download-zh.svg" /></a>
+  <a href="https://github.com/Aleverio/Winc/#download"><img alt="下载 Winct" src="./.github/assets/download-zh.svg" /></a>
 </p>
 
 ## 概述
@@ -89,10 +89,10 @@ JSON）开启自动选择，或为语言输入自定义程序和参数。服务�
 }
 ```
 
-Winc 会把打开和编辑的文件同步给对应服务器，并为诊断范围添加下划线；点击状态栏的诊断数量可查看
+Winct 会把打开和编辑的文件同步给对应服务器，并为诊断范围添加下划线；点击状态栏的诊断数量可查看
 行号、列号和错误信息。使用「显示悬停信息」（Ctrl/Cmd+K，Ctrl/Cmd+I）请求悬停内容。
 
-主要在 macOS 上开发和测试。可从 [winc.si](https://winc.si/#download) 下载，所有版本见
+主要在 macOS 上开发和测试。可从 [winc.si](https://github.com/Aleverio/Winc/#download) 下载，所有版本见
 [GitHub Releases](https://github.com/DEEIX-AI/Winc/releases)。
 
 ## 安装
@@ -152,22 +152,22 @@ cargo xtask bench                   # 测启动、内存、滚动，对照性能
 
 | crate | 职责 |
 | --- | --- |
-| `winc-core` | 文本、编辑、撤销、差异等与界面无关的基础 |
-| `winc-syntax` | 语法高亮的词法分析 |
-| `winc-editor` | 文档、文件树、查找、Git、格式化等编辑器逻辑 |
-| `winc-vim` | Vim 模式的无界面部分：按键记法、命令表、命令的解析与求值 |
-| `winc-backend` | 文件系统的访问入口，区分本机路径与远端主机上的路径 |
-| `winc-server` | 运行在远端主机上的服务进程，经 SSH 为本机执行文件操作 |
-| `winc-watch` | 在文件所在的机器上监视目录（WSL 发行版内、远端主机上） |
-| `winc-render` | 渲染层：字形、光栅化、呈现 |
-| `winc-preview` | 图片、SVG、Markdown、PDF、Word 文档、表格预览 |
-| `winc-typeset` | Markdown 预览的排版 |
-| `winc-pty` | 终端仿真和伪终端的辅助进程 |
-| `winc-config` | 配置和状态文件 |
-| `winc-i18n` | 界面文案（Fluent 语言包） |
-| `winc-version` | 产品版本号，取自 `VERSION` 文件 |
-| `winc-app` | 应用本体：窗口、事件、各个界面 |
-| `winc` | 可执行文件的入口，只调用 `winc-app` |
+| `winct-core` | 文本、编辑、撤销、差异等与界面无关的基础 |
+| `winct-syntax` | 语法高亮的词法分析 |
+| `winct-editor` | 文档、文件树、查找、Git、格式化等编辑器逻辑 |
+| `winct-vim` | Vim 模式的无界面部分：按键记法、命令表、命令的解析与求值 |
+| `winct-backend` | 文件系统的访问入口，区分本机路径与远端主机上的路径 |
+| `winct-server` | 运行在远端主机上的服务进程，经 SSH 为本机执行文件操作 |
+| `winct-watch` | 在文件所在的机器上监视目录（WSL 发行版内、远端主机上） |
+| `winct-render` | 渲染层：字形、光栅化、呈现 |
+| `winct-preview` | 图片、SVG、Markdown、PDF、Word 文档、表格预览 |
+| `winct-typeset` | Markdown 预览的排版 |
+| `winct-pty` | 终端仿真和伪终端的辅助进程 |
+| `winct-config` | 配置和状态文件 |
+| `winct-i18n` | 界面文案（Fluent 语言包） |
+| `winct-version` | 产品版本号，取自 `VERSION` 文件 |
+| `winct-app` | 应用本体：窗口、事件、各个界面 |
+| `winc` | 可执行文件的入口，只调用 `winct-app` |
 | `xtask` | 开发自动化：测试、基准、打包 |
 
 ## 参与贡献
@@ -178,7 +178,7 @@ cargo xtask bench                   # 测启动、内存、滚动，对照性能
 
 ## 联系我们
 
-- 网站：[winc.si](https://winc.si)
+- 网站：[winc.si](https://github.com/Aleverio/Winc)
 - 邮箱：[support@deeix.com](mailto:support@deeix.com)
 - Telegram：[t.me/deeix_chat](https://t.me/deeix_chat)
 - X：[@DEEIX_AI](https://x.com/DEEIX_AI)

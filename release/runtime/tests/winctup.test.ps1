@@ -35,12 +35,12 @@ try {
     Assert-Equal '1.2.3' (Get-Content -LiteralPath (Join-Path $testHome 'current') -Raw).Trim() 'current holds the active version'
     $launcher = Get-Content -LiteralPath (Join-Path $testBin 'winct.cmd') -Raw
     if ($launcher -notlike "*$testHome*" -or $launcher -notlike '*current*' -or
-        $launcher -notlike '*releases\%WINCT_VERSION%\winc.exe*' -or $launcher -like '*\app\winc.exe*') {
+        $launcher -notlike '*releases\%WINCTT_VERSION%\winc.exe*' -or $launcher -like '*\app\winc.exe*') {
         throw 'not ok - the launcher resolves the active release'
     }
     Assert-Equal $true (Test-Path -LiteralPath (Join-Path $testBin 'winc.cmd')) 'the compatibility launcher exists'
     $commandLauncher = Get-Content -LiteralPath (Join-Path $testBin 'winctup.cmd') -Raw
-    if ($commandLauncher -notlike '*-Command "%WINCT_CMD%" %1*') {
+    if ($commandLauncher -notlike '*-Command "%WINCTT_CMD%" %1*') {
         throw 'not ok - the command launcher forwards the first option after SHIFT'
     }
 

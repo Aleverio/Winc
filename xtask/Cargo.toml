@@ -9,13 +9,13 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-winc-config.workspace = true
-winc-version.workspace = true
+winct-config.workspace = true
+winct-version.workspace = true
 # 打包时把应用图标的 SVG 渲染成各个尺寸的 PNG，与应用内预览 SVG 用的是同一个渲染器。
-winc-preview.workspace = true
+winct-preview.workspace = true
 png.workspace = true
 # 录制 Vim 模式的对照用例：按键记法与录制文件的格式。
-winc-vim.workspace = true
+winct-vim.workspace = true
 
 [lints]
 workspace = true

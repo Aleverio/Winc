@@ -1,38 +1,38 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "xtask"]
-default-members = ["crates/winc"]
+default-members = ["crates/winct"]
 
 [workspace.package]
 edition = "2024"
 rust-version = "1.89"
 publish = false
 license = "Apache-2.0"
-repository = "https://github.com/DEEIX-AI/Winc"
-homepage = "https://winc.si"
+repository = "https://github.com/Aleverio/Winc"
+homepage = "https://github.com/Aleverio/Winc"
 
 [workspace.dependencies]
-winc-config = { path = "crates/winc-config" }
-winc-core = { path = "crates/winc-core" }
-winc-plugin = { path = "crates/winc-plugin" }
-winc-plugin-api = { path = "crates/winc-plugin-api" }
-winc-emoji = { path = "crates/winc-emoji" }
-winc-syntax = { path = "crates/winc-syntax" }
-winc-render = { path = "crates/winc-render" }
-winc-editor = { path = "crates/winc-editor" }
-winc-preview = { path = "crates/winc-preview" }
-winc-pty = { path = "crates/winc-pty" }
-winc-i18n = { path = "crates/winc-i18n" }
-winc-version = { path = "crates/winc-version" }
-winc-backend = { path = "crates/winc-backend" }
-winc-app = { path = "crates/winc-app" }
-winc-typeset = { path = "crates/winc-typeset" }
-winc-vim = { path = "crates/winc-vim" }
+winct-config = { path = "crates/winct-config" }
+winct-core = { path = "crates/winct-core" }
+winct-plugin = { path = "crates/winct-plugin" }
+winct-plugin-api = { path = "crates/winct-plugin-api" }
+winct-emoji = { path = "crates/winct-emoji" }
+winct-syntax = { path = "crates/winct-syntax" }
+winct-render = { path = "crates/winct-render" }
+winct-editor = { path = "crates/winct-editor" }
+winct-preview = { path = "crates/winct-preview" }
+winct-pty = { path = "crates/winct-pty" }
+winct-i18n = { path = "crates/winct-i18n" }
+winct-version = { path = "crates/winct-version" }
+winct-backend = { path = "crates/winct-backend" }
+winct-app = { path = "crates/winct-app" }
+winct-typeset = { path = "crates/winct-typeset" }
+winct-vim = { path = "crates/winct-vim" }
 dscode-lsp = "0.1"
 lsp-types = "0.94"
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 serde_json = "1"
-winc-watch = { path = "crates/winc-watch" }
+winct-watch = { path = "crates/winct-watch" }
 
 # 只把 LF、CR、CRLF 当换行。默认的 `unicode_lines` 还认 VT、FF、U+0085、U+2028、U+2029，
 # 行号会和编译器、git、grep 报的对不上（C 和 Python 源码里常见分页符 FF）。
@@ -65,7 +65,7 @@ ignore = "0.4"
 # 格式化超时时连同子进程一起杀掉整个进程组（`kill(-pgid)`）。
 # 本来就在依赖树里（winit、memmap2 都用它）。
 libc = "0.2"
-# 终端的 VT 序列切分（VT 解析状态机），只有辅助进程 winc-pty 用到。
+# 终端的 VT 序列切分（VT 解析状态机），只有辅助进程 winct-pty 用到。
 vte = { version = "0.15", default-features = false, features = ["std"] }
 notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
 # 不是 UTF-8 的文件（GBK、Big5、Shift JIS、UTF-16……）的编解码和按内容猜编码。
@@ -74,7 +74,7 @@ chardetng = "0.1"
 # 图片预览：PNG、JPEG、GIF、WebP 的解码，纯 Rust，各平台一样
 # （BMP、ICO 自己解，SVG 用 swash 里的 zeno 画）。
 # macOS 上要缩小的 JPEG 例外，交给系统的 ImageIO 按目标大小解码
-# （winc-preview 的 src/image/imageio.rs）。
+# （winct-preview 的 src/image/imageio.rs）。
 png = "0.18"
 zune-jpeg = { version = "0.5", default-features = false, features = ["std"] }
 gif = { version = "0.14", default-features = false, features = ["std"] }
@@ -115,7 +115,7 @@ undocumented_unsafe_blocks = "warn"
 doc_markdown = "warn"
 
 # 调试信息只留行号：崩溃、panic 的回溯仍然有文件和行号，只是调试器里看不了局部变量（要看时本地
-# 临时改回 `true`）。依赖不留调试信息。实测：干净构建 winc-app 的测试 29 → 24 s，
+# 临时改回 `true`）。依赖不留调试信息。实测：干净构建 winct-app 的测试 29 → 24 s，
 # target 1.4 → 0.9 GB，改一个文件后的增量构建不变。
 [profile.dev]
 debug = "line-tables-only"
@@ -127,7 +127,7 @@ opt-level = 2
 debug = false
 
 # 逐像素合成在未优化时耗时增加数十倍。
-[profile.dev.package.winc-render]
+[profile.dev.package.winct-render]
 opt-level = 2
 
 # 优化级别取 2：与 3 相比滚动、高亮、查找、终端吞吐都在测量误差以内，二进制小约 0.6 MB。
@@ -146,7 +146,7 @@ opt-level = "s"
 # 应用层按体积优化（二进制小约 0.7 MB）：其中是事件处理、命令、布局和各界面的绘制；逐像素合成、
 # 文本存储、语法高亮、查找在各自的 crate 中，级别不变。可执行文件单独在 `winc` crate 中：
 # 链接时优化的流程由可执行 crate 的级别决定，该 crate 设为 `"s"` 时二进制反而增大。
-[profile.release.package.winc-app]
+[profile.release.package.winct-app]
 opt-level = "s"
 
 # 文件内查找、全局搜索：按体积优化时纯文字查找慢约 7%。

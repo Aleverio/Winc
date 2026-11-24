@@ -15,7 +15,7 @@ esac
 version="$(node release/common/version.mjs)"
 bundle="$root/target/$target/release/bundle"
 app="$bundle/macos/winc.app"
-release_stem="Winc-$version-macos-$arch"
+release_stem="Winct-$version-macos-$arch"
 dmg="$bundle/dmg/$release_stem.dmg"
 mode="${SIGNING_MODE:-adhoc}"
 workdir=""
@@ -118,7 +118,7 @@ case "$phase" in
     node release/common/sign-updates.mjs --platform "macos-$arch" --bundle "$bundle"
     # Cross-check the portable signer with Sparkle's own verifier before upload.
     make_workdir
-    printf '%s' "$WINC_UPDATE_PRIVATE_KEY" > "$workdir/update-key"
+    printf '%s' "$WINCT_UPDATE_PRIVATE_KEY" > "$workdir/update-key"
     chmod 600 "$workdir/update-key"
     sparkle_tools="$(cargo xtask sparkle)"
     feed="$bundle/updates/appcast-macos-$binary_arch.xml"

@@ -6,10 +6,10 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"' EXIT
 
-export WINCT_HOME="$tmp/source-home"
-export WINCT_BIN="$tmp/source-bin"
+export WINCTT_HOME="$tmp/source-home"
+export WINCTT_BIN="$tmp/source-bin"
 export XDG_DATA_HOME="$tmp/source-xdg"
-mkdir -p "$WINCT_HOME" "$WINCT_BIN" "$XDG_DATA_HOME"
+mkdir -p "$WINCTT_HOME" "$WINCTT_BIN" "$XDG_DATA_HOME"
 
 # The source guard in runtime.sh keeps main() from running here.
 source "$root/release/runtime/runtime.sh"
@@ -62,16 +62,16 @@ asset_info() {
 linux_uses_appimage() {
   FAKE_OS=Linux FAKE_ARCH=x86_64
   asset_info 1.2.3
-  [[ $ASSET_NAME == Winc-1.2.3-linux-x64.AppImage && $ASSET_KIND == appimage ]]
+  [[ $ASSET_NAME == Winct-1.2.3-linux-x64.AppImage && $ASSET_KIND == appimage ]]
 }
 
 macos_uses_dmg() {
   FAKE_OS=Darwin FAKE_ARCH=arm64
   asset_info 1.2.3
-  [[ $ASSET_NAME == Winc-1.2.3-macos-arm64.dmg && $ASSET_KIND == dmg ]]
+  [[ $ASSET_NAME == Winct-1.2.3-macos-arm64.dmg && $ASSET_KIND == dmg ]]
   FAKE_OS=Darwin FAKE_ARCH=x86_64
   asset_info 1.2.3
-  [[ $ASSET_NAME == Winc-1.2.3-macos-x64.dmg && $ASSET_KIND == dmg ]]
+  [[ $ASSET_NAME == Winct-1.2.3-macos-x64.dmg && $ASSET_KIND == dmg ]]
 }
 
 state_round_trips() {
@@ -120,7 +120,7 @@ if [ "$1" = "--appimage-extract" ]; then
   mkdir -p squashfs-root/usr/bin
   printf '#!/bin/sh\n[ "$1" = "--version" ] && printf 1.2.3\\n' > squashfs-root/usr/bin/winc
   chmod +x squashfs-root/usr/bin/winc
-  cp squashfs-root/usr/bin/winc squashfs-root/usr/bin/winc-pty
+  cp squashfs-root/usr/bin/winc squashfs-root/usr/bin/winct-pty
   exit 0
 fi
 printf '1.2.3\n'
@@ -129,7 +129,7 @@ SCRIPT
   mkdir -p "$stage"
   ASSET_KIND=appimage
   extract "$asset" "$stage"
-  [[ -x $stage/app/winc && -x $stage/app/winc-pty && -x $stage/app/usr/bin/winc ]]
+  [[ -x $stage/app/winc && -x $stage/app/winct-pty && -x $stage/app/usr/bin/winc ]]
 
   mkdir -p "$HOME_DIR/releases/1.2.3"
   mv "$stage/app" "$HOME_DIR/releases/1.2.3/app"

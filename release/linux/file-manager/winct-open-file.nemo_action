@@ -1,0 +1,10 @@
+# Nemo action, installed to /usr/share/nemo/actions. Text files only, as in winct-open-file.desktop.
+[Nemo Action]
+Name=Open with Winct
+Name[zh_CN]=通过 Winct 打开
+Comment=Open the selected files in Winct
+Comment[zh_CN]=在 Winct 中打开所选文件
+Exec=winc %F
+Icon-Name=winc
+Selection=notnone
+Mimetypes=text/plain;

@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 if (-not $env:WINDOWS_CERTIFICATE_THUMBPRINT) { return }
 $root = (Resolve-Path "$PSScriptRoot/../..").Path
 if (-not $FilePath.Count) {
-    $FilePath = @("$root/target/$Target/release/winc.exe", "$root/target/$Target/release/winc-pty.exe")
+    $FilePath = @("$root/target/$Target/release/winc.exe", "$root/target/$Target/release/winct-pty.exe")
 }
 $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
     Where-Object { $_.Directory.Parent.Name -as [version] } |

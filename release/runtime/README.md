@@ -33,7 +33,7 @@ points to the same build, so the existing `winc .` command line keeps working. W
 config directory and URL scheme stay `winc`; only the user-facing name is **Winct**.
 
 To pin the runtime to a reviewable revision, replace `dev` in the URL with a commit SHA and export
-the same value as `WINCT_RUNTIME_REF`.
+the same value as `WINCTT_RUNTIME_REF`.
 
 ## Commands
 
@@ -55,7 +55,7 @@ bin directory is not on `PATH`.
 ## Layout
 
 ```
-$WINCT_HOME                         # default: ~/.local/share/winct | %LOCALAPPDATA%\winct
+$WINCTT_HOME                         # default: ~/.local/share/winct | %LOCALAPPDATA%\winct
 ├── runtime/                        # verified copy of runtime.sh / winctup.ps1 + CHECKSUMS
 ├── releases/
 │   ├── 1.2.3/app/                  # Unix: extracted AppImage/DMG build
@@ -65,7 +65,7 @@ $WINCT_HOME                         # default: ~/.local/share/winct | %LOCALAPPD
 ├── current                         # symlink (Unix) or version file (Windows)
 ├── state                           # VERSION, PREVIOUS, CHANNEL, ARTIFACT, INSTALLED_AT
 └── .lock/                          # mutex directory, so two updates cannot race
-$WINCT_BIN/winct, winc              # launchers
+$WINCTT_BIN/winct, winc              # launchers
 $XDG_DATA_HOME/applications/winct.desktop  # Linux desktop entry (Unix only)
 ```
 
@@ -73,15 +73,15 @@ $XDG_DATA_HOME/applications/winct.desktop  # Linux desktop entry (Unix only)
 
 1. Resolve the newest release: `/releases/latest` (stable) or the Releases API (beta, which includes
    prereleases). Tags must be `vX.Y.Z` or `vX.Y.Z-<suffix>`.
-2. Pick the asset for the host: Linux x86_64 → `Winc-<version>-linux-x64.AppImage`, macOS arm64/x64
-   → `Winc-<version>-macos-{arm64,x64}.dmg`, Windows x86_64 →
-   `Winc-<version>-windows-x64-portable.zip`.
+2. Pick the asset for the host: Linux x86_64 → `Winct-<version>-linux-x64.AppImage`, macOS arm64/x64
+   → `Winct-<version>-macos-{arm64,x64}.dmg`, Windows x86_64 →
+   `Winct-<version>-windows-x64-portable.zip`.
 3. Download `SHA256SUMS` and the asset over HTTPS with retries and timeouts, then compare the
    SHA-256. A mismatch or a missing entry aborts before anything is installed.
 4. Extract into `releases/.<version>.staging/` and smoke-test `winc --version`.
 5. Move the staging tree into place, then flip `current` atomically (symlink replacement on Unix,
    temp-file + move on Windows). Record the old version as `PREVIOUS`.
-6. Write the launchers, prune releases beyond `WINCT_KEEP_RELEASES` (the current and previous ones
+6. Write the launchers, prune releases beyond `WINCTT_KEEP_RELEASES` (the current and previous ones
    are always kept) and delete the download cache.
 
 A failed step leaves the previous release untouched. In-app update notifications remain useful for
@@ -93,12 +93,12 @@ discovery, but runtime-managed installs should be updated with `winctup update`.
 - The runtime verifies the release asset against the release's own `SHA256SUMS`.
 - The bootstrap and `self-update` verify the runtime against `CHECKSUMS` committed in this
   repository, so a truncated or tampered download is rejected.
-- `WINCT_RUNTIME_REF` pins the runtime source; pinning to a commit SHA makes the bootstrap
+- `WINCTT_RUNTIME_REF` pins the runtime source; pinning to a commit SHA makes the bootstrap
   reproducible and reviewable.
 - The lock directory serialises concurrent installs/updates.
 - On macOS the quarantine attribute is removed from the extracted app because it was verified by
   hash; Gatekeeper otherwise blocks a command-line launch.
-- `WINCT_GITHUB_TOKEN` (Windows API calls) only raises the GitHub rate limit; it is never written to
+- `WINCTT_GITHUB_TOKEN` (Windows API calls) only raises the GitHub rate limit; it is never written to
   disk. Releases must be public for unauthenticated installs.
 
 This is integrity, not code signing: the trust anchor is this repository over HTTPS. A compromised
@@ -109,13 +109,13 @@ separate decision.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `WINCT_RELEASE_REPO` | `Aleverio/Winc` | Repository whose Releases are used. |
-| `WINCT_RUNTIME_REF` | `dev` | Ref used for the bootstrap and runtime `CHECKSUMS`. |
-| `WINCT_CHANNEL` | `stable` | `stable` or `beta`. |
-| `WINCT_HOME` | `~/.local/share/winct` / `%LOCALAPPDATA%\winct` | Runtime root. |
-| `WINCT_BIN` | `~/.local/bin` / `$WINCT_HOME\bin` | Launcher directory. |
-| `WINCT_KEEP_RELEASES` | `3` | Number of releases retained, including current and previous. |
-| `WINCT_GITHUB_TOKEN` | unset | Optional token for Windows Releases API calls. |
+| `WINCTT_RELEASE_REPO` | `Aleverio/Winc` | Repository whose Releases are used. |
+| `WINCTT_RUNTIME_REF` | `dev` | Ref used for the bootstrap and runtime `CHECKSUMS`. |
+| `WINCTT_CHANNEL` | `stable` | `stable` or `beta`. |
+| `WINCTT_HOME` | `~/.local/share/winct` / `%LOCALAPPDATA%\winct` | Runtime root. |
+| `WINCTT_BIN` | `~/.local/bin` / `$WINCTT_HOME\bin` | Launcher directory. |
+| `WINCTT_KEEP_RELEASES` | `3` | Number of releases retained, including current and previous. |
+| `WINCTT_GITHUB_TOKEN` | unset | Optional token for Windows Releases API calls. |
 
 ## Relationship to native packages
 

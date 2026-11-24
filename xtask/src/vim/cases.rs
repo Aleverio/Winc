@@ -2,8 +2,8 @@
 //!
 //! 生成的结果是确定的：同一份代码每次生成相同的用例文件。用例的名字由所在的组与序号组成。
 
-use winc_vim::fixture::{Case, File, Position};
-use winc_vim::{Key, notation};
+use winct_vim::fixture::{Case, File, Position};
+use winct_vim::{Key, notation};
 
 mod commands;
 mod navigation;

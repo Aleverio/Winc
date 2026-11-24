@@ -2,12 +2,12 @@
 
 use super::*;
 
-#[path = "../../../crates/winc/build_icon.rs"]
+#[path = "../../../crates/winct/build_icon.rs"]
 mod build_icon;
 
 /// 读取提交在仓库里、嵌入 Windows 可执行文件的 ICO。
 fn committed_ico() -> Vec<u8> {
-    std::fs::read(root().join("crates/winc-app/assets/winc.ico")).unwrap()
+    std::fs::read(root().join("crates/winct-app/assets/winct.ico")).unwrap()
 }
 
 /// 返回 ICO 中各图像的（目录中的边长字节，PNG 数据）。
@@ -25,8 +25,8 @@ fn images(ico: &[u8]) -> Vec<(u8, &[u8])> {
 
 #[test]
 fn the_committed_icon_matches_the_svg() {
-    let text = std::fs::read_to_string(root().join("crates/winc-app/assets/icon.svg")).unwrap();
-    let picture = winc_preview::svg::load(&text, None, None).unwrap();
+    let text = std::fs::read_to_string(root().join("crates/winct-app/assets/icon.svg")).unwrap();
+    let picture = winct_preview::svg::load(&text, None, None).unwrap();
     let ico = committed_ico();
     let images = images(&ico);
     assert_eq!(images.len(), 4);
@@ -50,7 +50,7 @@ fn the_committed_icon_matches_the_svg() {
                 .all(|(a, b)| a.abs_diff(*b) <= 2);
         assert!(
             same,
-            "重新生成 crates/winc-app/assets/winc.ico（cargo xtask icons）：{size}"
+            "重新生成 crates/winct-app/assets/winct.ico（cargo xtask icons）：{size}"
         );
     }
 }
@@ -104,9 +104,9 @@ fn a_file_that_is_not_an_icon_is_rejected() {
 /// 与 SVG 中底板的宽度相同。
 #[test]
 fn the_macos_icon_follows_the_app_icon_template() {
-    let text = std::fs::read_to_string(root().join("crates/winc-app/assets/icon.svg")).unwrap();
+    let text = std::fs::read_to_string(root().join("crates/winct-app/assets/icon.svg")).unwrap();
     assert!(text.contains(&format!("width=\"{}\"", crate::dmg::ICON_TILE)));
-    let picture = winc_preview::svg::load(&text, None, None).unwrap();
+    let picture = winct_preview::svg::load(&text, None, None).unwrap();
     let pixels = crate::dmg::macos_icon(&picture, 1024);
     assert_eq!((pixels.width, pixels.height), (1024, 1024));
     let opaque = |x: usize, y: usize| pixels.rgba[(y * 1024 + x) * 4 + 3] > 128;

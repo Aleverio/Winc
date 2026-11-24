@@ -12,9 +12,9 @@ if ($config.version -ne $version) { throw 'build configuration does not match th
 $release = "$root/target/$Target/release"
 $bundle = "$release/bundle"
 $stage = "$bundle/stage"
-$stem = "Winc-$version-windows-x64"
+$stem = "Winct-$version-windows-x64"
 New-Item -ItemType Directory -Force $stage | Out-Null
-foreach ($name in @('winc.exe', 'winc-pty.exe', 'conpty.dll', 'OpenConsole.exe')) {
+foreach ($name in @('winc.exe', 'winct-pty.exe', 'conpty.dll', 'OpenConsole.exe')) {
     if (-not (Test-Path "$release/$name")) { throw "missing $name" }
     Copy-Item "$release/$name" "$stage/$name" -Force
 }
@@ -28,9 +28,9 @@ Copy-Item "$PSScriptRoot/path.ps1" $stage -Force
 # Document icons for the file types, one per group of types (see installer.nsi).
 New-Item -ItemType Directory -Force "$stage/icons" | Out-Null
 Copy-Item "$PSScriptRoot/icons/*.ico" "$stage/icons" -Force
-Copy-Item "$root/target/x86_64-unknown-linux-musl/release/winc-watch" $stage -Force
+Copy-Item "$root/target/x86_64-unknown-linux-musl/release/winct-watch" $stage -Force
 # The remote server for each Linux architecture, uploaded to hosts on connection.
-$servers = @('winc-server-Linux-x86_64', 'winc-server-Linux-aarch64')
+$servers = @('winct-server-Linux-x86_64', 'winct-server-Linux-aarch64')
 foreach ($name in $servers) {
     if (-not (Test-Path "$root/target/remote-server/$name")) { throw "missing $name" }
     Copy-Item "$root/target/remote-server/$name" $stage -Force
@@ -43,13 +43,13 @@ if ($Phase -eq 'portable') {
     New-Item -ItemType Directory -Force "$stage/data" | Out-Null
     Copy-Item "$PSScriptRoot/portable-data-readme.txt" "$stage/data/README.txt" -Force
     # Enumerate the files: installer markers never enter a portable archive.
-    Compress-Archive -Path "$stage/winc.exe", "$stage/winc-pty.exe", "$stage/conpty.dll", "$stage/OpenConsole.exe", "$stage/winc-watch", "$stage/winc-server-Linux-x86_64", "$stage/winc-server-Linux-aarch64", "$stage/bin", "$stage/data", "$stage/LICENSE", "$stage/NOTICE", "$stage/winc.ico" -DestinationPath "$portable/$stem-portable.zip" -Force
+    Compress-Archive -Path "$stage/winc.exe", "$stage/winct-pty.exe", "$stage/conpty.dll", "$stage/OpenConsole.exe", "$stage/winct-watch", "$stage/winct-server-Linux-x86_64", "$stage/winct-server-Linux-aarch64", "$stage/bin", "$stage/data", "$stage/LICENSE", "$stage/NOTICE", "$stage/winc.ico" -DestinationPath "$portable/$stem-portable.zip" -Force
     return
 }
 
 New-Item -ItemType Directory -Force "$stage/nsis", "$stage/msi", "$bundle/nsis", "$bundle/msi" | Out-Null
-[IO.File]::WriteAllText("$stage/nsis/winc-installation", "nsis`n")
-[IO.File]::WriteAllText("$stage/msi/winc-installation", "msi`n")
+[IO.File]::WriteAllText("$stage/nsis/winct-installation", "nsis`n")
+[IO.File]::WriteAllText("$stage/msi/winct-installation", "msi`n")
 $makensis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
 $wix = "${env:ProgramFiles(x86)}\WiX Toolset v3.14\bin"
 if (-not (Test-Path $makensis) -or -not (Test-Path "$wix/candle.exe")) { throw 'NSIS 3.11 and WiX 3.14.1 are required' }

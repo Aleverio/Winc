@@ -4,8 +4,8 @@ use super::*;
 
 const TEXT: &str = r#"
 # 注释
-WINC_UPDATE_CHANNELS="global=https://dl.example.com/winc/ cn=https://dl.example.cn/winc"
-WINC_UPDATE_PUBLIC_KEY="abc+/="
+WINCT_UPDATE_CHANNELS="global=https://dl.example.com/winc/ cn=https://dl.example.cn/winc"
+WINCT_UPDATE_PUBLIC_KEY="abc+/="
 "#;
 
 // `TEXT` 中的地址前缀以 `/` 结尾，解析后必须去掉；两个通道的顺序保持不变。
@@ -26,7 +26,7 @@ fn channels_and_key_come_from_the_file_unless_the_environment_sets_them() {
     assert!(config.enabled());
 
     let env =
-        |key: &str| (key == "WINC_UPDATE_CHANNELS").then(|| "a=http://127.0.0.1:1".to_owned());
+        |key: &str| (key == "WINCT_UPDATE_CHANNELS").then(|| "a=http://127.0.0.1:1".to_owned());
     // 环境变量只提供通道，公钥仍然取自文本。
     let config = UpdateConfig::parse(TEXT, env);
     assert_eq!(
@@ -38,15 +38,15 @@ fn channels_and_key_come_from_the_file_unless_the_environment_sets_them() {
 
 #[test]
 fn info_plist_gets_update_keys_only_when_configured() {
-    let empty = UpdateConfig::parse("WINC_UPDATE_CHANNELS=\"\"\n", |_| None);
+    let empty = UpdateConfig::parse("WINCT_UPDATE_CHANNELS=\"\"\n", |_| None);
     assert!(!empty.enabled());
     assert_eq!(empty.plist_entries("arm64"), "");
     // 只有通道、没有公钥也不启用：Sparkle 不安装无法校验的更新。
-    let no_key = UpdateConfig::parse("WINC_UPDATE_CHANNELS=\"a=https://x\"\n", |_| None);
+    let no_key = UpdateConfig::parse("WINCT_UPDATE_CHANNELS=\"a=https://x\"\n", |_| None);
     assert_eq!(no_key.plist_entries("arm64"), "");
 
     let entries = UpdateConfig::parse(TEXT, |_| None).plist_entries("arm64");
-    // 每个通道写一条 `WincUpdateFeeds`，地址带本机架构后缀。
+    // 每个通道写一条 `WinctUpdateFeeds`，地址带本机架构后缀。
     for want in [
         "<string>https://dl.example.com/winc/appcast-macos-arm64.xml</string>",
         "<string>https://dl.example.cn/winc/appcast-macos-arm64.xml</string>",
@@ -58,7 +58,7 @@ fn info_plist_gets_update_keys_only_when_configured() {
     }
     // 地址里的 `&` 要转义，否则 Info.plist 不是合法的 XML。
     let amp = UpdateConfig::parse(
-        "WINC_UPDATE_CHANNELS=\"a=https://x/?a=1&b=2\"\nWINC_UPDATE_PUBLIC_KEY=\"k\"\n",
+        "WINCT_UPDATE_CHANNELS=\"a=https://x/?a=1&b=2\"\nWINCT_UPDATE_PUBLIC_KEY=\"k\"\n",
         |_| None,
     );
     assert!(

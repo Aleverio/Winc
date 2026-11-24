@@ -6,7 +6,7 @@ use crate::root;
 
 /// 在 `out` 中生成 `winc.png`（256 像素）和含四种尺寸的 `winc.ico`。
 ///
-/// 嵌入 Windows 可执行文件的 `crates/winc-app/assets/winc.ico` 是其中一次的结果，提交在仓库里
+/// 嵌入 Windows 可执行文件的 `crates/winct-app/assets/winc.ico` 是其中一次的结果，提交在仓库里
 /// （构建 Windows 版本时不必渲染 SVG）；改了 SVG 以后要把新生成的文件复制过去，否则测试失败。
 ///
 /// # Errors
@@ -15,8 +15,8 @@ use crate::root;
 pub fn write(out: &Path) -> Result<(), String> {
     let io = |e: std::io::Error| e.to_string();
     let text =
-        std::fs::read_to_string(root().join("crates/winc-app/assets/icon.svg")).map_err(io)?;
-    let picture = winc_preview::svg::load(&text, None, None)?;
+        std::fs::read_to_string(root().join("crates/winct-app/assets/icon.svg")).map_err(io)?;
+    let picture = winct_preview::svg::load(&text, None, None)?;
     std::fs::create_dir_all(out).map_err(io)?;
     let mut images = Vec::new();
     for size in [16u32, 32, 48, 256] {
