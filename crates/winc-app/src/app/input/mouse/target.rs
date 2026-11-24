@@ -134,6 +134,11 @@ impl App {
             || self.panels.name_input.is_some()
     }
 
+    /// 窗口内的提示框或菜单是否处于打开状态；二者位于最上层且为模态，打开期间下方的部件不响应鼠标。
+    pub(in crate::app) fn modal_open(&self) -> bool {
+        self.overlays.alert.is_some() || self.popup().is_some()
+    }
+
     /// 返回在 (`x`, `y`) 落指时立即开始的窗口操作：顶栏空白处移动窗口，窗口边缘调整大小。
     ///
     /// 窗口操作不参与内容滚动与长按菜单的识别。浮层或设置页打开时返回 `None`。
@@ -194,8 +199,8 @@ impl App {
     /// 返回窗口坐标 (`x`, `y`)（逻辑像素）处的悬停目标。
     pub(in crate::app) fn hover_at(&self, x: f32, y: f32) -> Hover {
         let l = &self.layout;
-        // 窗口内的菜单位于最上层，打开期间下方的部件不产生悬停。
-        if self.popup().is_some() {
+        // 窗口内的提示框和菜单位于最上层，打开期间下方的部件不产生悬停。
+        if self.modal_open() {
             return Hover::None;
         }
 
@@ -300,6 +305,10 @@ impl App {
 
     pub(super) fn target_at(&self, x: f32, y: f32) -> Target {
         let l = &self.layout;
+        // 提示框和菜单自身的悬停与点击由调用方先行处理。
+        if self.modal_open() {
+            return Target::Blocked;
+        }
         // 窗口最外圈的细边用于改变窗口大小，位于所有部件之上；窗口按钮位于顶栏右端。
         if let Some(direction) = self.resize_edge_at(x, y) {
             return Target::ResizeEdge(direction);
@@ -843,6 +852,11 @@ impl App {
 
     fn place_cursor_icon(&mut self) {
         let (x, y) = self.pointer.mouse;
+        // 提示框和菜单可叠加于设置与对话框之上，故先行判断，打开期间一律显示箭头。
+        if self.modal_open() {
+            self.set_cursor_icon(CursorIcon::Default);
+            return;
+        }
         // 新建工作树对话框打开时只判断对话框自身：
         // 名称输入框上显示文本光标（I 形），其余位置显示箭头。
         if self.overlays.form_dialog.is_some() {

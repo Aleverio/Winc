@@ -222,6 +222,7 @@ impl App {
             done: Box::new(done),
         });
         self.set_hover(Hover::None);
+        self.update_cursor_icon();
         self.request_redraw();
         true
     }
