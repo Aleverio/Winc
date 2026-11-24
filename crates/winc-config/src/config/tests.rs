@@ -352,6 +352,7 @@ fn round_trips_through_json() {
         diff_inline: Some(true),
         line_numbers: Some(false),
         status_bar: Some(false),
+        full_tab_names: Some(false),
         restore_window: Some(false),
         theme: Some(ThemeChoice::Dark),
         light_theme: Some("paper".to_string()),

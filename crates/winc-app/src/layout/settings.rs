@@ -100,6 +100,8 @@ pub enum Setting {
     RenderWhitespace,
     /// 显示状态栏。
     StatusBar,
+    /// 编辑器的标签按文件名加宽，不截短文件名。
+    FullTabNames,
     /// 记住窗口大小和位置。
     RestoreWindow,
     /// 播放界面的过渡动画。
@@ -306,7 +308,7 @@ impl Setting {
             S::Minimap | S::StickyScroll | S::RenderWhitespace | S::WholeLines => {
                 SettingsPage::Editor
             }
-            S::SmoothCaret | S::DragAndDrop => SettingsPage::Editor,
+            S::SmoothCaret | S::DragAndDrop | S::FullTabNames => SettingsPage::Editor,
             S::DefaultLanguage | S::DetectLanguageOnPaste | S::VimMode | S::VimClipboard => {
                 SettingsPage::Editor
             }
@@ -384,6 +386,7 @@ impl Setting {
             S::DiffInline => "editor.diffInline",
             S::RenderWhitespace => "editor.renderWhitespace",
             S::StatusBar => "editor.statusBar",
+            S::FullTabNames => "editor.fullTabNames",
             S::RestoreWindow => "editor.restoreWindow",
             S::SmoothScrolling => "editor.smoothScrolling",
             S::DropFolder => "editor.dropFolder",
@@ -489,6 +492,7 @@ impl Setting {
             Setting::DiffInline => t!("settings-diff-inline"),
             Setting::RenderWhitespace => t!("settings-render-whitespace"),
             Setting::StatusBar => t!("settings-status-bar"),
+            Setting::FullTabNames => t!("settings-full-tab-names"),
             Setting::RestoreWindow => t!("settings-restore-window"),
             Setting::Animations => t!("settings-animations"),
             Setting::SmoothScrolling => t!("settings-smooth-scrolling"),
@@ -598,6 +602,7 @@ impl Setting {
             Setting::DiffInline => Some(t!("settings-diff-inline-desc")),
             Setting::RenderWhitespace => Some(t!("settings-render-whitespace-desc")),
             Setting::StatusBar => Some(t!("settings-status-bar-desc")),
+            Setting::FullTabNames => Some(t!("settings-full-tab-names-desc")),
             Setting::RestoreWindow => Some(t!("settings-restore-window-desc")),
             Setting::Animations => Some(t!("settings-animations-desc")),
             Setting::SmoothScrolling => Some(t!("settings-smooth-scrolling-desc")),
@@ -692,6 +697,7 @@ impl Setting {
             | Setting::LineNumbers
             | Setting::DiffInline
             | Setting::StatusBar
+            | Setting::FullTabNames
             | Setting::RestoreWindow
             | Setting::Animations
             | Setting::SmoothScrolling

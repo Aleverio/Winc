@@ -157,6 +157,7 @@ impl SettingsPage {
                         S::SmoothCaret,
                         S::RenderWhitespace,
                         S::WholeLines,
+                        S::FullTabNames,
                     ],
                 ),
                 group(t!("settings-group-behavior"), vec![S::DragAndDrop]),

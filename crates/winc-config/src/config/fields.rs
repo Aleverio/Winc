@@ -265,6 +265,7 @@ const EDITOR: &[Field] = &[
     bool_field!("diffInline", diff_inline),
     bool_field!("lineNumbers", line_numbers),
     bool_field!("statusBar", status_bar),
+    bool_field!("fullTabNames", full_tab_names),
     bool_field!("restoreWindow", restore_window),
 ];
 

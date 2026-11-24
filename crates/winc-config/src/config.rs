@@ -110,6 +110,9 @@ pub struct Config {
     pub line_numbers: Option<bool>,
     /// 显示窗口底部的状态栏，默认为是。
     pub status_bar: Option<bool>,
+    /// 编辑器的标签按文件名加宽、显示完整的文件名，默认为是；关闭后标签有最大宽度，过长的文件名
+    /// 截短。
+    pub full_tab_names: Option<bool>,
     /// 新窗口沿用上次关闭时的大小和位置，默认为是。
     pub restore_window: Option<bool>,
     /// 配色：`auto` 跟随系统，`dark` 或 `light` 强制指定。
