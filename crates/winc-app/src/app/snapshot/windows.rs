@@ -235,6 +235,42 @@ fn dropped_on_the_dock_icon_open_in_the_window_that_has_them_or_the_current_one(
     let _ = std::fs::remove_dir_all(&other);
 }
 
+/// 本机的文件不交给远端主机的窗口：交给最近成为当前窗口的本机窗口，没有本机窗口时新建窗口。
+#[cfg(unix)]
+#[test]
+fn local_files_skip_windows_on_a_remote_host() {
+    let (mut winc, a, b, dir) = two_windows("windows-local-files");
+    let mut remote = blank_app(false);
+    let _abort = remote.begin_connection_for_test();
+    let c = winc.add_detached(remote);
+    winc.settle_for_test();
+    let target = |path: &Path| crate::cli::Target {
+        path: path.to_path_buf(),
+        line: None,
+        col: None,
+    };
+    let file = winc_config::files::canonicalize(&dir)
+        .unwrap()
+        .join("a.txt");
+
+    for local in [b, a] {
+        winc.set_active(local);
+        winc.set_active(c);
+        assert_eq!(winc.window_for_test(&[target(&file)]), Ok(local));
+    }
+    // 开着文件所在目录的窗口仍然优先。
+    winc.set_active(b);
+    let src = winc_config::files::canonicalize(dir.join("src")).unwrap();
+    assert_eq!(winc.window_for_test(&[target(&src.join("main.rs"))]), Ok(a));
+
+    let mut only_remote = Winc::new(None, None);
+    let mut remote = blank_app(false);
+    let _abort = remote.begin_connection_for_test();
+    only_remote.add_detached(remote);
+    assert_eq!(only_remote.window_for_test(&[target(&file)]), Err(None));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn settings_changed_in_one_window_reach_the_others() {
     let (mut winc, a, b, dir) = two_windows("windows-config");
