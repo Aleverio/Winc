@@ -163,7 +163,7 @@ fn changed_files_nest_like_the_file_tree() {
     };
     let viewed = [files[4].clone(), files[0].clone()];
     let rows = log_file_rows(Some(root), &viewed, pinned, &none);
-    let first = [dir(&ef, &ef, 0, true), file(0, 1), dir("b", "b", 0, true)];
+    let first = [dir(&ef, "e/f", 0, true), file(0, 1), dir("b", "b", 0, true)];
     assert_eq!(rows[..3], first);
 }
 
