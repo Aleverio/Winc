@@ -34,6 +34,8 @@ impl App {
         {
             self.focus_pane(pane);
         }
+        // 点在终端不在用的一栏上：先改用那一栏；按在分栏的分隔线上是调整大小，不换。
+        self.focus_terminal_group_at(x, y);
         // 点在终端标签里不在前台的终端上：同样先换到前台。按在分隔线上是调整大小，不换。
         if self.terminal_split_at(x, y).is_none() {
             self.focus_terminal_pane_at(x, y);
@@ -427,6 +429,12 @@ impl App {
                     HeaderHit::Hide => self.click_terminal_button(),
                     HeaderHit::Run(_) | HeaderHit::Find(_) => {}
                 }
+            }
+            Target::TerminalGroupSplit(index) if self.click_count(x, y) >= 2 => {
+                self.reset_terminal_group_split(index);
+            }
+            Target::TerminalGroupSplit(index) => {
+                self.pointer.drag = Drag::TerminalGroupSplit { index };
             }
             Target::TerminalSplit(index) if self.click_count(x, y) >= 2 => {
                 self.reset_terminal_split(index);

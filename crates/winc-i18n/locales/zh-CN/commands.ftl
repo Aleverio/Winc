@@ -38,6 +38,7 @@ cmd-unsplit = 合并全部窗格
 cmd-next-pane = 下一个窗格
 cmd-previous-pane = 上一个窗格
 cmd-split-terminal = 拆分终端
+cmd-move-terminal-to-group = 将终端移到新分栏
 cmd-next-terminal-pane = 终端中的下一个窗格
 cmd-previous-terminal-pane = 终端中的上一个窗格
 cmd-next-tab = 下一个标签页

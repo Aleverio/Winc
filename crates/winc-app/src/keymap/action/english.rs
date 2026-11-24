@@ -273,6 +273,7 @@ impl Action {
             NextTerminal => "Terminal: Next Tab",
             PreviousTerminal => "Terminal: Previous Tab",
             SplitTerminal => "Terminal: Split",
+            MoveTerminalToGroup => "Terminal: Move to New Group",
             NextTerminalPane => "Terminal: Focus Next Pane",
             PreviousTerminalPane => "Terminal: Focus Previous Pane",
             FocusTerminal1 => "Terminal: Focus Tab 1",

@@ -280,6 +280,7 @@ pub const ACTIONS: &[Action] = {
         NextTerminal,
         PreviousTerminal,
         SplitTerminal,
+        MoveTerminalToGroup,
         NextTerminalPane,
         PreviousTerminalPane,
         FocusTerminal1,

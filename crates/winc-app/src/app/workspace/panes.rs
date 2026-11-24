@@ -20,7 +20,7 @@ pub(crate) const GRIP: f32 = 3.0;
 /// 拆分后每一侧的最小宽度或高度（逻辑像素，取自调参）。
 const PANE_MIN: f32 = 160.0;
 /// 拖动标签时，鼠标离窗格边缘不足窗格宽或高的这一比例就拆分，否则放进窗格。
-const DROP_EDGE: f32 = 1.0 / 3.0;
+pub(crate) const DROP_EDGE: f32 = 1.0 / 3.0;
 
 /// 一个窗格的位置。
 #[derive(Debug, Clone, Copy, PartialEq)]

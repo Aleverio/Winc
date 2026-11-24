@@ -398,7 +398,7 @@ pub(super) fn draw_status(app: &mut App, frame: &mut Frame<'_>) {
             p.text_muted
         };
         icons::terminal(frame, center, color.alpha(opacity), bar);
-        let unseen = app.terminal.tabs.iter().filter_map(|t| t.unseen);
+        let unseen = app.terminal.all_tabs().filter_map(|t| t.unseen);
         if !open && let Some(failed) = unseen.reduce(|a, b| a || b) {
             let dot = if failed { p.error } else { p.accent };
             let at = Rect::new(pill.right() - 7.0, pill.y + 2.0, 5.0, 5.0);

@@ -107,6 +107,16 @@ fn sample() -> State {
                     height: 320.0,
                     width: 0.0,
                     maximized: true,
+                    groups: vec![
+                        TerminalGroup {
+                            tabs: 1,
+                            share: 1.0,
+                        },
+                        TerminalGroup {
+                            tabs: 1,
+                            share: 0.5,
+                        },
+                    ],
                 }),
                 run: Some("后端".into()),
                 folders: vec![PathBuf::from("/tmp/extra"), PathBuf::from("/tmp/另一个")],

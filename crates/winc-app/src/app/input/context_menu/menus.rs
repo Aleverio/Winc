@@ -558,8 +558,14 @@ pub fn editor_menu(editable: bool, selected: bool, bookmarked: bool) -> Vec<Menu
 
 /// 返回终端里的菜单项：右键点在命令块上时（`block`：报了命令行，能不能重新运行）先是复制命令、
 /// 复制输出、重新运行；然后复制（有选区时）、粘贴（程序还在运行时）、全选，查找、清屏，最大化
-/// 面板，新建、关闭终端。
-pub fn terminal_menu(selected: bool, running: bool, block: Option<(bool, bool)>) -> Vec<MenuEntry> {
+/// 面板，新建、拆分、移到新分栏（`group`：面板是否在右侧，即移到下方；这一栏是否不止一个
+/// 标签）、关闭终端。
+pub fn terminal_menu(
+    selected: bool,
+    running: bool,
+    block: Option<(bool, bool)>,
+    group: (bool, bool),
+) -> Vec<MenuEntry> {
     use MenuCommand::*;
     use MenuEntry::{Item, Separator};
 
@@ -585,6 +591,7 @@ pub fn terminal_menu(selected: bool, running: bool, block: Option<(bool, bool)>)
         Separator,
         Item(NewTerminal, true),
         Item(SplitTerminal, running),
+        Item(move_group_command(group.0), group.1),
         Item(CloseTerminal, true),
     ]);
     menu
@@ -965,5 +972,13 @@ pub fn indent_size_title(indent: Indent) -> &'static str {
     match indent {
         Indent::Spaces(_) => t!("menu-indent-size"),
         Indent::Tabs => t!("menu-tab-size"),
+    }
+}
+
+/// 移到新分栏的菜单项：面板在右侧（`right`）时各栏上下排，移到下方，否则移到右侧。
+pub fn move_group_command(right: bool) -> MenuCommand {
+    match right {
+        true => MenuCommand::MoveTerminalDown,
+        false => MenuCommand::MoveTerminalRight,
     }
 }

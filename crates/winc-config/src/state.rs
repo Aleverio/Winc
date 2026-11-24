@@ -243,6 +243,8 @@ pub struct TerminalSession {
     pub width: f32,
     /// 面板是否最大化（铺满编辑区）。
     pub maximized: bool,
+    /// 面板分成的各栏，按排列顺序；各栏的标签在 `tabs` 中依次接在一起。没有分栏时为空。
+    pub groups: Vec<TerminalGroup>,
 }
 
 /// 现场里的一个标签：已保存的文件，或未保存文档的备份。
@@ -443,6 +445,7 @@ impl State {
                     let names = names.iter().map(|n| n.as_str().unwrap_or_default());
                     names.map(str::to_owned).collect()
                 });
+                let groups = read_terminal_groups(t, tabs.len());
                 (!tabs.is_empty()).then(|| TerminalSession {
                     active: number("active").map_or(0, |n| (n as usize).min(tabs.len() - 1)),
                     tabs,
@@ -452,6 +455,7 @@ impl State {
                     height: number("height").unwrap_or(0.0) as f32,
                     width: number("width").unwrap_or(0.0) as f32,
                     maximized: t.get("maximized").and_then(Json::as_bool).unwrap_or(false),
+                    groups,
                 })
             });
             let folders = (s
@@ -884,6 +888,9 @@ impl State {
                 if t.shells.iter().any(|s| !s.is_empty()) {
                     let shells = t.shells.iter().map(|s| Json::String(s.clone()));
                     fields.push(("shells", Json::Array(shells.collect())));
+                }
+                if let Some(groups) = terminal_groups_json(&t.groups) {
+                    fields.push(("groups", groups));
                 }
                 items.push(("terminal", Json::object(fields)));
             }
@@ -1452,9 +1459,12 @@ fn window_frame(json: &std::collections::BTreeMap<String, Json>) -> Option<Windo
 }
 
 mod places;
+mod terminal;
 pub mod writer;
 pub use places::{FilePlace, MAX_PLACES};
 use places::{read_file_places, read_views, write_file_places};
+pub use terminal::TerminalGroup;
+use terminal::{read_terminal_groups, terminal_groups_json};
 
 #[cfg(test)]
 mod tests;

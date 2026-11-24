@@ -383,6 +383,8 @@ impl App {
     /// 把结果放进底部面板的「搜索」标签并关闭对话框（`⌘↩`，Windows、Linux 上为 `Ctrl+↩`）。
     pub(in crate::app) fn dock_search_results(&mut self) {
         self.close_search_dialog();
+        // 「搜索」标签在第一栏的标签栏上。
+        self.focus_terminal_group(0);
         let d = &mut self.search_dialog;
         d.docked = true;
         d.in_panel = true;
@@ -401,6 +403,7 @@ impl App {
 
     /// 在底部面板中显示「搜索」标签，焦点放进结果列表。
     pub(in crate::app) fn show_docked_search(&mut self) {
+        self.focus_terminal_group(0);
         self.search_dialog.in_panel = true;
         self.focus = Focus::SearchDock;
         self.request_redraw();
@@ -414,7 +417,7 @@ impl App {
         if self.focus_in_docked_search() {
             self.focus = Focus::Editor;
         }
-        if self.terminal.tabs.is_empty() && self.terminal.want.is_empty() {
+        if self.terminal.tab_count() == 0 && self.terminal.want.is_empty() {
             self.set_terminal_open(false);
         }
         self.relayout();

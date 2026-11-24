@@ -230,12 +230,27 @@ impl App {
         }
     }
 
-    /// 前台换成当前标签里的下一个（`forward`）或上一个终端，到头时回到另一端。
+    /// 前台换成当前标签里的下一个（`forward`）或上一个终端；到了一端时分栏的进相邻一栏，没有分栏
+    /// 的回到另一端。
     pub(in crate::app) fn cycle_terminal_pane(&mut self, forward: bool) {
         let Some(tab) = self.terminal.tab() else {
             return;
         };
         let (n, at) = (tab.pane_count(), tab.pane_at());
+        let inside = if forward { at + 1 < n } else { at > 0 };
+        let groups = self.terminal.group_count();
+        if !inside && groups > 1 {
+            let now = self.terminal.group_at;
+            let next = if forward {
+                (now + 1) % groups
+            } else {
+                (now + groups - 1) % groups
+            };
+            self.focus_terminal_group(next);
+            let n = self.terminal.tab().map_or(1, TermTab::pane_count);
+            self.focus_terminal_pane(if forward { 0 } else { n - 1 });
+            return;
+        }
         if n < 2 {
             return;
         }

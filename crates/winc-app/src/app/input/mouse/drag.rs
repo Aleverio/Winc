@@ -95,7 +95,7 @@ impl App {
 
         let hover = self.hover_here(x, y);
         self.set_hover(hover);
-        if self.terminal.link.is_some() || self.layout.terminal.contains(x, y) {
+        if self.terminal.link.is_some() || self.terminal_group_focused_at(x, y) {
             self.update_terminal_link();
         }
         self.update_text_link();
@@ -108,7 +108,7 @@ impl App {
             }
             Drag::Picture { at } => self.drag_picture(x, y, at),
             Drag::TerminalSelect | Drag::TerminalMouse(_) => self.terminal_mouse_drag(x, y),
-            Drag::None if self.layout.terminal.contains(x, y) => self.terminal_mouse_hover(x, y),
+            Drag::None if self.terminal_group_focused_at(x, y) => self.terminal_mouse_hover(x, y),
             Drag::Select { by_word, origin } => self.drag_select(x, y, by_word, origin),
             Drag::SelectLine { line } => self.drag_select_line(x, y, line),
             Drag::Columns { anchor } => self.drag_columns(x, y, anchor),
@@ -202,6 +202,7 @@ impl App {
             }
             Drag::PaneDivider { index } => self.drag_pane_divider(index, (x, y)),
             Drag::TerminalSplit { index } => self.drag_terminal_split(index, (x, y)),
+            Drag::TerminalGroupSplit { index } => self.drag_terminal_group_split(index, (x, y)),
             Drag::SplitDivider {
                 start_x,
                 start_left,

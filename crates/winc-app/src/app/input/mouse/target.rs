@@ -83,6 +83,7 @@ impl App {
         client.extend(self.sidebar_tabs().iter().map(|(r, _)| *r));
         client.extend(self.hits.tree_tools.iter().map(|(r, _)| *r));
         client.extend(self.hits.terminal.iter().map(|(r, _)| *r));
+        client.extend(self.hits.terminal_groups.iter().flatten().map(|(r, _)| *r));
         client.extend(self.hits.merge.iter().map(|(r, _)| *r));
         client.extend(self.hits.crumbs.iter().map(|(r, _)| *r));
         client.extend(self.hits.status.iter().map(|(r, _)| *r));
@@ -185,6 +186,7 @@ impl App {
                 | Target::SplitDivider
                 | Target::PaneDivider(_)
                 | Target::TerminalSplit(_)
+                | Target::TerminalGroupSplit(_)
                 | Target::Log(crate::app::git::log::LogTarget::Divider)
                 | Target::Log(crate::app::git::log::LogTarget::BranchesEdge)
                 | Target::Log(crate::app::git::log::LogTarget::AuthorEdge)
@@ -276,6 +278,7 @@ impl App {
             Target::SplitDivider => Hover::SplitDivider,
             Target::PaneDivider(index) => Hover::PaneDivider(index),
             Target::TerminalSplit(index) => Hover::TerminalSplit(index),
+            Target::TerminalGroupSplit(index) => Hover::TerminalGroupSplit(index),
             Target::TerminalHeader(hit) => Hover::TerminalHeader(hit),
             Target::TerminalBlock(hit) => Hover::TerminalBlock(hit),
             // 遮挡下方但没有按钮的区域，以及没有悬停效果的部件：输入条、顶栏空白、编辑区文字。
@@ -471,10 +474,13 @@ impl App {
         if let Some(index) = self.pane_divider_at(x, y) {
             return Target::PaneDivider(index);
         }
+        if let Some(index) = self.terminal_group_split_at(x, y) {
+            return Target::TerminalGroupSplit(index);
+        }
         if let Some(index) = self.terminal_split_at(x, y) {
             return Target::TerminalSplit(index);
         }
-        if let Some(hit) = hit(&self.hits.terminal, x, y) {
+        if let Some(hit) = hit(self.terminal_hits_at(x, y), x, y) {
             return Target::TerminalHeader(hit);
         }
         if y < TOP_BAR_END {
@@ -1000,7 +1006,9 @@ impl App {
                 winc_editor::panes::Axis::Row => CursorIcon::ColResize,
                 winc_editor::panes::Axis::Column => CursorIcon::RowResize,
             }
-        } else if self.active_terminal_split().is_some() {
+        } else if self.active_terminal_split().is_some()
+            || self.active_terminal_group_split().is_some()
+        {
             // 终端面板在右侧时各终端上下排，分隔线是横的。
             if self.terminal_right() {
                 CursorIcon::RowResize
@@ -1182,6 +1190,8 @@ pub(super) enum Target {
     PaneDivider(usize),
     /// 拆分的终端标签中第几条分隔线。
     TerminalSplit(usize),
+    /// 终端分栏之间的第几条分隔线。
+    TerminalGroupSplit(usize),
     /// 编辑区右侧的缩略图。
     Minimap,
     /// 终端面板标签栏上的按钮。

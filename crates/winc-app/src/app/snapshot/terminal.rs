@@ -4,6 +4,7 @@
 mod blocks;
 mod editor;
 mod find;
+mod groups;
 mod input;
 mod run;
 mod shortcuts;

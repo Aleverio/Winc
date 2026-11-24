@@ -567,6 +567,10 @@ impl App {
             MenuTarget::TerminalTab(id) => vec![
                 MenuEntry::Item(MenuCommand::RenameTerminal, true),
                 MenuEntry::Item(MenuCommand::SplitTerminal, self.terminal_splittable(*id)),
+                MenuEntry::Item(
+                    move_group_command(self.terminal_right()),
+                    self.terminal_movable_to_group(),
+                ),
                 MenuEntry::Separator,
                 MenuEntry::Item(MenuCommand::CloseTerminal, true),
                 MenuEntry::Item(
@@ -583,7 +587,8 @@ impl App {
                     let b = tab.blocks.iter().find(|b| b.id == id)?;
                     Some((!b.text.is_empty(), self.terminal_can_rerun(id)))
                 });
-                terminal_menu(tab.selection_range().is_some(), running, block)
+                let group = (self.terminal_right(), self.terminal_movable_to_group());
+                terminal_menu(tab.selection_range().is_some(), running, block, group)
             }
             &MenuTarget::Diff(id, right) => {
                 if self.editor.active().map(|d| d.id) != Some(id) {

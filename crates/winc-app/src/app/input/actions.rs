@@ -153,6 +153,7 @@ impl App {
             NextPane => self.cycle_pane(true),
             PreviousPane => self.cycle_pane(false),
             SplitTerminal => self.split_terminal(),
+            MoveTerminalToGroup => self.move_terminal_to_new_group(),
             NextTerminalPane => self.cycle_terminal_pane(true),
             PreviousTerminalPane => self.cycle_terminal_pane(false),
             NextTab => self.cycle_tab(true),

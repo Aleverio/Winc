@@ -855,17 +855,17 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
     use crate::layout::with_key;
     match app.pointer.hover {
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::New) => {
-            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
+            let rect = app.terminal_hovered_hit(hit)?;
             Some((rect, t!("terminal-new").to_owned()))
         }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Tab(i))
             if app.terminal_tab_list().is_some() =>
         {
-            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
-            Some((rect, app.terminal.tabs.get(i)?.label().to_owned()))
+            let rect = app.terminal_hovered_hit(hit)?;
+            Some((rect, app.terminal_hovered_tab(i)?.label().to_owned()))
         }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::ShellMenu) => {
-            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
+            let rect = app.terminal_hovered_hit(hit)?;
             Some((rect, t!("terminal-shell-select").to_owned()))
         }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Find(part)) => {
@@ -879,11 +879,11 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
                 FindPart::Word => t!("workspace-find-whole-word"),
                 FindPart::Regex => t!("workspace-find-use-regex"),
             };
-            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
+            let rect = app.terminal_hovered_hit(hit)?;
             Some((rect, label.to_owned()))
         }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Maximize) => {
-            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
+            let rect = app.terminal_hovered_hit(hit)?;
             let label = if app.terminal.maximized {
                 t!("terminal-restore-panel")
             } else {
@@ -892,12 +892,12 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
             Some((rect, with_key(label, Some(Action::MaximizeTerminal))))
         }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Split) => {
-            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
+            let rect = app.terminal_hovered_hit(hit)?;
             let label = t!("cmd-split-terminal");
             Some((rect, with_key(label, Some(Action::SplitTerminal))))
         }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Position) => {
-            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
+            let rect = app.terminal_hovered_hit(hit)?;
             let label = if app.terminal_right() {
                 t!("terminal-dock-bottom")
             } else {
@@ -906,12 +906,12 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
             Some((rect, label.to_owned()))
         }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::SearchDialog) => {
-            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
+            let rect = app.terminal_hovered_hit(hit)?;
             let name = t!("workspace-search-tool-open-dialog");
             Some((rect, with_key(name, Some(Action::OpenSearchDialog))))
         }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Hide) => {
-            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
+            let rect = app.terminal_hovered_hit(hit)?;
             Some((
                 rect,
                 with_key(t!("terminal-hide-panel"), Some(Action::ToggleTerminalPanel)),
@@ -919,7 +919,7 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
         }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Run(button)) => {
             use crate::app::terminal::run::RunButton;
-            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
+            let rect = app.terminal_hovered_hit(hit)?;
             let label = match button {
                 RunButton::Menu => t!("terminal-run-select").to_owned(),
                 RunButton::Start if app.run.list.is_empty() => t!("terminal-run-add").to_owned(),

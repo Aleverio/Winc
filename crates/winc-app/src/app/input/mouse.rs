@@ -77,6 +77,7 @@ impl App {
                 | Drag::SplitDivider { .. }
                 | Drag::PaneDivider { .. }
                 | Drag::TerminalSplit { .. }
+                | Drag::TerminalGroupSplit { .. }
                 | Drag::OutlineDivider { .. }
         );
         if matches!(self.pointer.drag, Drag::TerminalDivider { .. }) {

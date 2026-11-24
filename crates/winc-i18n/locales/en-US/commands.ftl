@@ -38,6 +38,7 @@ cmd-unsplit = Join All Splits
 cmd-next-pane = Next Split
 cmd-previous-pane = Previous Split
 cmd-split-terminal = Split Terminal
+cmd-move-terminal-to-group = Move Terminal to New Group
 cmd-next-terminal-pane = Next Terminal Pane
 cmd-previous-terminal-pane = Previous Terminal Pane
 cmd-next-tab = Next Tab

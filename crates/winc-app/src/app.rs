@@ -573,6 +573,8 @@ pub enum Hover {
     PaneDivider(usize),
     /// 拆分的终端标签中第几条分隔线（见 `App::terminal_split_at`）。
     TerminalSplit(usize),
+    /// 终端分栏之间第几条分隔线（见 `App::terminal_group_split_at`）。
+    TerminalGroupSplit(usize),
     /// 终端面板标签栏上的标签、关闭按钮、「+」和位置按钮。
     TerminalHeader(terminal::HeaderHit),
     /// 终端中命令块的色带与吸顶的命令行。
@@ -823,6 +825,10 @@ enum Drag {
     },
     /// 拖动拆分的终端标签中的第 `index` 条分隔线（见 `App::drag_terminal_split`）。
     TerminalSplit {
+        index: usize,
+    },
+    /// 拖动终端分栏之间的第 `index` 条分隔线（见 `App::drag_terminal_group_split`）。
+    TerminalGroupSplit {
         index: usize,
     },
     /// 拖动日志标签中列表与详情之间的分隔线：按下时的横坐标、详情栏当时的宽度。
@@ -1278,6 +1284,7 @@ impl App {
     fn drop_drags(&mut self) {
         self.cancel_tree_drag();
         self.cancel_tab_drag();
+        self.cancel_terminal_tab_drag();
         self.pointer.drag = Drag::None;
         self.pointer.close_pressed = None;
         self.pointer.control_pressed = None;

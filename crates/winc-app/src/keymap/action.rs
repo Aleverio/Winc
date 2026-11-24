@@ -365,6 +365,8 @@ pub enum Action {
     NextTerminal,
     PreviousTerminal,
     SplitTerminal,
+    /// 终端：把正在看的标签移到正在用的一栏后面新加的一栏（见 `App::move_terminal_to_new_group`）。
+    MoveTerminalToGroup,
     NextTerminalPane,
     PreviousTerminalPane,
     FocusTerminal1,
@@ -723,6 +725,7 @@ impl Action {
             NextTerminal => t!("cmd-next-terminal"),
             PreviousTerminal => t!("cmd-previous-terminal"),
             SplitTerminal => t!("cmd-split-terminal"),
+            MoveTerminalToGroup => t!("cmd-move-terminal-to-group"),
             NextTerminalPane => t!("cmd-next-terminal-pane"),
             PreviousTerminalPane => t!("cmd-previous-terminal-pane"),
             FocusTerminal1 => t!("cmd-terminal-1"),
@@ -989,6 +992,7 @@ impl Action {
             | NextTerminal
             | PreviousTerminal
             | SplitTerminal
+            | MoveTerminalToGroup
             | NextTerminalPane
             | PreviousTerminalPane
             | FocusTerminal1
@@ -1195,6 +1199,7 @@ impl Action {
             | Action::NextTerminal
             | Action::PreviousTerminal
             | Action::SplitTerminal
+            | Action::MoveTerminalToGroup
             | Action::NextTerminalPane
             | Action::PreviousTerminalPane
             | Action::FocusTerminal1

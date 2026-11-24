@@ -140,6 +140,10 @@ impl App {
                         self.activate_terminal_tab(index);
                         self.split_terminal();
                     }
+                    MenuCommand::MoveTerminalRight | MenuCommand::MoveTerminalDown => {
+                        self.activate_terminal_tab(index);
+                        self.move_terminal_to_new_group();
+                    }
                     MenuCommand::CloseTerminal => self.close_terminal_tab(index),
                     MenuCommand::CloseOtherTerminals => self.close_other_terminal_tabs(id),
                     _ => {}
@@ -535,6 +539,9 @@ impl App {
             MenuCommand::TerminalDock => self.toggle_terminal_position(),
             MenuCommand::NewTerminal => self.new_terminal_tab(),
             MenuCommand::SplitTerminal => self.split_terminal(),
+            MenuCommand::MoveTerminalRight | MenuCommand::MoveTerminalDown => {
+                self.move_terminal_to_new_group();
+            }
             MenuCommand::CloseTerminal => self.close_terminal_pane(),
             _ => {}
         }
