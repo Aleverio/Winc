@@ -50,7 +50,8 @@ impl App {
             self.finish_terminal_rename(true);
         }
 
-        // 终端网格上的中键、右键：程序要了鼠标时上报给它（左键在下面按部件分发时处理）。
+        // 终端网格上的中键、右键：程序要了鼠标时上报给它（左键在下面按部件分发时处理）。网格被
+        // 底部面板的「搜索」标签、在文件中查找的对话框等部件遮挡时不上报。
         if matches!(button, MouseButton::Middle | MouseButton::Right)
             && !self.settings.open
             && self.overlays.form_dialog.is_none()
@@ -58,6 +59,7 @@ impl App {
             && !self
                 .terminal_find_bar()
                 .is_some_and(|bar| bar.contains(x, y))
+            && !self.blocks_context_menu(x, y)
             && self
                 .terminal
                 .tab()
