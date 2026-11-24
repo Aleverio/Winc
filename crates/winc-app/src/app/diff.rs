@@ -31,6 +31,7 @@ use winc_render::Rect;
 use winit::keyboard::{Key, NamedKey};
 
 use super::animation::{Clock, FOLD_ANIMATION};
+use super::git::DiffKind;
 use super::git::changes::replace_lines;
 use super::git::commit::stages_by_hunk;
 use super::lifecycle::notice::FLASH_DURATION;
@@ -577,6 +578,11 @@ impl App {
         };
         if view.source != source || view.hunks.get(hunk) != Some(&target) {
             self.request_redraw();
+            return;
+        }
+        let kind = self.active_diff_kind();
+        if kind != DiffKind::Whole {
+            self.toggle_split_part(&entry, (target, line), kind);
             return;
         }
         let (head, work) = (view.old.text.to_string(), view.new.text.to_string());

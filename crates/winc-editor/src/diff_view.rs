@@ -452,6 +452,23 @@ impl DiffView {
         self.new.text = text;
         // 右侧已替换为编辑器中的内容，文件必然存在，即使内容为空。
         self.new.missing = false;
+        self.take_compared(compared);
+    }
+
+    /// 把左侧替换为 `text` 并重新比较：左侧是暂存区的差异在暂存一段之后使用。
+    pub fn set_old_text(&mut self, text: Rope) {
+        let compared = Compared::new(&text, &self.new.text);
+        let first = first_difference(&self.old.text, &text);
+        self.old.highlighter.invalidate_from(first);
+        self.old.sticky_memo.edited(self.old.revision, first);
+        self.old.revision += 1;
+        self.old.text = text;
+        self.old.missing = false;
+        self.take_compared(compared);
+    }
+
+    /// 采用一侧替换后的比较结果 `compared`：改动的段数变化时，已展开的折叠和聚焦的改动作废。
+    fn take_compared(&mut self, compared: Compared) {
         if compared.hunks.len() != self.hunks.len() {
             self.expanded.clear();
             self.focus = None;

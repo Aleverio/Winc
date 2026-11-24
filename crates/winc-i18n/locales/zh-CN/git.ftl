@@ -365,14 +365,19 @@ git-not-a-repository = 当前目录不是 Git 仓库
 git-not-on-branch = 当前不在任何分支上，请先签出一个分支
 git-no-file-in-tab = 当前标签页未关联文件
 git-diff-title = { $name } · 差异
+git-diff-title-changes = { $name } · 更改
+git-diff-title-staged = { $name } · 暂存的更改
 git-diff-submodule = 「{ $name }」是子模块，不显示差异
 git-diff-head-unreadable = 无法读取「{ $name }」在上次提交中的版本：{ $error }
+git-diff-index-unreadable = 无法读取「{ $name }」在暂存区中的版本：{ $error }
 git-diff-too-large = 「{ $name }」过大，不显示差异
 git-diff-binary = 「{ $name }」是二进制文件，不显示差异
 git-diff-identical = 「{ $name }」与上次提交时相同
 git-diff-line-endings-only = 「{ $name }」与上次提交时只有换行符不同
 git-diff-side-worktree-deleted = 工作区 · 已删除
 git-diff-side-head-missing = HEAD · 文件不存在
+git-diff-side-index = 暂存区
+git-diff-side-index-missing = 暂存区 · 文件不存在
 
 ## 信任仓库的配置
 

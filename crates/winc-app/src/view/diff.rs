@@ -760,8 +760,9 @@ fn draw_body(
         |view: &DiffView, h: usize| unified.then(|| body.y + (view.hunk_pos(h) - pos) as f32 * lh);
     let drawn = drawn_rows(view, body, (scroll, shift), pos, lh);
     // 各段改动的暂存状态；文件不在提交视图里、只能按文件暂存时为空，不绘制任何勾选框。
+    let kind = app.active_diff_kind();
     let inclusions: Vec<Pick> = (app.diff_entry(view)).map_or_else(Vec::new, |entry| {
-        app.git.commit.hunk_inclusions(entry, view)
+        app.git.commit.hunk_inclusions(entry, view, kind)
     });
     let mut chars: Vec<char> = Vec::with_capacity(256);
     let mut tokens = Vec::with_capacity(32);
