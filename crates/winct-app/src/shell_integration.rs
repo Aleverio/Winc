@@ -33,6 +33,7 @@ pub(crate) fn list_in_tests(on: bool) {
 }
 
 /// 本线程的测试是否要求列出这一组；不是测试时为否。
+#[cfg_attr(not(test), allow(dead_code))]
 fn listed_in_tests() -> bool {
     #[cfg(test)]
     return LISTED.get();
@@ -41,11 +42,13 @@ fn listed_in_tests() -> bool {
 }
 
 /// 设置中是否列出「系统集成」一组：只在 Windows 上。
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn available() -> bool {
     cfg!(windows) || listed_in_tests()
 }
 
 /// 设置中是否列出「关联文件类型」：由安装程序装在当前用户之下时才有各类型的登记可列。
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn types_available() -> bool {
     #[cfg(windows)]
     return windows::per_user() || listed_in_tests();
@@ -54,6 +57,7 @@ pub(crate) fn types_available() -> bool {
 }
 
 /// 读出右键菜单和文件类型此刻的状态；其他平台上都是关。
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn read() -> Integration {
     #[cfg(windows)]
     return windows::read();
@@ -62,6 +66,7 @@ pub(crate) fn read() -> Integration {
 }
 
 /// 打开或关闭右键菜单；其他平台上什么也不做。
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn show_menu(on: bool) {
     #[cfg(windows)]
     windows::show_menu(on);
@@ -70,6 +75,7 @@ pub(crate) fn show_menu(on: bool) {
 }
 
 /// 把 Winct 列入各文件类型的候选程序或从中去掉；其他平台上什么也不做。
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn list_types(on: bool) {
     #[cfg(windows)]
     windows::list_types(on);

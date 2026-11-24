@@ -59,7 +59,6 @@ pub struct Palette {
     /// 模态浮层后方覆盖整个窗口的半透明遮罩。
     pub scrim: Color,
     /// 设置浮层后方的遮罩：卡片占去大半个窗口，遮罩比 [`Self::scrim`] 深。
-    pub scrim_strong: Color,
 
     // 文字
     /// 界面正文：文件树、标签、按钮。
@@ -409,7 +408,6 @@ impl Palette {
             shadow: BLACK.alpha(if dark { 0.5 } else { 0.14 }),
             tab_divider: ink.alpha(if dark { 0.08 } else { 0.1 }),
             scrim: BLACK.alpha(if dark { 0.4 } else { 0.08 }),
-            scrim_strong: BLACK.alpha(if dark { 0.5 } else { 0.3 }),
             text: t.text,
             text_muted: t.text_muted,
             text_dim: t.text_dim,

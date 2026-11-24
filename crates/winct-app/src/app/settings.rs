@@ -53,7 +53,6 @@ pub struct SettingsState {
     /// 鼠标悬停的部件。
     pub hover: Option<SettingsPart>,
     /// 「系统集成」一组的状态（Windows），打开设置和切换开关时从注册表读出。
-    pub(crate) integration: crate::shell_integration::Integration,
     /// 取值与默认不同的设置项：名称后面有「恢复默认」。打开设置和配置变化时重新算。
     pub changed: Vec<Setting>,
     /// 格式化页列出的语言。
@@ -391,6 +390,7 @@ impl App {
     }
 
     /// 返回「关于」页图标逐层出现的进度，0 到 1；没有在播放时为 `None`。
+    #[cfg(test)]
     pub(crate) fn about_logo_build(&self) -> Option<f32> {
         let (clock, delay) = self.motion.about_logo?;
         Some(((clock.linear() - delay) / (1.0 - delay)).clamp(0.0, 1.0))

@@ -20,6 +20,7 @@ pub use keys::*;
 
 /// 设置的一个分类，对应左侧分类栏中的一项和右侧的一页。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[allow(dead_code)]
 pub enum SettingsPage {
     /// 外观：主题、界面字体和字号。
     #[default]
@@ -146,6 +147,7 @@ pub struct Section {
 
 /// 一个设置项。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[allow(dead_code)]
 pub enum Setting {
     /// 主题。
     #[default]

@@ -1,6 +1,7 @@
 use super::*;
 
 /// 给标题生成锚点的规则：转成小写，空格换成 `-`，去掉其他标点（保留 `-`、`_`）。
+#[allow(dead_code)]
 pub fn slug(text: &str) -> String {
     text.chars()
         .filter_map(|c| {
@@ -20,6 +21,7 @@ pub fn slug(text: &str) -> String {
 /// 链接到对应的标题（锚点见 [`slug`]）。`blocks` 是正文的顶层块，不含脚注。
 ///
 /// 目录随标题生成，标题改变时所在块的内容随之改变；没有标题时保留原段落。
+#[allow(dead_code)]
 pub(super) fn contents(blocks: &mut [Block]) {
     let is_marker = |block: &Block| {
         matches!(block, Block::Paragraph(inline)
@@ -47,6 +49,7 @@ pub(super) fn contents(blocks: &mut [Block]) {
 }
 
 /// 把按先后排列的（级别，标题）排成嵌套的列表项：级别比前一项高的标题排在前一项下面。
+#[allow(dead_code)]
 fn contents_items(headings: &[(u8, String)]) -> Vec<Item> {
     let mut items = Vec::new();
     let mut i = 0;
@@ -83,6 +86,7 @@ fn contents_items(headings: &[(u8, String)]) -> Vec<Item> {
 }
 
 /// 行内文字的对照再改为相对于该段文字最靠前的位置（见 [`Inline::source`]）。
+#[allow(dead_code)]
 pub(super) fn rebase(block: &mut Block, start: usize) {
     let inline = |inline: &mut Inline| {
         if let Some(first) = inline.map.first() {

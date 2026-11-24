@@ -439,7 +439,7 @@ fn theme_colors(p: &Palette) -> Theme {
 impl App {
     /// 终端模块开着没有。
     pub(crate) fn terminal_enabled(&self) -> bool {
-        self.config.terminal_enabled.unwrap_or(false)
+        self.config.terminal_enabled.unwrap_or(true)
     }
 
     /// 对比度保护的最低对比度（`terminal.minimumContrast`，0 表示关）。

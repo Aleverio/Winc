@@ -9,7 +9,6 @@ rust-version = "1.89"
 publish = false
 license = "Apache-2.0"
 repository = "https://github.com/Aleverio/Winc"
-homepage = "https://github.com/Aleverio/Winc"
 
 [workspace.dependencies]
 winct-config = { path = "crates/winct-config" }

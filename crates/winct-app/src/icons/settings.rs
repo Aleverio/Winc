@@ -61,6 +61,7 @@ pub fn appearance(frame: &mut Frame<'_>, (cx, cy): (f32, f32), color: Color, cli
 /// 绘制「通用」图标，13×9：上下两道横线，各有一个圆形的滑块，表示可以调节的选项。
 ///
 /// 用于设置的分类栏。
+#[allow(dead_code)]
 pub fn sliders(frame: &mut Frame<'_>, (cx, cy): (f32, f32), color: Color, clip: Rect) {
     let (r, top, bottom) = (2.0, cy - 3.0, cy + 3.0);
     let (a, b) = (cx - 2.0, cx + 2.5);
@@ -132,6 +133,7 @@ pub fn globe(frame: &mut Frame<'_>, (cx, cy): (f32, f32), k: f32, color: Color, 
 /// 绘制「Markdown」图标，15×11：圆角框，内有字母 M 和一个向下的箭头。
 ///
 /// 用于设置的分类栏。
+#[allow(dead_code)]
 pub fn markdown(frame: &mut Frame<'_>, (cx, cy): (f32, f32), color: Color, clip: Rect) {
     let (w, h) = (15.0, 11.0);
     let (x, y) = (cx - w / 2.0, cy - h / 2.0);
