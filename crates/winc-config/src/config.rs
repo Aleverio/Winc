@@ -74,6 +74,8 @@ pub struct Config {
     pub default_language: Option<String>,
     /// 向空的未命名纯文本文档粘贴时是否按内容识别语言，默认为是。
     pub detect_language_on_paste: Option<bool>,
+    /// 是否可以拖动选中的文字来移动或复制（`editor.dragAndDrop`），默认为是。
+    pub drag_and_drop: Option<bool>,
     /// 把目录拖进已打开目录的窗口时怎样处理，默认每次询问。
     pub drop_folder: Option<FolderDrop>,
     /// 「在文件中查找」打开在哪里；没写时按键位方案：`idea` 为对话框，否则为侧栏。

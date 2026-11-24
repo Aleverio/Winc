@@ -377,6 +377,10 @@ impl ApplicationHandler<UserEvent> for App {
                 }
                 self.update_text_link();
                 self.tab_switch_modifiers();
+                // 拖动文字时按下、松开复制键，指针在移动与复制之间切换。
+                if self.text_drop().is_some() {
+                    self.update_cursor_icon();
+                }
                 // 按住 `⌥` 时分支选择器中的「拉取」变为「拉取并变基」，提交按钮变为「提交并推送」。
                 if (self.overlays.picker.open && self.picker_has_actions()) || self.commit_shown() {
                     self.request_redraw();

@@ -768,6 +768,13 @@ enum Drag {
     AddSelect {
         origin: usize,
     },
+    /// 在选中的文字上按下（见 `App::press_on_selection`）：`press` 是按下处的窗口坐标，`at` 是
+    /// 没有拖动就松开时放置光标的位置（字符偏移），`moving` 表示已越过阈值、正在拖动文字。
+    MoveText {
+        press: (f32, f32),
+        at: usize,
+        moving: bool,
+    },
     Splitter {
         start_x: f32,
         start_width: f32,

@@ -7,6 +7,7 @@ mod click;
 mod drag;
 mod regions;
 mod target;
+mod text_drag;
 
 use target::*;
 
@@ -89,7 +90,12 @@ impl App {
         if button == MouseButton::Left && matches!(self.pointer.drag, Drag::MarkdownText) {
             self.offer_selection_toolbar();
         }
+        // 拖动文字时放下的位置按拖动状态计算，在结束拖动之前取得。
+        let (text_drag, dropped) = (self.pointer.drag, self.text_drop());
         self.pointer.drag = Drag::None;
+        if let Drag::MoveText { at, .. } = text_drag {
+            self.release_text_drag(at, dropped);
+        }
         // 拖动分隔条期间不重新断行（`sync_wrap`）；松开后重绘，重绘前的布局按最终宽度断行。
         if was_divider {
             self.request_redraw();

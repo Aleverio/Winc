@@ -1134,7 +1134,7 @@ fn smooth_scrolling_switches_off_on_its_own() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-/// 平滑光标移动是编辑器页的下拉选项：默认关闭，两个模式列出当前的选择并写回配置。
+/// 平滑光标是编辑器页的下拉选项：默认关闭，两个模式列出当前的选择并写回配置。
 #[test]
 fn smooth_caret_movement_lists_its_modes() {
     let dir = sample_folder("settings-smooth-caret");

@@ -340,6 +340,7 @@ fn round_trips_through_json() {
         new_file_on_startup: Some(true),
         default_language: Some("markdown".to_string()),
         detect_language_on_paste: Some(false),
+        drag_and_drop: Some(false),
         open_folder_in_new_window: Some(true),
         sticky_scroll: Some(false),
         word_wrap: Some(true),

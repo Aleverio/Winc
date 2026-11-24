@@ -157,6 +157,7 @@ impl SettingsPage {
                         S::WholeLines,
                     ],
                 ),
+                group(t!("settings-group-behavior"), vec![S::DragAndDrop]),
                 group(
                     t!("settings-group-new-files"),
                     vec![S::DefaultLanguage, S::DetectLanguageOnPaste],

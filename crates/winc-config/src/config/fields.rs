@@ -217,6 +217,7 @@ const EDITOR: &[Field] = &[
         },
     },
     bool_field!("stickyScroll", sticky_scroll),
+    bool_field!("dragAndDrop", drag_and_drop),
     bool_field!("wordWrap", word_wrap),
     bool_field!("wholeLines", whole_lines),
     bool_field!("minimap", minimap),

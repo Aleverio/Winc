@@ -583,6 +583,14 @@ impl Screen<'_> {
                 ));
             }
         }
+        // 拖动文字时将放下的位置：一直显示，不随光标闪烁。
+        if let Some((_, col)) = self.text_drop.filter(|&(line, _)| line == row.line)
+            && let Some(pos) = caret_pos(col)
+        {
+            let (part, x) = self.place(row, pos);
+            let bar = caret_rect(x, row.y + part as f32 * lh, lh);
+            frame.rect_clipped(bar, app.palette.caret, 1.0, text_rect);
+        }
         // 其余光标与主光标同步闪烁；输入法组字只显示在主光标处。
         if self.focused {
             let carets = self.extra_carets.iter().filter(|c| c.0 == row.line);

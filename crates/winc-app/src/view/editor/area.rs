@@ -132,6 +132,7 @@ pub(super) fn draw_text_area(app: &mut App, frame: &mut Frame<'_>, index: usize)
         let vim_caret = app.vim_caret();
         let caret = vim_caret.map_or(selection.head, |(pos, _)| pos);
         let (caret_line, caret_col) = text.pos_to_line_col(caret);
+        let text_drop = app.text_drop().map(|pos| text.pos_to_line_col(pos));
         // 多光标：主选区以外、位于可见范围内的选区和光标（行，列）。光标可能有上万个，
         // 只取可见的部分。
         let shown_range = {
@@ -194,6 +195,7 @@ pub(super) fn draw_text_area(app: &mut App, frame: &mut Frame<'_>, index: usize)
             extra: &extra,
             caret_line,
             caret_col,
+            text_drop,
             relative: app.vim_relative(),
             yanked: app.vim_yanked(id),
             vim_caret: vim_caret.map(|(_, shape)| shape),
@@ -347,6 +349,8 @@ struct Screen<'a> {
     extra: &'a [Selection],
     caret_line: usize,
     caret_col: usize,
+    /// 拖动选中的文字时将放下的位置（行，列）；没有在拖动时为 `None`。
+    text_drop: Option<(usize, usize)>,
     /// 行号栏是否显示相对行号。
     relative: bool,
     /// Vim 模式下刚被复制、仍在高亮的范围。

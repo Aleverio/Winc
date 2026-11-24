@@ -847,6 +847,16 @@ impl App {
 
     fn place_cursor_icon(&mut self) {
         let (x, y) = self.pointer.mouse;
+        // 拖动选中的文字时显示箭头，按住复制键时显示复制样式。
+        if matches!(self.pointer.drag, Drag::MoveText { moving: true, .. }) {
+            let copy = self.drop_copies();
+            self.set_cursor_icon(if copy {
+                CursorIcon::Copy
+            } else {
+                CursorIcon::Default
+            });
+            return;
+        }
         // 新建工作树对话框打开时只判断对话框自身：
         // 名称输入框上显示文本光标（I 形），其余位置显示箭头。
         if self.overlays.form_dialog.is_some() {

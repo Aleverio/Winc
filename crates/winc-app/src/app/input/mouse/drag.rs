@@ -120,6 +120,7 @@ impl App {
                 }
             }
             Drag::AddSelect { origin } => self.drag_add_selection(x, y, origin),
+            Drag::MoveText { press, at, .. } => self.drag_text(x, y, press, at),
             Drag::DiffSelect { unit, origin, add } => {
                 self.drag_diff_select(x, y, unit, origin, add);
             }
@@ -543,7 +544,8 @@ impl App {
         }
     }
 
-    /// 是否需要逐帧自动滚动：正在拖选或列选择，鼠标位于编辑区边缘之外，且该方向仍可滚动。
+    /// 是否需要逐帧自动滚动：正在拖选、列选择或拖动文字，鼠标位于编辑区边缘之外，且该方向仍可
+    /// 滚动。
     pub(in crate::app) fn drag_autoscrolling(&self) -> bool {
         if self.pointer.drag == Drag::TerminalSelect {
             let view = self.terminal_view();
@@ -560,6 +562,7 @@ impl App {
                 | Drag::Columns { .. }
                 | Drag::ColumnClick { .. }
                 | Drag::AddSelect { .. }
+                | Drag::MoveText { moving: true, .. }
         );
         let (t, (x, y)) = (self.layout.text, self.pointer.mouse);
         let Some(doc) = self.editor.active() else {

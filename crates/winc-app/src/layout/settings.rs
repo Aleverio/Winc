@@ -68,6 +68,8 @@ pub enum Setting {
     DefaultLanguage,
     /// 粘贴时按内容识别语言（`editor.detectLanguageOnPaste`）。
     DetectLanguageOnPaste,
+    /// 拖动选中的文字来移动或复制（`editor.dragAndDrop`）。
+    DragAndDrop,
     /// 粘滞滚动：滚动时在编辑区顶部钉住当前所在的函数、类和标题。
     StickyScroll,
     /// 光标移动时滑到新位置的方式。
@@ -298,7 +300,7 @@ impl Setting {
             S::Minimap | S::StickyScroll | S::RenderWhitespace | S::WholeLines => {
                 SettingsPage::Editor
             }
-            S::SmoothCaret => SettingsPage::Editor,
+            S::SmoothCaret | S::DragAndDrop => SettingsPage::Editor,
             S::DefaultLanguage | S::DetectLanguageOnPaste | S::VimMode | S::VimClipboard => {
                 SettingsPage::Editor
             }
@@ -363,6 +365,7 @@ impl Setting {
             S::NewFileOnStartup => "editor.newFileOnStartup",
             S::DefaultLanguage => "editor.defaultLanguage",
             S::DetectLanguageOnPaste => "editor.detectLanguageOnPaste",
+            S::DragAndDrop => "editor.dragAndDrop",
             S::StickyScroll => "editor.stickyScroll",
             S::SmoothCaret => "editor.smoothCaretMovement",
             S::WordWrap => "editor.wordWrap",
@@ -460,6 +463,7 @@ impl Setting {
             Setting::NewFileOnStartup => t!("settings-new-file-on-startup"),
             Setting::DefaultLanguage => t!("settings-default-language"),
             Setting::DetectLanguageOnPaste => t!("settings-detect-language-on-paste"),
+            Setting::DragAndDrop => t!("settings-drag-and-drop"),
             Setting::DropFolder => t!("settings-drop-folder"),
             Setting::FindInFiles => t!("settings-find-in-files"),
             Setting::StickyScroll => t!("settings-sticky-scroll"),
@@ -564,6 +568,7 @@ impl Setting {
             Setting::NewFileOnStartup => Some(t!("settings-new-file-on-startup-desc")),
             Setting::DefaultLanguage => Some(t!("settings-default-language-desc")),
             Setting::DetectLanguageOnPaste => Some(t!("settings-detect-language-on-paste-desc")),
+            Setting::DragAndDrop => Some(t!("settings-drag-and-drop-desc")),
             Setting::DropFolder => Some(t!("settings-drop-folder-desc")),
             Setting::FindInFiles => Some(t!("settings-find-in-files-desc")),
             Setting::StickyScroll => Some(t!("settings-sticky-scroll-desc")),
@@ -659,6 +664,7 @@ impl Setting {
             | Setting::RestoreFolder
             | Setting::NewFileOnStartup
             | Setting::DetectLanguageOnPaste
+            | Setting::DragAndDrop
             | Setting::CompactFolders
             | Setting::PreviewOnClick
             | Setting::StickyScroll
