@@ -579,6 +579,7 @@ impl App {
             MenuCommand::SelectAll if self.hex_active() => self.select_all_hex(),
             MenuCommand::HexGoTo => self.open_goto(),
             MenuCommand::Paste => self.paste(),
+            MenuCommand::PastePlain => self.paste_plain(),
             MenuCommand::Format => self.format_active(),
             MenuCommand::FormatSelection => self.format_selection(),
             MenuCommand::Fix => self.fix_active(),

@@ -556,8 +556,10 @@ impl App {
             return;
         };
 
-        // 整行复制到文件最后一行（末尾没有换行符）时补上行尾换行符，使粘贴时仍是完整的一行。
-        if whole_line && range.end == doc.text().end_pos() {
+        // 整行复制到文件最后一行（末尾没有换行符）时补上行尾换行符，使粘贴时仍是完整的一行；
+        // 文件以换行符结尾时最后一行已经带着它，不再补。
+        let ends_line = content.ends_with(['\n', '\r']);
+        if whole_line && range.end == doc.text().end_pos() && !ends_line {
             content.push_str(doc.line_ending.as_str());
         }
 
@@ -608,7 +610,7 @@ impl App {
                 ));
                 return;
             };
-            if whole_line && range.end == text.end_pos() {
+            if whole_line && range.end == text.end_pos() && !part.ends_with(['\n', '\r']) {
                 part.push_str(ending);
             }
             parts.push(part);
@@ -653,6 +655,12 @@ impl App {
     /// 没有选区且 `content` 等于最近一次整行复制的内容时，插入到当前行上方；否则在光标处插入。
     /// Markdown 中网址、图片网址和表格单元格按 [`App::markdown_paste`] 改写。
     pub(super) fn paste_text(&mut self, content: String) {
+        self.paste_text_as(content, true);
+    }
+
+    /// 同 [`Self::paste_text`]；`rewrite` 为假时（粘贴为纯文本）不改写成 Markdown 的写法，
+    /// 其余照常：整行复制的内容仍插入到当前行上方。
+    pub(in crate::app) fn paste_text_as(&mut self, content: String, rewrite: bool) {
         // 空的未命名纯文本文档：按粘贴的内容识别语言（`editor.detectLanguageOnPaste`）。
         let blank = self.editor.active().is_some_and(|doc| {
             let untitled = doc.path.is_none() && doc.title.is_none();
@@ -664,7 +672,7 @@ impl App {
         {
             self.use_language(language);
         }
-        if let Some(text) = self.markdown_paste(&content) {
+        if let Some(text) = self.markdown_paste(&content).filter(|_| rewrite) {
             self.run(Command::Insert(text));
             return;
         }

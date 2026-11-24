@@ -909,6 +909,7 @@ impl MenuCommand {
             MenuCommand::Cut => Action::Cut,
             MenuCommand::Copy => Action::Copy,
             MenuCommand::Paste => Action::Paste,
+            MenuCommand::PastePlain => Action::MarkdownPastePlain,
             MenuCommand::SelectAll => Action::SelectAll,
             MenuCommand::TerminalFind => Action::FindInTerminal,
             MenuCommand::TerminalClear => Action::ClearTerminal,

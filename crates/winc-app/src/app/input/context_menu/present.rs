@@ -462,10 +462,12 @@ impl App {
                     .bookmarks()
                     .lines()
                     .contains(&doc.text().line_of(doc.selection.head));
+                let markdown = doc.preview_kind() == Some(winc_editor::PreviewKind::Markdown);
                 let mut menu = editor_menu(
                     doc.readonly_reason().is_none(),
                     !doc.selection.is_empty(),
                     bookmarked,
+                    markdown,
                 );
                 // 光标在链接上时第一项是「打开链接」。
                 if self.link_at_caret().is_some() {
@@ -834,9 +836,13 @@ impl App {
             _ => entries,
         };
 
-        // 菜单上显示的快捷键按菜单弹出的位置取：文件树中取文件树的键位，编辑区中取编辑区的键位。
+        // 菜单上显示的快捷键按菜单弹出的位置取：文件树中取文件树的键位，编辑区中取编辑区的键位，
+        // 编辑 Markdown 时取 Markdown 的键位（「粘贴为纯文本」只在这里有键）。
         let context = match &target {
             MenuTarget::Tree(_) => Context::Tree,
+            MenuTarget::Editor(_) | MenuTarget::Markdown if self.markdown_keys() => {
+                Context::Markdown
+            }
             MenuTarget::Editor(_)
             | MenuTarget::Diff(..)
             | MenuTarget::DiffGutter(..)

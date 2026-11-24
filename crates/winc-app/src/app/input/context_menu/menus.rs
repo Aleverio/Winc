@@ -528,12 +528,18 @@ pub fn hex_menu(selected: bool) -> Vec<MenuEntry> {
 }
 
 /// 返回编辑区菜单的菜单项：转到定义、查找引用，添加/删除书签、列出书签，格式化（有选区时多一项
-/// 「格式化选中部分」）、修复问题，最后是剪切、复制、粘贴、复制引用。
+/// 「格式化选中部分」）、修复问题，最后是剪切、复制、粘贴（`markdown` 时接着「粘贴为纯文本」）、
+/// 复制引用。
 ///
 /// `bookmarked` 决定「添加书签」「删除书签」哪个可用。没有选区时剪切、复制作用于光标所在的整行；
 /// 只读的文件不能格式化、剪切、粘贴。格式化和修复总是可以点击，无法执行时点击后说明原因。「粘贴」
 /// 不检查剪贴板里有没有文字：弹出菜单不应读取其他应用复制的内容。
-pub fn editor_menu(editable: bool, selected: bool, bookmarked: bool) -> Vec<MenuEntry> {
+pub fn editor_menu(
+    editable: bool,
+    selected: bool,
+    bookmarked: bool,
+    markdown: bool,
+) -> Vec<MenuEntry> {
     use MenuCommand::*;
     use MenuEntry::{Item, Separator};
 
@@ -556,8 +562,11 @@ pub fn editor_menu(editable: bool, selected: bool, bookmarked: bool) -> Vec<Menu
         Item(Cut, editable),
         Item(Copy, true),
         Item(Paste, editable),
-        Item(CopyReference, true),
     ]);
+    if markdown {
+        menu.push(Item(PastePlain, editable));
+    }
+    menu.push(Item(CopyReference, true));
     menu
 }
 
