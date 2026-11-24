@@ -91,16 +91,18 @@ impl SettingsPage {
         };
         match self {
             SettingsPage::General => {
+                // 「关闭窗口后退出」只在 macOS 上列出：其他平台上关闭最后一个窗口总是退出。
+                let mut saving = vec![S::AutoSave, S::HotExit, S::ConfirmClose];
+                if cfg!(target_os = "macos") {
+                    saving.push(S::QuitOnLastWindowClose);
+                }
                 let mut sections = vec![
                     group(t!("settings-group-language"), vec![S::Language]),
                     group(
                         t!("settings-group-launch"),
                         vec![S::RestoreFolder, S::NewFileOnStartup, S::RestoreWindow],
                     ),
-                    group(
-                        t!("settings-group-saving"),
-                        vec![S::AutoSave, S::HotExit, S::ConfirmClose],
-                    ),
+                    group(t!("settings-group-saving"), saving),
                     group(
                         t!("settings-group-network"),
                         vec![S::CheckUpdates, S::SystemProxy],

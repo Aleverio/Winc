@@ -64,6 +64,9 @@ pub struct Config {
     pub hot_exit: Option<bool>,
     /// 关闭窗口或退出前是否先确认，默认为否。
     pub confirm_close: Option<bool>,
+    /// macOS 上关闭最后一个窗口时是否退出应用，默认为否（应用留在程序坞中）；其他平台上关闭
+    /// 最后一个窗口总是退出。
+    pub quit_on_last_window_close: Option<bool>,
     /// 启动时打开上次退出时打开的目录和标签，默认为开。
     ///
     /// 关闭后每次启动都显示开始页；命令行指定了目录或文件时仍然打开。

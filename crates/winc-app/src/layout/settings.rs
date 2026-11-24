@@ -60,6 +60,8 @@ pub enum Setting {
     HotExit,
     /// 关闭窗口或退出前先确认。
     ConfirmClose,
+    /// macOS 上关闭最后一个窗口时退出应用（`editor.quitOnLastWindowClose`）。
+    QuitOnLastWindowClose,
     /// 启动时打开上次退出时打开的目录和标签。
     RestoreFolder,
     /// 启动时没有可恢复的内容时新建文件（`editor.newFileOnStartup`）。
@@ -282,9 +284,10 @@ impl Setting {
             S::Language | S::RestoreFolder | S::NewFileOnStartup | S::RestoreWindow => {
                 SettingsPage::General
             }
-            S::AutoSave | S::HotExit | S::ConfirmClose | S::CheckUpdates | S::SystemProxy => {
+            S::AutoSave | S::HotExit | S::ConfirmClose | S::QuitOnLastWindowClose => {
                 SettingsPage::General
             }
+            S::CheckUpdates | S::SystemProxy => SettingsPage::General,
             S::Theme | S::LightTheme | S::DarkTheme | S::UiFont | S::UiSize | S::FontWeight => {
                 SettingsPage::Appearance
             }
@@ -361,6 +364,7 @@ impl Setting {
             S::AutoSave => "editor.autoSave",
             S::HotExit => "editor.hotExit",
             S::ConfirmClose => "editor.confirmClose",
+            S::QuitOnLastWindowClose => "editor.quitOnLastWindowClose",
             S::RestoreFolder => "editor.restoreFolder",
             S::NewFileOnStartup => "editor.newFileOnStartup",
             S::DefaultLanguage => "editor.defaultLanguage",
@@ -459,6 +463,7 @@ impl Setting {
             Setting::AutoSave => t!("settings-auto-save"),
             Setting::HotExit => t!("settings-hot-exit"),
             Setting::ConfirmClose => t!("settings-confirm-close"),
+            Setting::QuitOnLastWindowClose => t!("settings-quit-on-last-window-close"),
             Setting::RestoreFolder => t!("settings-restore-folder"),
             Setting::NewFileOnStartup => t!("settings-new-file-on-startup"),
             Setting::DefaultLanguage => t!("settings-default-language"),
@@ -564,6 +569,7 @@ impl Setting {
             Setting::AutoSave => Some(t!("settings-auto-save-desc")),
             Setting::HotExit => Some(t!("settings-hot-exit-desc")),
             Setting::ConfirmClose => Some(t!("settings-confirm-close-desc")),
+            Setting::QuitOnLastWindowClose => Some(t!("settings-quit-on-last-window-close-desc")),
             Setting::RestoreFolder => Some(t!("settings-restore-folder-desc")),
             Setting::NewFileOnStartup => Some(t!("settings-new-file-on-startup-desc")),
             Setting::DefaultLanguage => Some(t!("settings-default-language-desc")),
@@ -661,6 +667,7 @@ impl Setting {
             Setting::SystemTitleBar
             | Setting::HotExit
             | Setting::ConfirmClose
+            | Setting::QuitOnLastWindowClose
             | Setting::RestoreFolder
             | Setting::NewFileOnStartup
             | Setting::DetectLanguageOnPaste

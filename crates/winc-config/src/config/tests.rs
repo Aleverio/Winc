@@ -336,6 +336,7 @@ fn round_trips_through_json() {
         auto_save: Some(AutoSave::AfterDelay),
         hot_exit: Some(false),
         confirm_close: Some(true),
+        quit_on_last_window_close: Some(true),
         restore_folder: Some(false),
         new_file_on_startup: Some(true),
         default_language: Some("markdown".to_string()),

@@ -44,6 +44,25 @@ fn closing_one_of_two_windows_drops_it_and_the_last_one_stays_hidden() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// 开了「关闭窗口后退出」：macOS 上关闭最后一个窗口也退出应用，与其他系统相同；还有
+/// 别的窗口时仍只关闭当前窗口。
+#[test]
+fn the_last_window_quits_when_set_to() {
+    let (mut winc, a, b, dir) = two_windows("windows-close-quits");
+    for key in [a, b] {
+        winc.app(key).config.quit_on_last_window_close = Some(true);
+    }
+    winc.app(b).request_close_window();
+    assert!(winc.app(b).window.hidden && !winc.app(b).closing.quit_requested);
+    winc.settle_for_test();
+
+    winc.app(a).request_close_window();
+    assert!(winc.app(a).closing.quit_requested);
+    let (_, exit) = winc.settle_for_test();
+    assert!(exit, "最后一个窗口退出后结束事件循环");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn closing_a_window_without_a_folder_asks_about_unsaved_files() {
     let (mut winc, a, b, dir) = two_windows("windows-close-untitled");

@@ -169,6 +169,7 @@ const EDITOR: &[Field] = &[
     },
     bool_field!("hotExit", hot_exit),
     bool_field!("confirmClose", confirm_close),
+    bool_field!("quitOnLastWindowClose", quit_on_last_window_close),
     bool_field!("restoreFolder", restore_folder),
     bool_field!("newFileOnStartup", new_file_on_startup),
     string_field!("defaultLanguage", default_language),
