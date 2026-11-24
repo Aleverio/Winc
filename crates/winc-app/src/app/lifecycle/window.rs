@@ -135,10 +135,26 @@ impl App {
         self.raise();
     }
 
-    /// 窗口是否完全看不见（见 `occluded`）；看得见时，或者测量时（窗口透明，系统当它看不见）
-    /// 为假。
+    /// 窗口是否完全不可见（见 `occluded`、`minimized`）；测量时为假：窗口透明，系统将其视为
+    /// 不可见，但仍需绘制。
     pub(in crate::app) fn unseen(&self) -> bool {
-        self.window.occluded && !self.frame.bench.silent()
+        (self.window.occluded || self.window.minimized) && !self.frame.bench.silent()
+    }
+
+    /// 窗口尺寸变化后记录窗口是否最小化（见 `WindowState::minimized`），返回是否最小化。
+    ///
+    /// 最小化时暂停显示链接：Windows 上显示链接仍随合成器的刷新回调，最小化期间不绘制，没有
+    /// 一帧会将其暂停。
+    pub(super) fn note_minimized(&mut self) -> bool {
+        let size = (self.window.handle.as_ref()).map(|window| window.inner_size());
+        self.window.minimized = size.is_some_and(|size| size.width == 0 || size.height == 0);
+        #[cfg(any(target_os = "macos", windows))]
+        if self.window.minimized
+            && let Some(link) = &mut self.frame.display_link
+        {
+            link.set_running(false);
+        }
+        self.window.minimized
     }
 
     /// 窗口变得完全看不见或又看得见（`WindowEvent::Occluded`）。
@@ -282,6 +298,7 @@ impl App {
     ///
     /// 窗口尺寸、面板宽度、标签或预览状态变化后调用；面板跟着焦点关闭也在这一步完成。
     pub(crate) fn relayout(&mut self) {
+        self.track_recent_tabs();
         self.note_terminal_tab_position();
         self.sync_project_offer();
         // 面板打开以后换了标签（⌘W、切换标签、后退前进、新建文件）：面板里的符号、书签、用法
@@ -376,6 +393,7 @@ impl App {
         }
         self.sync_wrap();
         self.sync_terminal();
+        self.prepare_combined();
     }
 
     /// 在编辑区里放置随当前标签变化的部分：标签栏右端的按钮、分栏预览、合并的两侧、缩略图。
@@ -455,7 +473,7 @@ impl App {
                 && doc.diff.is_none()
                 && doc.log.is_none()
                 && doc.preview_mode() != winc_editor::PreviewMode::Preview
-        });
+        }) && !self.combined_active();
         let l = &mut self.layout;
         if self.config.minimap != Some(true) || !shows_code || l.editor.w < MINIMAP_MIN {
             return;
@@ -932,6 +950,9 @@ pub struct WindowState {
     pub(in crate::app) frame_due: Option<Instant>,
     /// 窗口是否完全不可见（被遮挡、最小化或位于其他桌面）；不可见时不绘制，窗口画面标记为可清除。
     pub(in crate::app) occluded: bool,
+    /// 窗口是否因最小化而尺寸为 0：Windows 上最小化时如此，且不发出 `WindowEvent::Occluded`。
+    /// 为真时同样不绘制，也不按 0 尺寸重新排版：按 0 尺寸排版的一帧会改变各区域的滚动位置。
+    pub(in crate::app) minimized: bool,
     /// 关闭时窗口处于全屏：退出全屏完成后再隐藏（见 `App::hide_window`）。
     #[cfg(target_os = "macos")]
     pub(in crate::app) hide_after_fullscreen: bool,
@@ -947,6 +968,7 @@ impl Default for WindowState {
             frame: None,
             frame_due: None,
             occluded: false,
+            minimized: false,
             #[cfg(target_os = "macos")]
             hide_after_fullscreen: false,
         }

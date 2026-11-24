@@ -8,7 +8,6 @@ terminal-hide-panel = Hide terminal panel
 terminal-show-panel = Show terminal panel
 terminal-tab-default-name = Terminal
 terminal-new = New Terminal
-terminal-split-group = Split group
 terminal-module-disabled = The terminal module isn’t enabled
 
 ## Terminal helper

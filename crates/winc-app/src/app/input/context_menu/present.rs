@@ -164,10 +164,13 @@ impl App {
             MenuTarget::Diff(id, right)
         } else if let Some(id) = self.terminal_tab_context_target(x, y) {
             MenuTarget::TerminalTab(id)
-        } else if let Some(target) = self.terminal_context_target(x, y) {
-            target
+        } else if let Some(block) = self.terminal_context_target(x, y) {
+            MenuTarget::Terminal(block)
         } else if self.markdown_context_target(x, y) {
             MenuTarget::Markdown
+        } else if self.combined_active() && self.layout.editor.contains(x, y) {
+            // 「未提交的更改」中段头、工具栏上没有菜单；差异上的菜单由那一段弹出。
+            return;
         } else if let Some(id) = self.editor_context_target(x, y) {
             MenuTarget::Editor(id)
         } else {
@@ -311,28 +314,19 @@ impl App {
         self.terminal.tabs.get(index).map(|t| t.id)
     }
 
-    /// 右键终端内容或窗格列表时，记录点到的会话和命令块。
+    /// 右键点在终端面板的网格上（标签栏以下）：焦点给终端，弹终端的菜单；返回点着的命令块。
     ///
     /// 程序要了鼠标时右键已经上报给程序了，到不了这里（按着 `⇧` 时才到）。
-    fn terminal_context_target(&mut self, x: f32, y: f32) -> Option<MenuTarget> {
-        use crate::app::terminal::HeaderHit;
-        if let Some(HeaderHit::Pane(pane) | HeaderHit::ClosePane(pane)) =
-            crate::layout::hit(&self.hits.terminal, x, y)
-        {
-            self.terminal.pane(pane)?;
-            self.focus_terminal_pane_by_id(pane);
-            return Some(MenuTarget::Terminal { pane, block: None });
-        }
+    fn terminal_context_target(&mut self, x: f32, y: f32) -> Option<Option<u32>> {
         let card = self.layout.terminal;
-        if !card.contains(x, y) || y < card.y + crate::app::terminal::header_height(card) {
+        let hit = card.contains(x, y)
+            && y >= card.y + crate::app::terminal::header_height(card)
+            && self.terminal.tab().is_some();
+        if !hit {
             return None;
         }
-        let pane = self.terminal.tab()?.id;
         self.focus = Focus::Terminal;
-        Some(MenuTarget::Terminal {
-            pane,
-            block: self.terminal_block_under(x, y),
-        })
+        Some(self.terminal_block_under(x, y))
     }
 
     /// 为 `target` 生成菜单项，并在窗口坐标 `at`（逻辑像素）处弹出系统菜单。
@@ -468,10 +462,12 @@ impl App {
                     .bookmarks()
                     .lines()
                     .contains(&doc.text().line_of(doc.selection.head));
+                let markdown = doc.preview_kind() == Some(winc_editor::PreviewKind::Markdown);
                 let mut menu = editor_menu(
                     doc.readonly_reason().is_none(),
                     !doc.selection.is_empty(),
                     bookmarked,
+                    markdown,
                 );
                 // 光标在链接上时第一项是「打开链接」。
                 if self.link_at_caret().is_some() {
@@ -576,6 +572,10 @@ impl App {
             MenuTarget::TerminalTab(id) => vec![
                 MenuEntry::Item(MenuCommand::RenameTerminal, true),
                 MenuEntry::Item(MenuCommand::SplitTerminal, self.terminal_splittable(*id)),
+                MenuEntry::Item(
+                    move_group_command(self.terminal_right()),
+                    self.terminal_movable_to_group(),
+                ),
                 MenuEntry::Separator,
                 MenuEntry::Item(MenuCommand::CloseTerminal, true),
                 MenuEntry::Item(
@@ -583,8 +583,8 @@ impl App {
                     self.terminal.tabs.len() > 1,
                 ),
             ],
-            &MenuTarget::Terminal { pane, block } => {
-                let Some(tab) = self.terminal.pane(pane) else {
+            &MenuTarget::Terminal(block) => {
+                let Some(tab) = self.terminal.tab() else {
                     return;
                 };
                 let running = tab.ended.is_none() && !self.terminal.crashed;
@@ -592,7 +592,8 @@ impl App {
                     let b = tab.blocks.iter().find(|b| b.id == id)?;
                     Some((!b.text.is_empty(), self.terminal_can_rerun(id)))
                 });
-                terminal_menu(tab.selection_range().is_some(), running, block)
+                let group = (self.terminal_right(), self.terminal_movable_to_group());
+                terminal_menu(tab.selection_range().is_some(), running, block, group)
             }
             &MenuTarget::Diff(id, right) => {
                 if self.editor.active().map(|d| d.id) != Some(id) {
@@ -721,8 +722,10 @@ impl App {
                 }
                 menu
             }
-            MenuTarget::SearchResult(_, m) => {
-                search_result_menu(m.is_none(), self.panels.global.replace_open)
+            MenuTarget::SearchResult(path, m) => {
+                let g = &self.panels.global;
+                let dir = m.is_none() && !g.engine.results.iter().any(|f| &f.path == path);
+                search_result_menu(m.is_none(), dir, g.replace_open)
             }
             MenuTarget::CommitMore => self.commit_more_menu(),
             MenuTarget::StashRow(i) => {
@@ -758,35 +761,6 @@ impl App {
             MenuTarget::TerminalShells => (0..self.terminal_shell_list().len())
                 .map(|i| MenuEntry::Item(MenuCommand::NewTerminalShell(i), true))
                 .collect(),
-            MenuTarget::TerminalTools(_) => {
-                let mut entries = vec![MenuEntry::Item(MenuCommand::NewTerminal, true)];
-                let shells = self.terminal_shell_list();
-                if shells.len() > 1 {
-                    let items = (0..shells.len())
-                        .map(|i| MenuEntry::Item(MenuCommand::NewTerminalShell(i), true))
-                        .collect();
-                    entries.push(MenuEntry::Submenu(
-                        t!("terminal-shell-select").into(),
-                        items,
-                    ));
-                }
-                let operation = if self.docked_search_shown() {
-                    MenuEntry::Item(MenuCommand::TerminalSearchDialog, true)
-                } else {
-                    MenuEntry::Item(
-                        MenuCommand::SplitTerminal,
-                        self.terminal_split_button_enabled(),
-                    )
-                };
-                entries.extend([
-                    operation,
-                    MenuEntry::Separator,
-                    MenuEntry::Item(MenuCommand::TerminalMaximize, true),
-                    MenuEntry::Item(MenuCommand::TerminalDock, true),
-                    MenuEntry::Item(MenuCommand::TerminalHide, true),
-                ]);
-                entries
-            }
             MenuTarget::StatusPlaces(_) => self.location_menu(),
             MenuTarget::RebaseAction(_) => (crate::app::git::rebase::REBASE_ACTIONS.iter())
                 .map(|&action| MenuEntry::Item(MenuCommand::RebaseAction(action), true))
@@ -862,17 +836,19 @@ impl App {
             _ => entries,
         };
 
-        // 菜单上显示的快捷键按菜单弹出的位置取：文件树中取文件树的键位，编辑区中取编辑区的键位。
+        // 菜单上显示的快捷键按菜单弹出的位置取：文件树中取文件树的键位，编辑区中取编辑区的键位，
+        // 编辑 Markdown 时取 Markdown 的键位（「粘贴为纯文本」只在这里有键）。
         let context = match &target {
             MenuTarget::Tree(_) => Context::Tree,
+            MenuTarget::Editor(_) | MenuTarget::Markdown if self.markdown_keys() => {
+                Context::Markdown
+            }
             MenuTarget::Editor(_)
             | MenuTarget::Diff(..)
             | MenuTarget::DiffGutter(..)
             | MenuTarget::Markdown
             | MenuTarget::LogCommit(_) => Context::Editor,
-            MenuTarget::Terminal { .. }
-            | MenuTarget::TerminalTab(_)
-            | MenuTarget::TerminalTools(_) => Context::Terminal,
+            MenuTarget::Terminal(_) | MenuTarget::TerminalTab(_) => Context::Terminal,
             MenuTarget::SearchResult(..) => Context::Panel,
             MenuTarget::CommitFile(_) => Context::Changes,
             _ => Context::Other,
@@ -1400,20 +1376,6 @@ impl App {
         self.git_scan_repositories();
         let hit = self.hits.project;
         self.open_button_menu(MenuButton::Project, MenuTarget::Project, menu_below(hit));
-    }
-
-    /// 从窄终端工具栏的「⋯」打开收起的操作。
-    pub(in crate::app) fn open_terminal_tools_menu(&mut self) {
-        let hit = crate::app::terminal::HeaderHit::More;
-        let Some(&(button, _)) = self.hits.terminal.iter().find(|(_, h)| *h == hit) else {
-            return;
-        };
-        let pane = self.terminal.tab().map(|tab| tab.id);
-        self.open_button_menu(
-            MenuButton::TerminalTools,
-            MenuTarget::TerminalTools(pane),
-            menu_below(button),
-        );
     }
 
     /// 从按钮 `button` 上弹出 `target` 的菜单（在 `at` 处，见 [`App::open_context_menu`]）：系统

@@ -8,7 +8,6 @@ terminal-hide-panel = 隐藏终端面板
 terminal-show-panel = 显示终端面板
 terminal-tab-default-name = 终端
 terminal-new = 新建终端
-terminal-split-group = 分栏组
 terminal-module-disabled = 终端模块未启用
 
 ## 终端组件

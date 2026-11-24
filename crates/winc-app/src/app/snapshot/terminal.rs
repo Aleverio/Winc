@@ -4,9 +4,11 @@
 mod blocks;
 mod editor;
 mod find;
+mod groups;
 mod input;
 mod run;
 mod shortcuts;
+mod split;
 mod tabs;
 
 use super::editor::navigation::press;
@@ -618,7 +620,7 @@ fn the_tab_bar_keeps_even_gaps_around_tabs_and_buttons() {
     assert_eq!(tab.x - card.x, app.terminal_view().y - tab.bottom());
     assert_eq!(tab.x - card.x, 5.0);
 
-    // 「+」、运行、拆分、最大化、切换位置、收起的按钮尺寸和间距与编辑区标签栏一致。
+    // 「+」、运行、拆分、最大化、切换位置、收起六个按钮间距相同，尺寸和间距与编辑区标签栏一致。
     let new = hit(&app, terminal::HeaderHit::New);
     let run = hit(
         &app,

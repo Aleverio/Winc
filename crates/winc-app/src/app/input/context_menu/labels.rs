@@ -58,9 +58,6 @@ impl App {
                     tooltip: None,
                 }
             }
-            MenuCommand::TerminalTabPosition(false) if self.terminal_has_split_groups() => {
-                MenuLabel::plain(t!("settings-terminal-tab-position-top-while-split"))
-            }
             MenuCommand::NewTerminalShell(i) => {
                 let shell = self.terminal_shell_list().into_iter().nth(i);
                 MenuLabel {
