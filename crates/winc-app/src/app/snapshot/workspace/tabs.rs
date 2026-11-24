@@ -1074,9 +1074,10 @@ fn tabs_without_a_file_show_a_tooltip_only_when_the_name_is_shortened() {
         "名称完整显示时不提示"
     );
 
-    // 名称超出标签宽度被截短时，提示显示完整名称。
-
-    let long = "很长的标签名称".repeat(12);
+    // 名称超出标签宽度被截短时，提示显示完整名称。标签随名称加宽（`editor.fullTabNames`），
+    // 名称要比整个标签栏还长才会截短：取远超窗口宽度的长度，不随平台的字宽和标签栏左边的
+    // 窗口按钮变化。
+    let long = "很长的标签名称".repeat(40);
     app.editor.documents[index].title = Some(long.clone());
     paint(&mut app);
     let (x, y) = tab_point(&app, index);

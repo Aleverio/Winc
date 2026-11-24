@@ -213,9 +213,11 @@ impl Tree<'_> {
             let full = dir.join(&label);
             let key = full.to_string_lossy().into_owned();
             let open = !self.folded.contains(&key);
+            // 合成一行的几级按 `/` 连接，同文件视图（`Entry::label`）：Windows 上也不写成 `\`。
+            let parts: Vec<_> = label.iter().map(|part| part.to_string_lossy()).collect();
             rows.push(LogFileRow::Dir {
                 dir: key,
-                label: label.to_string_lossy().into_owned(),
+                label: parts.join("/"),
                 depth,
                 open,
             });
