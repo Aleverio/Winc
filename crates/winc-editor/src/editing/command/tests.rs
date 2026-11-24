@@ -275,3 +275,15 @@ fn comment_toggling_skips_astro_frontmatter_fences() {
     assert_eq!(toggled(0, 0).0, src);
     assert_eq!(toggled(2, 2).0, src);
 }
+
+/// Liquid 与 Nunjucks 切换注释时使用模板自己的注释，注释掉的内容不会输出到页面。
+#[test]
+fn templates_comment_with_their_own_syntax() {
+    let mut d = doc("page.njk", "<p>{{ a }}</p>\n", 0);
+    d.execute(Command::ToggleComment, 10, 4);
+    assert_eq!(text(&d), "{# <p>{{ a }}</p> #}\n");
+
+    let mut d = doc("page.liquid", "<p>{{ a }}</p>\n", 0);
+    d.execute(Command::ToggleComment, 10, 4);
+    assert_eq!(text(&d), "{% comment %} <p>{{ a }}</p> {% endcomment %}\n");
+}

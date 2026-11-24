@@ -28,6 +28,35 @@ fn snapshot_astro_syntax() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// 截图：Liquid 与 Nunjucks 的模板标签、过滤器、模板注释与之外的 HTML。
+///
+/// `cargo test -p winc-app snapshot_template_syntax -- --ignored`
+#[test]
+#[ignore = "截图，手动运行"]
+fn snapshot_template_syntax() {
+    let dir = sample_folder("shot-template");
+    let samples = [
+        (
+            "page.liquid",
+            "{% comment %}\n  商品列表\n{% endcomment %}\n<ul class=\"products\">\n  {%- for product in collection.products limit: 4 -%}\n    <li>{{ product.title | upcase }} - {{ product.price | money }}</li>\n  {%- endfor -%}\n</ul>\n{% # 行内注释 %}\n<input {% if checked %}checked{% endif %} type=\"checkbox\">\n",
+        ),
+        (
+            "base.njk",
+            "{# 页面布局 #}\n{% extends \"layout.njk\" %}\n{% set items = [\n  'a', 'b'\n] %}\n{% block content %}\n  <h1>{{ title | default(\"Home\") }}</h1>\n  {% if user and not user.guest %}<p>{{ user.name }}</p>{% endif %}\n{% endblock %}\n",
+        ),
+    ];
+    for (name, text) in samples {
+        let file = dir.join(name);
+        std::fs::write(&file, text).unwrap();
+        for dark in [false, true] {
+            let mut app = app_with(&file, dark);
+            let theme = if dark { "dark" } else { "light" };
+            shoot(&mut app, &format!("template-{name}-{theme}"));
+        }
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 #[test]
 #[ignore = "截图，手动运行"]
 fn snapshot_placeholder() {

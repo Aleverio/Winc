@@ -160,6 +160,8 @@ fn detects_common_languages_and_names() {
         ("flake.nix", "Nix"),
         ("App.svelte", "Svelte"),
         ("src/pages/index.astro", "Astro"),
+        ("_includes/base.njk", "Nunjucks"),
+        ("layout/theme.liquid", "Liquid"),
         ("Index.ets", "ArkTS"),
         ("Index.ETS", "ArkTS"),
         ("paper.tex", "LaTeX"),
@@ -174,6 +176,25 @@ fn detects_common_languages_and_names() {
     }
     // vim 的俄语教程 `tutor.ru` 不是 Ruby。
     assert_eq!(detect("tutor.ru").id, "text");
+}
+
+/// Liquid 与 Nunjucks 是识别模板标签的 HTML，切换注释使用模板自己的注释；与网页、脚本和样式表
+/// 互相查找用法。
+#[test]
+fn liquid_and_nunjucks_are_html_templates() {
+    for (file, comment) in [
+        ("a.liquid", ("{% comment %}", "{% endcomment %}")),
+        ("a.njk", ("{#", "#}")),
+        ("a.nunjucks", ("{#", "#}")),
+    ] {
+        let language = detect(file);
+        assert_eq!(language.markup, Markup::Html, "{file}");
+        assert!(language.template_tags);
+        assert_eq!(language.block_comments.first(), Some(&comment));
+        assert!(language.is_related(detect("a.ts")));
+        assert!(language.is_related(detect("a.css")));
+    }
+    assert!(!detect("index.html").template_tags);
 }
 
 /// Astro 是 HTML 类的标记语言，文件开头另有 TypeScript frontmatter；与网页、脚本和样式表

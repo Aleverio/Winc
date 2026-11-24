@@ -4,6 +4,7 @@ use super::*;
 use crate::lang::detect;
 
 mod astro;
+mod template;
 
 fn lex(file: &str, line: &str, state: LineState) -> (Vec<(String, TokenKind)>, LineState) {
     let chars: Vec<char> = line.chars().collect();
