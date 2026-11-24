@@ -112,13 +112,27 @@ impl App {
         self.update_cursor_icon();
     }
 
+    /// (`x`, `y`) 处是否盖着浮在编辑区和面板上面的东西：提示框、菜单、表单对话框、设置和命令
+    /// 面板。滚轮先交给它们（见 [`App::scroll_target_at`]）。
+    fn covered_by_overlay(&self, x: f32, y: f32) -> bool {
+        self.overlays.alert.is_some()
+            || self.popup().is_some()
+            || self.overlays.form_dialog.is_some()
+            || self.settings.open
+            || (self.overlays.picker.open && self.layout.picker.contains(x, y))
+    }
+
     /// 处理窗口的滚轮事件：按住主修饰键时调整字号（见 [`Self::wheel_zoom`]），否则滚动。
     ///
     /// 触控板的手势阶段 `phase` 用于区分两次手势：调整字号与滚动的方向都在手势开始时确定。
     pub(in crate::app) fn on_wheel_event(&mut self, delta: MouseScrollDelta, phase: TouchPhase) {
         let fresh = self.note_wheel_gesture(delta, phase);
         let (x, y) = self.pointer.mouse;
-        if self.search_dialog_part_at(x, y).is_some() || self.docked_part_at(x, y).is_some() {
+        // 在文件中查找的对话框（或底部面板的「搜索」）在鼠标下、上面没有盖着别的东西时才交给它：
+        // 设置、对话框、提示框、菜单和命令面板都在它上面。
+        let search =
+            self.search_dialog_part_at(x, y).is_some() || self.docked_part_at(x, y).is_some();
+        if search && !self.covered_by_overlay(x, y) {
             let dy = match delta {
                 MouseScrollDelta::LineDelta(_, lines) => -lines * 3.0 * crate::app::PICKER_ROW,
                 MouseScrollDelta::PixelDelta(p) => {

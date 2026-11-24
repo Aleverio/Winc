@@ -208,7 +208,7 @@ fn draw_panel_header(app: &App, frame: &mut Frame<'_>, parts: &PanelParts) {
         match tool {
             PanelTool::Refresh => icons::refresh(frame, c, color, header),
             PanelTool::Clear => icons::clear_results(frame, c, color, header),
-            PanelTool::OpenDialog => icons::external(frame, c, color, header),
+            PanelTool::OpenDialog => icons::float_window(frame, c, color, header),
             // 图标是点击后换成的显示方式，同日志里文件列表的开关。
             PanelTool::Layout if app.search_tree() => icons::list_view(frame, c, color, header),
             PanelTool::Layout => icons::tree_view(frame, c, color, header),

@@ -975,6 +975,17 @@ pub fn sidebar(frame: &mut Frame<'_>, (cx, cy): (f32, f32), open: bool, color: C
     frame.stroke(shapes.as_slice(), STROKE, color, clip);
 }
 
+/// 绘制「在对话框中打开」图标，约 13×11，与侧栏标题行上的「刷新」「全部折叠」等同高、同笔宽、
+/// 同样只用线条：一个圆角窗口，正中浮着一张小卡片，表示浮在窗口上的对话框。与 [`panel`]（窗口
+/// 底部隔出一条，表示放到底部面板）是一对。
+pub fn float_window(frame: &mut Frame<'_>, (cx, cy): (f32, f32), color: Color, clip: Rect) {
+    let (w, h) = (13.0, 11.0);
+    let window = rounded_outline(cx - w / 2.0, cy - h / 2.0, w, h, 2.5);
+    let card = rounded_outline(cx - 3.5, cy - 2.0, 7.0, 4.5, 1.25);
+    frame.stroke(&window, RING_STROKE, color, clip);
+    frame.stroke(&card, RING_STROKE, color, clip);
+}
+
 /// 绘制终端面板位置按钮的图标：与侧栏开关尺寸相同的圆角框；`right` 为 `true` 时在右侧隔出一
 /// 栏，否则在下方隔出一条。
 ///
