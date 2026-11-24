@@ -720,8 +720,10 @@ impl App {
                 }
                 menu
             }
-            MenuTarget::SearchResult(_, m) => {
-                search_result_menu(m.is_none(), self.panels.global.replace_open)
+            MenuTarget::SearchResult(path, m) => {
+                let g = &self.panels.global;
+                let dir = m.is_none() && !g.engine.results.iter().any(|f| &f.path == path);
+                search_result_menu(m.is_none(), dir, g.replace_open)
             }
             MenuTarget::CommitMore => self.commit_more_menu(),
             MenuTarget::StashRow(i) => {

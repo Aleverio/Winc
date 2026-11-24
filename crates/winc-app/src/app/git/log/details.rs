@@ -152,6 +152,23 @@ pub(crate) fn log_file_rows(
     rows
 }
 
+/// 把 `items`（下标、相对路径）同文件视图排成树：先是目录、再是文件，各按名字排；`compact` 时
+/// 只有一个子目录的几级合成一行，`folded` 里的目录（相对路径）收起。侧栏搜索的树形结果也这样排。
+pub(crate) fn path_tree_rows(
+    items: Vec<(usize, &Path)>,
+    compact: bool,
+    folded: &HashSet<String>,
+) -> Vec<LogFileRow> {
+    let shape = RowsShape {
+        flat: false,
+        pinned: false,
+        compact,
+    };
+    let mut rows = Vec::new();
+    Tree { shape, folded }.push_level(&mut rows, items, Path::new(""), 0);
+    rows
+}
+
 /// 排成树时各层共用的：排法和收起的目录。
 struct Tree<'a> {
     shape: RowsShape,

@@ -480,15 +480,20 @@ pub fn commit_selection_menu(any_exists: bool) -> Vec<MenuEntry> {
     ]
 }
 
-/// 返回全局搜索结果里一行的菜单项：打开；文件行是复制路径、复制相对路径、在文件树中显示，
-/// 匹配行是复制这一行的文字；最后是替换（`replace`：替换输入展开着）和从结果中移除。
+/// 返回全局搜索结果里一行的菜单项：打开（目录行没有）；目录、文件行是复制路径、复制相对路径、
+/// 在文件树中显示，匹配行是复制这一行的文字；最后是替换（`replace`：替换输入展开着）和从结果中
+/// 移除。
 ///
-/// `file` 表示右键点着的是文件行。结果都来自打开的目录，因此相对路径、在文件树中显示总是可用。
-pub fn search_result_menu(file: bool, replace: bool) -> Vec<MenuEntry> {
+/// `file` 表示右键点着的是目录或文件行，`dir` 表示是目录行（以树形显示时）。结果都来自打开的
+/// 目录，因此相对路径、在文件树中显示总是可用。
+pub fn search_result_menu(file: bool, dir: bool, replace: bool) -> Vec<MenuEntry> {
     use MenuCommand::*;
     use MenuEntry::{Item, Separator};
 
-    let mut menu = vec![Item(OpenFiles, true), Separator];
+    let mut menu = Vec::new();
+    if !dir {
+        menu.extend([Item(OpenFiles, true), Separator]);
+    }
     if file {
         menu.extend([
             Item(CopyPath, true),

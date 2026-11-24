@@ -179,6 +179,7 @@ fn sample() -> State {
         log_branches: Some(false),
         log_files_tree: Some(false),
         diff_files_tree: Some(true),
+        search_tree: true,
         log_columns: Some(vec!["date".into(), "hash".into()]),
         commit_messages: vec!["修复登录\n\n说明".into(), "first".into()],
         commit_check_todo: true,

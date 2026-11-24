@@ -86,6 +86,10 @@ pub struct State {
     pub log_files_tree: Option<bool>,
     /// 从 Git 日志打开的差异左侧文件栏是否按目录分组，规则同 `log_files_tree`。
     pub diff_files_tree: Option<bool>,
+    /// 侧栏搜索的结果是否按目录排成树显示。
+    ///
+    /// `false`（默认）时平铺，每个文件一行。所有窗口共用，下次启动沿用。
+    pub search_tree: bool,
     /// Git 日志列表右边显示的列（`author`、`date`、`hash`）；`None`（没有选过）时显示作者和
     /// 日期。所有窗口共用，下次启动沿用。
     pub log_columns: Option<Vec<String>>,
@@ -613,6 +617,7 @@ impl State {
         state.log_branches = root.get("logBranches").and_then(Json::as_bool);
         state.log_files_tree = root.get("logFilesTree").and_then(Json::as_bool);
         state.diff_files_tree = root.get("diffFilesTree").and_then(Json::as_bool);
+        state.search_tree = (root.get("searchTree").and_then(Json::as_bool)).unwrap_or(false);
         state.log_columns = (root.get("logColumns").and_then(Json::as_array)).map(|columns| {
             let names = columns.iter().filter_map(Json::as_str);
             names.map(str::to_owned).collect()
@@ -778,6 +783,9 @@ impl State {
         }
         if let Some(tree) = self.diff_files_tree {
             fields.push(("diffFilesTree", Json::Bool(tree)));
+        }
+        if self.search_tree {
+            fields.push(("searchTree", Json::Bool(true)));
         }
         if let Some(columns) = &self.log_columns {
             let names = columns.iter().map(|c| Json::String(c.clone()));
