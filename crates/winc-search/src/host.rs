@@ -1,8 +1,8 @@
 //! 在远端主机上搜索和列出文件：本机把条件交给远端的服务进程，由它遍历目录、读文件，只把结果
 //! 传回来。
 //!
-//! 服务进程以 [`SEARCH`] 或 [`FILES`] 为参数再次运行自身（见 [`search`]、[`files`]）：条件从
-//! 标准输入读入，结果逐条写到标准输出，本机随到随读。结果按需发送，本机读得慢时远端随之放慢；
+//! 服务进程以 [`SEARCH`]、[`FILES`] 或 [`DIRS`] 为参数再次运行自身（见 [`search`]、[`files`]、
+//! [`dirs`]）：条件从标准输入读入，结果逐条写到标准输出，本机随到随读。结果按需发送，本机读得慢时远端随之放慢；
 //! 本机放弃读取时远端的进程被结束，不会留下还在遍历的进程。
 //!
 //! 条件和结果是紧凑的二进制：整数是小端的 `u32`、`u64`，字节串前面是 `u32` 的长度；每条结果前面
@@ -19,13 +19,15 @@ use crate::walk::Probe;
 pub const SEARCH: &str = "search";
 /// 服务进程列出文件时的参数：`winc-server files`。
 pub const FILES: &str = "files";
+/// 服务进程找出递归展开的目录时的参数：`winc-server dirs`。
+pub const DIRS: &str = "dirs";
 
 /// 服务进程自身的一条命令：读入标准输入中的条件，把结果写到第二个参数。
 pub type Command = fn(&[u8], &mut (dyn Write + Send)) -> io::Result<()>;
 
 /// 服务进程以自身运行的各条命令：参数和实现。
 #[cfg(unix)]
-pub const COMMANDS: [(&str, Command); 2] = [(SEARCH, search), (FILES, files)];
+pub const COMMANDS: [(&str, Command); 3] = [(SEARCH, search), (FILES, files), (DIRS, dirs)];
 /// 一条结果的长度上限（字节，256 MiB）：读到更长的长度说明数据已损坏，不再读下去。
 ///
 /// 单个文件的结果最多 `MAX_RESULTS` 处，每处的预览有长度上限，远小于此。
@@ -185,7 +187,7 @@ pub fn write_record(output: &mut impl Write, record: &Record) -> io::Result<()> 
 }
 
 /// 写出一条结果：前面是它的长度。
-fn frame(output: &mut impl Write, body: &[u8]) -> io::Result<()> {
+fn frame(output: &mut (impl Write + ?Sized), body: &[u8]) -> io::Result<()> {
     let len = u32::try_from(body.len()).map_err(|_| invalid())?;
     output.write_all(&len.to_le_bytes())?;
     output.write_all(body)
@@ -453,6 +455,81 @@ pub fn serve(request: &Request, output: impl Write + Send) -> io::Result<()> {
         gave_up: matcher.gave_up(),
     };
     send(&end).map_err(|()| io::Error::from(io::ErrorKind::BrokenPipe))
+}
+
+/// 递归展开一个目录的条件，见 [`crate::descend`]。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Descent {
+    /// 目录在远端主机上的路径。
+    pub path: Vec<u8>,
+    /// 最多找的目录数。
+    pub dirs: usize,
+    /// 最多看的目录项数。
+    pub entries: usize,
+}
+
+impl Descent {
+    /// 编码为写进标准输入的字节。
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Encoder::default();
+        out.bytes(&self.path)
+            .u64(self.dirs as u64)
+            .u64(self.entries as u64);
+        out.0
+    }
+
+    /// 从 [`Descent::encode`] 写出的字节还原。
+    ///
+    /// # Errors
+    ///
+    /// 字节不合格式时返回 [`io::ErrorKind::InvalidData`]。
+    pub fn decode(bytes: &[u8]) -> io::Result<Self> {
+        let mut input = Decoder(bytes);
+        let descent = Self {
+            path: input.bytes()?.to_vec(),
+            dirs: input.usize()?,
+            entries: input.usize()?,
+        };
+        input.finish()?;
+        Ok(descent)
+    }
+}
+
+/// 服务进程的 [`DIRS`]：按标准输入 `input` 中的 [`Descent`] 找出要展开的各级目录，作为一条结果
+/// 写到 `output`（见 [`read_dirs`]）。
+///
+/// # Errors
+///
+/// 条件不合格式时返回 [`io::ErrorKind::InvalidData`]；写入失败时返回对应的 `io::Error`。
+#[cfg(unix)]
+pub fn dirs(input: &[u8], output: &mut (dyn Write + Send)) -> io::Result<()> {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let descent = Descent::decode(input)?;
+    let path = std::path::Path::new(OsStr::from_bytes(&descent.path));
+    let (found, limited) = crate::walk::descend(path, descent.dirs, descent.entries);
+    let found: Vec<Vec<u8>> = (found.iter())
+        .map(|dir| dir.as_os_str().as_bytes().to_vec())
+        .collect();
+    let mut out = Encoder::default();
+    out.flag(limited).list(&found);
+    frame(output, &out.0)?;
+    output.flush()
+}
+
+/// 读出 [`dirs`] 写出的结果：各级目录在远端主机上的路径，以及是否只找了一部分。
+///
+/// # Errors
+///
+/// 读取失败时返回对应的 `io::Error`；数据不合格式或不完整时返回 [`io::ErrorKind::InvalidData`]。
+pub fn read_dirs(input: &mut impl Read) -> io::Result<(Vec<Vec<u8>>, bool)> {
+    let body = unframe(input)?.ok_or_else(invalid)?;
+    let mut input = Decoder(&body);
+    let limited = input.flag()?;
+    let found = input.list()?;
+    input.finish()?;
+    Ok((found, limited))
 }
 
 /// 数据不合格式。

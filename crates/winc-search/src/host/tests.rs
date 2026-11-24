@@ -1,4 +1,4 @@
-//! 远端搜索的测试：条件与结果的编解码、不合格式的数据，以及在本机目录上按条件搜索。
+//! 远端搜索和列出文件的测试：条件与结果的编解码、不合格式的数据，以及在本机目录上按条件搜索。
 
 use super::*;
 
@@ -47,6 +47,18 @@ fn requests_and_records_survive_encoding() {
             gave_up: false,
         },
     ];
+    let listing = Listing {
+        root: b"/srv/app".to_vec(),
+        paths: vec![String::new(), "src/main.rs".into()],
+        layers: Some(3),
+    };
+    assert_eq!(Listing::decode(&listing.encode()).unwrap(), listing);
+    let descent = Descent {
+        path: b"/srv/app/src".to_vec(),
+        dirs: 1000,
+        entries: 50_000,
+    };
+    assert_eq!(Descent::decode(&descent.encode()).unwrap(), descent);
     let mut stream = Vec::new();
     for record in &records {
         write_record(&mut stream, record).unwrap();

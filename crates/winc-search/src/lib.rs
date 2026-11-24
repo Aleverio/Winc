@@ -23,6 +23,6 @@ pub use matcher::*;
 pub use query::{Filter, GlobError, Query};
 pub use scan::search_file;
 pub use walk::{
-    DEPENDENCY_FOLDERS, HIDDEN, Probe, dependency_folders, gather, is_listed_file, natural_cmp,
-    probe, slashed, walker, walker_with_ignored,
+    DEPENDENCY_FOLDERS, HIDDEN, Probe, dependency_folders, descend, gather, is_listed_file,
+    natural_cmp, probe, slashed, walker, walker_with_ignored,
 };

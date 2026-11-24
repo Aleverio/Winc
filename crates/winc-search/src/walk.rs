@@ -229,6 +229,38 @@ pub fn slashed(relative: &Path) -> Option<String> {
     (!out.is_empty()).then_some(out)
 }
 
+/// 返回递归展开目录 `path` 时要展开的各级目录（含它自己，按名字逐层排序），以及是否因超过上限
+/// 只找了一部分：最多 `dirs` 个目录、看 `entries` 个目录项。
+///
+/// 遵守忽略规则，不进入符号链接；`path` 本身被忽略时不往下找，返回空。
+pub fn descend(path: &Path, dirs: usize, entries: usize) -> (Vec<PathBuf>, bool) {
+    let listed = path.parent().is_some_and(|parent| {
+        walker(parent)
+            .max_depth(Some(1))
+            .build()
+            .filter_map(Result::ok)
+            .any(|e| e.path() == path)
+    });
+    if !listed {
+        return (Vec::new(), false);
+    }
+
+    let mut walk = walker(path);
+    walk.sort_by_file_name(|a, b| a.cmp(b));
+    let (mut found, mut seen) = (Vec::new(), 0);
+    for item in walk.build().filter_map(Result::ok) {
+        seen += 1;
+        let dir = item.file_type().is_some_and(|kind| kind.is_dir());
+        if seen > entries || (dir && found.len() == dirs) {
+            return (found, true);
+        }
+        if dir {
+            found.push(item.into_path());
+        }
+    }
+    (found, false)
+}
+
 /// 依赖目录的名字：Node 的、Python 虚拟环境的、PHP 和 Go 的 `vendor`、iOS 的 `Pods`。
 pub const DEPENDENCY_FOLDERS: [&str; 5] = ["node_modules", ".venv", "venv", "vendor", "Pods"];
 /// 往下找依赖目录的层数：根目录下一层和两层（如 `frontend/node_modules`）。

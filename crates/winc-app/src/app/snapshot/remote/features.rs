@@ -10,6 +10,10 @@ use super::*;
 /// [`super::folders_on_a_remote_host_are_not_taken_for_files`]。
 pub(super) fn features_work_in_a_remote_workspace() {
     let dir = search_folder("remote-features").canonicalize().unwrap();
+    for file in ["nest/b/c/file.rs", "nest/d/e/other.rs"] {
+        std::fs::create_dir_all(dir.join(file).parent().unwrap()).unwrap();
+        std::fs::write(dir.join(file), "").unwrap();
+    }
     let target = loopback("app-remote-features");
     let root = winc_backend::virtual_path(&target, dir.as_os_str().as_bytes());
     let mut app = blank_app(false);
@@ -50,6 +54,18 @@ pub(super) fn features_work_in_a_remote_workspace() {
         "src/fresh.rs"
     );
     app.close_picker();
+
+    // 按住 Alt 单击目录：各级目录由那台主机一次找出，一并展开；再按一次全部收起。
+    let names = |app: &App| -> Vec<String> {
+        let rows = app.editor.workspace.as_ref().unwrap().rows();
+        rows.iter().map(|row| row.name.clone()).collect()
+    };
+    app.toggle_dir_recursively(row_of(&app, "nest"));
+    let shown = names(&app);
+    assert!(shown.iter().any(|name| name == "file.rs"), "{shown:?}");
+    assert!(shown.iter().any(|name| name == "other.rs"), "{shown:?}");
+    app.toggle_dir_recursively(row_of(&app, "nest"));
+    assert!(!names(&app).iter().any(|name| name == "file.rs"));
 
     // 全局搜索在那台主机上的文件中进行。
     app.set_sidebar_view(SidebarView::Search);
