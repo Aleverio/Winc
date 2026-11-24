@@ -237,7 +237,10 @@ pub(super) fn patch(
                 mut files,
                 dirs: mut found,
             } => {
-                if was_dir && !was_file && same_files(base, &rel, &mut files) {
+                // 文件没变、也没有新的目录时不更新：其下的变化已在这次查看之内（见
+                // `Probe::Covered`），新建的空目录也要记为遍历过。
+                let known = found.iter().all(|dir| base.dirs.contains(dir.as_str()));
+                if was_dir && !was_file && known && same_files(base, &rel, &mut files) {
                     continue;
                 }
                 if was_file || was_dir {

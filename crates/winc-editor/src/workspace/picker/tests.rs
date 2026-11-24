@@ -600,6 +600,26 @@ fn patching_with_the_changed_paths_matches_walking_again() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// 同一批变化里有目录和它下面新建的空目录：目录里的文件没变，新目录也记为遍历过，之后其中新建
+/// 的文件能收录。
+#[test]
+fn a_new_empty_folder_is_walked_even_when_its_parent_has_the_same_files() {
+    let root = crate::test_util::scratch("index-patch-empty-dir");
+    write(&root, "src/main.rs");
+    let cancel = AtomicBool::new(false);
+    let base = collect(&root, MAX_FILES, &cancel);
+
+    std::fs::create_dir_all(root.join("src/sub")).unwrap();
+    let changed = [root.join("src"), root.join("src/sub")];
+    let patched = updated(&root, &base, &changed, &cancel).unwrap();
+    assert!(patched.walked("src/sub"));
+    write(&root, "src/sub/new.rs");
+    let added = updated(&root, &patched, &[root.join("src/sub/new.rs")], &cancel).unwrap();
+    assert_eq!(contents(&added).0, ["src/main.rs", "src/sub/new.rs"]);
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 #[test]
 fn patching_a_layered_index_keeps_its_layers() {
     let root = crate::test_util::scratch("index-patch-layers");
