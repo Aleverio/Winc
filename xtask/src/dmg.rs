@@ -531,7 +531,17 @@ pub(crate) const ICON_TILE: f32 = 1024.0;
 pub(crate) const MACOS_ICON_TILE: f32 = 824.0;
 
 /// `.icns` 的文件名（不含扩展名），也是 `Info.plist` 中 `CFBundleIconFile` 的值。
-const ICON_NAME: &str = "winc";
+const ICON_NAME: &str = "winct";
+
+/// 项目文件文档图标的源文件，相对 workspace 根目录：大图，以及边长不超过 40 像素时用的小图
+/// （分界与 Windows 的文档图标相同）。
+const PROJECT_ICON_SOURCES: [&str; 2] = [
+    "crates/winct-app/assets/file-icons/project.svg",
+    "crates/winct-app/assets/file-icons/project-small.svg",
+];
+
+/// 项目文件文档图标（`.icns`）的文件名（不含扩展名），即 `Info.plist` 中该类型的图标名。
+const PROJECT_ICON: &str = "winct-project";
 
 /// `iconutil` 要求的图标尺寸：（文件名中的尺寸，倍率）。
 ///
