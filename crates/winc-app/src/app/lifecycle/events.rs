@@ -319,6 +319,7 @@ impl ApplicationHandler<UserEvent> for App {
             WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
                 self.cancel_touch();
                 self.window_frame_changed();
+                // 最小化时尺寸为 0：保留此前的排版，还原时按实际尺寸重新排版。
                 if self.note_minimized() {
                     return;
                 }
