@@ -102,6 +102,8 @@ fn astro_uses_prettier_only_with_the_plugin() {
     assert!(matches!(
         detect(Task::Format, "astro", &root),
         Detected::Preset(p, Some(reason)) if p.name == "Prettier" && reason == "package.json"
+            // Prettier 3 不自动加载依赖中的插件，命令中必须指名。
+            && p.command.contains("--plugin prettier-plugin-astro")
     ));
 
     std::fs::write(

@@ -147,7 +147,8 @@ const FRONTMATTER_COMMENT: u8 = 11;
 /// - `11`：frontmatter 中的块注释（见 [`FRONTMATTER_COMMENT`]）。
 /// - `0x10 | i`：块字符串 `i`（`i` 小于 16）。
 /// - `0x20 | k`：标签内部（`k` 小于 16）。
-/// - `0x30 | n`：Astro frontmatter 的内层状态（`n` 小于 16）。
+/// - `0x30 | n`：Astro frontmatter 的内层状态（`n` 小于 16）；放不下时为 `0x30`，内层按
+///   `Normal` 处理。
 /// - `0x40 | 下标 << 3 | 层数`：块注释（下标和层数都小于 8）。
 /// - `0x80 | n`、`0xC0 | n`：长括号字符串和注释（`n` 小于 64）。
 fn compact(state: LineState) -> u8 {
@@ -168,6 +169,8 @@ fn compact(state: LineState) -> u8 {
         LineState::Frontmatter {
             inner: FRONTMATTER_COMMENT_INNER,
         } => FRONTMATTER_COMMENT,
+        // 内层状态放不下时只丢掉内层状态，仍留在 frontmatter 中，之后的行不按模板着色。
+        LineState::Frontmatter { .. } => 0x30,
         LineState::BlockComment { index, depth } if index < 8 && depth < 8 => {
             0x40 | index << 3 | depth
         }

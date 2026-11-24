@@ -107,7 +107,8 @@ const PRETTIER_FILES: &[Sign] = &[
 
 /// 表明项目能用 Prettier 格式化 Astro 的迹象：官方插件已声明为依赖。
 ///
-/// 没有插件时 Prettier 找不到 `.astro` 的解析器，即使装了 Prettier 也不能自动使用。
+/// 没有插件时 Prettier 找不到 `.astro` 的解析器，即使装了 Prettier 也不能自动使用。Prettier 3
+/// 不再自动加载依赖中的插件，因此预设的命令用 `--plugin` 指名加载。
 const ASTRO_PRETTIER_FILES: &[Sign] = &[Sign::Package("prettier-plugin-astro")];
 
 /// 预设工具列表；同一种语言中排在前面的优先。
@@ -149,7 +150,7 @@ pub const PRESETS: &[Preset] = &[
     Preset {
         name: "Prettier",
         task: Task::Format,
-        command: "prettier --stdin-filepath {file}",
+        command: "prettier --plugin prettier-plugin-astro --stdin-filepath {file}",
         languages: &["astro"],
         auto: Auto::OnlyWhen(ASTRO_PRETTIER_FILES),
     },

@@ -249,3 +249,29 @@ fn vertical_movement_keeps_goal() {
     );
     assert_eq!(d.goal_cell, None);
 }
+
+/// Astro frontmatter 的 `---` 分隔行不参与切换注释：注释之后 frontmatter 仍然闭合，模板仍按
+/// HTML 着色。
+#[test]
+fn comment_toggling_skips_astro_frontmatter_fences() {
+    let src = "---\nconst a = 1;\n---\n<div>{a}</div>\n";
+    let commented = "---\n// const a = 1;\n---\n<div>{a}</div>\n";
+    let toggled = |from: usize, to: usize| {
+        let mut d = doc("Page.astro", src, 0);
+        let (start, end) = (d.text().line_start(from), d.text().line_end(to));
+        d.selection = Selection::new(start, end);
+        d.execute(Command::ToggleComment, 10, 4);
+        (text(&d), d.selection)
+    };
+
+    // 第 1 至 2 行：结束的分隔行不注释。
+    let (result, _) = toggled(1, 2);
+    assert_eq!(result, commented);
+    // 从第 0 行开始：开头的分隔行同样跳过，注释按 TypeScript 写 `//`；选区仍从文件开头开始。
+    let (result, selection) = toggled(0, 2);
+    assert_eq!(result, commented);
+    assert_eq!(selection.from(), 0);
+    // 只选分隔行时不修改。
+    assert_eq!(toggled(0, 0).0, src);
+    assert_eq!(toggled(2, 2).0, src);
+}

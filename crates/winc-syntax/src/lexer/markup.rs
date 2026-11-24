@@ -30,7 +30,8 @@ impl Lexer<'_> {
                 0
             }
             LineState::Frontmatter { inner } => {
-                if self.frontmatter_fence() {
+                // 多行模板字符串或块注释中的 `---` 是 TypeScript 的内容，不结束 frontmatter。
+                if expand(inner) == LineState::Normal && self.frontmatter_fence() {
                     self.push(0, 3, TokenKind::Decorator);
                     return LineState::Normal;
                 }

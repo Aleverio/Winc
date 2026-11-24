@@ -66,3 +66,24 @@ fn astro_frontmatter_starts_only_at_the_first_line() {
     let (_, next) = lex("a.astro", "---  ", LineState::Start);
     assert_eq!(next, LineState::Frontmatter { inner: 0 });
 }
+
+/// frontmatter 中多行模板字符串里的 `---` 是 TypeScript 的内容，不结束 frontmatter。
+#[test]
+fn astro_fence_inside_a_template_literal_does_not_close_frontmatter() {
+    let (_, next) = lex("a.astro", "---", LineState::Start);
+    let (_, next) = lex("a.astro", "const md = `", next);
+    let (tokens, next) = lex("a.astro", "---", next);
+    assert_eq!(tokens, vec![("---".into(), TokenKind::String)]);
+    let (_, next) = lex("a.astro", "`;", next);
+    assert_eq!(next, LineState::Frontmatter { inner: 0 });
+    let (tokens, next) = lex("a.astro", "---", next);
+    assert_eq!(tokens, vec![("---".into(), TokenKind::Decorator)]);
+    assert_eq!(next, LineState::Normal);
+}
+
+/// 内层状态放不进紧凑编码时只丢掉内层状态，仍留在 frontmatter 中。
+#[test]
+fn astro_frontmatter_survives_an_inner_state_that_does_not_fit() {
+    let state = LineState::Frontmatter { inner: 0x23 };
+    assert_eq!(expand(compact(state)), LineState::Frontmatter { inner: 0 });
+}
