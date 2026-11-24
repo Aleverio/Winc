@@ -222,14 +222,14 @@ fn listing_the_file_types_keeps_other_programs_entries() {
 }
 
 #[test]
-fn the_settings_list_the_group_only_on_windows() {
+fn the_integration_group_is_available_only_on_windows() {
     use crate::layout::{Setting, SettingControl, SettingsPage};
 
-    let sections = SettingsPage::General.sections(&Default::default());
-    let listed = sections
-        .iter()
-        .any(|s| s.items.contains(&Setting::ExplorerMenu));
-    assert_eq!(listed, cfg!(windows));
+    // 这一组是否被设置页列出由 `available()` 决定；Windows 之外只在测试里强制列出。
+    assert_eq!(super::available(), cfg!(windows));
+    super::list_in_tests(true);
+    assert!(super::available());
+    super::list_in_tests(false);
     // 记在注册表里，不是配置文件中的项；同组各项都有说明。
     for setting in [Setting::ExplorerMenu, Setting::FileAssociations] {
         assert_eq!(setting.page(), SettingsPage::Editor);
