@@ -89,6 +89,12 @@ fn images_are_read_as_png_and_tiff_is_converted() {
 
 #[test]
 fn messages_match_the_appkit_declarations() {
+    // AppKit 的 `BOOL` 在 x86_64 上编码为 `c`，在 arm64 上编码为 `B`。
+    let bool_type = if cfg!(target_arch = "x86_64") {
+        "c"
+    } else {
+        "B"
+    };
     assert_eq!(
         method_encoding(c"NSPasteboard", sel!(generalPasteboard), false),
         "@@:"
@@ -112,7 +118,7 @@ fn messages_match_the_appkit_declarations() {
     );
     assert_eq!(
         method_encoding(c"NSArray", sel!(containsObject:), true),
-        "B@:@"
+        format!("{bool_type}@:@")
     );
     assert_eq!(method_encoding(c"NSData", sel!(length), true), "Q@:");
     assert_eq!(method_encoding(c"NSData", sel!(bytes), true), "r^v@:");

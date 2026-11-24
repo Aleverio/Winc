@@ -51,8 +51,13 @@ fn panel_messages_match_appkit_signatures() {
     // 面板不能在测试中弹出（会显示在屏幕上，且必须在主线程），因此只核对发出的每条消息在
     // AppKit 中确实存在，且参数类型与传入的一致。
     let encoding = method_encoding;
-
-    let bool_setter = "v@:B";
+    // AppKit 的 `BOOL` 在 x86_64 上编码为 `c`，在 arm64 上编码为 `B`。
+    let bool_type = if cfg!(target_arch = "x86_64") {
+        "c"
+    } else {
+        "B"
+    };
+    let bool_setter = format!("v@:{bool_type}");
     for name in [
         sel!(setCanChooseFiles:),
         sel!(setCanChooseDirectories:),
@@ -82,7 +87,7 @@ fn panel_messages_match_appkit_signatures() {
     assert_eq!(encoding(c"NSWindow", sel!(attachedSheet), true), "@@:");
     assert_eq!(
         encoding(c"NSURL", sel!(fileURLWithPath:isDirectory:), false),
-        "@@:@B"
+        format!("@@:@{bool_type}")
     );
     assert!(encoding(c"NSURL", sel!(fileSystemRepresentation), true).ends_with("*@:"));
 
@@ -99,7 +104,7 @@ fn panel_messages_match_appkit_signatures() {
             sel!(popUpMenuPositioningItem:atLocation:inView:),
             true
         ),
-        "B@:@{CGPoint=dd}@"
+        format!("{bool_type}@:@{{CGPoint=dd}}@")
     );
     assert_eq!(
         encoding(
@@ -133,7 +138,7 @@ fn panel_messages_match_appkit_signatures() {
             sel!(initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bytesPerRow:bitsPerPixel:),
             true
         ),
-        "@@:^*qqqqBB@qq"
+        format!("@@:^*qqqq{bool_type}{bool_type}@qq")
     );
     assert_eq!(encoding(c"NSBitmapImageRep", sel!(bitmapData), true), "*@:");
     assert_eq!(
@@ -191,7 +196,7 @@ fn panel_messages_match_appkit_signatures() {
             sel!(trashItemAtURL:resultingItemURL:error:),
             true
         ),
-        "B@:@^@^@"
+        format!("{bool_type}@:@^@^@")
     );
     assert_eq!(
         encoding(c"NSError", sel!(localizedDescription), true),

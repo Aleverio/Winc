@@ -342,12 +342,25 @@ fn fonts_without_stated_heights_measure_their_letters() {
     let mut data = font.data.to_vec();
     let offset = font.offset as usize;
     let count = usize::from(u16::from_be_bytes([data[offset + 4], data[offset + 5]]));
-    let record = (0..count)
-        .map(|i| offset + 12 + 16 * i)
-        .find(|&r| &data[r..r + 4] == b"OS/2")
-        .expect("字体有 OS/2 表");
+    let mut os2 = None;
+    let mut mvar = None;
+    for i in 0..count {
+        let r = offset + 12 + 16 * i;
+        let tag = &data[r..r + 4];
+        if tag == b"OS/2" {
+            os2 = Some(r);
+        } else if tag == b"MVAR" {
+            mvar = Some(r);
+        }
+    }
+    let record = os2.expect("字体有 OS/2 表");
     let table = u32::from_be_bytes(data[record + 8..record + 12].try_into().unwrap()) as usize;
     data[table..table + 2].copy_from_slice(&1u16.to_be_bytes());
+    // macOS 的系统字体还带 MVAR 表，即使 OS/2 版本过低，它也会加上 xhgt 增量；把 MVAR
+    // 标成未知表，确保副本的 x 字高只能由轮廓测得。
+    if let Some(r) = mvar {
+        data[r..r + 4].copy_from_slice(b"ZZZZ");
+    }
     let old = FontRef {
         data: &data,
         offset: font.offset,
