@@ -58,6 +58,10 @@ pub enum Action {
     FocusTab7,
     FocusTab8,
     FocusTab9,
+    /// 按最近使用的顺序切换标签页（见 `App::switch_tab`）。
+    SwitchTab,
+    /// 按最近使用的顺序反向切换标签页。
+    SwitchTabBack,
     SplitRight,
     SplitDown,
     MoveToSplitRight,
@@ -485,6 +489,8 @@ impl Action {
             FocusTab7 => t!("cmd-tab-7"),
             FocusTab8 => t!("cmd-tab-8"),
             FocusTab9 => t!("cmd-tab-9"),
+            SwitchTab => t!("cmd-switch-tab"),
+            SwitchTabBack => t!("cmd-switch-tab-back"),
             SplitRight => t!("cmd-split-right"),
             SplitDown => t!("cmd-split-down"),
             MoveToSplitRight => t!("cmd-move-to-split-right"),
@@ -783,10 +789,9 @@ impl Action {
             | RemoteConnect | RemoteDisconnect | Save | SaveAs | CloseTab | CloseOtherTabs
             | CloseAllTabs | ReopenClosed | NextTab | PreviousTab | FocusTab1 | FocusTab2
             | FocusTab3 | FocusTab4 | FocusTab5 | FocusTab6 | FocusTab7 | FocusTab8 | FocusTab9
-            | CloseFolder | CloseWindow | CopyPath | CopyRelativePath | RevealInFinder
-            | CopyActivePath | CopyKeyPath | RevealActiveFile | OpenInTerminal | Quit => {
-                Group::File
-            }
+            | SwitchTab | SwitchTabBack | CloseFolder | CloseWindow | CopyPath
+            | CopyRelativePath | RevealInFinder | CopyActivePath | CopyKeyPath
+            | RevealActiveFile | OpenInTerminal | Quit => Group::File,
             NewWindow | OpenRecent | CopyReference | CopyAbsoluteReference => Group::File,
             Undo
             | Redo
@@ -1130,9 +1135,11 @@ impl Action {
     /// 焦点在终端里时，带 ⌘ 的全局快捷键是否还作用于这个命令。
     ///
     /// 编辑和查找的命令针对编辑区里的文档，在终端里按下不能改到看不见的文档，交给终端
-    /// （粘贴由终端自己处理；复制、全选在终端里另有绑定）。
+    /// （粘贴由终端自己处理；复制、全选在终端里另有绑定）。按最近使用切换标签页的两个方向都
+    /// 交给终端：其默认键单按 `Ctrl`，正向本来就交给终端程序。
     pub fn reaches_terminal(self) -> bool {
-        self == Action::Paste || !matches!(self.group(), Group::Edit | Group::Find)
+        let switch = matches!(self, Action::SwitchTab | Action::SwitchTabBack);
+        self == Action::Paste || !switch && !matches!(self.group(), Group::Edit | Group::Find)
     }
 
     /// 命令属于哪个可选模块；不属于任何模块的命令总是可用。

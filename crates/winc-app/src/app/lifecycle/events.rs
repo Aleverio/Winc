@@ -376,6 +376,7 @@ impl ApplicationHandler<UserEvent> for App {
                     self.update_terminal_link();
                 }
                 self.update_text_link();
+                self.tab_switch_modifiers();
                 // 按住 `⌥` 时分支选择器中的「拉取」变为「拉取并变基」，提交按钮变为「提交并推送」。
                 if (self.overlays.picker.open && self.picker_has_actions()) || self.commit_shown() {
                     self.request_redraw();
@@ -460,6 +461,7 @@ impl App {
             self.reload_state();
         } else {
             self.cancel_chord();
+            self.close_tab_switch();
             let ids: Vec<DocumentId> = self.editor.documents.iter().map(|d| d.id).collect();
             self.auto_save(&ids);
             self.drop_drags();

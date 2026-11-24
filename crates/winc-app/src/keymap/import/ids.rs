@@ -173,6 +173,16 @@ const IDS: &[(Action, &[&str], &[&str])] = &[
     (FocusTab8, &[], &["workbench.action.openEditorAtIndex8"]),
     (FocusTab9, &[], &["workbench.action.openEditorAtIndex9"]),
     (
+        SwitchTab,
+        &["Switcher"],
+        &["workbench.action.quickOpenPreviousRecentlyUsedEditorInGroup"],
+    ),
+    (
+        SwitchTabBack,
+        &[],
+        &["workbench.action.quickOpenLeastRecentlyUsedEditorInGroup"],
+    ),
+    (
         CloseFolder,
         &["CloseProject"],
         &["workbench.action.closeFolder"],

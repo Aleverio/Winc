@@ -70,6 +70,8 @@ pub const ACTIONS: &[Action] = {
         FocusTab7,
         FocusTab8,
         FocusTab9,
+        SwitchTab,
+        SwitchTabBack,
         SplitRight,
         SplitDown,
         MoveToSplitRight,

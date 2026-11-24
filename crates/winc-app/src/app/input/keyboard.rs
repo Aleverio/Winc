@@ -98,6 +98,10 @@ impl App {
         if self.alert_key(&event.logical_key, cmd) || self.popup_key(event) {
             return;
         }
+        // 标签页切换列表打开时，选择用的按键先给它。
+        if self.tab_switch_key(event) {
+            return;
+        }
         // 设置浮层是模态的：打开期间只处理它自己的按键，其他快捷键不会传到下层。
         if self.settings.open {
             self.on_key_settings(event, &base, cmd);

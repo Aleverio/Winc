@@ -23,6 +23,7 @@ impl App {
         if (button == MouseButton::Left && self.alert_mouse_down())
             || self.overlays.alert.is_some()
             || self.popup_mouse_down(button)
+            || self.tab_switch_mouse_down()
         {
             return;
         }

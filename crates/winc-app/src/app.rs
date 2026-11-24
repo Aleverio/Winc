@@ -965,6 +965,8 @@ pub struct App {
     pub layout: Layout,
     /// 标签栏的标签和滚动状态。
     pub tabs: TabBar,
+    /// 按最近使用切换标签页的列表和记录。
+    pub(crate) tab_switch: workspace::tab_switch::TabSwitch,
     /// 编辑区的各个窗格在界面上的位置和状态。
     pub(crate) panes: workspace::panes::PaneUi,
     /// 差异视图的界面状态。

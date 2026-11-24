@@ -163,6 +163,8 @@ impl App {
                     self.focus_tab_number(index);
                 }
             }
+            SwitchTab => self.switch_tab(true),
+            SwitchTabBack => self.switch_tab(false),
             CloseFolder => self.close_folder(),
             // 只有一个窗口，关闭窗口就是退出，未保存的内容按退出的流程备份或询问。
             CloseWindow => self.request_close_window(),

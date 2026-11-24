@@ -47,6 +47,8 @@ impl Action {
             FocusTab7 => "Open Editor at Index 7",
             FocusTab8 => "Open Editor at Index 8",
             FocusTab9 => "Open Editor at Index 9",
+            SwitchTab => "Quick Open Previous Recently Used Editor in Group",
+            SwitchTabBack => "Quick Open Least Recently Used Editor in Group",
             SplitRight => "Split Editor Right",
             SplitDown => "Split Editor Down",
             MoveToSplitRight => "Move Editor into Right Split",

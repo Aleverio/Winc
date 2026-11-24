@@ -67,6 +67,31 @@ fn numbered_tab_keys_follow_vscode() {
     }
 }
 
+/// 两套方案在三个系统上都用 `Ctrl+Tab`、`Ctrl+Shift+Tab` 按最近使用切换标签页；焦点在终端时
+/// 两个方向都交给终端程序。
+#[test]
+fn ctrl_tab_switches_tabs_in_both_presets() {
+    for (os, preset) in ALL_OS
+        .into_iter()
+        .flat_map(|os| Preset::ALL.map(|p| (os, p)))
+    {
+        let table = preset.bindings(os);
+        for (mods, action) in [
+            (Mods::CTRL, Action::SwitchTab),
+            (Mods::CTRL | Mods::SHIFT, Action::SwitchTabBack),
+        ] {
+            let stroke = Stroke {
+                key: KeyCode::Tab,
+                mods,
+            };
+            let found = lookup(&table, stroke, None, Context::Editor);
+            assert_eq!(found, Lookup::Run(vec![action]), "{os:?} {preset:?}");
+            let found = lookup(&table, stroke, None, Context::Terminal);
+            assert_eq!(found, Lookup::None, "{os:?} {preset:?}");
+        }
+    }
+}
+
 #[test]
 fn terminal_clipboard_keys_follow_each_system() {
     use Action::{TerminalCopy, TerminalPaste};

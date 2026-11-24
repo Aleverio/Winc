@@ -213,6 +213,7 @@ pub fn draw(app: &mut App, frame: &mut Frame<'_>) {
     }
 
     editor::hint::draw_name_hint(app, frame);
+    workspace::tab_switch::draw(app, frame);
 
     draw_notices(app, frame);
 

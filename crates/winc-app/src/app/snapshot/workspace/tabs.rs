@@ -100,6 +100,73 @@ fn numbered_tab_commands_switch_by_position() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// `⌃Tab` 按最近使用的顺序列出标签页：按住 `Ctrl` 时 `Tab` 移动选中项，松开切换；`Esc` 不切换。
+/// 从命令面板打开时没有按住的键，回车切换。
+#[test]
+fn ctrl_tab_switches_tabs_by_recent_use() {
+    use crate::app::snapshot::editor::navigation::press;
+    use crate::keymap::{Action, KeyCode};
+    use winit::keyboard::ModifiersState;
+
+    let dir = search_folder("tab-switch");
+    let mut app = app_with(&dir.join("src/main.rs"), false);
+    paint(&mut app);
+    app.open_path(&dir.join("src/config.rs"));
+    paint(&mut app);
+    app.open_path(&dir.join("Cargo.toml"));
+    paint(&mut app);
+    let active = |app: &App| app.editor.active().map(|d| d.name().into_owned()).unwrap();
+    let names = |app: &App| -> Vec<String> {
+        let list = app.tab_switch.list.as_ref().unwrap();
+        let name = |id: &DocumentId| app.editor.document(*id).unwrap().name().into_owned();
+        list.rows.iter().map(name).collect()
+    };
+    let release = |app: &mut App| {
+        app.pointer.modifiers = ModifiersState::empty();
+        app.tab_switch_modifiers();
+        paint(app);
+    };
+
+    // 按下并松开：切到上一个使用的标签页。
+    app.pointer.modifiers = ModifiersState::CONTROL;
+    assert!(press(&mut app, &["ctrl"], KeyCode::Tab));
+    assert_eq!(names(&app), ["Cargo.toml", "config.rs", "main.rs"]);
+    paint(&mut app);
+    assert!(!app.hits.tab_switch.is_empty());
+    release(&mut app);
+    assert_eq!(active(&app), "config.rs");
+    assert!(app.tab_switch.list.is_none());
+
+    // 按住 `Ctrl` 再按一次 `Tab`，选到更早使用的；松开 `Shift` 不算松开。
+    app.pointer.modifiers = ModifiersState::CONTROL;
+    press(&mut app, &["ctrl"], KeyCode::Tab);
+    press(&mut app, &["ctrl"], KeyCode::Tab);
+    app.pointer.modifiers = ModifiersState::CONTROL | ModifiersState::SHIFT;
+    app.tab_switch_modifiers();
+    app.pointer.modifiers = ModifiersState::CONTROL;
+    app.tab_switch_modifiers();
+    assert!(app.tab_switch.list.is_some());
+    release(&mut app);
+    assert_eq!(active(&app), "main.rs");
+
+    // `⌃⇧Tab` 选中最早使用的；`Esc` 关闭列表，不切换。
+    app.pointer.modifiers = ModifiersState::CONTROL | ModifiersState::SHIFT;
+    press(&mut app, &["ctrl", "shift"], KeyCode::Tab);
+    let list = app.tab_switch.list.as_ref().unwrap();
+    assert_eq!(list.selected, list.rows.len() - 1);
+    app.close_tab_switch();
+    release(&mut app);
+    assert_eq!(active(&app), "main.rs");
+
+    // 从命令面板打开：松开修饰键不切换，回车切换。
+    app.run_action(Action::SwitchTab);
+    app.tab_switch_modifiers();
+    assert!(app.tab_switch.list.is_some());
+    app.accept_tab_switch();
+    assert_eq!(active(&app), "config.rs");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn dragging_a_tab_reorders_the_tabs() {
     let dir = search_folder("tabs-drag");

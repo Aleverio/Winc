@@ -95,6 +95,7 @@ impl App {
             ime: Default::default(),
             layout: Layout::default(),
             tabs: TabBar::default(),
+            tab_switch: Default::default(),
             panes: Default::default(),
             diff: Default::default(),
             status: Default::default(),

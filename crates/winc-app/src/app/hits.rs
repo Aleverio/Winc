@@ -112,6 +112,8 @@ pub struct Hits {
     /// 当前帧「快捷键」页中绘制出的按钮、链接和键帽上的 ×；位置随文字宽度而定，悬停和点击用
     /// 这里的。
     pub(crate) keys_parts: Vec<(Rect, crate::layout::SettingsPart)>,
+    /// 标签页切换列表中各行的位置和行号（见 `SwitchList::rows`）。
+    pub(crate) tab_switch: Vec<(Rect, usize)>,
 }
 
 impl Hits {
@@ -165,6 +167,7 @@ impl Hits {
             install_links,
             reset_links,
             keys_parts,
+            tab_switch,
         } = self;
         start.clear();
         *suggest_card = None;
@@ -211,5 +214,6 @@ impl Hits {
         install_links.clear();
         reset_links.clear();
         keys_parts.clear();
+        tab_switch.clear();
     }
 }

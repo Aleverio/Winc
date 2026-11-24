@@ -438,6 +438,14 @@ pub(super) const IDEA: &[PresetRow] = &[
         &["ctrl+left", "shift+cmd+["],
         &["alt+left"],
     ),
+    // 两套方案在三个系统上都是 Ctrl+Tab（macOS 上同样是 Control），按住期间列出最近使用的标签页。
+    row(SwitchTab, Global, &["ctrl+tab"], &["ctrl+tab"]),
+    row(
+        SwitchTabBack,
+        Global,
+        &["ctrl+shift+tab"],
+        &["ctrl+shift+tab"],
+    ),
     row(CopyPath, Global, &["shift+cmd+c"], &["ctrl+shift+c"]),
     row(Paste, Global, &["cmd+v"], &["ctrl+v", "shift+insert"]),
     row(Quit, Global, &["cmd+q"], &[]),
@@ -727,6 +735,14 @@ pub(super) const VSCODE: &[PresetRow] = &[
         Global,
         &["alt+cmd+left", "shift+cmd+["],
         &["ctrl+pageup"],
+    ),
+    // 两套方案在三个系统上都是 Ctrl+Tab（macOS 上同样是 Control），按住期间列出最近使用的标签页。
+    row(SwitchTab, Global, &["ctrl+tab"], &["ctrl+tab"]),
+    row(
+        SwitchTabBack,
+        Global,
+        &["ctrl+shift+tab"],
+        &["ctrl+shift+tab"],
     ),
     row(FocusTab1, Global, &["ctrl+1"], &["alt+1"]),
     row(FocusTab2, Global, &["ctrl+2"], &["alt+2"]),
