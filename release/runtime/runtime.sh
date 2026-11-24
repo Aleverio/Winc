@@ -209,22 +209,7 @@ root=$root
 $LD
 exec "\$root/current/winct" "\$@"
 EOF
-  cat > "$BIN_DIR/winct" <<EOF
-#!/bin/sh
-set -eu
-self=\$0
-while [ -L "\$self" ]; do
-  dir=\$(CDPATH= cd -P "\$(dirname "\$self")" && pwd)
-  target=\$(readlink "\$self")
-  case \$target in
-    /*) self=\$target ;;
-    *) self=\$dir/\$target ;;
-  esac
-done
-bin=\$(CDPATH= cd -P "\$(dirname "\$self")" && pwd)
-exec "\$bin/winct" "\$@"
-EOF
-  chmod +x "$BIN_DIR/winct" "$BIN_DIR/winct"
+  chmod +x "$BIN_DIR/winct"
 
   if [[ $ASSET_KIND == appimage ]]; then
     mkdir -p "$DESKTOP_DIR"
@@ -239,7 +224,7 @@ Terminal=false
 Categories=Development;TextEditor;
 EOF
   fi
-  info "launchers: $BIN_DIR/winct, $BIN_DIR/winct"
+  info "launcher: $BIN_DIR/winct"
 }
 
 switch_to() {

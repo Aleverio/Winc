@@ -38,7 +38,7 @@ try {
         $launcher -notlike '*releases\%WINCT_VERSION%\winct.exe*' -or $launcher -like '*\app\winct.exe*') {
         throw 'not ok - the launcher resolves the active release'
     }
-    Assert-Equal $true (Test-Path -LiteralPath (Join-Path $testBin 'winct.cmd')) 'the compatibility launcher exists'
+    Assert-Equal $true (Test-Path -LiteralPath (Join-Path $testBin 'winct.cmd')) 'the launcher exists'
     $commandLauncher = Get-Content -LiteralPath (Join-Path $testBin 'winctup.cmd') -Raw
     if ($commandLauncher -notlike '*-Command "%WINCT_CMD%" %1*') {
         throw 'not ok - the command launcher forwards the first option after SHIFT'

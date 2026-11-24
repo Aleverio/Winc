@@ -27,10 +27,9 @@ on `PATH`:
 - Linux/macOS: `~/.local/bin` (or `$XDG_BIN_HOME`)
 - Windows: `%LOCALAPPDATA%\winct\bin`
 
-The launchers are `winct` (`winct.cmd` on Windows) and a compatibility `winct` (`winct.cmd`) that
-points to the same build, so the existing `winct .` command line keeps working. Windows also gets a
+The launcher is `winct` (`winct.cmd` on Windows); it points to the active build. Windows also gets a
 `winctup.cmd` shim, so `winctup status` works there as well. The application binary, bundle name,
-config directory and URL scheme stay `winct`; only the user-facing name is **Winct**.
+config directory and URL scheme are all `winct`.
 
 To pin the runtime to a reviewable revision, replace `dev` in the URL with a commit SHA and export
 the same value as `WINCT_RUNTIME_REF`.
@@ -65,7 +64,7 @@ $WINCT_HOME                         # default: ~/.local/share/winct | %LOCALAPPD
 ├── current                         # symlink (Unix) or version file (Windows)
 ├── state                           # VERSION, PREVIOUS, CHANNEL, ARTIFACT, INSTALLED_AT
 └── .lock/                          # mutex directory, so two updates cannot race
-$WINCT_BIN/winct, winct              # launchers
+$WINCT_BIN/winct                     # launcher
 $XDG_DATA_HOME/applications/winct.desktop  # Linux desktop entry (Unix only)
 ```
 

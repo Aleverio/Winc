@@ -20,7 +20,8 @@ struct Temp(PathBuf);
 
 impl Temp {
     fn new(name: &str) -> Temp {
-        let dir = std::env::temp_dir().join(format!("winct-pty-{name}-{}", std::process::id()));
+        // macOS 的临时目录前缀很长；短一点，避免 `pwd` 的输出在 80 列终端里折行。
+        let dir = std::env::temp_dir().join(format!("winct-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("home")).unwrap();
         // macOS 的临时目录位于 `/var`，该路径是指向 `/private/var` 的符号链接；shell 报告

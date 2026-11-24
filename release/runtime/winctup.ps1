@@ -159,9 +159,7 @@ for /f "usebackq delims=" %%v in ("%WINCT_HOME%\current") do set "WINCT_VERSION=
 exit /b %ERRORLEVEL%
 '@
     $content = $template.Replace('__HOME__', $HomeDir)
-    foreach ($name in @('winct.cmd', 'winct.cmd')) {
-        [IO.File]::WriteAllText((Join-Path $BinDir $name), $content)
-    }
+    [IO.File]::WriteAllText((Join-Path $BinDir 'winct.cmd'), $content)
 
     # A command-shaped shim so `winctup status` works on Windows too. SHIFT moves %2 into %1, so
     # forward %1..%9 after the shift; using %2..%9 would silently drop the first option.
@@ -181,7 +179,7 @@ exit /b %ERRORLEVEL%
 '@
     $runtimeContent = $runtimeTemplate.Replace('__HOME__', $HomeDir).Replace('__BIN__', $BinDir)
     [IO.File]::WriteAllText((Join-Path $BinDir 'winctup.cmd'), $runtimeContent)
-    Info "launchers: $(Join-Path $BinDir 'winct.cmd'), $(Join-Path $BinDir 'winct.cmd'), $(Join-Path $BinDir 'winctup.cmd')"
+    Info "launchers: $(Join-Path $BinDir 'winct.cmd'), $(Join-Path $BinDir 'winctup.cmd')"
 }
 
 function Set-Current([string]$Version) {
@@ -346,7 +344,7 @@ function Do-Uninstall {
     } finally {
         Exit-Lock $lock
     }
-    foreach ($name in @('winct.cmd', 'winct.cmd', 'winctup.cmd')) {
+    foreach ($name in @('winct.cmd', 'winctup.cmd')) {
         Remove-Item -LiteralPath (Join-Path $BinDir $name) -Force -ErrorAction SilentlyContinue
     }
     Info 'winctup and its releases were removed; application settings were kept'

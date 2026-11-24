@@ -136,7 +136,6 @@ SCRIPT
   switch_to 1.2.3 ''
   install_launcher
   [[ $("$BIN_DIR/winct" --version) == 1.2.3 ]]
-  [[ $("$BIN_DIR/winct" --version) == 1.2.3 ]]
   grep -q 'LD_LIBRARY_PATH' "$BIN_DIR/winct"
   grep -q '^Name=Winct$' "$DESKTOP_DIR/winct.desktop"
 }
@@ -148,7 +147,7 @@ check 'state keys can be read and replaced' state_round_trips
 check 'switching releases is atomic and records the previous one' switch_is_atomic_and_tracks_previous
 check 'pruning keeps current, previous and the configured limit' prune_keeps_current_previous_and_limit
 check 'hashing matches sha256sum' hash_matches_coreutils
-check 'an AppImage is extracted and both launchers work' extracts_appimage_and_launches_it
+check 'an AppImage is extracted and the launcher works' extracts_appimage_and_launches_it
 
 lock_is_only_removed_when_held() {
   new_home
@@ -171,7 +170,7 @@ staging_directory_is_cleaned_up() {
   STAGE_DIR=""
 }
 
-compatibility_launcher_follows_symlinks() {
+launcher_follows_symlinks() {
   new_home
   mkdir -p "$HOME_DIR/releases/1.2.3/app"
   cat > "$HOME_DIR/releases/1.2.3/app/winct" <<'SCRIPT'
@@ -195,7 +194,7 @@ global_channel_option_is_accepted() {
 
 check 'cleanup leaves a lock owned by another process' lock_is_only_removed_when_held
 check 'a failed install removes its staging directory' staging_directory_is_cleaned_up
-check 'the compatibility launcher resolves symlinks' compatibility_launcher_follows_symlinks
+check 'the launcher resolves symlinks' launcher_follows_symlinks
 check 'global options are accepted before the command' global_channel_option_is_accepted
 
 printf '%d tests passed\n' "$passed"

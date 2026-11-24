@@ -29,19 +29,31 @@ fn language(id: &str) -> &'static Language {
 /// 「没有安装任何格式化工具」的用例会因此失败。模拟脚本用到的外部命令从这里单独链接进来。
 #[cfg_attr(not(unix), allow(dead_code))] // 只有 Unix 上的测试用到
 fn formatter(bin: &Path) -> Formatter {
-    let name = bin.file_name().unwrap().to_string_lossy();
-    let sys = bin
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join(format!("{name}-sys"));
-    std::fs::create_dir_all(&sys).unwrap();
-    for command in ["tr", "cat", "sleep", "sed", "tee"] {
-        let link = sys.join(command);
-        if !link.exists() {
-            std::os::unix::fs::symlink(Path::new("/usr/bin").join(command), link).unwrap();
+    #[cfg(unix)]
+    let path = {
+        let name = bin.file_name().unwrap().to_string_lossy();
+        let sys = bin
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(format!("{name}-sys"));
+        std::fs::create_dir_all(&sys).unwrap();
+        for command in ["tr", "cat", "sleep", "sed", "tee"] {
+            let link = sys.join(command);
+            if std::fs::symlink_metadata(&link).is_ok() {
+                continue;
+            }
+            // macOS 把 `cat`、`sleep` 放在 /bin，其余在 /usr/bin；Linux 一般都在 /usr/bin。
+            let source = ["/usr/bin", "/bin"]
+                .iter()
+                .map(|dir| Path::new(dir).join(command))
+                .find(|path| path.exists())
+                .unwrap_or_else(|| panic!("找不到系统命令 {command}"));
+            std::os::unix::fs::symlink(source, link).unwrap();
         }
-    }
-    let path = std::env::join_paths([bin, sys.as_path()]).unwrap();
+        std::env::join_paths([bin, sys.as_path()]).unwrap()
+    };
+    #[cfg(not(unix))]
+    let path = std::env::join_paths([bin]).unwrap();
     Formatter::with_vars(vec![
         (OsString::from("PATH"), path),
         (OsString::from("HOME"), OsString::from("/nowhere")),
