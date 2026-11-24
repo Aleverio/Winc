@@ -907,11 +907,9 @@ fn exec(frame: &Frame, job: &Arc<Job>, output: &Output) -> io::Result<Vec<u8>> {
     if !cwd.is_empty() {
         command.current_dir(absolute(cwd)?);
     }
-    let mut first = None;
     for _ in 0..input.u32()? {
         let arg = input.bytes()?;
         text(arg)?;
-        first.get_or_insert(arg);
         command.arg(OsStr::from_bytes(arg));
     }
     for _ in 0..input.u32()? {
@@ -932,12 +930,10 @@ fn exec(frame: &Frame, job: &Arc<Job>, output: &Output) -> io::Result<Vec<u8>> {
     input.finish()?;
     #[cfg(feature = "test-support")]
     if program == wire::SELF
-        && let Some(run) = first.and_then(builtin)
+        && let Some(run) = (command.get_args().next()).and_then(|name| builtin(name.as_bytes()))
     {
         return run_builtin(run, stdin, (frame.id, output), job, paced);
     }
-    #[cfg(not(feature = "test-support"))]
-    let _ = first;
     // 命令需要用户输入时运行服务进程自身来提问（`git` 和它启动的 `ssh` 各认一个变量）；
     // `SSH_ASKPASS_REQUIRE` 使 `ssh` 不依赖 `DISPLAY` 和控制终端。通道随命令结束而关闭。
     // 通道建不起来（临时目录不可写）时命令仍然运行，只是需要输入时会失败。
