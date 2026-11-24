@@ -1,8 +1,9 @@
-//! 在远端主机上搜索：本机把条件交给远端的服务进程，由它遍历目录、读文件并匹配，只把结果传回来。
+//! 在远端主机上搜索和列出文件：本机把条件交给远端的服务进程，由它遍历目录、读文件，只把结果
+//! 传回来。
 //!
-//! 服务进程以 [`COMMAND`] 为参数再次运行自身来搜索（见 [`serve`]）：条件从标准输入读入，结果逐条
-//! 写到标准输出，本机随到随读。结果按需发送，本机读得慢时远端随之放慢；本机放弃读取时远端的
-//! 进程被结束，不会留下还在遍历的进程。
+//! 服务进程以 [`SEARCH`] 或 [`FILES`] 为参数再次运行自身（见 [`search`]、[`files`]）：条件从
+//! 标准输入读入，结果逐条写到标准输出，本机随到随读。结果按需发送，本机读得慢时远端随之放慢；
+//! 本机放弃读取时远端的进程被结束，不会留下还在遍历的进程。
 //!
 //! 条件和结果是紧凑的二进制：整数是小端的 `u32`、`u64`，字节串前面是 `u32` 的长度；每条结果前面
 //! 是 `u32` 的长度。路径是远端主机上的绝对路径（原始字节）。
@@ -12,9 +13,19 @@ use std::ops::Range;
 
 use crate::lines::LineMatch;
 use crate::query::Query;
+use crate::walk::Probe;
 
 /// 服务进程搜索时的参数：`winc-server search`。
-pub const COMMAND: &str = "search";
+pub const SEARCH: &str = "search";
+/// 服务进程列出文件时的参数：`winc-server files`。
+pub const FILES: &str = "files";
+
+/// 服务进程自身的一条命令：读入标准输入中的条件，把结果写到第二个参数。
+pub type Command = fn(&[u8], &mut (dyn Write + Send)) -> io::Result<()>;
+
+/// 服务进程以自身运行的各条命令：参数和实现。
+#[cfg(unix)]
+pub const COMMANDS: [(&str, Command); 2] = [(SEARCH, search), (FILES, files)];
 /// 一条结果的长度上限（字节，256 MiB）：读到更长的长度说明数据已损坏，不再读下去。
 ///
 /// 单个文件的结果最多 `MAX_RESULTS` 处，每处的预览有长度上限，远小于此。
@@ -170,18 +181,18 @@ pub fn write_record(output: &mut impl Write, record: &Record) -> io::Result<()> 
             out.u8(2).flag(*truncated).flag(*gave_up);
         }
     }
-    let len = u32::try_from(out.0.len()).map_err(|_| invalid())?;
-    output.write_all(&len.to_le_bytes())?;
-    output.write_all(&out.0)
+    frame(output, &out.0)
 }
 
-/// 读出下一条结果；数据在两条结果之间结束时返回 `None`。
-///
-/// # Errors
-///
-/// 读取失败时返回对应的 `io::Error`；数据不合格式或在一条结果中间结束时返回
-/// [`io::ErrorKind::InvalidData`]。
-pub fn read_record(input: &mut impl Read) -> io::Result<Option<Record>> {
+/// 写出一条结果：前面是它的长度。
+fn frame(output: &mut impl Write, body: &[u8]) -> io::Result<()> {
+    let len = u32::try_from(body.len()).map_err(|_| invalid())?;
+    output.write_all(&len.to_le_bytes())?;
+    output.write_all(body)
+}
+
+/// 读出一条结果的内容；数据在两条结果之间结束时返回 `None`。
+fn unframe(input: &mut impl Read) -> io::Result<Option<Vec<u8>>> {
     let mut len = [0; 4];
     match input.read_exact(&mut len) {
         Ok(()) => {}
@@ -199,6 +210,19 @@ pub fn read_record(input: &mut impl Read) -> io::Result<Option<Record>> {
             io::ErrorKind::UnexpectedEof => invalid(),
             _ => error,
         })?;
+    Ok(Some(body))
+}
+
+/// 读出下一条结果；数据在两条结果之间结束时返回 `None`。
+///
+/// # Errors
+///
+/// 读取失败时返回对应的 `io::Error`；数据不合格式或在一条结果中间结束时返回
+/// [`io::ErrorKind::InvalidData`]。
+pub fn read_record(input: &mut impl Read) -> io::Result<Option<Record>> {
+    let Some(body) = unframe(input)? else {
+        return Ok(None);
+    };
     let mut input = Decoder(&body);
     let record = match input.u8()? {
         0 => {
@@ -232,14 +256,117 @@ pub fn read_record(input: &mut impl Read) -> io::Result<Option<Record>> {
     Ok(Some(record))
 }
 
-/// 服务进程的 [`COMMAND`]：按标准输入 `input` 中的条件搜索，结果写到 `output`。
+/// 服务进程的 [`SEARCH`]：按标准输入 `input` 中的条件搜索，结果写到 `output`。
 ///
 /// # Errors
 ///
 /// 条件不合格式时返回 [`io::ErrorKind::InvalidData`]，其余同 [`serve`]。
 #[cfg(unix)]
-pub fn run(input: &[u8], output: &mut (dyn Write + Send)) -> io::Result<()> {
+pub fn search(input: &[u8], output: &mut (dyn Write + Send)) -> io::Result<()> {
     serve(&Request::decode(input)?, output)
+}
+
+/// 列出文件的条件：根目录下变化了的各个路径，见 [`crate::probe`]。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Listing {
+    /// 根目录在远端主机上的路径。
+    pub root: Vec<u8>,
+    /// 相对于根目录的路径（以 `/` 分隔，按 [`std::path::Path`] 的顺序排好）；空串是根目录本身。
+    pub paths: Vec<String>,
+    /// 收录的层数；为 `None` 时不限。
+    pub layers: Option<usize>,
+}
+
+impl Listing {
+    /// 编码为写进标准输入的字节。
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Encoder::default();
+        out.bytes(&self.root)
+            .flag(self.layers.is_some())
+            .u64(self.layers.unwrap_or(0) as u64)
+            .texts(&self.paths);
+        out.0
+    }
+
+    /// 从 [`Listing::encode`] 写出的字节还原。
+    ///
+    /// # Errors
+    ///
+    /// 字节不合格式时返回 [`io::ErrorKind::InvalidData`]。
+    pub fn decode(bytes: &[u8]) -> io::Result<Self> {
+        let mut input = Decoder(bytes);
+        let root = input.bytes()?.to_vec();
+        let limited = input.flag()?;
+        let layers = input.usize()?;
+        let paths = input.texts()?;
+        input.finish()?;
+        Ok(Self {
+            root,
+            paths,
+            layers: limited.then_some(layers),
+        })
+    }
+}
+
+/// 服务进程的 [`FILES`]：按标准输入 `input` 中的 [`Listing`] 查看各个路径，每个路径一条结果，按
+/// 顺序写到 `output`（见 [`read_probe`]）。
+///
+/// # Errors
+///
+/// 条件不合格式时返回 [`io::ErrorKind::InvalidData`]；写入失败时返回对应的 `io::Error`。
+#[cfg(unix)]
+pub fn files(input: &[u8], output: &mut (dyn Write + Send)) -> io::Result<()> {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    use std::sync::atomic::AtomicBool;
+
+    let listing = Listing::decode(input)?;
+    let root = std::path::Path::new(OsStr::from_bytes(&listing.root));
+    let found = crate::walk::probe(
+        root,
+        &listing.paths,
+        listing.layers,
+        &AtomicBool::new(false),
+    );
+    let mut output = io::BufWriter::new(output);
+    for probe in &found {
+        let mut out = Encoder::default();
+        match probe {
+            Probe::Missing => out.u8(0),
+            Probe::Unlisted => out.u8(1),
+            Probe::File => out.u8(2),
+            Probe::Covered => out.u8(3),
+            Probe::Dir { files, dirs } => out.u8(4).texts(files).texts(dirs),
+        };
+        frame(&mut output, &out.0)?;
+    }
+    output.flush()
+}
+
+/// 读出 [`files`] 写出的下一条结果；数据在两条结果之间结束时返回 `None`。
+///
+/// # Errors
+///
+/// 读取失败时返回对应的 `io::Error`；数据不合格式或在一条结果中间结束时返回
+/// [`io::ErrorKind::InvalidData`]。
+pub fn read_probe(input: &mut impl Read) -> io::Result<Option<Probe>> {
+    let Some(body) = unframe(input)? else {
+        return Ok(None);
+    };
+    let mut input = Decoder(&body);
+    let probe = match input.u8()? {
+        0 => Probe::Missing,
+        1 => Probe::Unlisted,
+        2 => Probe::File,
+        3 => Probe::Covered,
+        4 => Probe::Dir {
+            files: input.texts()?,
+            dirs: input.texts()?,
+        },
+        _ => return Err(invalid()),
+    };
+    input.finish()?;
+    Ok(Some(probe))
 }
 
 /// 按 `request` 在本机（远端主机）搜索，结果逐条写到 `output`，最后写出 [`Record::End`]。
@@ -368,6 +495,14 @@ impl Encoder {
         self.u64(value.start as u64).u64(value.end as u64)
     }
 
+    fn texts(&mut self, values: &[String]) -> &mut Self {
+        self.u64(values.len() as u64);
+        for value in values {
+            self.text(value);
+        }
+        self
+    }
+
     fn list(&mut self, values: &[Vec<u8>]) -> &mut Self {
         self.u64(values.len() as u64);
         for value in values {
@@ -422,6 +557,16 @@ impl<'a> Decoder<'a> {
 
     fn range(&mut self) -> io::Result<Range<usize>> {
         Ok(self.usize()?..self.usize()?)
+    }
+
+    fn texts(&mut self) -> io::Result<Vec<String>> {
+        let count = self.u64()?;
+        // 每项至少占 4 字节，数量不会超过剩下的字节数。
+        let mut values = Vec::with_capacity((count as usize).min(self.0.len() / 4));
+        for _ in 0..count {
+            values.push(self.text()?);
+        }
+        Ok(values)
     }
 
     fn list(&mut self) -> io::Result<Vec<Vec<u8>>> {

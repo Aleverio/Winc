@@ -125,7 +125,7 @@ impl Walk {
             ..remote.request.clone()
         };
         let exec = Exec::this_server()
-            .arg(host::COMMAND)
+            .arg(host::SEARCH)
             .stdin(request.encode());
         let running = remote::spawn(&remote.at, &exec)?;
         self.run.watch(running.stopper());

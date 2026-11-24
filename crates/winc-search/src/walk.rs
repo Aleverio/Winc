@@ -4,7 +4,9 @@
 //! 也共用，远端的目录在远端遍历。
 
 use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
 use ignore::WalkBuilder;
 
@@ -70,6 +72,161 @@ fn in_repository(dir: &Path) -> bool {
 pub fn is_listed_file(kind: impl Into<winc_backend::fs::Kind>, path: &Path) -> bool {
     let kind = kind.into();
     kind.is_file() || kind.is_symlink() && winc_backend::fs::is_file(path)
+}
+
+/// 一个变化了的路径现在的样子，见 [`probe`]。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Probe {
+    /// 已不存在。
+    Missing,
+    /// 存在，但不收录：被忽略、在 [`HIDDEN`] 中，或不是文件也不是目录。
+    Unlisted,
+    /// 收录的文件。
+    File,
+    /// 目录：其下收录的文件和遍历过的目录（相对于根目录，以 `/` 分隔，含它自己）。
+    Dir {
+        /// 其下收录的文件。
+        files: Vec<String>,
+        /// 遍历过的目录。
+        dirs: Vec<String>,
+    },
+    /// 在前面刚收录过的目录之下，不必再看。
+    Covered,
+}
+
+/// 查看根目录 `root` 下变化了的各个路径（相对路径，以 `/` 分隔，按 [`Path`] 的顺序排好）现在的
+/// 样子；`layers` 是收录的层数（从 1 起，为 `None` 时不限），目录只收录到这一层。
+///
+/// 是否收录按所在目录的忽略规则，与遍历时相同；空的相对路径是根目录本身。`cancel` 置位时提前
+/// 返回，结果不全。
+pub fn probe(
+    root: &Path,
+    paths: &[String],
+    layers: Option<usize>,
+    cancel: &AtomicBool,
+) -> Vec<Probe> {
+    // 各目录下收录的名字，同一目录里的多个变化只列一次。
+    let mut listed: HashMap<&str, HashSet<String>> = HashMap::new();
+    // 上一个收录的目录：路径排好了序，其下的路径紧随其后。
+    let mut gathered: Option<&str> = None;
+    let mut found = Vec::with_capacity(paths.len());
+    for rel in paths {
+        if cancel.load(Relaxed) {
+            break;
+        }
+        let covered = gathered.is_some_and(|dir| {
+            dir.is_empty() || rel.strip_prefix(dir).is_some_and(|r| r.starts_with('/'))
+        });
+        if covered {
+            found.push(Probe::Covered);
+            continue;
+        }
+        let path = if rel.is_empty() {
+            root.to_path_buf()
+        } else {
+            root.join(rel)
+        };
+        let Ok(metadata) = winc_backend::fs::symlink_metadata(&path) else {
+            found.push(Probe::Missing);
+            continue;
+        };
+        let (parent, name) = rel.rsplit_once('/').unwrap_or(("", rel));
+        let allowed = rel.is_empty()
+            || listed
+                .entry(parent)
+                .or_insert_with(|| listed_names(&root.join(parent)))
+                .contains(name);
+        let kind = metadata.kind;
+        found.push(if !allowed {
+            Probe::Unlisted
+        } else if is_listed_file(kind, &path) {
+            Probe::File
+        } else if kind.is_dir() {
+            let (mut files, mut dirs) = (Vec::new(), Vec::new());
+            gather(root, rel, layers, (&mut files, &mut dirs), cancel);
+            gathered = Some(rel);
+            Probe::Dir { files, dirs }
+        } else {
+            Probe::Unlisted
+        });
+    }
+    found
+}
+
+/// 返回目录 `dir` 下收录的直接子项的名字。
+fn listed_names(dir: &Path) -> HashSet<String> {
+    walker(dir)
+        .max_depth(Some(1))
+        .build()
+        .flatten()
+        .filter(|entry| entry.depth() == 1)
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect()
+}
+
+/// 收录 `dir`（相对路径，空串是根目录）下面的文件和遍历过的目录，最多到第 `layers` 层（为
+/// `None` 时不限）；`dir` 自己也算遍历过的目录（根目录除外）。
+///
+/// `dir` 所在的层数是其路径段数（从 1 起），已到第 `layers` 层时什么也不收录。名字不是有效
+/// UTF-8 的项不收录。`cancel` 置位时提前返回。
+pub fn gather(
+    root: &Path,
+    dir: &str,
+    layers: Option<usize>,
+    (files, dirs): (&mut Vec<String>, &mut Vec<String>),
+    cancel: &AtomicBool,
+) {
+    let depth = if dir.is_empty() {
+        0
+    } else {
+        dir.split('/').count()
+    };
+    if layers.is_some_and(|layers| depth >= layers) {
+        return;
+    }
+    if !dir.is_empty() {
+        dirs.push(dir.to_owned());
+    }
+    let base = if dir.is_empty() {
+        root.to_path_buf()
+    } else {
+        root.join(dir)
+    };
+    let walk = walker(&base)
+        .max_depth(layers.map(|layers| layers - depth))
+        .build();
+    for entry in walk.flatten() {
+        if cancel.load(Relaxed) {
+            return;
+        }
+        let Some(kind) = entry.file_type() else {
+            continue;
+        };
+        if entry.depth() == 0 {
+            continue;
+        }
+        let Some(path) = entry.path().strip_prefix(root).ok().and_then(slashed) else {
+            continue;
+        };
+        if is_listed_file(kind, entry.path()) {
+            files.push(path);
+        } else if kind.is_dir() && layers.is_none_or(|layers| depth + entry.depth() < layers) {
+            dirs.push(path);
+        }
+    }
+}
+
+/// 把相对路径写成以 `/` 分隔的字符串；含非 UTF-8 的部分或路径为空时返回 `None`。
+pub fn slashed(relative: &Path) -> Option<String> {
+    let mut out = String::new();
+    for part in relative.components() {
+        let text = part.as_os_str().to_str()?;
+        if !out.is_empty() {
+            out.push('/');
+        }
+        out.push_str(text);
+    }
+    (!out.is_empty()).then_some(out)
 }
 
 /// 依赖目录的名字：Node 的、Python 虚拟环境的、PHP 和 Go 的 `vendor`、iOS 的 `Pods`。

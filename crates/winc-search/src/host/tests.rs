@@ -106,7 +106,7 @@ fn serving_searches_the_tree_and_reports_skipped_files() {
         skip: vec![bytes("src/main.rs")],
     };
     let mut output = Vec::new();
-    run(&request.encode(), &mut output).unwrap();
+    search(&request.encode(), &mut output).unwrap();
 
     let mut input = output.as_slice();
     let mut records = Vec::new();

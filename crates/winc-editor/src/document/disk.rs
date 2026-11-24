@@ -162,6 +162,16 @@ pub struct Opened {
     content: OpenedContent,
 }
 
+impl Opened {
+    /// 文件是否已不存在（其他读取错误不算）。
+    pub(crate) fn missing(&self) -> bool {
+        matches!(
+            &self.content,
+            OpenedContent::Text(Err(OpenError::Io(error))) if winc_backend::fs::is_absent(error)
+        )
+    }
+}
+
 /// 打开时读到了什么。
 enum OpenedContent {
     /// 图片：只有修改时间，解码另外做。

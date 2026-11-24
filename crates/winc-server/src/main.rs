@@ -5,8 +5,8 @@
 //! Unix 主机。以 `watch <目录>` 为参数时监视该目录，把变化写到标准输出（见 `winc_watch`），由
 //! 服务进程在需要监视时再次运行自身。环境中有 `WINC_ASKPASS_SOCKET` 时作为 `git` 或 `ssh` 的
 //! askpass 程序运行：把提示交给启动那条命令的服务进程，由它转给本机询问用户，答复写到标准输出。
-//! 以 `search` 为参数时在本机搜索：条件从标准输入读入，结果写到标准输出（见
-//! `winc_search::host`）。
+//! 以 `search` 或 `files` 为参数时在本机搜索或列出文件：条件从标准输入读入，结果写到标准输出
+//! （见 `winc_search::host`）。
 
 use std::process::ExitCode;
 
@@ -18,8 +18,10 @@ fn main() -> ExitCode {
     let mut args = std::env::args_os().skip(1);
     let command = args.next();
     #[cfg(unix)]
-    if command.as_deref() == Some(winc_search::host::COMMAND.as_ref()) {
-        return search();
+    if let Some(&(_, run)) = (winc_search::host::COMMANDS.iter())
+        .find(|(name, _)| command.as_deref() == Some(name.as_ref()))
+    {
+        return from_stdin(run);
     }
     if command.is_some_and(|arg| arg == "watch") {
         let Some(root) = args.next().map(std::path::PathBuf::from) else {
@@ -69,16 +71,16 @@ fn answer() -> ExitCode {
     }
 }
 
-/// 按标准输入中的条件搜索，结果写到标准输出。
+/// 读入标准输入中的条件交给 `run`，结果写到标准输出。
 #[cfg(unix)]
-fn search() -> ExitCode {
+fn from_stdin(run: winc_search::host::Command) -> ExitCode {
     use std::io::Read;
 
     let mut request = Vec::new();
-    let searched = std::io::stdin()
+    let done = std::io::stdin()
         .read_to_end(&mut request)
-        .and_then(|_| winc_search::host::run(&request, &mut std::io::stdout()));
-    match searched {
+        .and_then(|_| run(&request, &mut std::io::stdout()));
+    match done {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("winc-server: {error}");

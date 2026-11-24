@@ -916,7 +916,7 @@ fn the_server_searches_a_folder_and_stops_when_asked() {
     };
     let start = |request: &Request| {
         let exec = remote::Exec::this_server()
-            .arg(host::COMMAND)
+            .arg(host::SEARCH)
             .stdin(request.encode());
         remote::spawn(&far, &exec).unwrap()
     };
