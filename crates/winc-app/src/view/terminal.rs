@@ -78,8 +78,15 @@ fn draw_panel(app: &mut App, frame: &mut Frame<'_>) {
     for k in (0..count).filter(|&k| k != at) {
         app.with_terminal_pane(k, |app| draw_content(app, frame, false));
     }
-    for line in app.terminal_pane_dividers() {
-        frame.rect(line, p.border);
+    // 悬停或拖动的分隔线加深，与编辑区窗格的分隔线相同。
+    let active = app.active_terminal_split();
+    for (i, line) in app.terminal_pane_dividers().into_iter().enumerate() {
+        let color = if active == Some(i) {
+            p.accent
+        } else {
+            p.border
+        };
+        frame.rect(line, color);
     }
     draw_content(app, frame, focused);
 }
@@ -485,11 +492,12 @@ fn draw_header(app: &mut App, frame: &mut Frame<'_>, card: Rect) {
     let hide = Rect::new(end - BUTTONS_END - BUTTON, button_y, BUTTON, BUTTON);
     let position = Rect::new(hide.x - TAB_GAP - BUTTON, button_y, BUTTON, BUTTON);
     let maximize = Rect::new(position.x - TAB_GAP - BUTTON, button_y, BUTTON, BUTTON);
-    // 显示「搜索」标签时，最大化左边是「在对话框中打开」。
+    let split = Rect::new(maximize.x - TAB_GAP - BUTTON, button_y, BUTTON, BUTTON);
+    // 显示「搜索」标签时，拆分左边是「在对话框中打开」。
     let reopen = app
         .docked_search_shown()
-        .then(|| Rect::new(maximize.x - TAB_GAP - BUTTON, button_y, BUTTON, BUTTON));
-    let tools_x = reopen.map_or(maximize.x, |r| r.x);
+        .then(|| Rect::new(split.x - TAB_GAP - BUTTON, button_y, BUTTON, BUTTON));
+    let tools_x = reopen.map_or(split.x, |r| r.x);
     let run = run_buttons(app, frame, left, tools_x - TAB_GAP, button_y);
     let vertical = app.terminal_tab_list().is_some();
     // 标签和「+」放得下的宽度。
@@ -541,6 +549,17 @@ fn draw_header(app: &mut App, frame: &mut Frame<'_>, card: Rect) {
         icons::external(frame, center(reopen), p.text_muted, header);
         hits.push((reopen, HeaderHit::SearchDialog));
     }
+
+    // 拆分当前的终端：面板在下方时左右排，在右侧时上下排，图标画的是拆开以后的排法。
+    if app.pointer.hover == Hover::TerminalHeader(HeaderHit::Split) {
+        frame.rect_clipped(split, p.hover, RADIUS_ROW, header);
+    }
+    if app.terminal_right() {
+        icons::single_column(frame, center(split), p.text_muted, header);
+    } else {
+        icons::split(frame, center(split), p.text_muted, header);
+    }
+    hits.push((split, HeaderHit::Split));
 
     // 右端：最大化或还原面板，图标绘制的是点下去以后的样子。
     if app.pointer.hover == Hover::TerminalHeader(HeaderHit::Maximize) {

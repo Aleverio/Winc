@@ -184,6 +184,7 @@ impl App {
                 | Target::OutlineDivider
                 | Target::SplitDivider
                 | Target::PaneDivider(_)
+                | Target::TerminalSplit(_)
                 | Target::Log(crate::app::git::log::LogTarget::Divider)
                 | Target::Log(crate::app::git::log::LogTarget::BranchesEdge)
                 | Target::Log(crate::app::git::log::LogTarget::AuthorEdge)
@@ -274,6 +275,7 @@ impl App {
             Target::OutlineDivider => Hover::OutlineDivider,
             Target::SplitDivider => Hover::SplitDivider,
             Target::PaneDivider(index) => Hover::PaneDivider(index),
+            Target::TerminalSplit(index) => Hover::TerminalSplit(index),
             Target::TerminalHeader(hit) => Hover::TerminalHeader(hit),
             Target::TerminalBlock(hit) => Hover::TerminalBlock(hit),
             // 遮挡下方但没有按钮的区域，以及没有悬停效果的部件：输入条、顶栏空白、编辑区文字。
@@ -468,6 +470,9 @@ impl App {
         }
         if let Some(index) = self.pane_divider_at(x, y) {
             return Target::PaneDivider(index);
+        }
+        if let Some(index) = self.terminal_split_at(x, y) {
+            return Target::TerminalSplit(index);
         }
         if let Some(hit) = hit(&self.hits.terminal, x, y) {
             return Target::TerminalHeader(hit);
@@ -995,6 +1000,13 @@ impl App {
                 winc_editor::panes::Axis::Row => CursorIcon::ColResize,
                 winc_editor::panes::Axis::Column => CursorIcon::RowResize,
             }
+        } else if self.active_terminal_split().is_some() {
+            // 终端面板在右侧时各终端上下排，分隔线是横的。
+            if self.terminal_right() {
+                CursorIcon::RowResize
+            } else {
+                CursorIcon::ColResize
+            }
         } else if matches!(self.pointer.drag, Drag::TerminalDivider { .. })
             || self.pointer.hover == Hover::TerminalDivider
         {
@@ -1168,6 +1180,8 @@ pub(super) enum Target {
     SplitDivider,
     /// 编辑区窗格之间的第几道分隔线。
     PaneDivider(usize),
+    /// 拆分的终端标签中第几条分隔线。
+    TerminalSplit(usize),
     /// 编辑区右侧的缩略图。
     Minimap,
     /// 终端面板标签栏上的按钮。

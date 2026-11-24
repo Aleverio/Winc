@@ -571,6 +571,8 @@ pub enum Hover {
     SplitDivider,
     /// 编辑区窗格之间的第几道分隔线（拖动可调整两侧的大小）。
     PaneDivider(usize),
+    /// 拆分的终端标签中第几条分隔线（见 `App::terminal_split_at`）。
+    TerminalSplit(usize),
     /// 终端面板标签栏上的标签、关闭按钮、「+」和位置按钮。
     TerminalHeader(terminal::HeaderHit),
     /// 终端中命令块的色带与吸顶的命令行。
@@ -636,6 +638,7 @@ impl Hover {
                     terminal::HeaderHit::Position
                         | terminal::HeaderHit::SearchDialog
                         | terminal::HeaderHit::Maximize
+                        | terminal::HeaderHit::Split
                         | terminal::HeaderHit::ShellMenu
                         | terminal::HeaderHit::Find(_)
                         | terminal::HeaderHit::Hide
@@ -816,6 +819,10 @@ enum Drag {
     },
     /// 拖动编辑区窗格之间的第 `index` 道分隔线。
     PaneDivider {
+        index: usize,
+    },
+    /// 拖动拆分的终端标签中的第 `index` 条分隔线（见 `App::drag_terminal_split`）。
+    TerminalSplit {
         index: usize,
     },
     /// 拖动日志标签中列表与详情之间的分隔线：按下时的横坐标、详情栏当时的宽度。

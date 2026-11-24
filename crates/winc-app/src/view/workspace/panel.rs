@@ -891,6 +891,11 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
             };
             Some((rect, with_key(label, Some(Action::MaximizeTerminal))))
         }
+        Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Split) => {
+            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
+            let label = t!("cmd-split-terminal");
+            Some((rect, with_key(label, Some(Action::SplitTerminal))))
+        }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Position) => {
             let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
             let label = if app.terminal_right() {

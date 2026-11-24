@@ -51,7 +51,7 @@ impl App {
         let Some(tab) = self.terminal.tab().filter(|t| t.pane_count() > 1) else {
             return card;
         };
-        let cards = super::split::pane_cards(card, tab.pane_count(), self.terminal_right());
+        let cards = super::split::pane_cards(card, &tab.pane_shares(), self.terminal_right());
         cards.get(tab.pane_at()).copied().unwrap_or(card)
     }
 
@@ -88,13 +88,19 @@ impl App {
     /// 显示终端内容的区域：从标签栏下沿到网格下沿，左右与网格相同。
     pub(crate) fn terminal_view(&self) -> Rect {
         let grid = self.terminal_grid();
-        let top = self.layout.terminal.y + header_height(self.layout.terminal);
+        let top = self.terminal_body_top();
         Rect::new(grid.x, top, grid.w, grid.bottom() - top)
+    }
+
+    /// 前台终端的终端区上沿：标签栏的下沿；面板在右侧、拆分成上下排时是它那一块的上沿。
+    fn terminal_body_top(&self) -> f32 {
+        let card = self.terminal_content_card();
+        card.y + header_height(card)
     }
 
     /// 视口最上面露出的显示行和它上沿的窗口坐标（对齐物理像素，文字不因滚动变模糊）。
     pub(crate) fn terminal_origin(&self) -> (u64, f32) {
-        let top = self.layout.terminal.y + header_height(self.layout.terminal);
+        let top = self.terminal_body_top();
         let Some((first, cut)) = self.terminal.tab().map(TermTab::viewport) else {
             return (0, top);
         };
@@ -498,9 +504,7 @@ impl App {
                 let into = (intos.get(i).copied().flatten()).and_then(|into| t.index_of(into));
                 match into {
                     Some(index) => {
-                        let (mut all, at) = super::take_group(&mut t.tabs, index);
-                        all.insert(at + 1, tab);
-                        super::put_group(&mut t.tabs, index, all, at + 1);
+                        super::insert_pane(&mut t.tabs, index, tab);
                         t.active = index;
                     }
                     None => {

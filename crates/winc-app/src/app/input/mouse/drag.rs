@@ -201,6 +201,7 @@ impl App {
                 self.request_redraw();
             }
             Drag::PaneDivider { index } => self.drag_pane_divider(index, (x, y)),
+            Drag::TerminalSplit { index } => self.drag_terminal_split(index, (x, y)),
             Drag::SplitDivider {
                 start_x,
                 start_left,

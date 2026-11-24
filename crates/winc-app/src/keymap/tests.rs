@@ -30,22 +30,26 @@ fn terminal_switching_uses_one_key_set_and_leaves_program_paging() {
         for key in [KeyCode::PageUp, KeyCode::PageDown] {
             assert_eq!(press(os, Mods::CTRL, key, Context::Terminal), Lookup::None);
         }
+        let focus = if os == Os::Mac {
+            Mods::CTRL
+        } else {
+            Mods::CTRL | Mods::SHIFT
+        };
         for (index, action) in Action::TERMINAL_FOCUS.into_iter().enumerate() {
             assert_eq!(action.terminal_index(), Some(index));
             assert!(ACTIONS.contains(&action));
-            assert_eq!(
-                runs(
-                    os,
-                    if os == Os::Mac {
-                        Mods::CTRL
-                    } else {
-                        Mods::CTRL | Mods::SHIFT
-                    },
-                    KeyCode::Char(char::from(b'1' + index as u8)),
-                    Context::Terminal
-                ),
-                Some(action)
-            );
+            let key = KeyCode::Char(char::from(b'1' + index as u8));
+            // VS Code 在 Windows、Linux 上用 `Ctrl+Shift+5` 拆分终端，方案的键优先于共用的键。
+            let expected = match (os, index) {
+                (Os::Windows | Os::Linux, 4) => Action::SplitTerminal,
+                _ => action,
+            };
+            assert_eq!(runs(os, focus, key, Context::Terminal), Some(expected));
+            // IDEA 方案没有拆分终端的默认键，共用的键照常。
+            let idea = Preset::Idea.bindings(os);
+            let stroke = Stroke { key, mods: focus };
+            let found = lookup(&idea, stroke, None, Context::Terminal);
+            assert_eq!(found, Lookup::Run(vec![action]), "{os:?}");
         }
     }
 }

@@ -34,8 +34,10 @@ impl App {
         {
             self.focus_pane(pane);
         }
-        // 点在终端标签里不在前台的终端上：同样先换到前台。
-        self.focus_terminal_pane_at(x, y);
+        // 点在终端标签里不在前台的终端上：同样先换到前台。按在分隔线上是调整大小，不换。
+        if self.terminal_split_at(x, y).is_none() {
+            self.focus_terminal_pane_at(x, y);
+        }
         let l = self.layout;
 
         // 鼠标侧面的两个键：后退、前进。
@@ -421,9 +423,16 @@ impl App {
                     HeaderHit::Restart => self.request_terminal_restart(),
                     HeaderHit::Position => self.toggle_terminal_position(),
                     HeaderHit::Maximize => self.toggle_terminal_maximized(),
+                    HeaderHit::Split => self.split_terminal(),
                     HeaderHit::Hide => self.click_terminal_button(),
                     HeaderHit::Run(_) | HeaderHit::Find(_) => {}
                 }
+            }
+            Target::TerminalSplit(index) if self.click_count(x, y) >= 2 => {
+                self.reset_terminal_split(index);
+            }
+            Target::TerminalSplit(index) => {
+                self.pointer.drag = Drag::TerminalSplit { index };
             }
             Target::PaneDivider(index) if self.click_count(x, y) >= 2 => {
                 self.reset_pane_divider(index);

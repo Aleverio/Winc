@@ -126,6 +126,8 @@ pub(crate) enum HeaderHit {
     Position,
     /// 最大化面板，或者还原（⌘⇧↩）。
     Maximize,
+    /// 拆分当前的终端（见 `App::split_terminal`）。
+    Split,
     /// 运行配置的按钮。
     Run(run::RunButton),
     /// 查找条的一部分。
@@ -348,6 +350,20 @@ impl TerminalPanel {
     }
 }
 
+/// 把标签 `tab` 里各终端攒着的额度发出去：拆分出的终端和前台的一样在眼前，都要拿到新的帧，
+/// 否则它们停在拆分前的画面上，变窄后重排的屏幕也收不到。
+pub(super) fn send_credit(client: &Client, tab: &mut TermTab) {
+    let credit = |pane: &mut TermTab| {
+        if std::mem::take(&mut pane.credit_due) {
+            client.send(&ToHelper::Credit { tab: pane.id });
+        }
+    };
+    credit(tab);
+    if let Some(split) = &mut tab.split {
+        split.others.iter_mut().for_each(credit);
+    }
+}
+
 /// 取出 `tabs` 中第 `index` 个标签的各个终端，按排列顺序，以及前台终端的位置。
 pub(crate) fn take_group(tabs: &mut Vec<TermTab>, index: usize) -> (Vec<TermTab>, usize) {
     let mut focused = tabs.remove(index);
@@ -369,6 +385,16 @@ pub(crate) fn put_group(tabs: &mut Vec<TermTab>, index: usize, mut all: Vec<Term
         focused.split = Some(Box::new(TermSplit { others: all, at }));
     }
     tabs.insert(index, focused);
+}
+
+/// 把拆分出的终端 `tab` 排进 `tabs` 的第 `index` 个标签：排在前台终端的后面并成为前台。
+///
+/// 拆分后各终端平分，之前拖动过的大小不再保留。
+pub(crate) fn insert_pane(tabs: &mut Vec<TermTab>, index: usize, tab: TermTab) {
+    let (mut all, at) = take_group(tabs, index);
+    all.insert(at + 1, tab);
+    all.iter_mut().for_each(|pane| pane.share = 1.0);
+    put_group(tabs, index, all, at + 1);
 }
 
 /// 面板标签栏的高度（逻辑像素）：`card` 从顶栏那一行开始时（面板在右边）用 `TOP_BAR`，
@@ -1066,10 +1092,7 @@ impl App {
         let (Some(client), Some(tab)) = (&t.client, t.tabs.get_mut(t.active)) else {
             return;
         };
-        if tab.credit_due {
-            tab.credit_due = false;
-            client.send(&ToHelper::Credit { tab: tab.id });
-        }
+        send_credit(client, tab);
         t.focus_sent = false;
     }
 
@@ -1093,7 +1116,7 @@ impl App {
         }
     }
 
-    /// 画完一帧以后：给正在看的标签额度，焦点变了时告诉终端里的程序。
+    /// 画完一帧以后：给正在看的标签（拆分出的终端也在眼前）额度，焦点变了时告诉终端里的程序。
     pub(super) fn after_terminal_frame(&mut self) {
         let focused = self.focus == Focus::Terminal && self.window.focused;
         let t = &mut self.terminal;
@@ -1105,10 +1128,7 @@ impl App {
         let (Some(client), Some(tab)) = (&t.client, t.tabs.get_mut(t.active)) else {
             return;
         };
-        if tab.credit_due {
-            tab.credit_due = false;
-            client.send(&ToHelper::Credit { tab: tab.id });
-        }
+        send_credit(client, tab);
         if focused != t.focus_sent {
             t.focus_sent = focused;
             let mut bytes = Vec::new();
