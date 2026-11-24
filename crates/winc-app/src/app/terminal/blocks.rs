@@ -108,10 +108,9 @@ impl App {
     /// 辅助进程发来了新的块：刚结束的命令按需要提醒。
     pub(in crate::app) fn terminal_blocks(&mut self, id: u16, blocks: Vec<Block>, early: bool) {
         let t = &mut self.terminal;
-        let Some(index) = t.index_of(id) else {
+        let Some(tab) = t.by_id(id) else {
             return;
         };
-        let tab = &mut t.tabs[index];
         // 在运行的一般只有最后那一条。比的是最新知道的块，先到、还没换上的也算。
         let known = tab.early_blocks.as_ref().unwrap_or(&tab.blocks);
         let running: Vec<u32> = known.iter().filter(|b| b.running()).map(|b| b.id).collect();
@@ -132,20 +131,24 @@ impl App {
             t.errors = None;
         }
         for block in finished {
-            self.terminal_command_finished(index, &block);
+            self.terminal_command_finished(id, &block);
         }
-        self.fetch_terminal_history();
+        if self.terminal.pane_is_shown(id) {
+            self.fetch_terminal_history_for(id);
+        }
     }
 
     /// 一条命令结束了。
     ///
     /// 不在看这个标签时标签上亮一个点；运行得久、窗口又不在前台时让程序坞
     /// 图标跳动一次，回到窗口时提示结果。
-    fn terminal_command_finished(&mut self, index: usize, block: &Block) {
+    fn terminal_command_finished(&mut self, id: u16, block: &Block) {
         let failed = failed_with_output(block);
         let t = &mut self.terminal;
-        // 窗口不在前台但面板上就是这个标签时不用点：回来时看到的就是它。
-        if !(t.open && t.active == index) {
+        // 窗口不在前台但面板上就是这个窗格时不用点：回来时看到的就是它。
+        if !t.pane_is_shown(id)
+            && let Some(index) = t.index_of(id)
+        {
             t.tabs[index].unseen = Some(failed);
         }
         if self.window.focused || block.duration.is_none_or(|d| d < LONG_COMMAND) {

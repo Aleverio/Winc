@@ -392,8 +392,20 @@ impl App {
             Target::TerminalHeader(crate::app::terminal::HeaderHit::Run(button)) => {
                 self.press_run_button(button);
             }
+            Target::TerminalHeader(crate::app::terminal::HeaderHit::Pane(id)) => {
+                self.focus_terminal_pane_by_id(id);
+            }
+            Target::TerminalHeader(crate::app::terminal::HeaderHit::ClosePane(id)) => {
+                self.close_terminal_pane_by_id(id);
+            }
+            Target::TerminalHeader(crate::app::terminal::HeaderHit::More) => {
+                self.open_terminal_tools_menu();
+            }
             Target::TerminalHeader(hit) => {
                 use crate::app::terminal::HeaderHit;
+                if hit == HeaderHit::Split && !self.terminal_split_button_enabled() {
+                    return;
+                }
                 if matches!(hit, HeaderHit::Tab(_) | HeaderHit::New) {
                     self.search_dialog.in_panel = false;
                 }
@@ -413,12 +425,19 @@ impl App {
                     }
                     HeaderHit::Close(i) => self.close_terminal_tab(i),
                     HeaderHit::New => self.new_terminal_tab(),
+                    HeaderHit::Split => {
+                        self.run_action(crate::keymap::Action::SplitTerminal);
+                    }
                     HeaderHit::ShellMenu => self.open_terminal_shell_menu(),
                     HeaderHit::Restart => self.request_terminal_restart(),
                     HeaderHit::Position => self.toggle_terminal_position(),
                     HeaderHit::Maximize => self.toggle_terminal_maximized(),
                     HeaderHit::Hide => self.click_terminal_button(),
-                    HeaderHit::Run(_) | HeaderHit::Find(_) => {}
+                    HeaderHit::Run(_)
+                    | HeaderHit::Find(_)
+                    | HeaderHit::More
+                    | HeaderHit::Pane(_)
+                    | HeaderHit::ClosePane(_) => {}
                 }
             }
             Target::PaneDivider(index) if self.click_count(x, y) >= 2 => {

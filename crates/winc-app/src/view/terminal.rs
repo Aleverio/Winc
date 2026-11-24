@@ -32,6 +32,8 @@ use crate::theme::{BUTTON, BUTTON_GAP, BUTTON_SMALL, RADIUS_TAB, TOGGLE_W, reada
 const TAB_H: f32 = crate::theme::TAB_HEIGHT;
 /// 最右端的按钮离面板右边的距离（逻辑像素），与编辑区标签栏相同。
 const BUTTONS_END: f32 = 8.0;
+/// 窄顶栏工具按钮的最小宽度，给图标两侧留出点击空间。
+const MIN_TOOL_WIDTH: f32 = 20.0;
 /// 成功命令色带的不透明度（0–1）：大多数命令都成功，满色的长条会比失败的红色更显眼。
 ///
 /// 取自调参：对照深色和浅色主题，长输出旁的色带可辨认且不抢正文。鼠标悬停时恢复满色。
@@ -68,7 +70,7 @@ fn draw_panel(app: &mut App, frame: &mut Frame<'_>) {
         .terminal
         .strip
         .position
-        .opacity(app.config.terminal_vertical_tabs == Some(true));
+        .opacity(app.terminal_tabs_vertical());
     if opacity > 0.0 {
         frame.with_opacity(opacity, |frame| list::draw_list(app, frame));
     }
@@ -253,7 +255,7 @@ fn draw_content(app: &mut App, frame: &mut Frame<'_>, focused: bool) {
         cell * width_at(line, usize::from(cursor.col)) as f32,
         lh,
     );
-    let preedit = app.preedit_at(Focus::Terminal);
+    let preedit = if focused { app.preedit_at(Focus::Terminal) } else { "" };
     let start = preedit_x(x, preedit, cell, view.right());
     let composing = !preedit.is_empty();
     if focused {
@@ -465,118 +467,225 @@ fn draw_header(app: &mut App, frame: &mut Frame<'_>, card: Rect) {
     let p = app.palette;
     let header = Rect::new(card.x, card.y, card.w, header_height(card));
     let y = card.y + (header.h - TAB_H) / 2.0;
-    // 面板在右边时标签栏在顶栏那一行，右端让给窗口按钮（由应用绘制标题栏时）；最大化、侧栏
-    // 收起时面板伸到窗口左边，左端让给侧栏开关（macOS 上还有它左边的红绿灯）。
+    // 标签栏与窗口顶栏控件在纵向重叠时才让位：右侧让给窗口按钮，左侧让给侧栏开关。
+    let overlaps_header = |rect: Rect| rect.y < header.bottom() && rect.bottom() > header.y;
     let toggle = app.layout.sidebar_button;
-    let left = if toggle.y < header.bottom() && toggle.right() > card.x {
-        (card.x + tab_inset(card)).max(toggle.right() + TAB_GAP)
+    let tab_start = card.x + tab_inset(card);
+    let left = if overlaps_header(toggle) && toggle.right() > card.x {
+        tab_start.max(toggle.right() + TAB_GAP)
     } else {
-        card.x + tab_inset(card)
+        tab_start
     };
     let controls = app.layout.controls;
-    let end = if controls.w > 0.0 && controls.y < header.bottom() && controls.x < header.right() {
+    let end = if controls.w > 0.0 && overlaps_header(controls) && controls.x < header.right() {
         controls.x - TAB_GAP
     } else {
         header.right()
     };
-    // 按钮的尺寸和间距与编辑区标签栏相同；标签放不下时「+」紧贴右边的按钮。
-    let button_y = card.y + (header.h - BUTTON) / 2.0;
-    let hide = Rect::new(end - BUTTONS_END - BUTTON, button_y, BUTTON, BUTTON);
-    let position = Rect::new(hide.x - TAB_GAP - BUTTON, button_y, BUTTON, BUTTON);
-    let maximize = Rect::new(position.x - TAB_GAP - BUTTON, button_y, BUTTON, BUTTON);
-    // 显示「搜索」标签时，最大化左边是「在对话框中打开」。
-    let reopen = app
-        .docked_search_shown()
-        .then(|| Rect::new(maximize.x - TAB_GAP - BUTTON, button_y, BUTTON, BUTTON));
-    let tools_x = reopen.map_or(maximize.x, |r| r.x);
-    let run = run_buttons(app, frame, left, tools_x - TAB_GAP, button_y);
     let vertical = app.terminal_tab_list().is_some();
-    // 标签和「+」放得下的宽度。
-    let rest = if vertical {
-        tools_x
-    } else {
-        run.map_or(tools_x, |[menu, ..]| menu.x)
-    } - TAB_GAP;
-    // 能选的 shell 不止一个时，「+」右边是选 shell 的按钮。
     let shell_menu = app.terminal_shell_list().len() > 1;
-    let room = rest - left;
-    let room = if vertical {
-        room
-    } else if shell_menu {
-        room - 2.0 * (TAB_GAP + BUTTON)
+    let new_buttons = if shell_menu { 2.0 } else { 1.0 };
+    let search_space = if app.search_dialog.docked {
+        tabs::SEARCH_TAB_MIN_WIDTH
     } else {
-        room - TAB_GAP - BUTTON
+        0.0
     };
-    let area = Rect::new(left, header.y, room.max(0.0), header.h).intersect(header);
-    let (new_x, mut hits) = tabs::draw_header_tabs(app, frame, area, y);
-    if !vertical {
-        let new = Rect::new(new_x, button_y, BUTTON, BUTTON);
-        if app.pointer.hover == Hover::TerminalHeader(HeaderHit::New) {
-            frame.rect_clipped(new, p.hover, RADIUS_ROW, header);
-        }
-        icons::plus(
-            frame,
-            (new.x + BUTTON / 2.0, new.y + BUTTON / 2.0),
-            9.0,
-            p.text_muted,
-            header,
-        );
-        hits.push((new, HeaderHit::New));
-        if shell_menu {
-            use crate::app::MenuButton;
-            let menu = Rect::new(new.right() + TAB_GAP, button_y, BUTTON, BUTTON);
-            let on = app.pointer.hover == Hover::TerminalHeader(HeaderHit::ShellMenu);
-            let open = app.overlays.menu_button == Some(MenuButton::TerminalShells);
-            draw_button(frame, p, menu, header, on, open);
-            let direction = icons::Direction::Down;
-            icons::chevron(frame, center(menu), 8.0, direction, p.text_muted, header);
-            hits.push((menu, HeaderHit::ShellMenu));
-        }
+    // 窄顶栏优先给搜索标签的关闭按钮留位置，再缩小工具按钮。
+    let slots = 4.0 + new_buttons;
+    let toolbar = Rect::new(left, header.y, (end - left).max(0.0), header.h).intersect(header);
+    let available = toolbar.w - BUTTONS_END - search_space;
+    let compact_width = available - (TAB_GAP - BUTTON_GAP);
+    if compact_width < slots * (MIN_TOOL_WIDTH + BUTTON_GAP) {
+        app.hits.terminal = draw_narrow_header(app, frame, toolbar, y, search_space);
+        return;
+    }
+    let (width, gap) = if available >= slots * (BUTTON + TAB_GAP) {
+        (BUTTON, TAB_GAP)
+    } else {
+        let width = (compact_width / slots - BUTTON_GAP).floor();
+        (width.min(BUTTON_SMALL), BUTTON_GAP)
+    };
+    let button_y = card.y + (header.h - BUTTON) / 2.0;
+    let button = |x| Rect::new(x, button_y, width, BUTTON);
+    let step = width + gap;
+    let hide = button(end - BUTTONS_END - width);
+    let position = button(hide.x - step);
+    let maximize = button(position.x - step);
+    let new_space = step * new_buttons;
+    // 显示「搜索」标签时，拆分按钮的位置改放「在对话框中打开」。
+    let tool = button(maximize.x - step);
+    let tools_x = tool.x;
+    let new_at = tools_x - new_space;
+    let horizontal_run = if vertical {
+        None
+    } else {
+        run_buttons(app, frame, left, tools_x - TAB_GAP, button_y)
+    };
+    let rest = horizontal_run.map_or(tools_x, |[menu, ..]| menu.x);
+    let room = rest - TAB_GAP - left - new_space;
+    let area = Rect { w: room.max(0.0), ..toolbar }.intersect(toolbar);
+    let (after_tabs, mut hits) = tabs::draw_header_tabs(app, frame, area, y);
+    let run = if vertical {
+        run_buttons(app, frame, after_tabs, new_at - TAB_GAP, button_y)
+    } else {
+        horizontal_run
+    };
+    let new_x = if vertical {
+        new_at
+    } else {
+        after_tabs.min(rest - new_space)
+    };
+    let new = button(new_x);
+    draw_new_button(app, frame, new, toolbar);
+    hits.push((new, HeaderHit::New));
+    if shell_menu {
+        use crate::app::MenuButton;
+        let menu = button(new.right() + gap);
+        let on = app.pointer.hover == Hover::TerminalHeader(HeaderHit::ShellMenu);
+        let open = app.overlays.menu_button == Some(MenuButton::TerminalShells);
+        draw_button(frame, p, menu, toolbar, on, open);
+        let direction = icons::Direction::Down;
+        icons::chevron(frame, center(menu), 8.0, direction, p.text_muted, toolbar);
+        hits.push((menu, HeaderHit::ShellMenu));
     }
 
-    if let Some(reopen) = reopen {
+    if app.docked_search_shown() {
         let on = app.pointer.hover == Hover::TerminalHeader(HeaderHit::SearchDialog);
-        draw_button(frame, p, reopen, header, on, false);
-        icons::external(frame, center(reopen), p.text_muted, header);
-        hits.push((reopen, HeaderHit::SearchDialog));
+        draw_button(frame, p, tool, toolbar, on, false);
+        icons::external(frame, center(tool), p.text_muted, toolbar);
+        hits.push((tool, HeaderHit::SearchDialog));
+    } else {
+        let enabled = app.terminal_split_button_enabled();
+        let hovered = enabled && app.pointer.hover == Hover::TerminalHeader(HeaderHit::Split);
+        draw_button(frame, p, tool, toolbar, hovered, false);
+        let color = if enabled { p.text_muted } else { p.text_dim };
+        if app.terminal_right() {
+            icons::single_column(frame, center(tool), color, toolbar);
+        } else {
+            icons::split(frame, center(tool), color, toolbar);
+        }
+        hits.push((tool, HeaderHit::Split));
     }
 
     // 右端：最大化或还原面板，图标绘制的是点下去以后的样子。
     if app.pointer.hover == Hover::TerminalHeader(HeaderHit::Maximize) {
-        frame.rect_clipped(maximize, p.hover, RADIUS_ROW, header);
+        frame.rect_clipped(maximize, p.hover, RADIUS_ROW, toolbar);
     }
-    let center = (maximize.x + BUTTON / 2.0, maximize.y + BUTTON / 2.0);
     if app.terminal.maximized {
-        icons::shrink(frame, center, p.text_muted, header);
+        icons::shrink(frame, center(maximize), p.text_muted, toolbar);
     } else {
-        icons::expand(frame, center, p.text_muted, header);
+        icons::expand(frame, center(maximize), p.text_muted, toolbar);
     }
     hits.push((maximize, HeaderHit::Maximize));
 
     // 切换面板的位置（编辑区右边或下面），图标绘制的是点下去以后的位置。
     if app.pointer.hover == Hover::TerminalHeader(HeaderHit::Position) {
-        frame.rect_clipped(position, p.hover, RADIUS_ROW, header);
+        frame.rect_clipped(position, p.hover, RADIUS_ROW, toolbar);
     }
-    let center = (position.x + BUTTON / 2.0, position.y + BUTTON / 2.0);
-    icons::panel(frame, center, !app.terminal_right(), p.text_muted, header);
+    icons::panel(
+        frame,
+        center(position),
+        !app.terminal_right(),
+        p.text_muted,
+        toolbar,
+    );
     hits.push((position, HeaderHit::Position));
 
     // 最右端：收起面板，箭头朝面板收进去的那一边。
     if app.pointer.hover == Hover::TerminalHeader(HeaderHit::Hide) {
-        frame.rect_clipped(hide, p.hover, RADIUS_ROW, header);
+        frame.rect_clipped(hide, p.hover, RADIUS_ROW, toolbar);
     }
     let toward = if app.terminal_right() {
         icons::Direction::Right
     } else {
         icons::Direction::Down
     };
-    let center = (hide.x + BUTTON / 2.0, hide.y + BUTTON / 2.0);
-    icons::collapse(frame, center, toward, p.text_muted, header);
+    icons::collapse(frame, center(hide), toward, p.text_muted, toolbar);
     hits.push((hide, HeaderHit::Hide));
     if let Some(run) = run {
-        draw_run_buttons(app, frame, run, header, &mut hits);
+        draw_run_buttons(app, frame, run, toolbar, &mut hits);
+    }
+    for (rect, _) in &mut hits {
+        *rect = rect.intersect(toolbar);
     }
     app.hits.terminal = hits;
+}
+
+/// 窄顶栏优先保留搜索关闭按钮；没有搜索时始终保留一个「⋯」入口。
+fn draw_narrow_header(
+    app: &mut App,
+    frame: &mut Frame<'_>,
+    toolbar: Rect,
+    y: f32,
+    _search_space: f32,
+) -> Vec<(Rect, HeaderHit)> {
+    let p = app.palette;
+    let gap = BUTTON_GAP;
+    let search = app.search_dialog.docked;
+    let close_width = search.then_some(toolbar.w.min(16.0)).unwrap_or(0.0);
+    let close = (close_width > 0.0).then(|| {
+        Rect::new(
+            toolbar.right() - close_width,
+            y + (TAB_H - 16.0) / 2.0,
+            close_width,
+            16.0,
+        )
+    });
+    let tools_right = toolbar.right() - close_width - if close.is_some() { gap } else { 0.0 };
+    let tools_width = (tools_right - toolbar.x).max(0.0);
+    let slot = MIN_TOOL_WIDTH + gap;
+    // 只要仍有可见宽度就保留入口；搜索打开时关闭按钮优先，剩余空间再给「⋯」。
+    let more = (tools_width > 0.0).then(|| {
+        Rect::new(
+            tools_right - tools_width.min(MIN_TOOL_WIDTH),
+            toolbar.y + (toolbar.h - BUTTON) / 2.0,
+            tools_width.min(MIN_TOOL_WIDTH),
+            BUTTON,
+        )
+    });
+    let new = if more.is_some() && tools_width >= 2.0 * slot {
+        Some(Rect::new(
+            tools_right - 2.0 * slot + gap,
+            toolbar.y + (toolbar.h - BUTTON) / 2.0,
+            MIN_TOOL_WIDTH,
+            BUTTON,
+        ))
+    } else {
+        None
+    };
+    let end = new
+        .or(more)
+        .map_or(tools_right, |rect| rect.x - gap);
+    let area = Rect {
+        w: (end - toolbar.x).max(0.0),
+        ..toolbar
+    };
+    let (_, mut hits) = tabs::draw_header_tabs(app, frame, area, y);
+    if let Some(close) = close {
+        let hovered = app.pointer.hover == Hover::TerminalHeader(HeaderHit::SearchClose);
+        workspace::top_bar::draw_tab_close(frame, p, close, hovered, toolbar);
+        hits.retain(|(_, hit)| *hit != HeaderHit::SearchClose);
+        hits.insert(0, (close, HeaderHit::SearchClose));
+    }
+    if let Some(new) = new {
+        draw_new_button(app, frame, new, toolbar);
+        hits.push((new, HeaderHit::New));
+    }
+    if let Some(more) = more {
+        let hovered = app.pointer.hover == Hover::TerminalHeader(HeaderHit::More);
+        let open = app.overlays.menu_button == Some(MenuButton::TerminalTools);
+        draw_button(frame, p, more, toolbar, hovered, open);
+        icons::more(frame, center(more), p.text_muted, toolbar);
+        hits.push((more, HeaderHit::More));
+    }
+    hits
+}
+
+fn draw_new_button(app: &App, frame: &mut Frame<'_>, rect: Rect, clip: Rect) {
+    let p = app.palette;
+    let hovered = app.pointer.hover == Hover::TerminalHeader(HeaderHit::New);
+    draw_button(frame, p, rect, clip, hovered, false);
+    icons::plus(frame, center(rect), 9.0, p.text_muted, clip);
 }
 
 /// 配置名按钮最宽多少（逻辑像素），约容纳 8 个汉字；更长的名字截短。
@@ -618,7 +727,7 @@ fn run_buttons(app: &App, frame: &mut Frame<'_>, left: f32, end: f32, y: f32) ->
         .terminal
         .strip
         .position
-        .share(app.config.terminal_vertical_tabs == Some(true));
+        .share(app.terminal_tabs_vertical());
     let last = Rect::new(end - BUTTON, y, BUTTON, BUTTON);
     let Some(config) = app.run.current() else {
         let (title, button) = if vertical {
@@ -791,7 +900,7 @@ fn draw_tab(
     color: Color,
 ) {
     workspace::top_bar::draw_tab_fill(frame, app.palette, rect, active, hovered, clip);
-    let text = Rect::new(rect.x + 10.0, rect.y, rect.w - 32.0, TAB_H);
+    let text = Rect::new(rect.x + 10.0, rect.y, (rect.w - 32.0).max(0.0), TAB_H);
     // 路径的两端都有用；命令和进程名从头读，开头足以辨认。
     let label = if label.contains(['/', '\\']) {
         ellipsize(frame, label, app.fonts.ui, text.w)

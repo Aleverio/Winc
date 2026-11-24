@@ -854,15 +854,43 @@ pub(in crate::view) fn tooltip(app: &App) -> Option<(Rect, String)> {
     use crate::keymap::Action;
     use crate::layout::with_key;
     match app.pointer.hover {
+        Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::More) => {
+            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
+            Some((rect, t!("workspace-tip-more-actions").to_owned()))
+        }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::New) => {
             let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
-            Some((rect, t!("terminal-new").to_owned()))
+            Some((
+                rect,
+                with_key(t!("terminal-new"), Some(Action::NewTerminal)),
+            ))
         }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Tab(i))
             if app.terminal_tab_list().is_some() =>
         {
             let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
-            Some((rect, app.terminal.tabs.get(i)?.label().to_owned()))
+            let tab = app.terminal.tabs.get(i)?;
+            let label = if tab.pane_count() > 1 {
+                t!("terminal-split-group")
+            } else {
+                tab.label()
+            };
+            Some((rect, label.to_owned()))
+        }
+        Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Pane(id)) => {
+            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
+            Some((rect, app.terminal.pane(id)?.label().to_owned()))
+        }
+        Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::ClosePane(_)) => {
+            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
+            Some((rect, t!("cmd-close-terminal").to_owned()))
+        }
+        Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::Split) => {
+            let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;
+            Some((
+                rect,
+                with_key(t!("cmd-split-terminal"), Some(Action::SplitTerminal)),
+            ))
         }
         Hover::TerminalHeader(hit @ crate::app::terminal::HeaderHit::ShellMenu) => {
             let rect = app.hits.terminal.iter().find(|(_, h)| *h == hit)?.0;

@@ -299,6 +299,7 @@ settings-terminal-shell-placeholder = Enter a command
 settings-terminal-position-bottom = Bottom
 settings-terminal-position-right = Right
 settings-terminal-tab-position-top = Top
+settings-terminal-tab-position-top-while-split = Top (right while split)
 settings-terminal-tab-position-right = Right
 settings-terminal-font-default = Match Editor
 settings-markdown-font-default = Match Interface

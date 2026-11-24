@@ -299,6 +299,7 @@ settings-terminal-shell-placeholder = 输入命令
 settings-terminal-position-bottom = 底部
 settings-terminal-position-right = 右侧
 settings-terminal-tab-position-top = 顶部
+settings-terminal-tab-position-top-while-split = 顶部（分栏时在右侧）
 settings-terminal-tab-position-right = 右侧
 settings-terminal-font-default = 跟随编辑器
 settings-markdown-font-default = 跟随界面

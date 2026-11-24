@@ -31,7 +31,13 @@ pub(crate) fn pane_cards(card: Rect, n: usize, column: bool) -> Vec<Rect> {
         .map(|i| {
             let y = top + i as f32 * (h + DIVIDER);
             let last = i + 1 == n;
-            let h = if last { card.bottom() - y } else { h };
+            let h = if last { (card.bottom() - y).max(0.0) } else { h };
+            // 每块卡片保留网格排版需要的顶部留白，标题栏的高度随卡片所在位置而变。
+            let header = if y - HEADER >= TOP_BAR_END {
+                HEADER
+            } else {
+                TOP_BAR
+            };
             Rect::new(card.x, y - header, card.w, h + header)
         })
         .collect()
@@ -57,14 +63,14 @@ impl App {
 
     /// 当前标签中 `(x, y)` 所在的、不在前台的终端的位置；被浮层遮住时为 `None`。
     pub(in crate::app) fn terminal_pane_at(&self, x: f32, y: f32) -> Option<usize> {
-        if self.overlay_covers(x, y) {
+        if self.overlay_covers(x, y) || self.docked_search_shown() {
             return None;
         }
         let tab = self.terminal.tab().filter(|t| t.pane_count() > 1)?;
         let card = self.terminal_whole_card();
-        let header = header_height(card);
         let cards = pane_cards(card, tab.pane_count(), self.terminal_right());
         let inside = |c: &Rect| {
+            let header = header_height(*c);
             let body = Rect::new(c.x, c.y + header, c.w, c.h - header);
             body.contains(x, y)
         };
@@ -106,15 +112,33 @@ impl App {
         let Some(tab) = self.terminal.tab() else {
             return;
         };
-        if at == tab.pane_at() || at >= tab.pane_count() {
+        if at >= tab.pane_count() {
             return;
         }
-        self.blur_terminal_tab();
-        self.rotate_terminal_pane(index, at);
-        self.terminal.focus_sent = false;
+        if at != tab.pane_at() {
+            self.blur_terminal_tab();
+            self.rotate_terminal_pane(index, at);
+            self.terminal_activated();
+        }
         self.focus = Focus::Terminal;
+        self.reset_blink();
         self.relayout();
         self.request_redraw();
+    }
+
+    /// 从终端列表切换到编号为 `id` 的窗格。
+    pub(in crate::app) fn focus_terminal_pane_by_id(&mut self, id: u16) {
+        let Some(index) = self.terminal.index_of(id) else {
+            return;
+        };
+        let tab = &self.terminal.tabs[index];
+        let Some(at) = tab.split_order().iter().position(|pane| pane.id == id) else {
+            return;
+        };
+        if index != self.terminal.active {
+            self.activate_terminal_tab(index);
+        }
+        self.focus_terminal_pane(at);
     }
 
     /// 点在当前标签里不在前台的终端上：把它换到前台；返回是否换了。
@@ -148,6 +172,17 @@ impl App {
     pub(in crate::app) fn terminal_splittable(&self, id: u16) -> bool {
         let tab = self.terminal.tabs.iter().find(|t| t.id == id);
         !self.terminal.crashed && tab.is_some_and(|t| t.ended.is_none())
+    }
+
+    /// 工具栏的拆分按钮只作用于面板中正在显示的终端。
+    pub(crate) fn terminal_split_button_enabled(&self) -> bool {
+        self.terminal_enabled()
+            && self.terminal.open
+            && !self.docked_search_shown()
+            && self
+                .terminal
+                .tab()
+                .is_some_and(|tab| self.terminal_splittable(tab.id))
     }
 
     /// 拆分当前的终端标签：新终端在当前终端的目录里启动，排在它后面；没有终端时新建一个。

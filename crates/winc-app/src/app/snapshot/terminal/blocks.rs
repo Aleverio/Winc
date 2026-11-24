@@ -134,6 +134,7 @@ fn the_menu_on_a_command_copies_it_and_its_output() {
     sync_blocks(&mut app, &mut term);
     paint(&mut app);
     let id = tab(&app).blocks[0].id;
+    let pane = tab(&app).id;
 
     // 右键点在第 `row` 行：菜单是哪个块的，前面几项是什么。
     let right_click = |app: &mut App, row: usize| {
@@ -154,7 +155,7 @@ fn the_menu_on_a_command_copies_it_and_its_output() {
         (menu.target.clone(), items)
     };
     let (target, items) = right_click(&mut app, 1);
-    assert_eq!(target, MenuTarget::Terminal(Some(id)));
+    assert_eq!(target, MenuTarget::Terminal { pane, block: Some(id) });
     assert_eq!(
         items,
         [
@@ -171,7 +172,7 @@ fn the_menu_on_a_command_copies_it_and_its_output() {
 
     // 提示符那一行的块还没运行：没有块的几项。
     let (target, items) = right_click(&mut app, 3);
-    assert_eq!(target, MenuTarget::Terminal(None));
+    assert_eq!(target, MenuTarget::Terminal { pane, block: None });
     assert_eq!(items[0].0, MenuCommand::Copy);
     app.overlays.context_menu = None;
 

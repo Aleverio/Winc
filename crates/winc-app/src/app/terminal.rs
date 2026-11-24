@@ -1,8 +1,8 @@
 //! 终端面板：编辑区卡片下方的一张卡片，可以有几个终端标签。
 //!
 //! 第一次打开面板时启动辅助进程 `winc-pty`，每个标签是它里面的一个登录 shell。帧存成可见的一屏，
-//! 往上翻时按需向它要回滚缓冲里的行（[`tab`]）。只给开着的标签额度：后面的标签不画、不收帧，
-//! 切过去时再要一帧最新的；模块关着时什么都不起。鼠标在 [`mod@pointer`]，查找在 [`find`]，命令块
+//! 往上翻时按需向它要回滚缓冲里的行（[`tab`]）。当前标签里的各个窗格都收帧；其他标签切过去时再要
+//! 最新的一帧。模块关着时什么都不起。鼠标在 [`mod@pointer`]，查找在 [`find`]，命令块
 //! 在 [`blocks`]，⌘ 悬停链接在 [`link`]，与编辑器配合在 [`editor`]，进程在 [`helper`]。
 
 mod blocks;
@@ -108,8 +108,16 @@ pub(crate) enum HeaderHit {
     Tab(usize),
     /// 第几个标签的关闭按钮。
     Close(usize),
+    /// 列表里的终端窗格（会话编号）。
+    Pane(u16),
+    /// 只关闭这个终端窗格（会话编号）。
+    ClosePane(u16),
     /// 新建标签的「+」。
     New,
+    /// 拆分当前终端标签。
+    Split,
+    /// 窄工具栏中的「更多操作」。
+    More,
     /// 「重新启动」：shell 退出了、或者辅助进程退出了时。
     Restart,
     /// 收起面板（和状态栏上的终端按钮一样）。
@@ -248,15 +256,22 @@ impl TerminalPanel {
         for tab in &self.tabs {
             tab.unseen.hash(&mut hasher);
             if self.open {
-                (tab.id, tab.label(), tab.ended).hash(&mut hasher);
+                for pane in tab.panes() {
+                    (pane.id, pane.label(), pane.ended, pane.unseen).hash(&mut hasher);
+                }
             }
         }
         hasher.finish()
     }
 
+    /// 当前标签的每个窗格都可见，其他标签的窗格在后台。
+    fn pane_is_shown(&self, id: u16) -> bool {
+        self.open && self.tab().is_some_and(|tab| tab.panes().any(|pane| pane.id == id))
+    }
+
     /// 消息是否作用于正在显示的内容。标题、进程、未读标记等的变化由 [`Self::visible_state`] 判断。
     pub(in crate::app) fn message_is_shown(&self, message: &FromHelper) -> bool {
-        let shows = |id: u16| self.open && self.tab().is_some_and(|tab| tab.id == id);
+        let shows = |id| self.pane_is_shown(id);
         match message {
             FromHelper::Hello { .. } | FromHelper::History { .. } | FromHelper::Failed { .. } => {
                 true
@@ -276,6 +291,14 @@ impl TerminalPanel {
     /// 编号为 `id` 的终端所在的标签（含拆分出的终端）。
     fn index_of(&self, id: u16) -> Option<usize> {
         (self.tabs.iter()).position(|t| t.panes().any(|pane| pane.id == id))
+    }
+
+    /// 按会话编号查找终端，包括拆分出的窗格。
+    pub(crate) fn pane(&self, id: u16) -> Option<&TermTab> {
+        self.tabs
+            .iter()
+            .flat_map(TermTab::panes)
+            .find(|pane| pane.id == id)
     }
 
     /// 编号为 `id` 的终端，可以是拆分出的。
@@ -893,11 +916,18 @@ impl App {
 
     /// 关掉当前标签里前台的那个终端（⌘W、终端里的菜单）；标签里只有它时标签也关掉。
     pub(super) fn close_terminal_pane(&mut self) {
-        let Some(tab) = self.terminal.tab() else {
+        if let Some(id) = self.terminal.tab().map(|tab| tab.id) {
+            self.close_terminal_pane_by_id(id);
+        }
+    }
+
+    /// 只关闭列表中点到的会话，即使它当前没有焦点。
+    pub(super) fn close_terminal_pane_by_id(&mut self, id: u16) {
+        let Some(tab) = self.terminal.pane(id) else {
             return;
         };
         let busy = tab.busy().map(str::to_owned);
-        self.confirm_terminal_close(tab.id, busy, false);
+        self.confirm_terminal_close(id, busy, false);
     }
 
     /// `busy` 是还在运行的程序：按设置先确认，再关掉终端 `id`（`whole` 为真时连同它所在的
@@ -944,6 +974,7 @@ impl App {
         let Some(index) = self.terminal.index_of(id) else {
             return;
         };
+        let focused = self.terminal.tab().map(|tab| tab.id);
         if self.terminal.tabs[index].pane_count() == 1 {
             self.animate_terminal_close(index);
         }
@@ -972,7 +1003,9 @@ impl App {
             self.set_terminal_open(false);
             self.focus = Focus::Editor;
         }
-        self.terminal_activated();
+        if self.terminal.tab().map(|tab| tab.id) != focused {
+            self.terminal_activated();
+        }
         self.relayout();
         self.request_redraw();
     }
@@ -1063,14 +1096,14 @@ impl App {
     fn terminal_activated(&mut self) {
         self.drop_other_tab_state();
         let t = &mut self.terminal;
+        t.focus_sent = false;
+        t.last_mouse_cell = None;
         let (Some(client), Some(tab)) = (&t.client, t.tabs.get_mut(t.active)) else {
             return;
         };
-        if tab.credit_due {
-            tab.credit_due = false;
+        if std::mem::take(&mut tab.credit_due) {
             client.send(&ToHelper::Credit { tab: tab.id });
         }
-        t.focus_sent = false;
     }
 
     /// 要离开正在看的标签：告诉里面的程序失去了焦点（开了焦点上报时），否则它一直以为自己在前台。
@@ -1093,21 +1126,25 @@ impl App {
         }
     }
 
-    /// 画完一帧以后：给正在看的标签额度，焦点变了时告诉终端里的程序。
+    /// 画完一帧以后：给当前标签的各个窗格额度，焦点变化只通知前台窗格。
     pub(super) fn after_terminal_frame(&mut self) {
-        let focused = self.focus == Focus::Terminal && self.window.focused;
-        let t = &mut self.terminal;
-        if !t.open {
-            // 收起面板时焦点去了编辑区：程序也要知道（1004），否则一直以为自己有焦点。
+        if !self.terminal.open || self.docked_search_shown() {
             self.blur_terminal_tab();
             return;
         }
+        let focused = self.focus == Focus::Terminal && self.window.focused;
+        let t = &mut self.terminal;
         let (Some(client), Some(tab)) = (&t.client, t.tabs.get_mut(t.active)) else {
             return;
         };
-        if tab.credit_due {
-            tab.credit_due = false;
-            client.send(&ToHelper::Credit { tab: tab.id });
+        let grant_credit = |pane: &mut TermTab| {
+            if std::mem::take(&mut pane.credit_due) {
+                client.send(&ToHelper::Credit { tab: pane.id });
+            }
+        };
+        grant_credit(tab);
+        if let Some(split) = &mut tab.split {
+            split.others.iter_mut().for_each(grant_credit);
         }
         if focused != t.focus_sent {
             t.focus_sent = focused;

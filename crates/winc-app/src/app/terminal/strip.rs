@@ -18,10 +18,10 @@ pub(crate) const TAB_MAX: f32 = 220.0;
 pub(crate) const TAB_SQUEEZED: f32 = 72.0;
 /// 横向标签之间的间距（逻辑像素）。
 pub(crate) const TAB_GAP: f32 = 4.0;
-/// 竖向终端条目之间的间距（逻辑像素）。
-///
-/// 取自调参：底部和右侧面板中，相邻条目可区分，列表仍保持紧凑。
+/// 同一组内相邻窗格之间的间距（逻辑像素）。
 pub(crate) const LIST_GAP: f32 = 2.0;
+/// 竖向列表中不同终端标签之间的间距（逻辑像素）。
+pub(crate) const LIST_GROUP_GAP: f32 = 6.0;
 /// 拖动起始距离（逻辑像素），与编辑区标签的拖动阈值相同。
 const THRESHOLD: f32 = 4.0;
 
@@ -125,7 +125,7 @@ impl Strip {
 
     /// 当前排列方向上标签之间的间距（逻辑像素）。
     fn gap(&self) -> f32 {
-        if self.vertical { LIST_GAP } else { TAB_GAP }
+        if self.vertical { LIST_GROUP_GAP } else { TAB_GAP }
     }
 
     /// 标签 `id` 长出来的程度（0 到 1）。
@@ -173,9 +173,19 @@ impl Strip {
 }
 
 impl App {
+    /// 是否有标签拆成了多个终端窗格。
+    pub(crate) fn terminal_has_split_groups(&self) -> bool {
+        self.terminal.tabs.iter().any(|tab| tab.pane_count() > 1)
+    }
+
+    /// 有拆分组时显示竖向列表，方便逐个操作窗格。
+    pub(crate) fn terminal_tabs_vertical(&self) -> bool {
+        self.config.terminal_vertical_tabs == Some(true) || self.terminal_has_split_groups()
+    }
+
     /// 排版前记录标签位置变化：先按显示比例让出宽度，内容使用与侧栏相同的淡入、淡出曲线。
     pub(crate) fn note_terminal_tab_position(&mut self) {
-        let vertical = self.config.terminal_vertical_tabs == Some(true);
+        let vertical = self.terminal_tabs_vertical();
         let animate = self.animations_on();
         let position = &self.terminal.strip.position;
         let clock = if animate

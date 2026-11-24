@@ -675,7 +675,13 @@ fn the_terminal_menu_maximizes_and_the_options_apply() {
         app.on_mouse_down(MouseButton::Right);
         app.on_mouse_up(MouseButton::Right);
         let menu = app.overlays.context_menu.as_ref().unwrap();
-        assert_eq!(menu.target, MenuTarget::Terminal(None));
+        assert_eq!(
+            menu.target,
+            MenuTarget::Terminal {
+                pane: app.terminal.tab().unwrap().id,
+                block: None,
+            },
+        );
         menu.entries
             .iter()
             .filter_map(|e| match e {

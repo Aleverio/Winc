@@ -89,6 +89,8 @@ pub enum MenuButton {
     RunConfigs,
     /// 终端面板标签栏上「+」右边选 shell 的按钮。
     TerminalShells,
+    /// 窄终端工具栏的「⋯」。
+    TerminalTools,
     /// 状态栏路径中的第几段（从 0 起）。
     Crumb(usize),
     /// 状态栏右侧的缩进、行尾等项。
@@ -521,6 +523,10 @@ pub enum MenuCommand {
     TerminalMaximize,
     /// 把终端面板停靠到另一边。
     TerminalDock,
+    /// 收起终端面板。
+    TerminalHide,
+    /// 把停靠的搜索重新放回对话框。
+    TerminalSearchDialog,
     NewTerminal,
     /// 终端：拆分标签，新终端在当前终端的目录里启动。
     SplitTerminal,
@@ -726,6 +732,8 @@ impl MenuCommand {
             MenuCommand::TerminalFind => t!("cmd-find"),
             MenuCommand::TerminalClear => t!("menu-terminal-clear"),
             MenuCommand::TerminalMaximize => t!("menu-terminal-maximize"),
+            MenuCommand::TerminalHide => t!("terminal-hide-panel"),
+            MenuCommand::TerminalSearchDialog => t!("workspace-search-tool-open-dialog"),
             MenuCommand::NewTerminal => t!("cmd-new-terminal"),
             MenuCommand::SplitTerminal => t!("cmd-split-terminal"),
             MenuCommand::RenameTerminal => t!("cmd-rename-file"),
@@ -908,6 +916,8 @@ impl MenuCommand {
             MenuCommand::TerminalClear => Action::ClearTerminal,
             MenuCommand::TerminalMaximize => Action::MaximizeTerminal,
             MenuCommand::TerminalDock => Action::ToggleTerminalPosition,
+            MenuCommand::TerminalHide => Action::ToggleTerminalPanel,
+            MenuCommand::TerminalSearchDialog => Action::OpenSearchDialog,
             MenuCommand::NewTerminal => Action::NewTerminal,
             MenuCommand::SplitTerminal => Action::SplitTerminal,
             MenuCommand::RenameTerminal => Action::RenameTerminal,
@@ -1058,6 +1068,8 @@ pub enum MenuTarget {
     RunConfigs,
     /// 终端面板标签栏上可选的 shell。
     TerminalShells,
+    /// 窄终端工具栏收起的操作及弹出时的终端会话。
+    TerminalTools(Option<u16>),
     /// 提交视图改动列表里的一个文件。
     CommitFile(PathBuf),
     /// 新建工作树对话框的「基于」。
@@ -1086,8 +1098,8 @@ pub enum MenuTarget {
     LogFile(usize, PathBuf),
     /// 终端标签栏上的一个标签（编号）。
     TerminalTab(u16),
-    /// 终端面板里正在看的标签，以及右键点着的命令块（编号；没点在运行过的块上时为 `None`）。
-    Terminal(Option<u32>),
+    /// 终端面板或列表中点到的会话，以及可选的命令块编号。
+    Terminal { pane: u16, block: Option<u32> },
     /// 全局搜索结果里的一行：文件的路径和该文件中第几处匹配（`None` 是文件行），和
     /// `GlobalSearch::selected` 的记法相同。
     SearchResult(PathBuf, Option<usize>),

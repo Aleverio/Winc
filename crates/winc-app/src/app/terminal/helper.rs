@@ -4,7 +4,7 @@ use super::*;
 use crate::app::NoticeKind;
 
 impl App {
-    /// 竖向终端列表的区域，包含新建入口和终端条目。
+    /// 竖向终端列表的区域。
     pub(crate) fn terminal_tab_list(&self) -> Option<Rect> {
         self.terminal_tab_list_in(self.layout.terminal)
     }
@@ -15,7 +15,7 @@ impl App {
             .terminal
             .strip
             .position
-            .share(self.config.terminal_vertical_tabs == Some(true));
+            .share(self.terminal_tabs_vertical());
         if shown <= 0.0 {
             return None;
         }
@@ -32,11 +32,10 @@ impl App {
         })
     }
 
-    /// 竖向列表中的终端条目区域，顶部留给新建入口。
+    /// 竖向列表中的终端条目区域，顶部留一小段与工具栏隔开。
     pub(crate) fn terminal_tab_rows(&self) -> Option<Rect> {
         let list = self.terminal_tab_list()?;
-        let top =
-            (list.y + crate::theme::TREE_ROW + strip::TAB_GAP + strip::LIST_GAP).min(list.bottom());
+        let top = (list.y + strip::TAB_GAP).min(list.bottom());
         Some(Rect::new(list.x, top, list.w, list.bottom() - top))
     }
 
@@ -73,7 +72,10 @@ impl App {
     /// 下面，此时增减行数不会有历史行进出网格，拖动分隔条时内容也不会跳。网格装满后切换到贴着下边
     /// 时，原来的第一行成为零头处的半行，位置不变。
     pub(crate) fn terminal_grid(&self) -> Rect {
-        let card = self.terminal_content_card();
+        self.terminal_grid_in(self.terminal_content_card())
+    }
+
+    fn terminal_grid_in(&self, card: Rect) -> Rect {
         let grid = grid_rect(card, self.fonts.terminal_line_height);
         let below = |tab: &TermTab| tab.view_top() > 0 && !tab.modes.has(Modes::ALT_SCREEN);
         if self.terminal.tab().is_some_and(below) {
@@ -87,14 +89,16 @@ impl App {
 
     /// 显示终端内容的区域：从标签栏下沿到网格下沿，左右与网格相同。
     pub(crate) fn terminal_view(&self) -> Rect {
-        let grid = self.terminal_grid();
-        let top = self.layout.terminal.y + header_height(self.layout.terminal);
+        let card = self.terminal_content_card();
+        let grid = self.terminal_grid_in(card);
+        let top = card.y + header_height(card);
         Rect::new(grid.x, top, grid.w, grid.bottom() - top)
     }
 
     /// 视口最上面露出的显示行和它上沿的窗口坐标（对齐物理像素，文字不因滚动变模糊）。
     pub(crate) fn terminal_origin(&self) -> (u64, f32) {
-        let top = self.layout.terminal.y + header_height(self.layout.terminal);
+        let card = self.terminal_content_card();
+        let top = card.y + header_height(card);
         let Some((first, cut)) = self.terminal.tab().map(TermTab::viewport) else {
             return (0, top);
         };
@@ -170,16 +174,33 @@ impl App {
         self.terminal.resize_due
     }
 
-    /// 光标在空行行首藏够了（见 [`TermTab::settle`]）：画出来；返回下一次要醒来的时刻。
+    /// 恢复当前组中暂时隐藏的光标，返回最早还需要唤醒的时刻。
     pub(crate) fn terminal_settle_tick(&mut self, now: Instant) -> Option<Instant> {
-        let tab = self.terminal.tab_mut()?;
-        let due = tab.settle? + SETTLE;
-        if now < due {
-            return Some(due);
+        if !self.terminal.open || self.docked_search_shown() {
+            return None;
         }
-        tab.settle = None;
-        self.request_redraw();
-        None
+        let tab = self.terminal.tab_mut()?;
+        let mut next: Option<Instant> = None;
+        let mut redraw = false;
+        let mut settle = |pane: &mut TermTab| {
+            if let Some(since) = pane.settle {
+                let due = since + SETTLE;
+                if now < due {
+                    next = Some(next.map_or(due, |earlier| earlier.min(due)));
+                } else {
+                    pane.settle = None;
+                    redraw = true;
+                }
+            }
+        };
+        settle(tab);
+        if let Some(split) = &mut tab.split {
+            split.others.iter_mut().for_each(settle);
+        }
+        if redraw {
+            self.request_redraw();
+        }
+        next
     }
 
     /// 开始、停止拖分隔条：拖的时候正在看的标签先把网格上面一屏的历史行取来（`TermTab::ahead`）。
@@ -354,7 +375,7 @@ impl App {
             return;
         }
         let size = self.terminal_size();
-        let slack = grid_slack(self.layout.terminal, self.fonts.terminal_line_height);
+        let slack = grid_slack(self.terminal_content_card(), self.fonts.terminal_line_height);
         for tab in &mut self.terminal.tabs {
             tab.shown = usize::from(size.rows);
             tab.slack = slack;
@@ -384,11 +405,13 @@ impl App {
         let prompt = self.config.terminal_prompt != Some(false);
         // 拆分过的标签：各终端按自己那一块的大小。
         let count = self.terminal.tab().map_or(1, TermTab::pane_count);
-        let sizes: Vec<(u16, Size)> = (0..count)
+        let sizes: Vec<_> = (0..count)
             .filter_map(|at| {
                 self.with_terminal_pane(at, |app| {
                     let id = app.terminal.tab()?.id;
-                    Some((id, app.terminal_size()))
+                    let card = app.terminal_content_card();
+                    let slack = grid_slack(card, app.fonts.terminal_line_height);
+                    Some((id, app.terminal_size(), slack))
                 })
             })
             .collect();
@@ -405,10 +428,12 @@ impl App {
         let mut due = None;
         if let Some(tab) = t.tabs.get_mut(active) {
             let mut resize = |tab: &mut TermTab| {
-                let size = (sizes.iter())
-                    .find(|(id, _)| *id == tab.id)
-                    .map_or(size, |(_, size)| *size);
+                let (size, slack) = sizes
+                    .iter()
+                    .find(|(id, _, _)| *id == tab.id)
+                    .map_or((size, slack), |&(_, size, slack)| (size, slack));
                 tab.shown = usize::from(size.rows);
+                tab.slack = slack;
                 if tab.size == size || tab.ended.is_some() {
                     return;
                 }
@@ -509,6 +534,7 @@ impl App {
                     }
                 }
                 t.focus_sent = false;
+                t.last_mouse_cell = None;
             }
             if let Some(active) = t.want_active.take() {
                 t.active = active.min(t.tabs.len().saturating_sub(1));
@@ -548,8 +574,14 @@ impl App {
 
     /// 往上翻着、缺历史行时向辅助进程要。
     pub(super) fn fetch_terminal_history(&mut self) {
+        if let Some(id) = self.terminal.tab().map(|tab| tab.id) {
+            self.fetch_terminal_history_for(id);
+        }
+    }
+
+    pub(super) fn fetch_terminal_history_for(&mut self, id: u16) {
         let t = &mut self.terminal;
-        let Some(tab) = t.tabs.get_mut(t.active) else {
+        let Some(tab) = t.by_id(id) else {
             return;
         };
         let Some(range) = tab.missing() else {
@@ -744,7 +776,9 @@ impl App {
                 if full {
                     self.terminal_renumbered(id);
                 }
-                self.fetch_terminal_history();
+                if self.terminal.pane_is_shown(id) {
+                    self.fetch_terminal_history_for(id);
+                }
             }
             FromHelper::History {
                 tab: id,

@@ -69,6 +69,8 @@ impl App {
         } else if setting == Setting::TerminalTabPosition {
             let text = if self.config.terminal_vertical_tabs == Some(true) {
                 t!("settings-terminal-tab-position-right")
+            } else if self.terminal_has_split_groups() {
+                t!("settings-terminal-tab-position-top-while-split")
             } else {
                 t!("settings-terminal-tab-position-top")
             };

@@ -3,6 +3,9 @@
 use super::*;
 use crate::app::terminal::strip::{TAB_SQUEEZED, fit_named_tabs, tabs_narrowed};
 
+/// 窄顶栏至少给搜索标签留出一个按钮宽度，足以显示关闭按钮。
+pub(super) const SEARCH_TAB_MIN_WIDTH: f32 = BUTTON;
+
 pub(super) fn draw_header_tabs(
     app: &mut App,
     frame: &mut Frame<'_>,
@@ -31,7 +34,8 @@ fn draw_search_tab(
     let p = app.palette;
     let label = winc_i18n::t!("workspace-search-dock-tab");
     let w = (frame.measure(FontKind::Ui, app.fonts.ui, label) + 36.0)
-        .clamp(TAB_SQUEEZED, (area.w * 0.4).max(TAB_SQUEEZED));
+        .clamp(TAB_SQUEEZED, (area.w * 0.4).max(TAB_SQUEEZED))
+        .min(area.w);
     let rect = Rect::new(area.x, y, w, TAB_H);
     let clip = rect.intersect(area);
     let active = app.docked_search_shown();

@@ -468,7 +468,9 @@ impl App {
         if let Some(index) = self.pane_divider_at(x, y) {
             return Target::PaneDivider(index);
         }
-        if let Some(hit) = hit(&self.hits.terminal, x, y) {
+        if l.terminal.contains(x, y)
+            && let Some(hit) = hit(&self.hits.terminal, x, y)
+        {
             return Target::TerminalHeader(hit);
         }
         if y < TOP_BAR_END {

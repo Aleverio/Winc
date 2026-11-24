@@ -129,7 +129,7 @@ impl App {
                 }
                 _ => {}
             },
-            MenuTarget::Terminal(block) => self.run_terminal_command(command, block),
+            MenuTarget::Terminal { pane, block } => self.run_terminal_command(command, pane, block),
             MenuTarget::TerminalTab(id) => {
                 let Some(index) = self.terminal.tabs.iter().position(|t| t.id == id) else {
                     return;
@@ -438,6 +438,28 @@ impl App {
                     self.new_terminal_with_shell(i);
                 }
             }
+            MenuTarget::TerminalTools(pane) => match command {
+                MenuCommand::NewTerminal => {
+                    self.search_dialog.in_panel = false;
+                    self.new_terminal_tab();
+                }
+                MenuCommand::NewTerminalShell(i) => {
+                    self.search_dialog.in_panel = false;
+                    self.new_terminal_with_shell(i);
+                }
+                MenuCommand::SplitTerminal if self.terminal_split_button_enabled() => {
+                    if let Some(pane) = pane {
+                        self.run_terminal_command(command, pane, None);
+                    }
+                }
+                MenuCommand::TerminalSearchDialog if self.docked_search_shown() => {
+                    self.open_search_dialog_with(None);
+                }
+                MenuCommand::TerminalMaximize => self.toggle_terminal_maximized(),
+                MenuCommand::TerminalDock => self.toggle_terminal_position(),
+                MenuCommand::TerminalHide if self.terminal.open => self.click_terminal_button(),
+                _ => {}
+            },
             MenuTarget::TreeTools => {
                 if let Some(tool) = tree_tool_of(command) {
                     self.run_tree_tool(tool);
@@ -518,7 +540,17 @@ impl App {
         }
     }
 
-    fn run_terminal_command(&mut self, command: MenuCommand, block: Option<u32>) {
+    fn run_terminal_command(&mut self, command: MenuCommand, pane: u16, block: Option<u32>) {
+        if command == MenuCommand::CloseTerminal {
+            self.close_terminal_pane_by_id(pane);
+            return;
+        }
+        if self.terminal.tab().is_none_or(|tab| tab.id != pane) {
+            self.focus_terminal_pane_by_id(pane);
+            if self.terminal.tab().is_none_or(|tab| tab.id != pane) {
+                return;
+            }
+        }
         match (command, block) {
             (MenuCommand::CopyCommand, Some(id)) => return self.copy_terminal_command(id),
             (MenuCommand::CopyOutput, Some(id)) => return self.copy_terminal_output(id),
@@ -534,8 +566,7 @@ impl App {
             MenuCommand::TerminalMaximize => self.toggle_terminal_maximized(),
             MenuCommand::TerminalDock => self.toggle_terminal_position(),
             MenuCommand::NewTerminal => self.new_terminal_tab(),
-            MenuCommand::SplitTerminal => self.split_terminal(),
-            MenuCommand::CloseTerminal => self.close_terminal_pane(),
+            MenuCommand::SplitTerminal if self.terminal_splittable(pane) => self.split_terminal(),
             _ => {}
         }
     }

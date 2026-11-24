@@ -45,8 +45,12 @@ fn vertical_tabs_share_the_panel_without_covering_terminal_content() {
         paint(&mut app);
         let (first, second) = (tab_hit(&app, 0), tab_hit(&app, 1));
         assert_eq!(first.x, second.x);
-        assert_eq!(second.y - first.bottom(), 2.0);
+        assert_eq!(
+            second.y - first.bottom(),
+            crate::app::terminal::strip::LIST_GROUP_GAP,
+        );
         assert!(first.y >= app.terminal_view().y);
+        assert!(new.bottom() <= app.terminal_tab_list().unwrap().y);
         assert!(app.terminal_grid().right() <= first.x);
         assert_eq!(app.terminal_size().cols, full.cols);
         assert_eq!(app.terminal_size().rows, full.rows);
@@ -337,7 +341,7 @@ fn list_close_actions_appear_on_hover_and_keep_the_new_entry_fixed() {
 }
 
 #[test]
-fn the_new_terminal_and_shell_menu_share_a_control_with_separate_actions() {
+fn the_new_terminal_and_shell_menu_have_separate_actions_in_the_toolbar() {
     use crate::app::MenuButton;
     use crate::app::terminal::shells::ShellChoice;
 
@@ -363,10 +367,9 @@ fn the_new_terminal_and_shell_menu_share_a_control_with_separate_actions() {
     };
     let new = hit(&app, HeaderHit::New);
     let menu = hit(&app, HeaderHit::ShellMenu);
-    assert_eq!(new.right(), menu.x);
+    assert_eq!(menu.x - new.right(), crate::theme::TAB_GAP);
     assert_eq!((new.y, new.h), (menu.y, menu.h));
-    let row = tab_hit(&app, 0);
-    assert_eq!((new.x, menu.right()), (row.x, row.right()));
+    assert!(new.bottom() <= app.terminal_tab_list().unwrap().y);
     let pixel = |app: &App, x: f32, y: f32| {
         let renderer = app.frame.renderer.as_ref().unwrap();
         let scale = renderer.scale_factor();
@@ -375,20 +378,153 @@ fn the_new_terminal_and_shell_menu_share_a_control_with_separate_actions() {
     };
     let sample = (new.right() - 6.0, new.y + new.h / 2.0);
     let idle = pixel(&app, sample.0, sample.1);
-    assert_eq!(idle, pixel(&app, sample.0, row.bottom() + 20.0));
     app.on_mouse_move(new.x + 12.0, sample.1);
     paint(&mut app);
-    let hovered = pixel(&app, sample.0, sample.1);
-    assert_ne!(idle, hovered);
+    assert_ne!(pixel(&app, sample.0, sample.1), idle);
     app.on_mouse_move(menu.x + menu.w / 2.0, sample.1);
     paint(&mut app);
-    assert_eq!(pixel(&app, sample.0, sample.1), hovered);
+    assert_eq!(pixel(&app, sample.0, sample.1), idle);
     let waiting = app.terminal.want.len();
     click(&mut app, (menu.x + menu.w / 2.0, menu.y + menu.h / 2.0));
     assert_eq!(app.overlays.menu_button, Some(MenuButton::TerminalShells));
     assert_eq!(app.terminal.want.len(), waiting);
+    app.overlays.context_menu = None;
+    app.overlays.menu_button = None;
+
+    // 右侧面板缩到下限且与窗口按钮同一行：新建、选 shell 和拆分或还原搜索都能放下。
+    app.config.terminal_right = Some(true);
+    app.terminal.width = terminal::MIN_WIDTH;
+    app.window.controls = true;
     paint(&mut app);
-    assert_eq!(pixel(&app, sample.0, sample.1), hovered);
+    assert_eq!(app.layout.terminal.w, terminal::MIN_WIDTH);
+    assert_eq!(hit(&app, HeaderHit::New).w, crate::theme::BUTTON_SMALL);
+    let check_tool = |app: &App, target| {
+        let new = hit(app, HeaderHit::New);
+        let menu = hit(app, HeaderHit::ShellMenu);
+        let tool = hit(app, target);
+        assert!(new.x >= app.layout.terminal.x);
+        assert!(new.right() <= menu.x && menu.right() <= tool.x);
+        assert!(tool.right() <= hit(app, HeaderHit::Maximize).x);
+        assert!(hit(app, HeaderHit::Hide).right() <= app.layout.controls.x);
+    };
+    check_tool(&app, HeaderHit::Split);
+    for vertical in [true, false] {
+        app.config.terminal_vertical_tabs = Some(vertical);
+        for width in [350.0, terminal::MIN_WIDTH] {
+            app.terminal.width = width;
+            app.search_dialog.docked = true;
+            app.search_dialog.in_panel = true;
+            paint(&mut app);
+            assert_eq!(app.layout.terminal.w, width);
+            check_tool(&app, HeaderHit::SearchDialog);
+            let close = hit(&app, HeaderHit::SearchClose);
+            assert_eq!((close.w, close.h), (16.0, 16.0));
+            assert!(close.right() <= hit(&app, HeaderHit::New).x);
+            click(&mut app, (close.x + close.w / 2.0, close.y + close.h / 2.0));
+            assert!(!app.search_dialog.docked);
+            assert!(app.terminal.open);
+            assert_eq!(app.terminal.tabs.len(), 1);
+        }
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn a_narrow_bottom_toolbar_keeps_its_clicks_out_of_the_file_tree() {
+    use crate::app::terminal::shells::ShellChoice;
+
+    let dir = sample_folder("terminal-narrow-bottom");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    app.frame.renderer = Some(
+        Renderer::offscreen(320.0, 450.0, SCALE, app.palette.frame_bg, None, None).unwrap(),
+    );
+    app.config.ui_animations = Some(false);
+    app.config.terminal_vertical_tabs = Some(true);
+    app.set_sidebar(true);
+    app.measure_fonts();
+    show_terminal(&mut app, "$ ");
+    app.terminal.shells = ["zsh", "bash"]
+        .into_iter()
+        .map(|name| ShellChoice {
+            name: name.into(),
+            command: name.into(),
+        })
+        .collect();
+    app.search_dialog.docked = true;
+    app.search_dialog.in_panel = true;
+    paint(&mut app);
+
+    let card = app.layout.terminal;
+    assert!(card.w < 100.0);
+    let hit = |app: &App, target| {
+        app.hits
+            .terminal
+            .iter()
+            .find(|(_, hit)| *hit == target)
+            .unwrap()
+            .0
+    };
+    let middle = |rect: Rect| (rect.x + rect.w / 2.0, rect.y + rect.h / 2.0);
+    let close = hit(&app, HeaderHit::SearchClose);
+    let more = hit(&app, HeaderHit::More);
+    assert_eq!((close.w, close.h), (16.0, 16.0));
+    for (rect, _) in &app.hits.terminal {
+        if rect.w > 0.0 && rect.h > 0.0 {
+            assert!(rect.x >= card.x && rect.right() <= card.right());
+        }
+    }
+
+    let tree = (card.x - 24.0, middle(more).1);
+    assert!(app.layout.tree.contains(tree.0, tree.1));
+    let queued = app.terminal.want.len();
+    click(&mut app, tree);
+    assert_eq!(app.focus, Focus::Tree);
+    assert_eq!(app.terminal.want.len(), queued);
+    assert!(app.docked_search_shown());
+
+    click(&mut app, middle(more));
+    let commands = menu_commands(&app);
+    assert!(commands.contains(&(MenuCommand::TerminalSearchDialog, true)));
+    assert!(commands.contains(&(MenuCommand::NewTerminalShell(1), true)));
+    app.overlays.context_menu = None;
+    app.overlays.menu_button = None;
+    click(&mut app, middle(close));
+    assert!(!app.search_dialog.docked);
+    assert_eq!(app.terminal.tabs.len(), 1);
+
+    // 极窄布局中关闭按钮位于整块搜索标签的命中区域之上，点击后仍能关闭搜索。
+    app.search_dialog.docked = true;
+    app.search_dialog.in_panel = true;
+    paint(&mut app);
+    let close = hit(&app, HeaderHit::SearchClose);
+    assert!(close.w > 0.0 && close.x >= card.x && close.right() <= card.right());
+    click(&mut app, middle(close));
+    assert!(!app.search_dialog.docked);
+    assert_eq!(app.terminal.tabs.len(), 1);
+
+    // 更窄时搜索关闭按钮和「⋯」仍分别保留自己的命中区域。
+    app.frame.renderer = Some(
+        Renderer::offscreen(250.0, 450.0, SCALE, app.palette.frame_bg, None, None).unwrap(),
+    );
+    app.measure_fonts();
+    app.search_dialog.docked = true;
+    app.search_dialog.in_panel = true;
+    paint(&mut app);
+    let card = app.layout.terminal;
+    assert!(card.w < 22.0);
+    let close = hit(&app, HeaderHit::SearchClose);
+    assert!(close.w > 0.0 && close.x >= card.x && close.right() <= card.right());
+    click(&mut app, middle(close));
+    assert!(!app.search_dialog.docked);
+    assert_eq!(app.terminal.tabs.len(), 1);
+
+    app.search_dialog.docked = false;
+    app.search_dialog.in_panel = false;
+    paint(&mut app);
+    let more = hit(&app, HeaderHit::More);
+    assert!(more.w > 0.0 && more.x >= card.x && more.right() <= card.right());
+    click(&mut app, middle(more));
+    assert_eq!(app.overlays.menu_button, Some(MenuButton::TerminalTools));
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -439,20 +575,26 @@ fn a_partially_visible_rename_is_clipped_and_does_not_cover_the_new_entry() {
         paint(&mut app);
         let rows = app.terminal_tab_rows().unwrap();
         let at = (rows.x + 30.0, rows.y + 10.0);
-        // 保留行底部 5 个逻辑像素，输入框主体位于固定的新建入口中。
+        // 保留行底部 5 个逻辑像素，输入框主体会被列表上沿裁切。
         let delta = -(crate::theme::TREE_ROW - 5.0);
         app.scroll_target_by(ScrollTarget::TerminalStrip, at, false, (0.0, delta));
         paint(&mut app);
         assert_eq!(tab_hit(&app, 0).h, 5.0);
+        let new = app
+            .hits
+            .terminal
+            .iter()
+            .find(|(_, hit)| *hit == HeaderHit::New)
+            .unwrap()
+            .0;
         let pixels = |app: &App| {
             let renderer = app.frame.renderer.as_ref().unwrap();
             let scale = renderer.scale_factor();
             let image = renderer.image().unwrap();
             let mut pixels = Vec::new();
-            for y in ((rows.y - crate::theme::TREE_ROW) * scale) as usize..(rows.y * scale) as usize
-            {
-                let start = y * image.width as usize + (rows.x * scale) as usize;
-                let end = y * image.width as usize + (rows.right() * scale) as usize;
+            for y in (new.y * scale) as usize..(new.bottom() * scale) as usize {
+                let start = y * image.width as usize + (new.x * scale) as usize;
+                let end = y * image.width as usize + (new.right() * scale) as usize;
                 pixels.extend_from_slice(&image.pixels[start..end]);
             }
             pixels
@@ -769,7 +911,13 @@ fn a_split_terminal_tab_shows_its_terminals_side_by_side() {
     let first = app.terminal.tab().unwrap().id;
 
     // 标签和终端里的右键菜单都能拆分：新终端排进这个标签。
-    for target in [MenuTarget::TerminalTab(first), MenuTarget::Terminal(None)] {
+    for target in [
+        MenuTarget::TerminalTab(first),
+        MenuTarget::Terminal {
+            pane: first,
+            block: None,
+        },
+    ] {
         app.open_context_menu(target, (whole.x + 20.0, whole.y + 20.0));
         assert!(menu_commands(&app).contains(&(MenuCommand::SplitTerminal, true)));
         app.overlays.context_menu = None;
@@ -807,6 +955,32 @@ fn a_split_terminal_tab_shows_its_terminals_side_by_side() {
     app.run_action(crate::keymap::Action::NextTerminalPane);
     assert_eq!(app.terminal.tab().unwrap().id, 99);
 
+    let pane_hit = |app: &App, target| {
+        app.hits
+            .terminal
+            .iter()
+            .find(|(_, hit)| *hit == target)
+            .unwrap()
+            .0
+    };
+    let middle = |row: Rect| (row.x + row.w / 2.0, row.y + row.h / 2.0);
+    paint(&mut app);
+    let left = pane_hit(&app, HeaderHit::Pane(first));
+    let right = pane_hit(&app, HeaderHit::Pane(99));
+    let group = tab_hit(&app, 0);
+    assert!(left.x > group.x && left.y > group.y);
+    assert!(left.y < right.y);
+    assert!(pane_hit(&app, HeaderHit::New).bottom() <= group.y);
+    let position = crate::layout::Setting::TerminalTabPosition;
+    let preference = MenuCommand::TerminalTabPosition(false);
+    let split_notice = winc_i18n::t!("settings-terminal-tab-position-top-while-split");
+    assert_eq!(app.choice_text(position).0, split_notice);
+    assert_eq!(app.menu_label(preference).title, split_notice);
+    click(&mut app, middle(left));
+    assert_eq!(app.terminal.tab().unwrap().id, first);
+    click(&mut app, middle(right));
+    assert_eq!(app.terminal.tab().unwrap().id, 99);
+
     app.save_session();
     let root = app.editor.root().unwrap().to_path_buf();
     let session = app.state.session_for(&root).cloned().unwrap();
@@ -817,11 +991,91 @@ fn a_split_terminal_tab_shows_its_terminals_side_by_side() {
     let tab = app.terminal.tab().unwrap();
     assert_eq!((tab.id, tab.pane_count()), (first, 1));
 
-    // 标签上的 × 关掉标签里的全部终端。
+    // 列表上的 × 可以只关闭没在前台的窗格。
     let (mut all, at) = app.terminal.take_group(0);
     all.push(TermTab::new(98, size));
     app.terminal.put_group(0, all, at);
+    paint(&mut app);
+    let close = pane_hit(&app, HeaderHit::ClosePane(98));
+    click(&mut app, middle(close));
+    assert_eq!(app.terminal.tab().unwrap().id, first);
+    assert_eq!(app.terminal.tab().unwrap().pane_count(), 1);
+    assert!(app.terminal_tab_list().is_none());
+    let top = winc_i18n::t!("settings-terminal-tab-position-top");
+    assert_eq!(app.choice_text(position).0, top);
+    assert_eq!(app.menu_label(preference).title, top);
+
+    // 右键菜单打开期间目标 shell 退出，关闭命令不会误关剩下的窗格。
+    let (mut all, at) = app.terminal.take_group(0);
+    all.push(TermTab::new(97, size));
+    app.terminal.put_group(0, all, at);
+    paint(&mut app);
+    let (x, y) = middle(pane_hit(&app, HeaderHit::Pane(97)));
+    app.on_mouse_move(x, y);
+    app.on_mouse_down(MouseButton::Right);
+    app.on_mouse_up(MouseButton::Right);
+    assert_eq!(
+        app.overlays.context_menu.as_ref().unwrap().target,
+        MenuTarget::Terminal { pane: 97, block: None },
+    );
+    app.terminal_message(FromHelper::Exited { tab: 97, code: 0 });
+    app.run_menu_command(MenuCommand::CloseTerminal);
+    assert_eq!(app.terminal.tab().unwrap().id, first);
+
+    // 关闭整个标签仍然会关掉标签里的全部终端。
+    let (mut all, at) = app.terminal.take_group(0);
+    all.push(TermTab::new(96, size));
+    app.terminal.put_group(0, all, at);
     app.close_terminal_tab(0);
     assert!(app.terminal.tabs.is_empty());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 分栏后旧窗格还能重绘并收到额度，保存在其他标签中的会话停在后台。
+#[test]
+fn each_visible_terminal_pane_keeps_getting_frames() {
+    use winc_pty::protocol::ToHelper;
+
+    let dir = sample_folder("terminal-pane-frames");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    let mut left = show_terminal(&mut app, "$ ");
+    let first = app.terminal.tab().unwrap().id;
+    let size = app.terminal_size();
+    add_tab(&mut app, "bash", "");
+    let hidden = app.terminal.tab().unwrap().id;
+    app.terminal.tab_mut().unwrap().credit_due = true;
+    let (mut all, _) = app.terminal.take_group(0);
+    let mut right = TermTab::new(99, size);
+    right.credit_due = true;
+    all.push(right);
+    app.terminal.put_group(0, all, 1);
+    app.activate_terminal_tab(0);
+    let log = app.attach_recording_helper(&dir);
+
+    left.feed(b"background output\r\n");
+    let frame = FromHelper::Frame {
+        tab: first,
+        frame: left.take_frame().unwrap(),
+    };
+    assert!(app.terminal.message_is_shown(&frame));
+    app.terminal_message(frame);
+    assert_eq!(app.terminal.tab().unwrap().id, 99);
+    app.after_terminal_frame();
+
+    let messages = app.sent_to_helper(&log);
+    assert!(messages.contains(&ToHelper::Credit { tab: first }));
+    assert!(messages.contains(&ToHelper::Credit { tab: 99 }));
+    assert!(!messages.contains(&ToHelper::Credit { tab: hidden }));
+
+    // 旧窗格移到空行行首时会暂时隐藏光标，到期后无需切换焦点即可恢复。
+    let since = std::time::Instant::now();
+    let (mut panes, at) = app.terminal.take_group(0);
+    panes[0].settle = Some(since);
+    app.terminal.put_group(0, panes, at);
+    let due = since + terminal::SETTLE;
+    assert_eq!(app.terminal_settle_tick(since), Some(due));
+    assert_eq!(app.terminal_settle_tick(due), None);
+    assert!(app.terminal.pane(first).unwrap().settle.is_none());
+    assert_eq!(app.terminal.tab().unwrap().id, 99);
     let _ = std::fs::remove_dir_all(&dir);
 }
