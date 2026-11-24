@@ -676,7 +676,7 @@ impl App {
             return "untitled.txt".to_owned();
         };
         let name = doc.name();
-        if doc.path.is_some() || doc.title.is_some() {
+        if doc.path.is_some() {
             return name.into_owned();
         }
         let language = doc.highlighter.language();
@@ -744,14 +744,17 @@ impl App {
 
     /// 保存当前文档（`⌘S`）。
     ///
-    /// 未命名的文档弹出「另存为」面板；开启了「保存时格式化」时先格式化再保存。
+    /// 未命名的文档和仍在读取的标准输入标签弹出「另存为」面板；开启了「保存时格式化」时先格式化
+    /// 再保存。
     pub(in crate::app) fn save_active(&mut self) {
         let Some(doc) = self.editor.active() else {
             return;
         };
         let id = doc.id;
 
-        if doc.title.is_some() {
+        if self.reading_stdin(id) {
+            self.pick(Pick::SaveAs(id));
+        } else if doc.title.is_some() {
             // 格式化工具的输出标签只用于查看，不可保存。
             if let Some(reason) = doc.unwritable_reason() {
                 self.flash(reason);
@@ -1297,7 +1300,7 @@ impl App {
             Pick::SaveProject => self.save_project_as(path),
             Pick::OpenProject => self.open_from_outside(&path),
             Pick::SaveAs(id) => {
-                if self.save_document(id, Some(path))
+                if self.save_picked(id, path)
                     && let Some(prompt) = continuation
                 {
                     self.save_then_close(prompt);
