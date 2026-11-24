@@ -155,7 +155,13 @@ fn the_menu_on_a_command_copies_it_and_its_output() {
         (menu.target.clone(), items)
     };
     let (target, items) = right_click(&mut app, 1);
-    assert_eq!(target, MenuTarget::Terminal { pane, block: Some(id) });
+    assert_eq!(
+        target,
+        MenuTarget::Terminal {
+            pane,
+            block: Some(id)
+        }
+    );
     assert_eq!(
         items,
         [

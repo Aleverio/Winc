@@ -266,7 +266,10 @@ impl TerminalPanel {
 
     /// 当前标签的每个窗格都可见，其他标签的窗格在后台。
     fn pane_is_shown(&self, id: u16) -> bool {
-        self.open && self.tab().is_some_and(|tab| tab.panes().any(|pane| pane.id == id))
+        self.open
+            && self
+                .tab()
+                .is_some_and(|tab| tab.panes().any(|pane| pane.id == id))
     }
 
     /// 消息是否作用于正在显示的内容。标题、进程、未读标记等的变化由 [`Self::visible_state`] 判断。

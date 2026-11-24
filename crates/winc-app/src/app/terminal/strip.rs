@@ -125,7 +125,11 @@ impl Strip {
 
     /// 当前排列方向上标签之间的间距（逻辑像素）。
     fn gap(&self) -> f32 {
-        if self.vertical { LIST_GROUP_GAP } else { TAB_GAP }
+        if self.vertical {
+            LIST_GROUP_GAP
+        } else {
+            TAB_GAP
+        }
     }
 
     /// 标签 `id` 长出来的程度（0 到 1）。

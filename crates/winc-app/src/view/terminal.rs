@@ -255,7 +255,11 @@ fn draw_content(app: &mut App, frame: &mut Frame<'_>, focused: bool) {
         cell * width_at(line, usize::from(cursor.col)) as f32,
         lh,
     );
-    let preedit = if focused { app.preedit_at(Focus::Terminal) } else { "" };
+    let preedit = if focused {
+        app.preedit_at(Focus::Terminal)
+    } else {
+        ""
+    };
     let start = preedit_x(x, preedit, cell, view.right());
     let composing = !preedit.is_empty();
     if focused {
@@ -523,7 +527,11 @@ fn draw_header(app: &mut App, frame: &mut Frame<'_>, card: Rect) {
     };
     let rest = horizontal_run.map_or(tools_x, |[menu, ..]| menu.x);
     let room = rest - TAB_GAP - left - new_space;
-    let area = Rect { w: room.max(0.0), ..toolbar }.intersect(toolbar);
+    let area = Rect {
+        w: room.max(0.0),
+        ..toolbar
+    }
+    .intersect(toolbar);
     let (after_tabs, mut hits) = tabs::draw_header_tabs(app, frame, area, y);
     let run = if vertical {
         run_buttons(app, frame, after_tabs, new_at - TAB_GAP, button_y)
@@ -622,7 +630,7 @@ fn draw_narrow_header(
     let p = app.palette;
     let gap = BUTTON_GAP;
     let search = app.search_dialog.docked;
-    let close_width = search.then_some(toolbar.w.min(16.0)).unwrap_or(0.0);
+    let close_width = if search { toolbar.w.min(16.0) } else { 0.0 };
     let close = (close_width > 0.0).then(|| {
         Rect::new(
             toolbar.right() - close_width,
@@ -653,9 +661,7 @@ fn draw_narrow_header(
     } else {
         None
     };
-    let end = new
-        .or(more)
-        .map_or(tools_right, |rect| rect.x - gap);
+    let end = new.or(more).map_or(tools_right, |rect| rect.x - gap);
     let area = Rect {
         w: (end - toolbar.x).max(0.0),
         ..toolbar

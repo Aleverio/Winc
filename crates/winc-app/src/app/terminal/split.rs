@@ -31,7 +31,11 @@ pub(crate) fn pane_cards(card: Rect, n: usize, column: bool) -> Vec<Rect> {
         .map(|i| {
             let y = top + i as f32 * (h + DIVIDER);
             let last = i + 1 == n;
-            let h = if last { (card.bottom() - y).max(0.0) } else { h };
+            let h = if last {
+                (card.bottom() - y).max(0.0)
+            } else {
+                h
+            };
             // 每块卡片保留网格排版需要的顶部留白，标题栏的高度随卡片所在位置而变。
             let header = if y - HEADER >= TOP_BAR_END {
                 HEADER

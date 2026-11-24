@@ -765,7 +765,10 @@ impl App {
                     let items = (0..shells.len())
                         .map(|i| MenuEntry::Item(MenuCommand::NewTerminalShell(i), true))
                         .collect();
-                    entries.push(MenuEntry::Submenu(t!("terminal-shell-select").into(), items));
+                    entries.push(MenuEntry::Submenu(
+                        t!("terminal-shell-select").into(),
+                        items,
+                    ));
                 }
                 let operation = if self.docked_search_shown() {
                     MenuEntry::Item(MenuCommand::TerminalSearchDialog, true)

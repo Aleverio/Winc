@@ -375,7 +375,10 @@ impl App {
             return;
         }
         let size = self.terminal_size();
-        let slack = grid_slack(self.terminal_content_card(), self.fonts.terminal_line_height);
+        let slack = grid_slack(
+            self.terminal_content_card(),
+            self.fonts.terminal_line_height,
+        );
         for tab in &mut self.terminal.tabs {
             tab.shown = usize::from(size.rows);
             tab.slack = slack;

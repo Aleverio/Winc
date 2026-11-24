@@ -435,9 +435,8 @@ fn a_narrow_bottom_toolbar_keeps_its_clicks_out_of_the_file_tree() {
 
     let dir = sample_folder("terminal-narrow-bottom");
     let mut app = app_with(&dir.join("short.rs"), false);
-    app.frame.renderer = Some(
-        Renderer::offscreen(320.0, 450.0, SCALE, app.palette.frame_bg, None, None).unwrap(),
-    );
+    app.frame.renderer =
+        Some(Renderer::offscreen(320.0, 450.0, SCALE, app.palette.frame_bg, None, None).unwrap());
     app.config.ui_animations = Some(false);
     app.config.terminal_vertical_tabs = Some(true);
     app.set_sidebar(true);
@@ -503,9 +502,8 @@ fn a_narrow_bottom_toolbar_keeps_its_clicks_out_of_the_file_tree() {
     assert_eq!(app.terminal.tabs.len(), 1);
 
     // 更窄时搜索关闭按钮和「⋯」仍分别保留自己的命中区域。
-    app.frame.renderer = Some(
-        Renderer::offscreen(250.0, 450.0, SCALE, app.palette.frame_bg, None, None).unwrap(),
-    );
+    app.frame.renderer =
+        Some(Renderer::offscreen(250.0, 450.0, SCALE, app.palette.frame_bg, None, None).unwrap());
     app.measure_fonts();
     app.search_dialog.docked = true;
     app.search_dialog.in_panel = true;
@@ -1016,7 +1014,10 @@ fn a_split_terminal_tab_shows_its_terminals_side_by_side() {
     app.on_mouse_up(MouseButton::Right);
     assert_eq!(
         app.overlays.context_menu.as_ref().unwrap().target,
-        MenuTarget::Terminal { pane: 97, block: None },
+        MenuTarget::Terminal {
+            pane: 97,
+            block: None
+        },
     );
     app.terminal_message(FromHelper::Exited { tab: 97, code: 0 });
     app.run_menu_command(MenuCommand::CloseTerminal);

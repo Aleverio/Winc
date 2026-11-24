@@ -87,7 +87,10 @@ fn draw_group(
     clip: Rect,
     rename: Option<&mut (u16, TextField)>,
 ) {
-    let row = Rect { h: TREE_ROW, ..group };
+    let row = Rect {
+        h: TREE_ROW,
+        ..group
+    };
     draw_row(app, frame, index, row, clip, rename);
     let tab = &app.terminal.tabs[index];
     if tab.pane_count() == 1 {
@@ -138,7 +141,15 @@ fn draw_group(
         } else {
             p.text_muted
         };
-        ui_text(frame, app, text.x, text, &label, color, text.intersect(clip));
+        ui_text(
+            frame,
+            app,
+            text.x,
+            text,
+            &label,
+            color,
+            text.intersect(clip),
+        );
         let on = app.pointer.hover == Hover::TerminalHeader(HeaderHit::ClosePane(pane.id));
         workspace::top_bar::draw_tab_close(frame, p, close, on, hit);
         app.hits
@@ -176,7 +187,11 @@ fn draw_row(
         };
         frame.rect_clipped(row, fill, RADIUS_ROW, clip);
     }
-    let (inset, end) = if group { (22.0, 10.0) } else { (12.0, BUTTON_SMALL) };
+    let (inset, end) = if group {
+        (22.0, 10.0)
+    } else {
+        (12.0, BUTTON_SMALL)
+    };
     let text = Rect::new(row.x + inset, row.y, (row.w - inset - end).max(0.0), row.h);
     if let Some((_, field)) = rename.filter(|(id, _)| *id == tab.id) {
         let field_rect = row.inset(6.0, 2.0);
@@ -219,7 +234,11 @@ fn draw_row(
             None => tab.busy().map(|_| p.text_dim),
         };
         if let Some(color) = dot {
-            let x = if group { row.right() - 8.0 } else { row.x + 5.0 };
+            let x = if group {
+                row.right() - 8.0
+            } else {
+                row.x + 5.0
+            };
             frame.rect_clipped(Rect::new(x, center(row).1 - 2.0, 4.0, 4.0), color, 2.0, hit);
         }
         if hovered && !group {
