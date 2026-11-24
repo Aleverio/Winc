@@ -978,3 +978,57 @@ fn only_the_bare_body_hands_the_pointer_to_a_section() {
     assert!(body.contains(over.0, over.1));
     assert!(!app.combined_takes_pointer(over.0, over.1), "命令面板");
 }
+
+/// 「折叠未更改的内容」是一项设置（`editor.diffCollapseUnchanged`，默认开）：关掉后差异打开时
+/// 就全部展开；差异标题栏和「未提交的更改」工具栏上的开关改的就是这一项，打开着的差异一起跟着变。
+#[test]
+fn unchanged_regions_follow_the_collapse_setting() {
+    use winc_editor::diff_view::SideRow;
+
+    let Some((mut app, root)) = git_app("git-diff-collapse-setting", true) else {
+        return;
+    };
+    let folded = |view: &winc_editor::diff_view::DiffView| {
+        view.collapses()
+            && view.rows[RIGHT]
+                .iter()
+                .any(|r| matches!(r, SideRow::Fold { .. }))
+    };
+    let tab_view = |app: &App| -> (bool, bool) {
+        let view = app.editor.active().unwrap().diff.as_deref().unwrap();
+        let rows = view.rows[RIGHT].iter();
+        (
+            view.collapses(),
+            rows.clone().any(|r| matches!(r, SideRow::Fold { .. })),
+        )
+    };
+
+    // 关掉：新打开的差异全部展开。
+    app.settings_toggle(Setting::DiffCollapse);
+    assert_eq!(app.config.diff_collapse_unchanged, Some(false));
+    app.fetch_changes(&root.join("src/main.rs"), Target::Open);
+    assert_eq!(tab_view(&app), (false, false));
+    let diff_tab = app.editor.active().unwrap().id;
+
+    // 标题栏上的开关：设置打开，这个差异折叠起来。
+    app.press_diff(DiffTarget::Collapse);
+    assert_eq!(app.config.diff_collapse_unchanged, Some(true));
+    assert_eq!(tab_view(&app), (true, true));
+
+    // 「未提交的更改」按设置折叠；工具栏上的开关关掉设置，另一个标签里的差异也一起展开。
+    assert!(app.run_action(Action::GitShowAllChanges));
+    paint(&mut app);
+    let main = section_of(&app, "src/main.rs");
+    assert!(folded(view(&app, main)));
+    app.press_combined(CombinedHit::Collapse);
+    assert_eq!(app.config.diff_collapse_unchanged, Some(false));
+    assert!(!view(&app, main).collapses());
+    let other = app
+        .editor
+        .document(diff_tab)
+        .unwrap()
+        .diff
+        .as_deref()
+        .unwrap();
+    assert!(!other.collapses());
+}

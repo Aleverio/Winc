@@ -907,6 +907,7 @@ impl Winc {
         app.git.commit.set_sort(sort);
         app.restore_panel_width();
         app.editor.diff_unified = app.config.diff_inline == Some(true);
+        app.editor.diff_collapse = app.config.diff_collapse_unchanged != Some(false);
         app.apply_preview_state();
         app.store.state_path = template.state_path;
         app.backup.root = template.backup_root;

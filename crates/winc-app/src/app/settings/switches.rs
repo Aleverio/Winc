@@ -25,6 +25,7 @@ impl App {
             Setting::Outline => self.config.outline != Some(false),
             Setting::LineNumbers => self.config.line_numbers != Some(false),
             Setting::DiffInline => self.config.diff_inline == Some(true),
+            Setting::DiffCollapse => self.config.diff_collapse_unchanged != Some(false),
             Setting::StatusBar => self.config.status_bar != Some(false),
             Setting::FullTabNames => self.config.full_tab_names != Some(false),
             Setting::RestoreWindow => self.config.restore_window != Some(false),
@@ -105,6 +106,7 @@ impl App {
             Setting::Outline => self.config.outline = Some(on),
             Setting::LineNumbers => self.config.line_numbers = Some(on),
             Setting::DiffInline => self.config.diff_inline = Some(on),
+            Setting::DiffCollapse => self.config.diff_collapse_unchanged = Some(on),
             Setting::StatusBar => self.config.status_bar = Some(on),
             Setting::FullTabNames => self.config.full_tab_names = Some(on),
             Setting::RestoreWindow => self.config.restore_window = Some(on),
@@ -179,6 +181,9 @@ impl App {
         }
         if setting == Setting::DiffInline {
             self.apply_diff_layout();
+        }
+        if setting == Setting::DiffCollapse {
+            self.apply_diff_collapse();
         }
         if setting == Setting::GitStagingArea {
             self.apply_staging_view();

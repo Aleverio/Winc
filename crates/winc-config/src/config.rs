@@ -106,6 +106,8 @@ pub struct Config {
     pub render_whitespace: Option<RenderWhitespace>,
     /// 差异单栏显示：新旧内容上下排列，默认为否（左右并排）。
     pub diff_inline: Option<bool>,
+    /// 差异中较长的未更改内容折叠为一行，默认为是；关闭后差异打开时就是全部展开的。
+    pub diff_collapse_unchanged: Option<bool>,
     /// 在行号栏显示行号，默认为是；关闭后折叠箭头、书签和改动标记仍然显示。
     pub line_numbers: Option<bool>,
     /// 显示窗口底部的状态栏，默认为是。

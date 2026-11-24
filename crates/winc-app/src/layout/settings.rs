@@ -96,6 +96,8 @@ pub enum Setting {
     LineNumbers,
     /// 差异单栏显示。
     DiffInline,
+    /// 差异中折叠较长的未更改内容。
+    DiffCollapse,
     /// 何时显示空格和制表符。
     RenderWhitespace,
     /// 显示状态栏。
@@ -337,9 +339,12 @@ impl Setting {
                 SettingsPage::Terminal
             }
             S::TerminalApplicationPriority | S::TerminalOptionAsMeta => SettingsPage::Terminal,
-            S::GitPath | S::GitOpenWorktree | S::GitStagingArea | S::GitTree | S::DiffInline => {
-                SettingsPage::Git
-            }
+            S::GitPath
+            | S::GitOpenWorktree
+            | S::GitStagingArea
+            | S::GitTree
+            | S::DiffInline
+            | S::DiffCollapse => SettingsPage::Git,
             S::GitCombinedDiff => SettingsPage::Git,
             S::GitInlineBlame | S::GitPullMode | S::GitConfirmPush | S::GitAutoFetch => {
                 SettingsPage::Git
@@ -384,6 +389,7 @@ impl Setting {
             S::Outline => "editor.outline",
             S::LineNumbers => "editor.lineNumbers",
             S::DiffInline => "editor.diffInline",
+            S::DiffCollapse => "editor.diffCollapseUnchanged",
             S::RenderWhitespace => "editor.renderWhitespace",
             S::StatusBar => "editor.statusBar",
             S::FullTabNames => "editor.fullTabNames",
@@ -490,6 +496,7 @@ impl Setting {
             Setting::Minimap => t!("settings-minimap"),
             Setting::LineNumbers => t!("settings-line-numbers"),
             Setting::DiffInline => t!("settings-diff-inline"),
+            Setting::DiffCollapse => t!("settings-diff-collapse"),
             Setting::RenderWhitespace => t!("settings-render-whitespace"),
             Setting::StatusBar => t!("settings-status-bar"),
             Setting::FullTabNames => t!("settings-full-tab-names"),
@@ -600,6 +607,7 @@ impl Setting {
             Setting::Minimap => Some(t!("settings-minimap-desc")),
             Setting::LineNumbers => Some(t!("settings-line-numbers-desc")),
             Setting::DiffInline => Some(t!("settings-diff-inline-desc")),
+            Setting::DiffCollapse => Some(t!("settings-diff-collapse-desc")),
             Setting::RenderWhitespace => Some(t!("settings-render-whitespace-desc")),
             Setting::StatusBar => Some(t!("settings-status-bar-desc")),
             Setting::FullTabNames => Some(t!("settings-full-tab-names-desc")),
@@ -696,6 +704,7 @@ impl Setting {
             | Setting::Outline
             | Setting::LineNumbers
             | Setting::DiffInline
+            | Setting::DiffCollapse
             | Setting::StatusBar
             | Setting::FullTabNames
             | Setting::RestoreWindow

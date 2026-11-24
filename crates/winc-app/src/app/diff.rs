@@ -375,10 +375,8 @@ impl App {
             DiffTarget::BannerBack => self.git_show_log(),
             DiffTarget::Layout => self.settings_toggle(crate::layout::Setting::DiffInline),
             DiffTarget::Combined => self.toggle_combined_diff(),
-            DiffTarget::Collapse => self.refold_diff(|view, row| {
-                let on = !view.collapses();
-                view.set_collapse(on, row)
-            }),
+            // 与设置中的「折叠未更改的内容」是同一项：所有差异一起折叠或展开。
+            DiffTarget::Collapse => self.settings_toggle(crate::layout::Setting::DiffCollapse),
             DiffTarget::Fold(gap) => {
                 self.finish_diff_fold(true);
                 if let Some(view) = self.editor.active_mut().and_then(|d| d.diff.as_deref_mut()) {
@@ -1197,6 +1195,30 @@ impl App {
             let range = (pos, pos);
             view.read_selection = Some(ReadSelection { side, range });
         }
+    }
+
+    /// 使所有已打开和之后打开的差异按设置（`diffCollapseUnchanged`）折叠或展开未更改的内容：
+    /// 标题栏上的开关和设置是同一项。各标签顶部的行保持在顶部。
+    pub(in crate::app) fn apply_diff_collapse(&mut self) {
+        let on = self.config.diff_collapse_unchanged != Some(false);
+        self.finish_diff_fold(true);
+        self.editor.diff_collapse = on;
+        for doc in &mut self.editor.documents {
+            let Some(view) = doc.diff.as_deref_mut() else {
+                continue;
+            };
+            if view.collapses() == on {
+                continue;
+            }
+            let row = view.row_at(RIGHT, doc.scroll_line.max(0.0)) as usize;
+            let row = view.set_collapse(on, row);
+            let scroll = view.pos_of(RIGHT, row as f64);
+            set_scroll_line(doc, scroll);
+        }
+        self.apply_combined_collapse(on);
+        self.relayout();
+        self.clamp_scroll();
+        self.request_redraw();
     }
 
     /// 使所有已打开和之后打开的差异按设置（`diffInline`）显示。

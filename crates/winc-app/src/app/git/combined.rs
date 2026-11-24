@@ -837,7 +837,11 @@ impl App {
                     body
                 }
                 Ok(mut view) => {
-                    arrange(&mut view, self.editor.diff_unified);
+                    arrange(
+                        &mut view,
+                        self.editor.diff_unified,
+                        self.editor.diff_collapse,
+                    );
                     if let Body::Ready(old) = &section.body {
                         view.inherit(old);
                     }
@@ -992,9 +996,9 @@ impl App {
         views.next().is_none_or(|view| view.collapses())
     }
 
-    /// 工具栏上的「折叠未更改的行」：各段一起打开或关闭，视口顶边所在的段停在原处。
-    fn collapse_combined(&mut self) {
-        let on = !self.combined_collapses();
+    /// 「折叠未更改的内容」变了（工具栏、差异标题栏上的开关和设置是同一项）：各段一起折叠或
+    /// 展开，视口顶边所在的段停在原处。
+    pub(in crate::app) fn apply_combined_collapse(&mut self, on: bool) {
         let anchor = self.combined_anchor();
         if let Some(tab) = self.git.combined.as_mut() {
             for section in &mut tab.sections {
@@ -1421,7 +1425,7 @@ impl App {
             CombinedHit::OpenDiff(i) => self.open_combined_diff(i),
             CombinedHit::Previous => self.step_combined_change(false),
             CombinedHit::Next => self.step_combined_change(true),
-            CombinedHit::Collapse => self.collapse_combined(),
+            CombinedHit::Collapse => self.settings_toggle(crate::layout::Setting::DiffCollapse),
             CombinedHit::Layout => self.settings_toggle(crate::layout::Setting::DiffInline),
             CombinedHit::View => self.toggle_combined_diff(),
         }
@@ -1430,8 +1434,10 @@ impl App {
 }
 
 /// 排好一段的差异：按设置单栏（`unified`）或并排，并排时两侧按改动对齐（见
-/// `DiffView::aligned`）。其余与单独打开这个文件的差异相同：右侧可以编辑，可以按块、按行暂存。
-fn arrange(view: &mut DiffView, unified: bool) {
+/// `DiffView::aligned`），按设置折叠（`collapse`）未更改的内容。其余与单独打开这个文件的差异
+/// 相同：右侧可以编辑，可以按块、按行暂存。
+fn arrange(view: &mut DiffView, unified: bool, collapse: bool) {
     view.aligned = true;
     view.set_unified(unified);
+    view.set_collapse(collapse, 0);
 }
