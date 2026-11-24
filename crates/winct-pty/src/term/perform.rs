@@ -237,7 +237,7 @@ impl Perform for Emulator {
             }
             // 终端名称与版本报告（XTVERSION）。
             ([b'>'], 'q') => {
-                self.respond(&format!("\x1bP>|winc {}\x1b\\", winct_version::VERSION));
+                self.respond(&format!("\x1bP>|winct {}\x1b\\", winct_version::VERSION));
             }
             // 设置滚动区域（DECSTBM），参数行号从 1 起。
             ([], 'r') => {

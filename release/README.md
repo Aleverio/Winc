@@ -64,8 +64,8 @@ certificate, installers are unsigned. Updater signatures remain mandatory on eve
 `WINCT_UPDATE_PRIVATE_KEY` is a **Sparkle seed** that signs every update package and appcast. Store
 it in this repository's Secrets; it is never shared with other projects. With the pinned Sparkle
 tools, generate a dedicated Winct key and export it using
-`generate_keys --account com.deeix.winc`, followed by
-`generate_keys --account com.deeix.winc -x <private-key-file>`. Alternatively, Node.js can generate
+`generate_keys --account com.deeix.winct`, followed by
+`generate_keys --account com.deeix.winct -x <private-key-file>`. Alternatively, Node.js can generate
 the required random 32-byte seed on any platform:
 
 ```powershell
@@ -95,7 +95,7 @@ The rpm wraps the same binaries in a Fedora container: rpmbuild derives the glib
 the window system libraries loaded at run time are required by soname, so it installs on Fedora 40
 or newer, RHEL 10 and openSUSE Tumbleweed. Debian and RPM prerelease versions use `~` so the final
 release sorts after its betas.
-Stable `X.Y.Z` releases also include `winc-<version>-1-x86_64.pkg.tar.zst` built from the same Linux
+Stable `X.Y.Z` releases also include `winct-<version>-1-x86_64.pkg.tar.zst` built from the same Linux
 binaries. The Arch package is updated with `pacman -U` through the update script below.
 
 Each release also has five signed appcasts for the in-app updater: `appcast-macos-arm64.xml`,
@@ -140,7 +140,7 @@ deb, and Arch installations are not self-updating.
 
 The in-app release notes are not part of a channel. The app reads
 `https://github.com/Aleverio/Winc/releases/notes/<language>.md` (`en.md`, `zh-cn.md`) when the user opens them;
-winc.si generates these files from its changelog. Each release starts with a `## <version> · <date>`
+winct.si generates these files from its changelog. Each release starts with a `## <version> · <date>`
 line, which the app uses to pick the releases to show (`crates/winct-app/src/release_notes.rs`).
 
 Windows NSIS installations are per-user; MSI installations are per-machine and use the fixed
@@ -152,7 +152,7 @@ continue to use manual or package-manager updates.
 
 ### Arch repository
 
-The **Release · Sign Arch repository** workflow stages `deeix-ai-winc` after a stable GitHub
+The **Release · Sign Arch repository** workflow stages `deeix-ai-winct` after a stable GitHub
 Release is published. The Arch repository itself is still deployed under `https://github.com/Aleverio/Winc`. In the
 repository's **Settings → Secrets and variables → Actions**, add the following repository secrets.
 
@@ -180,13 +180,13 @@ curl --proto '=https' --tlsv1.2 -fL -o install-arch.sh \
 sudo bash ./install-arch.sh
 ```
 
-Once the repository is configured, install with `sudo pacman -Syu winc` and update with
+Once the repository is configured, install with `sudo pacman -Syu winct` and update with
 `sudo pacman -Syu`.
 
 ### Arch updates without a repository
 
-Forks do not publish the signed `deeix-ai-winc` repository, so a package installed directly from a
-GitHub Release cannot be updated with `pacman -Syu` (`target not found: winc`). For those installs,
+Forks do not publish the signed `deeix-ai-winct` repository, so a package installed directly from a
+GitHub Release cannot be updated with `pacman -Syu` (`target not found: winct`). For those installs,
 run the update script, which downloads the latest stable Arch package from this repository, checks
 it against the release's `SHA256SUMS`, and installs it with `pacman -U`:
 

@@ -108,7 +108,7 @@ fn types_windows_runs_on_double_click_are_never_registered() {
 
 #[test]
 fn the_linux_desktop_entry_declares_types_outside_plain_text() {
-    let entry = release_file("linux/winc.desktop");
+    let entry = release_file("linux/winct.desktop");
     let mime = entry
         .lines()
         .find_map(|line| line.strip_prefix("MimeType="))
@@ -128,8 +128,8 @@ fn the_linux_desktop_entry_declares_types_outside_plain_text() {
 
 #[test]
 fn the_linux_mime_type_matches_project_files() {
-    // 桌面项列出的项目文件类型由随包安装的 `winc.xml` 定义。
-    let mime = release_file("linux/winc.xml");
+    // 桌面项列出的项目文件类型由随包安装的 `winct.xml` 定义。
+    let mime = release_file("linux/winct.xml");
     assert!(mime.contains("<mime-type type=\"application/x-winct-project\">"));
     assert!(mime.contains("<glob pattern=\"*.winct-project\"/>"));
     // 文档图标随包装进图标主题，按类型名找到。
@@ -137,11 +137,11 @@ fn the_linux_mime_type_matches_project_files() {
     let icon = "icons/hicolor/scalable/mimetypes/application-x-winct-project.svg";
     for script in [
         "linux/package.sh",
-        "linux/rpm/winc.spec",
+        "linux/rpm/winct.spec",
         "linux/arch/PKGBUILD",
     ] {
         let text = release_file(script);
-        assert!(text.contains("mime/packages/winc.xml"), "{script}");
+        assert!(text.contains("mime/packages/winct.xml"), "{script}");
         assert!(text.contains(icon), "{script}");
     }
 }

@@ -165,7 +165,7 @@ pub enum UserEvent {
     /// 菜单栏的「更新日志」被触发。
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     OpenReleaseNotes,
-    /// 菜单栏的「安装 winc 命令…」被触发。
+    /// 菜单栏的「安装 winct 命令…」被触发。
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     InstallShellCommand,
     /// macOS 上全屏过渡中红绿灯的位置发生变化（见 `crate::macos::TrafficLights`），
@@ -233,14 +233,14 @@ pub enum UserEvent {
     Definitions,
     /// 已打开目录中有文件被外部修改。
     FilesChanged,
-    /// 后台读到一段标准输入（`winc -`）。
+    /// 后台读到一段标准输入（`winct -`）。
     StdinRead,
-    /// 新启动的 `winc` 进程交来要打开的目录、文件及其激活令牌（见 [`crate::instance`]）。
+    /// 新启动的 `winct` 进程交来要打开的目录、文件及其激活令牌（见 [`crate::instance`]）。
     ///
     /// 由应用层决定切换到哪个窗口或新建窗口，并经通道答复是否接收；该事件不会分发到窗口。
     Launched(crate::instance::Launch, std::sync::mpsc::Sender<bool>),
     /// 系统交来要打开的文件和目录（拖到程序坞图标上、文件管理器中的「打开方式」、
-    /// `winc://` 链接）。
+    /// `winct://` 链接）。
     ///
     /// 处理方式同 [`UserEvent::Launched`]：由应用层决定在哪个窗口打开。
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
@@ -383,7 +383,7 @@ pub enum UserEvent {
     TerminalRestart(u16),
     /// 提示框中回答了是否为终端加载第一个参数所指的 Python 环境。
     PythonEnvironment(PathBuf, bool),
-    /// 需要授权的 `winc` 命令安装或卸载已结束。
+    /// 需要授权的 `winct` 命令安装或卸载已结束。
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     ShellCommandDone(crate::shell_command::Done),
     /// 本机可用 shell 的检测已完成。

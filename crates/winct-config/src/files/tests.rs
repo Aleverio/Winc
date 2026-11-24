@@ -102,7 +102,7 @@ fn verbatim_prefixes_are_dropped_when_safe() {
 #[test]
 fn a_data_folder_beside_the_program_makes_it_portable() {
     let dir = scratch("portable");
-    let exe = dir.join("winc.exe");
+    let exe = dir.join("winct.exe");
     assert_eq!(portable_dir_beside(&exe), None);
     // 同名的文件不算：只认目录。
     std::fs::write(dir.join("data"), "").unwrap();

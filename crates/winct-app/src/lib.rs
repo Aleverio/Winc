@@ -1,6 +1,6 @@
-//! winc 桌面程序的实现：读取配置和状态，按命令行参数或上次的现场打开文件，创建窗口和事件循环。
+//! winct 桌面程序的实现：读取配置和状态，按命令行参数或上次的现场打开文件，创建窗口和事件循环。
 //!
-//! 入口是 [`run`]，由可执行文件 `winc` 调用。`app` 模块放 `App` 的状态与各项功能，`view` 绘制并把
+//! 入口是 [`run`]，由可执行文件 `winct` 调用。`app` 模块放 `App` 的状态与各项功能，`view` 绘制并把
 //! 几何交给 `layout`，`keymap`、`theme`、`icons` 给出快捷键、配色和尺寸，`field` 是单行输入框，
 //! `macos` 放直接调用 `AppKit` 的能力。Windows 上是图形界面程序：从命令行启动时接上该命令行的
 //! 控制台，`--help` 和错误信息输出到该控制台（`windows::attach_console`）。
@@ -67,9 +67,9 @@ use app::App;
 use bench::Bench;
 use winct::{Envelope, Winct};
 
-/// 运行 winc：按命令行参数或上次的现场打开文件，创建窗口并运行事件循环，直到全部窗口关闭。
+/// 运行 winct：按命令行参数或上次的现场打开文件，创建窗口并运行事件循环，直到全部窗口关闭。
 ///
-/// 无需窗口的情形（输出用法或版本、把目标交给已在运行的 winc、参数有误）直接返回或退出进程。
+/// 无需窗口的情形（输出用法或版本、把目标交给已在运行的 winct、参数有误）直接返回或退出进程。
 pub fn run() {
     // 作为 `git`、`ssh` 的 askpass 程序启动时不创建窗口。
     if let Some(code) = askpass::helper() {
@@ -105,7 +105,7 @@ pub fn run() {
             return;
         }
         Ok(args) if args.version => {
-            println!("winc {}", winct_version::VERSION);
+            println!("winct {}", winct_version::VERSION);
             return;
         }
         Ok(args) => args,
@@ -129,7 +129,7 @@ pub fn run() {
     set_locale(config.language.unwrap_or_default().resolve());
     problems.extend(keymap::install_from(&config));
     for problem in &problems {
-        eprintln!("winc: {problem}");
+        eprintln!("winct: {problem}");
     }
 
     // 非 UTF-8 文件按内容推测编码；内容很短、特征不足时参考用户的语言（简体中文倾向 GBK）。
@@ -156,7 +156,7 @@ pub fn run() {
         .and_then(Path::parent)
         .map(|dir| dir.join("backups"));
 
-    // 已经有 winc 在运行：交给它打开并切到前台，本进程不再启动。临时打开（`--wait`、`-`）要等标签关
+    // 已经有 winct 在运行：交给它打开并切到前台，本进程不再启动。临时打开（`--wait`、`-`）要等标签关
     // 闭或读标准输入，总是自己打开；测量时、指定了 `--new-instance` 时也不交出去。读不了的目标现在
     // 就报告：之后可能交给其他进程，错误不再回到这个终端。
     let mut args = args;
@@ -174,13 +174,13 @@ pub fn run() {
 
     let opened = open_targets(&mut editor, &args);
     for problem in &opened.problems {
-        eprintln!("winc: {problem}");
+        eprintln!("winct: {problem}");
     }
     // `--wait` 给的全是打不开的目标（例如目录）时没有标签可等，窗口在命令行目标处理完之后
-    // 不会自行退出，调用 winc 的程序（如 `git`）会一直等待。此时直接以失败状态退出。
+    // 不会自行退出，调用 winct 的程序（如 `git`）会一直等待。此时直接以失败状态退出。
     if args.wait && !args.stdin && editor.documents.is_empty() {
         eprintln!(
-            "winc: {}",
+            "winct: {}",
             winct_i18n::t!("cmd-cli-wait-needs-openable-file")
         );
         std::process::exit(1);
@@ -225,7 +225,7 @@ pub fn run() {
         Ok(event_loop) => event_loop,
         Err(e) => {
             eprintln!(
-                "winc: {}",
+                "winct: {}",
                 winct_i18n::t!("cmd-cli-event-loop-failed", error = e.to_string())
             );
             std::process::exit(1);
@@ -244,7 +244,7 @@ pub fn run() {
         });
     }
 
-    // 拖到程序坞图标上、由系统转交给 winc 打开的文件和目录。winc 因此被启动时，系统在启动
+    // 拖到程序坞图标上、由系统转交给 winct 打开的文件和目录。winct 因此被启动时，系统在启动
     // 完成之前就交来这些路径，因此必须在事件循环开始运行之前注册回调；这些事件在窗口建好以后
     // 才处理。测量时不注册，样本文件只能由命令行指定。
     #[cfg(target_os = "macos")]
@@ -266,8 +266,8 @@ pub fn run() {
         state_path: state_path.clone(),
         backup_root: backup_root.clone(),
     });
-    let mut winc = Winct::new(Some(event_loop.create_proxy()), template);
-    let (key, proxy) = winc.reserve();
+    let mut winct = Winct::new(Some(event_loop.create_proxy()), template);
+    let (key, proxy) = winct.reserve();
     let mut app = App::new(editor, proxy, bench, config);
     // 第一个窗口出示启动本进程时给出的激活令牌，合成器随之结束启动通知。
     app.set_activation(tokens.for_window(is_wayland(&event_loop)));
@@ -314,15 +314,15 @@ pub fn run() {
         }
     }
 
-    winc.add(key, app);
-    winc.restore_windows(&others);
-    // 指定了 `--new-instance` 的进程不接收之后启动的 winc 交来的目录和文件，这些仍交给原来
-    // 运行着的 winc。
+    winct.add(key, app);
+    winct.restore_windows(&others);
+    // 指定了 `--new-instance` 的进程不接收之后启动的 winct 交来的目录和文件，这些仍交给原来
+    // 运行着的 winct。
     if !args.new_instance {
-        winc.listen_for_launches();
+        winct.listen_for_launches();
     }
-    if let Err(e) = event_loop.run_app(&mut winc) {
-        eprintln!("winc: {e}");
+    if let Err(e) = event_loop.run_app(&mut winct) {
+        eprintln!("winct: {e}");
         std::process::exit(1);
     }
     #[cfg(not(target_os = "macos"))]
@@ -402,7 +402,7 @@ pub(crate) fn open_targets(editor: &mut Editor, args: &cli::Args) -> Opened {
     }
 }
 
-/// 是否已将要打开的目录和文件交给正在运行的 winc，由该进程切到打开该目录的窗口、新建窗口或
+/// 是否已将要打开的目录和文件交给正在运行的 winct，由该进程切到打开该目录的窗口、新建窗口或
 /// 切到前台。
 fn hand_over(args: &cli::Args, tokens: &instance::LaunchTokens) -> bool {
     let targets: Vec<cli::Target> = args

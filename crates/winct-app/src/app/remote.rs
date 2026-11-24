@@ -433,7 +433,7 @@ fn is_system(name: &str) -> bool {
 ///
 /// 环境变量 [`SERVER_DIR`] 指定时只看它。否则是本程序所在的目录（Windows 的安装目录和便携版、
 /// 开发时的构建目录），以及各系统安装包中放置数据文件的位置：macOS 应用包的 `Resources`，
-/// Linux 上与 `bin` 并列的 `lib/winc`。
+/// Linux 上与 `bin` 并列的 `lib/winct`。
 fn server_dirs() -> Vec<PathBuf> {
     if let Some(dir) = std::env::var_os(SERVER_DIR) {
         return vec![PathBuf::from(dir)];
@@ -447,7 +447,7 @@ fn server_dirs() -> Vec<PathBuf> {
         if cfg!(target_os = "macos") {
             dirs.push(prefix.join("Resources"));
         } else if cfg!(unix) {
-            dirs.push(prefix.join("lib/winc"));
+            dirs.push(prefix.join("lib/winct"));
         }
     }
     dirs
@@ -566,7 +566,7 @@ fn resolve(target: &Target, folder: &str, abort: &remote::Abort) -> std::io::Res
     let exec = Exec::new("sh")
         .arg("-c")
         .arg(RESOLVE)
-        .arg("winc")
+        .arg("winct")
         .arg(folder);
     let output = remote::exec(&home, &exec, &|| abort.is_aborted())?;
     let text = output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout);
@@ -1364,7 +1364,7 @@ Host -oProxyCommand=x a;b
         // 不存在的目录：给出主目录和仍然存在的最近一级上级目录。
         let missing = open(
             &target,
-            "/winc/no/such/folder",
+            "/winct/no/such/folder",
             None,
             None,
             &remote::Abort::default(),
@@ -1381,7 +1381,7 @@ Host -oProxyCommand=x a;b
         let root = winct_backend::virtual_path(&target, b"/");
         assert_eq!(
             wanted,
-            winct_backend::virtual_path(&target, b"/winc/no/such/folder")
+            winct_backend::virtual_path(&target, b"/winct/no/such/folder")
         );
         assert_eq!((found, nearest), (home.clone(), root));
         let gone = home.join(".ssh/winct-no-such-folder/inner");

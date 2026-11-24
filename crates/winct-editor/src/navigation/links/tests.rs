@@ -23,7 +23,7 @@ fn address(text: &str, address: &str) -> Option<(String, Target)> {
 fn urls_are_found_in_any_file() {
     let url = "https://github.com/Aleverio/Winc/zh-cn/";
     assert_eq!(
-        at("// 见 https://winc^.si/zh-cn/。", false),
+        at("// 见 https://github.com/Aleverio/Winc^/zh-cn/。", false),
         address(url, url)
     );
     assert_eq!(
@@ -55,11 +55,11 @@ fn urls_are_found_in_any_file() {
 fn markdown_links_cover_the_whole_form() {
     let link = "[Winct](https://github.com/Aleverio/Winc)";
     assert_eq!(
-        at("见 [Wi^nc](https://github.com/Aleverio/Winc)。", true),
+        at("见 [Win^ct](https://github.com/Aleverio/Winc)。", true),
         address(link, "https://github.com/Aleverio/Winc")
     );
     assert_eq!(
-        at("见 [Winct](https://wi^nc.si)。", true),
+        at("见 [Winct](https://github.com/Aleverio/Winc^)。", true),
         address(link, "https://github.com/Aleverio/Winc")
     );
     assert_eq!(
@@ -88,12 +88,12 @@ fn markdown_links_cover_the_whole_form() {
 fn wikilinks_give_the_name_without_the_label() {
     let wiki = |name: &str| Target::Wiki(name.to_owned());
     assert_eq!(
-        at("见 [[wi^nc]]。", true),
-        Some(("[[winc]]".to_owned(), wiki("winc")))
+        at("见 [[wi^nct]]。", true),
+        Some(("[[winct]]".to_owned(), wiki("winct")))
     );
     assert_eq!(
-        at("[[a]] [[winc.csv#表 | 显示^]]", true).map(|(_, target)| target),
-        Some(wiki("winc.csv#表"))
+        at("[[a]] [[winct.csv#表 | 显示^]]", true).map(|(_, target)| target),
+        Some(wiki("winct.csv#表"))
     );
     assert_eq!(at("[[wi^nc]]", false), None);
     assert_eq!(at("[[^]]", true), None);

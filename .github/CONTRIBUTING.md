@@ -1,6 +1,6 @@
-# Contributing to winc
+# Contributing to winct
 
-Thank you for helping improve winc. This guide explains how to propose a change and what a pull
+Thank you for helping improve winct. This guide explains how to propose a change and what a pull
 request needs before it can be merged.
 
 ## Before You Start
@@ -23,7 +23,7 @@ request needs before it can be merged.
 
 ## Setting Up
 
-winc builds with Rust 1.99.1; `rust-toolchain.toml` selects the toolchain and installs rustfmt and
+winct builds with Rust 1.99.1; `rust-toolchain.toml` selects the toolchain and installs rustfmt and
 clippy.
 
 ```bash
@@ -52,13 +52,13 @@ include the results in the pull request.
 - Keep each pull request focused on one change. Do not mix in unrelated refactoring or formatting.
 - Run `cargo fmt` before committing. `rustfmt.toml` holds the settings, and CI rejects code that
   is not formatted.
-- Add tests for fixed bugs and new behavior. Visual changes use the snapshot tests in `winc-app`.
+- Add tests for fixed bugs and new behavior. Visual changes use the snapshot tests in `winct-app`.
 - Follow the structure of the surrounding code: put logic in the crate that owns it (see the crate
   table in the [README](../README.md)), and keep platform-specific code behind the existing platform
   modules.
-- Avoid new dependencies unless they are clearly needed. winc keeps its binary small and its startup
+- Avoid new dependencies unless they are clearly needed. winct keeps its binary small and its startup
   fast, so every dependency is weighed against that.
-- Interface strings live in the Fluent bundles of `winc-i18n`. Add new strings in both English
+- Interface strings live in the Fluent bundles of `winct-i18n`. Add new strings in both English
   (`en-US`) and Simplified Chinese (`zh-CN`).
 - Write comments in a formal, neutral style, wrapped at 100 columns. Describe what the code does and
   why, not how it changed over time.

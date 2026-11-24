@@ -177,7 +177,7 @@ fn the_tree_copies_files_and_pastes_text_and_images_as_new_files() {
     // 替换；按 ↩ 新建并打开，内容就是剪贴板中的文本。
     select(&mut app, &dir.join("Cargo.toml"));
     app.clipboard.copied_files.clear();
-    app.clipboard.copied = Some("{\"name\": \"winc\"}".into());
+    app.clipboard.copied = Some("{\"name\": \"winct\"}".into());
     app.paste();
     let entry = app.panels.name_input.as_ref().expect("打开名字输入行");
     assert_eq!(entry.dir, dir);
@@ -189,7 +189,7 @@ fn the_tree_copies_files_and_pastes_text_and_images_as_new_files() {
     assert!(app.panels.name_input.is_none());
     assert_eq!(
         std::fs::read_to_string(dir.join("package.json")).unwrap(),
-        "{\"name\": \"winc\"}"
+        "{\"name\": \"winct\"}"
     );
     let doc = app.editor.active().unwrap();
     assert_eq!(

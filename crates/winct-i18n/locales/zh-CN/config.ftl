@@ -8,7 +8,7 @@ config-project-read-failed = 无法读取（{ $error }），已忽略
 config-project-invalid-json = 不是有效的 JSON 对象，已忽略
 config-project-unsupported-key = 项目设置仅支持 format，已忽略 { $key }
 
-## 运行配置（.winc/run.json）。
+## 运行配置（.winct/run.json）。
 
 config-run-read-failed = 无法读取（{ $error }），已忽略
 config-run-invalid-json = 文件格式无效，应为包含 configurations 数组的 JSON 对象，已忽略

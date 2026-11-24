@@ -17,7 +17,7 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 #[test]
-fn reports_changes_and_exits_when_winc_goes_away() {
+fn reports_changes_and_exits_when_winct_goes_away() {
     let dir = scratch("reports");
     let mut child = Command::new(env!("CARGO_BIN_EXE_winct-watch"))
         .arg(&dir)
@@ -39,7 +39,7 @@ fn reports_changes_and_exits_when_winc_goes_away() {
     let want = format!("P{}", file.display()).into_bytes();
     while messages.recv_timeout(WAIT).unwrap() != want {}
 
-    // 关闭标准输入等同于 winc 退出。
+    // 关闭标准输入等同于 winct 退出。
     drop(child.stdin.take());
     assert!(child.wait().unwrap().success());
     let _ = std::fs::remove_dir_all(&dir);

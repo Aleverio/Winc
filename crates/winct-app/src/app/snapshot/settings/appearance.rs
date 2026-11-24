@@ -652,14 +652,14 @@ fn scrolling_settings_over_a_background_image_looks_the_same() {
     let corner = full[at(card.x + 10.0, card.bottom() - 10.0)] & 0xff_ffff;
     let part = |v: f32| (v * 255.0 + 0.5) as i32;
     let c = app.palette.group_bg;
-    let plain = ((part(c.r) << 16) | (part(c.g) << 8) | part(c.b)) as i32;
+    let plain = (part(c.r) << 16) | (part(c.g) << 8) | part(c.b);
     let diff = |a: i32, b: i32| (a - b).abs();
     let cr = ((corner >> 16) & 0xff) as i32;
     let cg = ((corner >> 8) & 0xff) as i32;
     let cb = (corner & 0xff) as i32;
-    let pr = ((plain >> 16) & 0xff) as i32;
-    let pg = ((plain >> 8) & 0xff) as i32;
-    let pb = (plain & 0xff) as i32;
+    let pr = (plain >> 16) & 0xff;
+    let pg = (plain >> 8) & 0xff;
+    let pb = plain & 0xff;
     assert!(
         diff(cr, pr) <= 12 && diff(cg, pg) <= 12 && diff(cb, pb) <= 12,
         "corner={corner:#x} plain={plain:#x}"

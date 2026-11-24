@@ -1,4 +1,4 @@
-//! 打包（`cargo xtask dmg`）：macOS 的 winc.app 和安装用的 dmg，含应用图标、dmg 窗口的背景和布局。
+//! 打包（`cargo xtask dmg`）：macOS 的 winct.app 和安装用的 dmg，含应用图标、dmg 窗口的背景和布局。
 
 use std::fs::File;
 use std::io::BufWriter;
@@ -14,15 +14,15 @@ mod finder;
 /// 应用的标识。
 ///
 /// 系统按这个标识区分应用（权限、默认打开方式、Launch Services）。
-const BUNDLE_ID: &str = "com.deeix.winc";
+const BUNDLE_ID: &str = "com.deeix.winct";
 
 /// 应用的显示名：菜单栏、访达、程序坞、「打开方式」和更新窗口里写的名字，也是 dmg 的卷名。
 ///
-/// 应用包（`winc.app`）、可执行文件和命令行命令仍是小写的 `winc`；访达按 `CFBundleDisplayName`
+/// 应用包（`winct.app`）、可执行文件和命令行命令仍是小写的 `winct`；访达按 `CFBundleDisplayName`
 /// 显示应用的名字，不显示包名。
 const APP_NAME: &str = "Winct";
 
-/// 构建 release，组成临时签名（ad-hoc）的 `target/release/bundle/winc.app`，返回路径和版本号。
+/// 构建 release，组成临时签名（ad-hoc）的 `target/release/bundle/winct.app`，返回路径和版本号。
 ///
 /// 应用包里有主程序、终端的辅助进程 `winct-pty`、`Sparkle.framework` 和图标。`target` 是 Rust 的
 /// 目标（`aarch64-apple-darwin` 或 `x86_64-apple-darwin`，在 Apple 芯片上交叉编译 Intel 版），
@@ -58,14 +58,14 @@ pub fn app(target: Option<&str>, prebuilt: bool) -> Result<(PathBuf, String), St
     );
     let bundle = built.join("bundle");
     let version = winct_version::VERSION;
-    let app = bundle.join("winc.app");
+    let app = bundle.join("winct.app");
     let _ = std::fs::remove_dir_all(&bundle);
     let contents = app.join("Contents");
     std::fs::create_dir_all(contents.join("MacOS")).map_err(io)?;
     std::fs::create_dir_all(contents.join("Resources")).map_err(io)?;
     // 终端模块的辅助进程和主程序放在一起，主程序按自身旁边的位置查找辅助进程。
     let helper = contents.join("MacOS/winct-pty");
-    std::fs::copy(built.join("winc"), contents.join("MacOS/winc")).map_err(io)?;
+    std::fs::copy(built.join("winct"), contents.join("MacOS/winct")).map_err(io)?;
     std::fs::copy(built.join("winct-pty"), &helper).map_err(io)?;
     // 主程序不链接 Sparkle，运行时从 `Contents/Frameworks` 加载；没有更新配置时也带着。
     sparkle::embed(&contents)?;
@@ -134,7 +134,7 @@ fn mac_arch(arch: &str) -> &str {
 pub fn app_arch(app: &Path) -> Result<String, String> {
     let output = Command::new("lipo")
         .arg("-archs")
-        .arg(app.join("Contents/MacOS/winc"))
+        .arg(app.join("Contents/MacOS/winct"))
         .output()
         .map_err(|e| format!("无法运行 lipo：{e}"))?;
     if !output.status.success() {
@@ -160,7 +160,7 @@ const WINDOW: (u32, u32) = (640, 400);
 /// 标题栏的高度（点）。
 ///
 /// 窗口大小记录含标题栏，所以写进去的高度要加上标题栏高度。该值随系统版本变化，
-/// 这里按 winc 支持的系统版本的标准窗口标题栏高度取 28 点。
+/// 这里按 winct 支持的系统版本的标准窗口标题栏高度取 28 点。
 #[cfg(unix)]
 const TITLE_BAR: u32 = 28;
 /// 背景图的高度（点）：内容区高度加上 80 点余量。各版本系统的标题栏高度不同，
@@ -175,16 +175,16 @@ const ICON_SIZE: f64 = 128.0;
 /// 图标下面名字的字号（点）。
 #[cfg(unix)]
 const TEXT_SIZE: f64 = 12.0;
-/// winc.app 的图标中心（内容区坐标，点）。
+/// winct.app 的图标中心（内容区坐标，点）。
 ///
 /// 比内容区的正中稍高，连同下面的名字整体在视觉上居中。
 const APP_AT: (u32, u32) = (160, 186);
 /// 「应用程序」替身的图标中心；背景上的箭头画在两个图标正中间。
 const APPLICATIONS_AT: (u32, u32) = (480, 186);
-/// 构建 release 版 `winc.app` 和 `.dmg`，只在 macOS 上可用。
+/// 构建 release 版 `winct.app` 和 `.dmg`，只在 macOS 上可用。
 ///
 /// 签名是本机临时签名（ad-hoc），没有公证，从网上下载的副本首次打开需要用户放行。`signed` 是
-/// 已经用 Developer ID 签好名的 winc.app：给出时不构建、不重新签名，校验后原样装进 dmg。
+/// 已经用 Developer ID 签好名的 winct.app：给出时不构建、不重新签名，校验后原样装进 dmg。
 ///
 /// # Errors
 ///
@@ -228,7 +228,7 @@ pub fn dmg(signed: Option<&Path>, output: Option<&Path>) -> Result<(), String> {
         .args(["create", "-quiet", "-fs", "HFS+", "-volname", APP_NAME])
         .args(["-size", &format!("{megabytes}m")])
         .arg(&writable))?;
-    // 挂到自己的目录上，不进 `/Volumes`：不和已经打开的 winc 镜像重名，也不出现在系统的卷列表中。
+    // 挂到自己的目录上，不进 `/Volumes`：不和已经打开的 winct 镜像重名，也不出现在系统的卷列表中。
     let volume = work.join("volume");
     std::fs::create_dir_all(&volume).map_err(io)?;
     run(Command::new("hdiutil")
@@ -260,14 +260,14 @@ pub fn dmg(signed: Option<&Path>, output: Option<&Path>) -> Result<(), String> {
         .arg(&writable))?;
 
     let image = output.map_or_else(
-        || release.join(format!("winc-{version}-{arch}.dmg")),
+        || release.join(format!("winct-{version}-{arch}.dmg")),
         Path::to_path_buf,
     );
     if let Some(parent) = image.parent() {
         std::fs::create_dir_all(parent).map_err(io)?;
     }
     let _ = std::fs::remove_file(&image);
-    // LZFSE 压缩：macOS 10.11 起支持（winc 要求 11），比 zlib 解压快、压缩率也更高。
+    // LZFSE 压缩：macOS 10.11 起支持（winct 要求 11），比 zlib 解压快、压缩率也更高。
     run(Command::new("hdiutil")
         .args(["convert", "-quiet", "-format", "ULFO", "-o"])
         .arg(&image)
@@ -313,7 +313,7 @@ fn fill_volume(volume: &Path, app: &Path, background: &Path, icon: &Path) -> Res
 
     let io = |e: std::io::Error| e.to_string();
     // `ditto` 原样保留签名和扩展属性。
-    run(Command::new("ditto").arg(app).arg(volume.join("winc.app")))?;
+    run(Command::new("ditto").arg(app).arg(volume.join("winct.app")))?;
     std::os::unix::fs::symlink("/Applications", volume.join("Applications")).map_err(io)?;
     let hidden = volume.join(".background");
     std::fs::create_dir(&hidden).map_err(io)?;
@@ -323,10 +323,10 @@ fn fill_volume(volume: &Path, app: &Path, background: &Path, icon: &Path) -> Res
     let volume_icon = volume.join(".VolumeIcon.icns");
     std::fs::copy(icon, &volume_icon).map_err(io)?;
     // 卷根目录的 `.metadata_never_index` 使聚焦（Spotlight）不为挂载后的卷建立索引，卷中的
-    // winc.app 不会经由索引登记为应用，「打开方式」等列表中不出现安装包内的副本。
+    // winct.app 不会经由索引登记为应用，「打开方式」等列表中不出现安装包内的副本。
     let never_index = volume.join(".metadata_never_index");
     std::fs::write(&never_index, b"").map_err(io)?;
-    // 不给 winc.app 设「隐藏扩展名」：该标志存在包根目录的文件信息里，装到「应用程序」以后
+    // 不给 winct.app 设「隐藏扩展名」：该标志存在包根目录的文件信息里，装到「应用程序」以后
     // `codesign --verify --strict` 会把这个标志当成多余的附加数据而判定签名无效。
     set_finder_flags(volume, HAS_CUSTOM_ICON)?;
     // 打开「显示隐藏文件」后仍不显示 `.background`、`.VolumeIcon.icns` 和
@@ -385,7 +385,7 @@ fn fill_volume(volume: &Path, app: &Path, background: &Path, icon: &Path) -> Res
         // 用图标视图打开。
         root(b"vstl", Value::Type(*b"icnv")),
         root(b"vSrn", Value::Long(1)),
-        Record::icon_at("winc.app", APP_AT),
+        Record::icon_at("winct.app", APP_AT),
         Record::icon_at("Applications", APPLICATIONS_AT),
     ])?;
     std::fs::write(volume.join(".DS_Store"), store).map_err(io)?;
@@ -866,7 +866,7 @@ const TEXT_EXTENSIONS: &[&str] = &[
 ];
 
 /// Winct 的项目文件（`.winct-project`）的系统类型，由本应用声明（见 [`exported_types`]）。
-const PROJECT_TYPE: &str = "com.deeix.winc.project";
+const PROJECT_TYPE: &str = "com.deeix.winct.project";
 
 /// 生成 `UTExportedTypeDeclarations` 的各项：Winct 的项目文件，遵从 `public.json`。
 fn exported_types() -> String {
@@ -973,7 +973,7 @@ fn document_type<'a>(
 
 /// 生成 `Info.plist`；`arch` 是应用的架构（`arm64` 或 `x86_64`），决定请求哪一份 appcast。
 ///
-/// `CFBundleDocumentTypes` 见 [`document_types`]；`CFBundleURLTypes` 声明 `winc://` 链接。
+/// `CFBundleDocumentTypes` 见 [`document_types`]；`CFBundleURLTypes` 声明 `winct://` 链接。
 /// `NSServices` 声明一项服务「在 Winct 中打开」（见 [`SERVICE_TITLE`]），只针对文本文件
 /// （`public.text`）和文件夹，由应用委托处理，声明了 `NSRequiredContext`，安装后即启用；不安装
 /// 扩展，也不修改任何文件类型的默认打开方式。
@@ -999,7 +999,7 @@ fn info_plist(version: &str, updates: &sparkle::UpdateConfig, arch: &str) -> Str
 			<string>{BUNDLE_ID}</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>winc</string>
+				<string>winct</string>
 			</array>
 		</dict>
 	</array>
@@ -1027,7 +1027,7 @@ fn info_plist(version: &str, updates: &sparkle::UpdateConfig, arch: &str) -> Str
 	<key>CFBundleDisplayName</key>
 	<string>{APP_NAME}</string>
 	<key>CFBundleExecutable</key>
-	<string>winc</string>
+	<string>winct</string>
 	<key>CFBundleIconFile</key>
 	<string>{ICON_NAME}</string>
 	<key>CFBundleIdentifier</key>

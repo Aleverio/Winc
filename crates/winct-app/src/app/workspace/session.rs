@@ -150,7 +150,7 @@ impl App {
     ///
     /// 已经打开了其他目录时先替换：记录当前目录的现场，关闭该目录的标签（有未保存修改的先询问）
     /// 和终端（有程序在运行的先确认），再打开新目录。`path` 就是当前目录时只显示文件树；已在
-    /// 另一个 winc 窗口里打开时切到该窗口。
+    /// 另一个 winct 窗口里打开时切到该窗口。
     ///
     /// `path` 为项目文件时打开项目；其第一个目录已在当前窗口打开时就地载入项目。
     pub(in crate::app) fn switch_folder(&mut self, path: &Path) {
@@ -343,7 +343,7 @@ impl App {
     ///
     /// 打开目录时为应对进程异常中止而记下的 `last` 一并清除：之后再中止，下次启动是开始页。
     pub(in crate::app) fn close_folder_now(&mut self) {
-        // `last` 是别的 winc 进程写的（指向别的目录）时不动，该进程异常中止后仍需用它恢复。
+        // `last` 是别的 winct 进程写的（指向别的目录）时不动，该进程异常中止后仍需用它恢复。
         if let Some(root) = self.session_key() {
             self.update_state(move |state| {
                 if state.last.as_deref() == Some(root.as_path()) {
@@ -549,7 +549,7 @@ impl App {
     /// 修改状态（最近目录、各目录的现场）并写入状态文件；失败时在标准错误输出原因。
     ///
     /// 内存中的状态立即修改；文件由后台重新读出、在其上做同一个修改再写回（见
-    /// [`State::update`]），不会盖掉别的 winc 进程刚写入的内容，写完后内存中的状态换成文件里
+    /// [`State::update`]），不会盖掉别的 winct 进程刚写入的内容，写完后内存中的状态换成文件里
     /// 的（[`App::state_stored`]）。测试和测量时没有状态文件，只改内存；没有事件循环时当场写。
     pub(in crate::app) fn update_state(
         &mut self,
@@ -578,7 +578,7 @@ impl App {
         });
     }
 
-    /// 在后台重新读出状态文件：其他 winc 进程可能修改了最近列表。读不出来时保留内存中的状态。
+    /// 在后台重新读出状态文件：其他 winct 进程可能修改了最近列表。读不出来时保留内存中的状态。
     pub(in crate::app) fn reload_state(&mut self) {
         let Some(path) = self.store.state_path.clone() else {
             return;
@@ -596,7 +596,7 @@ impl App {
         });
     }
 
-    /// 后台读写完了状态文件：内存中的状态换成文件里的，其中有其他 winc 进程写入的内容。
+    /// 后台读写完了状态文件：内存中的状态换成文件里的，其中有其他 winct 进程写入的内容。
     ///
     /// 之后又提交过读写时不换：文件里还没有那些修改，等最后一次的结果。
     pub(in crate::app) fn state_stored(&mut self, request: u64, state: State) {
@@ -727,7 +727,7 @@ impl App {
 /// 状态文件没能写入时在标准错误输出原因。
 fn report_state_error(result: &std::io::Result<()>) {
     if let Err(e) = result {
-        eprintln!("winc: 无法记下最近打开的目录：{e}");
+        eprintln!("winct: 无法记下最近打开的目录：{e}");
     }
 }
 

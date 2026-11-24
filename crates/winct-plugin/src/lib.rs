@@ -1,7 +1,7 @@
 //! Runtime plugin WebAssembly untuk Winct.
 //!
 //! Guest berjalan di Wasmtime dengan fuel terbatas dan hanya bisa memanggil host lewat satu fungsi
-//! `winc.host_call`. Host memeriksa capability sebelum meneruskan request ke [`HostBridge`]. Request
+//! `winct.host_call`. Host memeriksa capability sebelum meneruskan request ke [`HostBridge`]. Request
 //! yang mengubah state tidak langsung menyentuh `App`, melainkan masuk antrean [`HostEffect`] yang
 //! diterapkan oleh `winct-app` setelah panggilan guest selesai. Ini menghindari reentrancy dan
 //! meminjam `App` dua kali.

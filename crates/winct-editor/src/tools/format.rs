@@ -908,7 +908,7 @@ impl Formatter {
         let finished = output.status.success() || (eslint && output.status.code() == Some(1));
         if !finished {
             for line in stderr.lines() {
-                eprintln!("winc: {tool}: {line}");
+                eprintln!("winct: {tool}: {line}");
             }
             let message =
                 summary(&stderr, &tool, &name).unwrap_or_else(|| match output.status.code() {

@@ -43,13 +43,13 @@ thread_local! {
     static CURRENT: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
 }
 
-/// 子菜单尚未读取时占位项的 `tag`，值是 ASCII 字符串 `winc` 的四个字节。
+/// 子菜单尚未读取时占位项的 `tag`，值是 ASCII 字符串 `winct` 的四个字节。
 ///
 /// 子菜单中先放一个占位项，是因为 `AppKit` 不一定会为空菜单询问委托。
 const UNREAD: isize = 0x7769_6e63;
 
 /// 选中文件时的动作名，添加在 `winit` 的应用委托上。
-const OPEN_ACTION: &CStr = c"wincOpenFolderItem:";
+const OPEN_ACTION: &CStr = c"winctOpenFolderItem:";
 
 /// 注册目录菜单的回调：`list` 列出一个目录，选中文件时以其路径调用 `chosen`。
 ///
@@ -217,7 +217,7 @@ extern "C-unwind" fn menu_needs_update(_this: *mut AnyObject, _cmd: Sel, menu: *
     }
 }
 
-/// `- (void)wincOpenFolderItem:(NSMenuItem *)sender`：选中了一个文件，以其路径调用 `chosen` 回调。
+/// `- (void)winctOpenFolderItem:(NSMenuItem *)sender`：选中了一个文件，以其路径调用 `chosen` 回调。
 extern "C-unwind" fn open_item(_this: *mut AnyObject, _cmd: Sel, sender: *mut AnyObject) {
     // SAFETY: 发送者是 `fill` 创建的 NSMenuItem，`representedObject` 是当时放入的 NSURL；
     // 指针为空时不读取（`as_ref` 返回 `None`）。

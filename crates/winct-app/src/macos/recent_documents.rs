@@ -1,6 +1,6 @@
 //! 系统的最近文档列表：程序坞菜单顶部和「最近使用的项目」中列出的最近打开的目录和文件。
 //!
-//! 列表由 `NSDocumentController` 保存，winc 未运行时同样可用；选中其中一项时系统经
+//! 列表由 `NSDocumentController` 保存，winct 未运行时同样可用；选中其中一项时系统经
 //! `application:openURLs:` 把目录交回（见 `on_open_files`）。列表不能单独移除某一项，
 //! 最近列表变化时清空后按顺序重新记入。
 

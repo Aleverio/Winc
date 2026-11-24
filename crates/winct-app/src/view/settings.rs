@@ -696,7 +696,7 @@ fn draw_reset(
     let color = if hovered { p.accent } else { p.text_dim };
     let x = end + 10.0;
     let text = t!("settings-reset");
-    let last = ui_text(frame, app, x, line, &text, color, clip);
+    let last = ui_text(frame, app, x, line, text, color, clip);
     let hit = Rect::new(x - 4.0, line.y, last - x + 8.0, line.h);
     app.hits.reset_links.push((setting, hit));
 }

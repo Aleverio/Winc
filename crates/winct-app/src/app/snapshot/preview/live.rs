@@ -54,7 +54,7 @@ fn the_full_preview_edits_the_document() {
         shown.contains("一个用 Rust 写的") && shown.contains("*启动快*"),
         "{shown}"
     );
-    assert!(!shown.contains("# winc"));
+    assert!(!shown.contains("# winct"));
     assert!((caret_screen_y(&app) - before).abs() < 1.0);
 
     // 输入修改的是文档；重新解析之前，预览已显示刚输入的文字。

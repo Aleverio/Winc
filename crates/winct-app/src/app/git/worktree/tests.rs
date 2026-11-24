@@ -24,10 +24,10 @@ fn branch(name: &str) -> Option<Head> {
 fn the_current_worktree_main_and_held_branches() {
     // 打开的是主工作树：不算附属的，别的工作树签出的分支算被占用。
     let mut git = GitState {
-        root: Some(PathBuf::from("/r/winc")),
+        root: Some(PathBuf::from("/r/winct")),
         worktrees: vec![
-            worktree("/r/winc", branch("main")),
-            worktree("/r/winc.worktrees/feat", branch("feat")),
+            worktree("/r/winct", branch("main")),
+            worktree("/r/winct.worktrees/feat", branch("feat")),
             worktree("/r/fix", Some(Head::Detached("abc1234".into()))),
         ],
         ..GitState::default()
@@ -39,11 +39,11 @@ fn the_current_worktree_main_and_held_branches() {
     assert_eq!(git.worktree_holding("main"), None);
 
     // 打开的是附属工作树：主工作树是第一项，自己签出的分支不算被占用。
-    git.root = Some(PathBuf::from("/r/winc.worktrees/feat"));
+    git.root = Some(PathBuf::from("/r/winct.worktrees/feat"));
     assert_eq!(git.current_worktree(), Some(1));
     assert_eq!(
         git.main_worktree().map(worktree_name).as_deref(),
-        Some("winc")
+        Some("winct")
     );
     assert_eq!(git.held_branches(), ["main"]);
     assert_eq!(git.worktree_holding("feat"), None);
@@ -56,5 +56,5 @@ fn the_current_worktree_main_and_held_branches() {
 
 #[test]
 fn a_worktree_is_named_after_its_folder() {
-    assert_eq!(worktree_name(&worktree("/r/winc.git", None)), "winc");
+    assert_eq!(worktree_name(&worktree("/r/winct.git", None)), "winct");
 }

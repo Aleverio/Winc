@@ -194,7 +194,7 @@ fn search_dirs(root: &Path, config: &Config) -> Vec<PathBuf> {
         }
     };
     push(root.to_path_buf());
-    push(root.join(".winc/lsp"));
+    push(root.join(".winct/lsp"));
     push(root.join("node_modules/.bin"));
     push(root.join(".bin"));
     for dir in &config.lsp_detect_dirs {

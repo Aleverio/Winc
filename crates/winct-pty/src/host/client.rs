@@ -208,7 +208,7 @@ fn read_messages(mut stdout: impl Read, inbox: &Mutex<Inbox>, woken: &AtomicBool
         };
         lock(inbox).messages.extend(batch);
         if let Err(error) = result {
-            eprintln!("winc: {error}");
+            eprintln!("winct: {error}");
             return;
         }
         if !woken.swap(true, Ordering::AcqRel) {

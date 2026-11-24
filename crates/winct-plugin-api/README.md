@@ -8,7 +8,7 @@ host call yang divalidasi terhadap capability yang disetujui user.
 
 1. **Sandbox dulu, izin kemudian.** Modul tidak bisa mengakses FS, network, editor, atau UI sampai
    manifest meminta capability dan user menyetujuinya.
-2. **Satu pintu host call.** Guest hanya mengimpor `winc.host_call(ptr, len, out_ptr, out_cap)`.
+2. **Satu pintu host call.** Guest hanya mengimpor `winct.host_call(ptr, len, out_ptr, out_cap)`.
    Body request adalah JSON `HostRequest`; balasan adalah JSON `HostReply`. Ini membuat ABI mudah
    diveresikan tanpa menambah import baru tiap fitur.
 3. **Kontribusi deklaratif.** Saat aktivasi plugin mengembalikan command, setting, status item,

@@ -8,9 +8,9 @@ try {
         throw "Icon generation failed with exit code $LASTEXITCODE."
     }
 
-    Copy-Item target\icon-preview\winc.ico crates\winct-app\assets\winc.ico -Force
+    Copy-Item target\icon-preview\winct.ico crates\winct-app\assets\winct.ico -Force
 
-    cargo run -p winc
+    cargo run -p winct
     if ($LASTEXITCODE -ne 0) {
         throw "Winct exited with code $LASTEXITCODE."
     }

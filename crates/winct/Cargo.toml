@@ -1,6 +1,6 @@
 [package]
 name = "winct"
-description = "winc 可执行文件的入口，程序的实现在 winct-app 中。"
+description = "winct 可执行文件的入口，程序的实现在 winct-app 中。"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true

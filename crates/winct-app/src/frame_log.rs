@@ -1,6 +1,6 @@
 //! 帧日志：设置环境变量 `WINCT_FRAME_LOG` 后，每隔 [`REPORT_EVERY`] 向标准错误输出一行绘制统计。
 //!
-//! 用于排查卡顿和掉帧：在终端中启动 winc，复现问题后附上输出。只统计实际绘制的帧；画面静止、
+//! 用于排查卡顿和掉帧：在终端中启动 winct，复现问题后附上输出。只统计实际绘制的帧；画面静止、
 //! 不绘制时不输出。
 //!
 //! 另记录鼠标移动到画面更新的间隔、查询光标下的窗口的耗时、跳过的帧数和被系统收回的呈现缓冲数。
@@ -119,7 +119,7 @@ impl FrameLog {
         };
         let (queries, query_time) = self.queries.take();
         eprintln!(
-            "winc frame-log: frames={} draw_p50_ms={:.2} draw_p95_ms={:.2} draw_max_ms={:.2} \
+            "winct frame-log: frames={} draw_p50_ms={:.2} draw_p95_ms={:.2} draw_max_ms={:.2} \
              slow_frames={} refresh_ms={:.2} size={}x{} pointer_moves={} \
              pointer_to_frame_p50_ms={:.2} pointer_to_frame_p95_ms={:.2} \
              pointer_to_frame_max_ms={:.2} window_queries={} window_query_total_ms={:.2} \

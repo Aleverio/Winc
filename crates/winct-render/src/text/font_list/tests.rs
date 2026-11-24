@@ -25,7 +25,7 @@ fn families_are_sorted_and_deduplicated_ignoring_how_names_are_written() {
 
 #[test]
 fn an_unknown_or_blank_name_finds_no_family() {
-    for name in ["", " - _", "winc 不存在的字体 42"] {
+    for name in ["", " - _", "winct 不存在的字体 42"] {
         assert_eq!(find_family(name), None, "{name:?}");
     }
 }

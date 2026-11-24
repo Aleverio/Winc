@@ -239,16 +239,16 @@ fn only_http_sign_ins_can_be_remembered() {
     assert_eq!(origin("Password for 'ftp://example.com': "), None);
 }
 
-/// 用真实的 `git` 和已构建的 winc 程序走完凭据助手协议：没有保存时询问，验证通过后保存，再次
+/// 用真实的 `git` 和已构建的 winct 程序走完凭据助手协议：没有保存时询问，验证通过后保存，再次
 /// 需要时直接提供，被拒绝后删除。
 ///
-/// 使用测试程序同一构建目录中的 winc，需要先运行 `cargo build`；没有 `git` 或 winc 时跳过。
+/// 使用测试程序同一构建目录中的 winct，需要先运行 `cargo build`；没有 `git` 或 winct 时跳过。
 #[test]
-#[ignore = "依赖已构建的 winc 程序，手动运行"]
+#[ignore = "依赖已构建的 winct 程序，手动运行"]
 fn git_stores_and_reuses_a_credential_through_the_helper() {
     use std::process::{Command, Stdio};
 
-    let name = format!("winc{}", std::env::consts::EXE_SUFFIX);
+    let name = format!("winct{}", std::env::consts::EXE_SUFFIX);
     let Some(program) = std::env::current_exe()
         .ok()
         .and_then(|test| Some(test.parent()?.parent()?.join(name)))

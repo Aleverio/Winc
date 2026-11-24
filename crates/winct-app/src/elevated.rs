@@ -1,4 +1,4 @@
-//! 以管理员身份保存：保存被系统拒绝时，经系统的授权对话框以管理员身份运行 winc 自身，只把一个
+//! 以管理员身份保存：保存被系统拒绝时，经系统的授权对话框以管理员身份运行 winct 自身，只把一个
 //! 临时文件的内容写进目标文件，写完即退出。
 //!
 //! 写入进程（[`helper`]）只接受 [`ARG`]、内容文件、目标文件和目标的身份（Unix），不执行其他
@@ -213,7 +213,7 @@ fn write_in_place(copy: &Path, target: &Path) -> io::Result<()> {
 
 /// 保存 `path` 失败、原因为 `error` 时能否以管理员身份重试：是本机的文件，且是系统拒绝了写入。
 ///
-/// 文档只读等 winc 自己的拒绝不算；远端主机上和 WSL 发行版中的文件不经本机的管理员权限。
+/// 文档只读等 winct 自己的拒绝不算；远端主机上和 WSL 发行版中的文件不经本机的管理员权限。
 pub fn can_retry(path: &Path, error: &io::Error) -> bool {
     error.kind() == io::ErrorKind::PermissionDenied
         && error.raw_os_error().is_some()
@@ -291,7 +291,7 @@ pub fn write(copy: &Path, target: &Path, owner: Owner) -> io::Result<()> {
     }
 }
 
-/// 写入进程的程序：winc 自身。
+/// 写入进程的程序：winct 自身。
 ///
 /// 以 AppImage 运行时是 AppImage 文件：程序本身在只有当前用户能访问的挂载目录里，管理员身份
 /// 的进程打不开它。
@@ -342,7 +342,7 @@ fn run_as_admin(exe: &Path, args: &[OsString], owner: Owner, _: &str) -> Result<
     let mut info: SHELLEXECUTEINFOW = unsafe { std::mem::zeroed() };
     info.cbSize = size_of::<SHELLEXECUTEINFOW>() as u32;
     info.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI;
-    // 对话框属于 winc 的窗口，出现在它前面，不只在任务栏上闪烁。
+    // 对话框属于 winct 的窗口，出现在它前面，不只在任务栏上闪烁。
     info.hwnd = owner.0 as _;
     info.lpVerb = verb.as_ptr();
     info.lpFile = file.as_ptr();
@@ -551,7 +551,7 @@ mod tests {
         let os_denied = io::Error::from_raw_os_error(if cfg!(windows) { 5 } else { 13 });
         let local = Path::new("/etc/hosts");
         assert!(can_retry(local, &os_denied));
-        // winc 自己的拒绝（文档只读）不是系统的拒绝。
+        // winct 自己的拒绝（文档只读）不是系统的拒绝。
         assert!(!can_retry(local, &denied));
         assert!(!can_retry(local, &io::Error::other("full")));
         let target = winct_backend::Target::new("host").unwrap();
@@ -567,8 +567,8 @@ mod tests {
             String::from_utf16(&out).unwrap()
         };
         assert_eq!(
-            quoted(r"C:\Program Files\Winct\winc.exe"),
-            r#""C:\Program Files\Winct\winc.exe""#
+            quoted(r"C:\Program Files\Winct\winct.exe"),
+            r#""C:\Program Files\Winct\winct.exe""#
         );
         assert_eq!(quoted(r"C:\dir\"), r#""C:\dir\\""#);
         assert_eq!(quoted(r#"a"b"#), r#""a\"b""#);

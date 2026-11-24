@@ -21,7 +21,7 @@ type Tick = Arc<dyn Fn() + Send + Sync>;
 /// 每个窗口的显示链接各叫各的窗口重画。
 static TICKS: Mutex<Vec<(usize, Tick)>> = Mutex::new(Vec::new());
 
-/// 实现 `- (void)wincFrame:(CADisplayLink *)link`：屏幕每次刷新时推进动画。
+/// 实现 `- (void)winctFrame:(CADisplayLink *)link`：屏幕每次刷新时推进动画。
 extern "C-unwind" fn frame(this: *mut AnyObject, _cmd: Sel, _link: *mut AnyObject) {
     #[cfg(test)]
     tests::FRAMES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -87,7 +87,7 @@ impl DisplayLink {
         unsafe {
             let target: Retained<AnyObject> = msg_send![target_class()?, new];
             let link: *mut AnyObject =
-                msg_send![view, displayLinkWithTarget: &*target, selector: sel!(wincFrame:)];
+                msg_send![view, displayLinkWithTarget: &*target, selector: sel!(winctFrame:)];
             let link = Retained::retain(link)?;
             let key = Retained::as_ptr(&target) as usize;
             TICKS.lock().ok()?.push((key, Arc::new(tick)));
@@ -154,7 +154,7 @@ unsafe fn schedule(link: &AnyObject, run_loop: *mut AnyObject) {
     }
 }
 
-/// 返回接收显示链接回调的类：`NSObject` 的子类，只添加一个方法 `wincFrame:`；类注册失败时
+/// 返回接收显示链接回调的类：`NSObject` 的子类，只添加一个方法 `winctFrame:`；类注册失败时
 /// 返回 `None`。
 fn target_class() -> Option<&'static AnyClass> {
     static CLASS: OnceLock<Option<&'static AnyClass>> = OnceLock::new();
@@ -162,7 +162,7 @@ fn target_class() -> Option<&'static AnyClass> {
         let mut builder = ClassBuilder::new(c"WinctFrameTarget", class!(NSObject))?;
         type Frame = extern "C-unwind" fn(*mut AnyObject, Sel, *mut AnyObject);
         // SAFETY: 方法的签名与 `Frame` 一致（返回 void，参数为 self、_cmd、link）。
-        unsafe { builder.add_method(sel!(wincFrame:), frame as Frame) };
+        unsafe { builder.add_method(sel!(winctFrame:), frame as Frame) };
         Some(builder.register())
     })
 }

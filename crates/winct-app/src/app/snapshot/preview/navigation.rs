@@ -170,7 +170,7 @@ fn preview_text_can_be_selected_and_copied() {
     assert!(press(&mut app, &["cmd"], Char('c')));
     let all = app.clipboard.copied.clone().unwrap();
     assert!(
-        all.starts_with("winc 编辑器\n一个用 Rust 写的轻量编辑器，启动快"),
+        all.starts_with("winct 编辑器\n一个用 Rust 写的轻量编辑器，启动快"),
         "{all}"
     );
     assert!(all.contains("混排时按字换行，链接比如 GitHub 和 安装。"));
@@ -379,7 +379,7 @@ fn the_preview_font_setting_changes_only_the_preview_body() {
     let (mut app, dir) = readme("md-font", false, PreviewMode::Split);
     let widths = |app: &App| {
         let renderer = app.frame.renderer.as_ref().unwrap();
-        let width = |kind| renderer.measure(kind, 13.0, "winc 编辑器 Preview");
+        let width = |kind| renderer.measure(kind, 13.0, "winct 编辑器 Preview");
         (width(FontKind::Prose), width(FontKind::Ui))
     };
     let (body, ui) = widths(&app);

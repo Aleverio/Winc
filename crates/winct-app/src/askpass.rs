@@ -1,7 +1,7 @@
-//! `git`、`ssh` 的输入请求通道：winc 自身作为 askpass 程序（`GIT_ASKPASS`、`SSH_ASKPASS`）运行。
+//! `git`、`ssh` 的输入请求通道：winct 自身作为 askpass 程序（`GIT_ASKPASS`、`SSH_ASKPASS`）运行。
 //!
 //! askpass 程序（[`helper`]）以提示文字为参数启动，连接窗口进程监听的本地端点（[`Listener`]），转发
-//! 提示和答复。勾选「记住密码」时，winc 还作为排在最后的凭据助手（`git-credential` 协议）把 HTTP(S)
+//! 提示和答复。勾选「记住密码」时，winct 还作为排在最后的凭据助手（`git-credential` 协议）把 HTTP(S)
 //! 凭据写入系统的凭据存储（[`crate::credentials`]）。请求：一个字节类型（0 普通询问，1 `confirm`
 //! 询问，2 凭据助手请求）、`u32` 小端长度和文字；答复：一个字节（1 有内容，0 取消或无结果），有内容
 //! 时再跟 `u32` 小端长度和文字。套接字限当前用户访问，命名管道拒绝其他主机的连接。
@@ -205,7 +205,7 @@ pub const CONFIRMED: &str = "yes";
 /// 进程作为 askpass 程序或凭据助手启动时转发请求并返回退出码；普通启动时返回 `None`。
 ///
 /// 环境变量只在 Git 操作的命令上设置，但钩子会继承该变量，因此同时要求参数的形式相符：恰好一个
-/// 参数（提示文字），或 [`CREDENTIAL_HELPER_ARG`] 加一个动作。钩子中以其他参数运行 `winc` 仍按
+/// 参数（提示文字），或 [`CREDENTIAL_HELPER_ARG`] 加一个动作。钩子中以其他参数运行 `winct` 仍按
 /// 普通启动处理。
 pub fn helper() -> Option<i32> {
     let endpoint = std::env::var_os(ASKPASS_ENDPOINT)?;
@@ -507,7 +507,7 @@ mod imp {
     ) -> Option<OsString> {
         let user = std::env::var("USERNAME").unwrap_or_default();
         let endpoint = OsString::from(format!(
-            r"\\.\pipe\winc-{user}-askpass-{}-{}",
+            r"\\.\pipe\winct-{user}-askpass-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));

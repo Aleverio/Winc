@@ -102,7 +102,7 @@ fn detect_shells(target: &Target) {
     let mut exec = Exec::new("sh")
         .arg("-c")
         .arg(crate::app::terminal::shells::REMOTE_DETECT)
-        .arg("winc");
+        .arg("winct");
     for path in crate::app::terminal::shells::remote_candidates() {
         exec = exec.arg(path);
     }
@@ -129,7 +129,7 @@ fn install_shell_scripts(target: &Target) {
     let mut exec = Exec::new("sh")
         .arg("-c")
         .arg(INSTALL_SHELL)
-        .arg("winc")
+        .arg("winct")
         .arg(winct_pty::scripts::REMOTE_DIR);
     for (name, content) in winct_pty::scripts::remote() {
         exec = exec.arg(name).arg(content.as_ref());

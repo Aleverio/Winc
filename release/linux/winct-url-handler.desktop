@@ -1,9 +1,9 @@
 [Desktop Entry]
 Name=Winct
-Comment=Open winc:// links in Winct
-Exec=winc %u
-Icon=winc
+Comment=Open winct:// links in Winct
+Exec=winct %u
+Icon=winct
 Type=Application
 NoDisplay=true
 Terminal=false
-MimeType=x-scheme-handler/winc;
+MimeType=x-scheme-handler/winct;

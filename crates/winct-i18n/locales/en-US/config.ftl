@@ -8,7 +8,7 @@ config-project-read-failed = Couldn’t read ({ $error }); ignored
 config-project-invalid-json = Not a valid JSON object; ignored
 config-project-unsupported-key = Project settings support only format; ignored { $key }
 
-## 运行配置（.winc/run.json）。
+## 运行配置（.winct/run.json）。
 
 config-run-read-failed = Couldn’t read ({ $error }); ignored
 config-run-invalid-json = Invalid file format: expected a JSON object with a configurations array; ignored

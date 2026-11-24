@@ -55,7 +55,7 @@ pub(crate) fn labels(folders: &[PathBuf]) -> Vec<String> {
         .collect()
 }
 
-/// 返回在 Windows 上把目录 `folder` 作为单个命令行参数传给 winc 的写法：两侧加引号。
+/// 返回在 Windows 上把目录 `folder` 作为单个命令行参数传给 winct 的写法：两侧加引号。
 ///
 /// 结尾的反斜杠后面紧跟引号时，引号会被当作转义的字面量；因此把结尾的反斜杠写两遍（如盘符的
 /// 根目录 `C:\`）。Windows 的路径中不含引号，无需其他转义。

@@ -11,7 +11,7 @@ fn u32_at(bytes: &[u8], at: usize) -> u32 {
 #[test]
 fn ds_store_reads_back() {
     let records = vec![
-        Record::icon_at("winc.app", (160, 176)),
+        Record::icon_at("winct.app", (160, 176)),
         Record {
             name: ".".into(),
             code: *b"vSrn",
@@ -69,7 +69,7 @@ fn ds_store_reads_back() {
             (".", "icvl"),
             (".", "vSrn"),
             ("Applications", "Iloc"),
-            ("winc.app", "Iloc")
+            ("winct.app", "Iloc")
         ]
     );
 
@@ -142,9 +142,9 @@ fn bplist_is_understood_by_plutil() {
 #[test]
 fn pascal_strings_fill_their_field() {
     let mut out = Vec::new();
-    pascal(&mut out, "winc", 28);
+    pascal(&mut out, "winct", 28);
     assert_eq!(out.len(), 28);
-    assert_eq!(&out[..5], b"\x04winc");
+    assert_eq!(&out[..6], b"\x05winct");
     let mut out = Vec::new();
     pascal(&mut out, &"文".repeat(30), 28);
     assert_eq!(out.len(), 28);

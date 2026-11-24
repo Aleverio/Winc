@@ -11,11 +11,11 @@ fn sandbox() -> (std::path::PathBuf, Placement) {
     let serial = NEXT.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!("winct-shell-{}-{serial}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let target = dir.join("Winct.app/Contents/MacOS/winc");
+    let target = dir.join("Winct.app/Contents/MacOS/winct");
     std::fs::create_dir_all(target.parent().unwrap()).unwrap();
     std::fs::write(&target, "").unwrap();
     let placement = Placement {
-        link: dir.join("bin/winc"),
+        link: dir.join("bin/winct"),
         target,
     };
     (dir, placement)
@@ -23,23 +23,23 @@ fn sandbox() -> (std::path::PathBuf, Placement) {
 
 #[test]
 fn only_the_app_bundle_gets_a_link_on_macos() {
-    let bundled = Path::new("/Applications/My Apps/winc.app/Contents/MacOS/winc");
+    let bundled = Path::new("/Applications/My Apps/winct.app/Contents/MacOS/winct");
     let placement = macos_placement(bundled).unwrap();
-    assert_eq!(placement.link, Path::new("/usr/local/bin/winc"));
+    assert_eq!(placement.link, Path::new("/usr/local/bin/winct"));
     assert_eq!(placement.target, bundled);
     // 开发构建不在应用包内。
-    assert_eq!(macos_placement(Path::new("/repo/target/debug/winc")), None);
-    assert_eq!(macos_placement(Path::new("/x/Contents/MacOS/winc")), None);
+    assert_eq!(macos_placement(Path::new("/repo/target/debug/winct")), None);
+    assert_eq!(macos_placement(Path::new("/x/Contents/MacOS/winct")), None);
 }
 
 #[test]
 fn the_appimage_links_into_the_home_directory() {
     let placement =
-        appimage_placement(Path::new("/opt/winc.AppImage"), Path::new("/home/a")).unwrap();
-    assert_eq!(placement.link, Path::new("/home/a/.local/bin/winc"));
-    assert_eq!(placement.target, Path::new("/opt/winc.AppImage"));
+        appimage_placement(Path::new("/opt/winct.AppImage"), Path::new("/home/a")).unwrap();
+    assert_eq!(placement.link, Path::new("/home/a/.local/bin/winct"));
+    assert_eq!(placement.target, Path::new("/opt/winct.AppImage"));
     assert_eq!(
-        appimage_placement(Path::new("winc"), Path::new("/home/a")),
+        appimage_placement(Path::new("winct"), Path::new("/home/a")),
         None
     );
 }
@@ -52,11 +52,11 @@ fn install_creates_the_directory_and_replaces_its_own_link() {
         std::fs::read_link(&placement.link).unwrap(),
         placement.target
     );
-    assert!(!placement.link.with_file_name(".winc.tmp").exists());
+    assert!(!placement.link.with_file_name(".winct.tmp").exists());
 
     // 应用移动后再次安装：指向旧位置的链接被替换。
     std::fs::remove_file(&placement.link).unwrap();
-    let old = dir.join("Old.app/Contents/MacOS/winc");
+    let old = dir.join("Old.app/Contents/MacOS/winct");
     std::os::unix::fs::symlink(&old, &placement.link).unwrap();
     assert_eq!(install(&placement), Outcome::Installed);
     assert_eq!(
@@ -119,18 +119,18 @@ fn a_read_only_directory_asks_for_authorization() {
 #[test]
 fn the_authorized_script_quotes_paths() {
     let placement = Placement {
-        link: "/usr/local/bin/winc".into(),
-        target: "/Applications/Bob's \"Apps\"/winc.app/Contents/MacOS/winc".into(),
+        link: "/usr/local/bin/winct".into(),
+        target: "/Applications/Bob's \"Apps\"/winct.app/Contents/MacOS/winct".into(),
     };
     let command = authorized_command(&placement, true);
     assert_eq!(
         command,
         "/bin/mkdir -p /usr/local/bin && /bin/ln -sfn \
-         '/Applications/Bob'\\''s \"Apps\"/winc.app/Contents/MacOS/winc' /usr/local/bin/winc"
+         '/Applications/Bob'\\''s \"Apps\"/winct.app/Contents/MacOS/winct' /usr/local/bin/winct"
     );
     assert_eq!(
         authorized_command(&placement, false),
-        "/bin/rm -f /usr/local/bin/winc"
+        "/bin/rm -f /usr/local/bin/winct"
     );
     // AppleScript 字符串内的反斜杠和双引号要转义。
     assert_eq!(
@@ -172,9 +172,9 @@ fn launching_a_bundle_passes_absolute_targets() {
         line,
         col,
     };
-    let bundle = Path::new("/Applications/My Apps/winc.app");
+    let bundle = Path::new("/Applications/My Apps/winct.app");
     let none = open_arguments(bundle, &Args::default());
-    assert_eq!(none, ["-n", "-a", "/Applications/My Apps/winc.app"]);
+    assert_eq!(none, ["-n", "-a", "/Applications/My Apps/winct.app"]);
 
     let args = Args {
         targets: vec![
@@ -236,7 +236,7 @@ fn relative_links_belong_to_other_programs() {
     let (dir, placement) = sandbox();
     let bin = placement.link.parent().unwrap();
     std::fs::create_dir_all(bin).unwrap();
-    std::os::unix::fs::symlink("../Cellar/other/1.0/bin/winc", &placement.link).unwrap();
+    std::os::unix::fs::symlink("../Cellar/other/1.0/bin/winct", &placement.link).unwrap();
     assert_eq!(install(&placement), Outcome::Occupied);
     assert_eq!(uninstall(&placement), Outcome::Occupied);
     assert!(std::fs::symlink_metadata(&placement.link).is_ok());
@@ -254,7 +254,7 @@ fn a_failed_install_leaves_no_temporary_link() {
     std::fs::set_permissions(bin, std::fs::Permissions::from_mode(0o555)).unwrap();
     let _ = install(&placement);
     std::fs::set_permissions(bin, std::fs::Permissions::from_mode(0o755)).unwrap();
-    assert!(std::fs::symlink_metadata(placement.link.with_file_name(".winc.tmp")).is_err());
+    assert!(std::fs::symlink_metadata(placement.link.with_file_name(".winct.tmp")).is_err());
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -279,16 +279,16 @@ fn a_display_is_needed_to_go_to_the_background() {
     assert!(has_display(None, Some(OsStr::new("wayland-0"))));
 }
 
-/// 只有程序位于 `APPDIR` 内才算 AppImage：内置终端里运行其他安装方式的 `winc` 时变量同样存在。
+/// 只有程序位于 `APPDIR` 内才算 AppImage：内置终端里运行其他安装方式的 `winct` 时变量同样存在。
 #[test]
 fn inherited_appimage_variables_are_ignored() {
     use std::ffi::OsStr;
-    let image = Some(OsStr::new("/opt/winc.AppImage"));
-    let mount = Some(OsStr::new("/tmp/.mount_winc"));
+    let image = Some(OsStr::new("/opt/winct.AppImage"));
+    let mount = Some(OsStr::new("/tmp/.mount_winct"));
     assert_eq!(
-        appimage_of(Path::new("/tmp/.mount_winc/usr/bin/winc"), mount, image),
-        Some("/opt/winc.AppImage".into())
+        appimage_of(Path::new("/tmp/.mount_winct/usr/bin/winct"), mount, image),
+        Some("/opt/winct.AppImage".into())
     );
-    assert_eq!(appimage_of(Path::new("/usr/bin/winc"), mount, image), None);
-    assert_eq!(appimage_of(Path::new("/usr/bin/winc"), None, image), None);
+    assert_eq!(appimage_of(Path::new("/usr/bin/winct"), mount, image), None);
+    assert_eq!(appimage_of(Path::new("/usr/bin/winct"), None, image), None);
 }

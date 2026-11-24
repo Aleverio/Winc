@@ -3,7 +3,7 @@
 //!
 //! 手动运行：`WINCT_MEMORY_REPO=<仓库的本地克隆> cargo test --release -p winct-app --lib --
 //! measure_window_memory --ignored --nocapture`；打开的是该变量指向的仓库。
-//! 不直接打开本仓库，因为它开在 winc 窗口里时请求会被交给那个窗口，测不到占用；未设置时跳过。
+//! 不直接打开本仓库，因为它开在 winct 窗口里时请求会被交给那个窗口，测不到占用；未设置时跳过。
 
 #![allow(unsafe_code)] // 读进程的物理内存（proc_pid_rusage）
 

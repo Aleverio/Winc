@@ -6,10 +6,10 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf -- "$tmp"' EXIT
 
-export WINCTT_HOME="$tmp/source-home"
-export WINCTT_BIN="$tmp/source-bin"
+export WINCT_HOME="$tmp/source-home"
+export WINCT_BIN="$tmp/source-bin"
 export XDG_DATA_HOME="$tmp/source-xdg"
-mkdir -p "$WINCTT_HOME" "$WINCTT_BIN" "$XDG_DATA_HOME"
+mkdir -p "$WINCT_HOME" "$WINCT_BIN" "$XDG_DATA_HOME"
 
 # The source guard in runtime.sh keeps main() from running here.
 source "$root/release/runtime/runtime.sh"
@@ -118,9 +118,9 @@ extracts_appimage_and_launches_it() {
 #!/bin/sh
 if [ "$1" = "--appimage-extract" ]; then
   mkdir -p squashfs-root/usr/bin
-  printf '#!/bin/sh\n[ "$1" = "--version" ] && printf 1.2.3\\n' > squashfs-root/usr/bin/winc
-  chmod +x squashfs-root/usr/bin/winc
-  cp squashfs-root/usr/bin/winc squashfs-root/usr/bin/winct-pty
+  printf '#!/bin/sh\n[ "$1" = "--version" ] && printf 1.2.3\\n' > squashfs-root/usr/bin/winct
+  chmod +x squashfs-root/usr/bin/winct
+  cp squashfs-root/usr/bin/winct squashfs-root/usr/bin/winct-pty
   exit 0
 fi
 printf '1.2.3\n'
@@ -129,14 +129,14 @@ SCRIPT
   mkdir -p "$stage"
   ASSET_KIND=appimage
   extract "$asset" "$stage"
-  [[ -x $stage/app/winc && -x $stage/app/winct-pty && -x $stage/app/usr/bin/winc ]]
+  [[ -x $stage/app/winct && -x $stage/app/winct-pty && -x $stage/app/usr/bin/winct ]]
 
   mkdir -p "$HOME_DIR/releases/1.2.3"
   mv "$stage/app" "$HOME_DIR/releases/1.2.3/app"
   switch_to 1.2.3 ''
   install_launcher
   [[ $("$BIN_DIR/winct" --version) == 1.2.3 ]]
-  [[ $("$BIN_DIR/winc" --version) == 1.2.3 ]]
+  [[ $("$BIN_DIR/winct" --version) == 1.2.3 ]]
   grep -q 'LD_LIBRARY_PATH' "$BIN_DIR/winct"
   grep -q '^Name=Winct$' "$DESKTOP_DIR/winct.desktop"
 }
@@ -174,15 +174,15 @@ staging_directory_is_cleaned_up() {
 compatibility_launcher_follows_symlinks() {
   new_home
   mkdir -p "$HOME_DIR/releases/1.2.3/app"
-  cat > "$HOME_DIR/releases/1.2.3/app/winc" <<'SCRIPT'
+  cat > "$HOME_DIR/releases/1.2.3/app/winct" <<'SCRIPT'
 #!/bin/sh
 printf '1.2.3\n'
 SCRIPT
-  chmod +x "$HOME_DIR/releases/1.2.3/app/winc"
+  chmod +x "$HOME_DIR/releases/1.2.3/app/winct"
   switch_to 1.2.3 ''
   install_launcher
-  ln -s "$BIN_DIR/winc" "$tmp/linked-winc"
-  [[ $("$tmp/linked-winc" --version) == 1.2.3 ]]
+  ln -s "$BIN_DIR/winct" "$tmp/linked-winct"
+  [[ $("$tmp/linked-winct" --version) == 1.2.3 ]]
 }
 
 global_channel_option_is_accepted() {

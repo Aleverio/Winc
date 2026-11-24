@@ -355,7 +355,7 @@ fn links_to_headings_in_other_files_open_there() {
 fn headings_get_github_anchors() {
     use crate::view::preview::markdown::tests::slug;
     assert_eq!(slug("Getting Started!"), "getting-started");
-    assert_eq!(slug("安装 winc"), "安装-winc");
+    assert_eq!(slug("安装 winct"), "安装-winct");
     assert_eq!(slug("a_b-c"), "a_b-c");
 }
 
@@ -803,7 +803,7 @@ fn shoot_markdown_reveal() {
     for (needle, name) in [
         ("Rust", "bold"),
         ("GitHub", "link"),
-        ("winc 编辑器", "heading"),
+        ("winct 编辑器", "heading"),
         ("cargo xtask", "code"),
     ] {
         put_caret(&mut app, needle, false);

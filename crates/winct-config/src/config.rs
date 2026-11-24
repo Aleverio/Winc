@@ -74,7 +74,7 @@ pub struct Config {
     pub ui_animation_speed: Option<u16>,
     /// 是否用系统的标题栏（配置中的 `"titleBarStyle": "native"`）。
     ///
-    /// 写成 `"custom"` 或没写时，窗口按钮在 winc 的顶栏中绘制。只影响 macOS 以外的平台。
+    /// 写成 `"custom"` 或没写时，窗口按钮在 winct 的顶栏中绘制。只影响 macOS 以外的平台。
     pub ui_native_title_bar: Option<bool>,
     /// 是否播放界面的过渡动画（面板、弹出层、列表的变化）。
     ///
@@ -251,7 +251,7 @@ pub struct Config {
     pub terminal_shell_integration: Option<bool>,
     /// 关闭还有程序在运行的终端标签前是否先确认，默认为是。
     pub terminal_confirm_close: Option<bool>,
-    /// 用户自己没设提示符时，终端里换成 winc 的提示符（目录、Git 分支、上一条命令的成败），ls 带
+    /// 用户自己没设提示符时，终端里换成 winct 的提示符（目录、Git 分支、上一条命令的成败），ls 带
     /// 颜色，zsh 的补全用菜单；默认为是。
     pub terminal_prompt: Option<bool>,
     /// 终端里选中文字（拖选、双击、三击）松开时自动复制，默认为否。
@@ -982,7 +982,7 @@ pub struct Backup {
 ///
 /// - macOS：`~/Library/Application Support/winct/config.json`
 /// - Linux：`$XDG_CONFIG_HOME/winct/config.json`，未设置时为 `~/.config/winct/config.json`
-/// - Windows：`%APPDATA%\winc\config.json`，未设置时使用 `HOME` 环境变量指向的目录；便携版放在
+/// - Windows：`%APPDATA%\winct\config.json`，未设置时使用 `HOME` 环境变量指向的目录；便携版放在
 ///   便携数据目录中（见 [`crate::files::portable_dir`]）
 ///
 /// 不读取系统级配置（如 `/etc/winct/config.json`）：只支持用户级配置。

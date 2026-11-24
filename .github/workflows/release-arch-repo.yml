@@ -30,27 +30,27 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-          WINC_ARCH_SIGNING_FINGERPRINT: ${{ secrets.WINC_ARCH_SIGNING_FINGERPRINT }}
-          WINC_ARCH_SIGNING_PRIVATE_KEY: ${{ secrets.WINC_ARCH_SIGNING_PRIVATE_KEY }}
-          WINC_ARCH_SIGNING_PASSPHRASE: ${{ secrets.WINC_ARCH_SIGNING_PASSPHRASE }}
+          WINCT_ARCH_SIGNING_FINGERPRINT: ${{ secrets.WINCT_ARCH_SIGNING_FINGERPRINT }}
+          WINCT_ARCH_SIGNING_PRIVATE_KEY: ${{ secrets.WINCT_ARCH_SIGNING_PRIVATE_KEY }}
+          WINCT_ARCH_SIGNING_PASSPHRASE: ${{ secrets.WINCT_ARCH_SIGNING_PASSPHRASE }}
         run: |
-          : "${WINC_ARCH_SIGNING_PRIVATE_KEY:?Set the WINC_ARCH_SIGNING_PRIVATE_KEY repository secret}"
-          : "${WINC_ARCH_SIGNING_PASSPHRASE:?Set the WINC_ARCH_SIGNING_PASSPHRASE repository secret}"
-          : "${WINC_ARCH_SIGNING_FINGERPRINT:?Set the WINC_ARCH_SIGNING_FINGERPRINT repository secret}"
+          : "${WINCT_ARCH_SIGNING_PRIVATE_KEY:?Set the WINCT_ARCH_SIGNING_PRIVATE_KEY repository secret}"
+          : "${WINCT_ARCH_SIGNING_PASSPHRASE:?Set the WINCT_ARCH_SIGNING_PASSPHRASE repository secret}"
+          : "${WINCT_ARCH_SIGNING_FINGERPRINT:?Set the WINCT_ARCH_SIGNING_FINGERPRINT repository secret}"
           umask 077
           GNUPGHOME=$(mktemp -d)
           export GNUPGHOME
           trap 'gpgconf --kill all || true; rm -rf -- "$GNUPGHOME"' EXIT
           # repo-add 调用 gpg 时也使用临时目录中的非交互签名配置。
-          printf '%s\n' "$WINC_ARCH_SIGNING_PASSPHRASE" > "$GNUPGHOME/passphrase"
+          printf '%s\n' "$WINCT_ARCH_SIGNING_PASSPHRASE" > "$GNUPGHOME/passphrase"
           printf 'batch\npinentry-mode loopback\npassphrase-file %s\n' "$GNUPGHOME/passphrase" > "$GNUPGHOME/gpg.conf"
-          printf '%s\n' "$WINC_ARCH_SIGNING_PRIVATE_KEY" | gpg --import
-          unset WINC_ARCH_SIGNING_PRIVATE_KEY WINC_ARCH_SIGNING_PASSPHRASE
-          bash release/linux/arch/prepare-repo.sh --tag "$RELEASE_TAG" --out target/winc-arch-repo
+          printf '%s\n' "$WINCT_ARCH_SIGNING_PRIVATE_KEY" | gpg --import
+          unset WINCT_ARCH_SIGNING_PRIVATE_KEY WINCT_ARCH_SIGNING_PASSPHRASE
+          bash release/linux/arch/prepare-repo.sh --tag "$RELEASE_TAG" --out target/winct-arch-repo
       - uses: actions/upload-artifact@v7
         with:
-          name: winc-arch-repo-${{ github.event.release.tag_name }}
-          path: target/winc-arch-repo
+          name: winct-arch-repo-${{ github.event.release.tag_name }}
+          path: target/winct-arch-repo
           compression-level: 0
           if-no-files-found: error
           overwrite: true
@@ -60,8 +60,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          archive="target/winc-arch-repo-${RELEASE_TAG}.zip"
+          archive="target/winct-arch-repo-${RELEASE_TAG}.zip"
           # 签名阶段使用私有权限，部署文件需要允许静态服务器读取。
-          chmod -R u=rwX,go=rX target/winc-arch-repo
-          bsdtar --format zip -cf "$archive" -C target/winc-arch-repo .
+          chmod -R u=rwX,go=rX target/winct-arch-repo
+          bsdtar --format zip -cf "$archive" -C target/winct-arch-repo .
           gh release upload "$RELEASE_TAG" "$archive" --repo "$GH_REPO" --clobber

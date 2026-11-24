@@ -480,7 +480,7 @@ fn a_folder_on_a_connected_host_opens_as_the_workspace() {
         dialog.third.set_text("");
         dialog.third.insert(text);
     };
-    fill(&mut app, "/winc/no/such/key");
+    fill(&mut app, "/winct/no/such/key");
     let plan = app.form_plan(app.overlays.form_dialog.as_ref().unwrap());
     assert!(!plan.enabled);
     assert_eq!(plan.problem.as_deref(), Some("未找到密钥文件"));
@@ -1124,7 +1124,7 @@ fn clipboard_images_pasted_into_a_remote_terminal_are_sent_there_first() {
             .and_then(|t| t.strip_suffix("\x1b[201~"));
         inner.unwrap_or_else(|| panic!("{text:?}")).to_owned()
     };
-    let folder = cache.join("winc/paste");
+    let folder = cache.join("winct/paste");
 
     // 剪贴板里只有图片：存为缓存目录中的 PNG，粘贴它在那台主机上的路径。
     let png = winct_editor::paste::encode_png(1, 1, &[255, 0, 0, 255]).unwrap();

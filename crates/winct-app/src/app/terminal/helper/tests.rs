@@ -123,18 +123,18 @@ fn a_remote_shell_gets_the_integration_once_its_scripts_are_there() {
     );
     // 随机数的位置留给辅助进程填，其后是「不换提示符」和「加载 Python 环境」。
     assert!(
-        integrated.ends_with("' winc @WINCT_NONCE@ 0 1 ''"),
+        integrated.ends_with("' winct @WINCT_NONCE@ 0 1 ''"),
         "{integrated}"
     );
     // 用户没有允许加载环境时告诉远端的脚本。
-    assert!(command(on(true, false), true).ends_with("' winc @WINCT_NONCE@ 1 0 ''"));
+    assert!(command(on(true, false), true).ends_with("' winct @WINCT_NONCE@ 1 0 ''"));
 
     // 选定的 shell：脚本就绪时作为启动脚本的参数，否则直接以登录方式启动它。
     let chosen = |integration, ready| {
         let launch = remote_launch(&at, integration, ready, Some("/usr/bin/fish"));
         String::from_utf8(launch.args.last().unwrap().clone()).unwrap()
     };
-    assert!(chosen(on(true, true), true).ends_with("' winc @WINCT_NONCE@ 1 1 '/usr/bin/fish'"));
+    assert!(chosen(on(true, true), true).ends_with("' winct @WINCT_NONCE@ 1 1 '/usr/bin/fish'"));
     assert_eq!(
         chosen(Integration::Off, true),
         "cd '/srv/app' && exec '/usr/bin/fish' -l"

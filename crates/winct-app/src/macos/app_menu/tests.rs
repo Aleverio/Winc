@@ -82,7 +82,7 @@ fn settings_action_is_added_once_and_runs() {
     unsafe {
         let object: *mut AnyObject = msg_send![class, new];
         let null = std::ptr::null_mut::<AnyObject>();
-        let () = msg_send![object, wincOpenSettings: null];
+        let () = msg_send![object, winctOpenSettings: null];
         let () = msg_send![object, release];
     }
     assert_eq!(CALLS.load(Ordering::Relaxed), 1);
@@ -102,7 +102,7 @@ fn opened_urls_reach_the_handler_as_targets() {
     assert!(add_open_urls(class, open_urls));
     assert!(!add_open_urls(class, open_urls));
 
-    // 一个文件、一个带空格的目录、一个 `winc://` 链接、一个其他网址（跳过）。
+    // 一个文件、一个带空格的目录、一个 `winct://` 链接、一个其他网址（跳过）。
     let file = super::super::files::file_url(Path::new("/tmp/a.txt"), false).unwrap();
     let dir = super::super::files::file_url(Path::new("/tmp/b c"), true).unwrap();
     // SAFETY: `class` 的实例已有刚添加的方法，按其类型编码 `v@:@@` 调用，NSApplication 传 nil；
@@ -116,7 +116,7 @@ fn opened_urls_reach_the_handler_as_targets() {
         let objects: [*mut AnyObject; 4] = [
             Retained::as_ptr(&file).cast_mut(),
             Retained::as_ptr(&dir).cast_mut(),
-            url("winc://file/tmp/c%20d.rs:3:2"),
+            url("winct://file/tmp/c%20d.rs:3:2"),
             url("https://example.com"),
         ];
         let urls: *mut AnyObject =
@@ -221,7 +221,7 @@ fn install_item_goes_right_below_settings() {
         add("Quit Winct", None);
         assert!(insert_install_item(menu, target));
 
-        // 关于 | 分隔线 | 设置… | 安装 winc 命令… | 分隔线 | 退出
+        // 关于 | 分隔线 | 设置… | 安装 winct 命令… | 分隔线 | 退出
         let count: isize = msg_send![menu, numberOfItems];
         assert_eq!(count, 6);
         let item: *mut AnyObject = msg_send![menu, itemAtIndex: 3isize];
@@ -246,17 +246,17 @@ fn install_item_goes_right_below_settings() {
 fn menu_items_take_the_display_name() {
     // `winit` 按进程名写的项换成显示名。
     assert_eq!(
-        renamed_title("About winc", "winc", "Winct").as_deref(),
+        renamed_title("About winct", "winct", "Winct").as_deref(),
         Some("About Winct")
     );
     assert_eq!(
-        renamed_title("Quit winc", "winc", "Winct").as_deref(),
+        renamed_title("Quit winct", "winct", "Winct").as_deref(),
         Some("Quit Winct")
     );
     // 不以进程名结尾的项、只是以这几个字母结尾的词，以及显示名与进程名相同（不在应用包中运行）
     // 时都不改。
-    assert_eq!(renamed_title("Hide Others", "winc", "Winct"), None);
-    assert_eq!(renamed_title("Services", "winc", "Winct"), None);
-    assert_eq!(renamed_title("Quit xwinc", "winc", "Winct"), None);
-    assert_eq!(renamed_title("Quit winc", "winc", "winc"), None);
+    assert_eq!(renamed_title("Hide Others", "winct", "Winct"), None);
+    assert_eq!(renamed_title("Services", "winct", "Winct"), None);
+    assert_eq!(renamed_title("Quit xwinct", "winct", "Winct"), None);
+    assert_eq!(renamed_title("Quit winct", "winct", "winct"), None);
 }

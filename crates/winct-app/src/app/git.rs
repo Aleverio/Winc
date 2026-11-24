@@ -894,7 +894,7 @@ impl App {
 
     /// 只刷新状态，分支与储藏列表保持不变。
     ///
-    /// 分支与储藏只随 `.git` 中的内容变化（目录监视报告 `git`，或 winc 自身执行的 Git 操作），
+    /// 分支与储藏只随 `.git` 中的内容变化（目录监视报告 `git`，或 winct 自身执行的 Git 操作），
     /// 这些情况都经由 [`App::git_refresh`]。工作区中每保存一次文件只运行一个 `status` 进程，
     /// 不运行 `for-each-ref` 和 `stash list`。
     pub(super) fn git_refresh_status(&mut self) {

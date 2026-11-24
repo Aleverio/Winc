@@ -48,7 +48,7 @@ fn to_helper() -> Vec<ToHelper> {
             env: vec![(b"PATH".to_vec(), b"/usr/bin".to_vec())],
             scrollback: 10_000,
             size,
-            integration: Some(b"/Users/a/Library/Application Support/winc/shell".to_vec()),
+            integration: Some(b"/Users/a/Library/Application Support/winct/shell".to_vec()),
             banner: Vec::new(),
         },
         ToHelper::Spawn {
@@ -135,7 +135,7 @@ fn from_helper() -> Vec<FromHelper> {
                     exit: Some(-1),
                     duration: Some(12_400),
                     text: "cargo xtask test".into(),
-                    cwd: b"/Users/a/winc".to_vec(),
+                    cwd: b"/Users/a/winct".to_vec(),
                 },
                 Block {
                     id: 2,

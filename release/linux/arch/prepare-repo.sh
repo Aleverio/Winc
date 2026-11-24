@@ -18,9 +18,9 @@ done
 fingerprint=${WINCT_ARCH_SIGNING_FINGERPRINT:-}
 [[ $fingerprint =~ ^[0-9A-F]{40}$ ]] || fail '请设置 WINCT_ARCH_SIGNING_FINGERPRINT 为 40 位大写十六进制公钥指纹'
 github_repo=github.com/DEEIX-AI/Winc
-repo=deeix-ai-winc
+repo=deeix-ai-winct
 version=${tag#v}-1
-package="winc-$version-x86_64.pkg.tar.zst"
+package="winct-$version-x86_64.pkg.tar.zst"
 base_url=https://github.com/Aleverio/Winc/releases/x86_64
 
 parent=$(dirname -- "$out")
@@ -44,7 +44,7 @@ gh release download "$tag" --repo "$github_repo" --dir "$stage/x86_64" \
   [[ $hash =~ ^[0-9a-f]{64}$ ]] || fail "SHA256SUMS 缺少唯一且有效的 $package 校验值"
   printf '%s  %s\n' "$hash" "$package" | sha256sum --check --strict -
   metadata=$(bsdtar -xOf "$package" .PKGINFO)
-  [[ $(awk -F ' = ' '$1 == "pkgname" {print $2}' <<< "$metadata") == winc &&
+  [[ $(awk -F ' = ' '$1 == "pkgname" {print $2}' <<< "$metadata") == winct &&
      $(awk -F ' = ' '$1 == "pkgver" {print $2}' <<< "$metadata") == "$version" &&
      $(awk -F ' = ' '$1 == "arch" {print $2}' <<< "$metadata") == x86_64 ]] ||
     fail "$package 的包名、版本或架构不符"

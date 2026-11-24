@@ -351,7 +351,7 @@ fn command_palette_runs_commands_and_remembers_them() {
     assert_eq!(palette()[app.overlays.picker.hits[0]].title(), "撤销");
     app.overlays.picker.input.set_text(">");
     app.picker_refresh();
-    // 模块关闭时（Git）其命令不列出；开发构建没有要安装的 `winc` 命令，同样不列出；Markdown 的
+    // 模块关闭时（Git）其命令不列出；开发构建没有要安装的 `winct` 命令，同样不列出；Markdown 的
     // Markdown 的写作命令只在编辑 Markdown 时列出。
     let installable = |a: &&crate::keymap::Action| {
         use crate::keymap::Action::{

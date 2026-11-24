@@ -4,9 +4,9 @@ use std::path::Path;
 
 use crate::root;
 
-/// 在 `out` 中生成 `winc.png`（256 像素）和含四种尺寸的 `winc.ico`。
+/// 在 `out` 中生成 `winct.png`（256 像素）和含四种尺寸的 `winct.ico`。
 ///
-/// 嵌入 Windows 可执行文件的 `crates/winct-app/assets/winc.ico` 是其中一次的结果，提交在仓库里
+/// 嵌入 Windows 可执行文件的 `crates/winct-app/assets/winct.ico` 是其中一次的结果，提交在仓库里
 /// （构建 Windows 版本时不必渲染 SVG）；改了 SVG 以后要把新生成的文件复制过去，否则测试失败。
 ///
 /// # Errors
@@ -32,7 +32,7 @@ pub fn write(out: &Path) -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
         }
         if size == 256 {
-            std::fs::write(out.join("winc.png"), &bytes).map_err(io)?;
+            std::fs::write(out.join("winct.png"), &bytes).map_err(io)?;
         }
         images.push((size, bytes));
     }
@@ -53,7 +53,7 @@ pub fn write(out: &Path) -> Result<(), String> {
     for (_, bytes) in images {
         ico.extend(bytes);
     }
-    std::fs::write(out.join("winc.ico"), ico).map_err(io)
+    std::fs::write(out.join("winct.ico"), ico).map_err(io)
 }
 
 #[cfg(test)]

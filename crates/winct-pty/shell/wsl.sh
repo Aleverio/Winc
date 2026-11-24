@@ -14,7 +14,7 @@ zsh)
 bash)
     # 登录 shell 不读取 --rcfile，因此以非登录方式启动，由集成脚本读取登录 shell 的配置文件。
     export WINCT_BASH_LOGIN=1
-    exec "$shell" --rcfile "$dir/bash/winc.bash"
+    exec "$shell" --rcfile "$dir/bash/winct.bash"
     ;;
 fish)
     if [ -n "${XDG_DATA_DIRS+x}" ]; then

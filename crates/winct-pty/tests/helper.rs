@@ -68,7 +68,7 @@ fn the_environment_says_what_terminal_this_is() {
             r#"printf '%s %s %s %s' "$TERM" "$COLORTERM" "$TERM_PROGRAM" "${WINCT_SECRET:-none}""#,
         ],
     );
-    c.until_exit_showing(|t| t == "xterm-256color truecolor winc none");
+    c.until_exit_showing(|t| t == "xterm-256color truecolor winct none");
 }
 
 #[test]

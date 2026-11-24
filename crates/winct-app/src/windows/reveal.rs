@@ -27,7 +27,7 @@ pub fn reveal_in_file_manager(path: &Path) -> io::Result<()> {
             if select(&path).is_err() {
                 let folder = path.parent().unwrap_or(&path);
                 if let Err(e) = crate::system::open_with_default_app(folder) {
-                    eprintln!("winc: 无法打开文件管理器：{e}");
+                    eprintln!("winct: 无法打开文件管理器：{e}");
                 }
             }
         })

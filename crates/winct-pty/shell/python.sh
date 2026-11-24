@@ -1,11 +1,11 @@
 # 在首次提示符前加载启动目录中的 Python 环境，只读取文件属性，不执行项目中的激活脚本。
-# 由 bash、zsh 的集成脚本读取；本文件由 winc 生成。
+# 由 bash、zsh 的集成脚本读取；本文件由 winct 生成。
 
-_winc_activate_python() {
+_winct_activate_python() {
     [[ -z ${VIRTUAL_ENV-} && -z ${CONDA_PREFIX-} ]] || builtin return 0
     builtin local name root
     for name in .venv venv; do
-        root=$_winc_python_root/$name
+        root=$_winct_python_root/$name
         [[ -f $root/pyvenv.cfg && -f $root/bin/python && -x $root/bin/python ]] || continue
         _OLD_VIRTUAL_PATH=$PATH
         if [[ -n ${PYTHONHOME+x} ]]; then
@@ -36,6 +36,6 @@ _winc_activate_python() {
         break
     done
 }
-_winc_activate_python
-builtin unset -f _winc_activate_python
-builtin unset _winc_python_root
+_winct_activate_python
+builtin unset -f _winct_activate_python
+builtin unset _winct_python_root

@@ -380,7 +380,7 @@ fn tabs_switch_close_and_take_the_panel_with_the_last_one() {
 fn the_cursor_waits_for_the_prompt_after_return() {
     let dir = sample_folder("terminal-settle");
     let mut app = app_with(&dir.join("short.rs"), false);
-    let mut term = show_terminal(&mut app, "~/winc $ ls");
+    let mut term = show_terminal(&mut app, "~/winct $ ls");
     let mut step = |app: &mut App, bytes: &str| {
         term.feed(bytes.as_bytes());
         let frame = term.take_frame().unwrap();
@@ -390,7 +390,7 @@ fn the_cursor_waits_for_the_prompt_after_return() {
 
     // 回车（或 ⌃C）：shell 先换行，光标位于空行行首，此时不绘制光标；提示符出现以后再绘制。
     assert!(step(&mut app, "\r\n"));
-    assert!(!step(&mut app, "~/winc $ "));
+    assert!(!step(&mut app, "~/winct $ "));
 
     // 等不到提示符：超过 `SETTLE` 以后仍然在行首绘制光标。
     assert!(step(&mut app, "\r\n"));
@@ -643,13 +643,13 @@ fn the_tab_bar_keeps_even_gaps_around_tabs_and_buttons() {
 fn snapshot_terminal() {
     let dir = sample_folder("terminal-shot");
     let screen = concat!(
-        "\x1b[1;32m➜\x1b[0m  \x1b[36mwinc\x1b[0m \x1b[34mgit:(\x1b[31mmain\x1b[34m)\x1b[0m ls\r\n",
+        "\x1b[1;32m➜\x1b[0m  \x1b[36mwinct\x1b[0m \x1b[34mgit:(\x1b[31mmain\x1b[34m)\x1b[0m ls\r\n",
         "Cargo.toml  \x1b[35mlink\x1b[0m@  README.md  \x1b[31mrun.sh\x1b[0m*  \x1b[1;34msrc\x1b[0m/\r\n",
         "\x1b[1;31merror\x1b[0m\x1b[1m: 未找到文件\x1b[0m \x1b[4msrc/main.rs\x1b[0m:\x1b[33m12\x1b[0m:5\r\n",
         "\x1b[38;5;208m256 色\x1b[0m \x1b[38;2;120;200;255m真彩色\x1b[0m \x1b[7m 反色 \x1b[0m ",
         "\x1b[2m淡色\x1b[0m \x1b[3m斜体\x1b[0m \x1b[9m删除线\x1b[0m \x1b[4:3;58;5;1m波浪线\x1b[0m\r\n",
         "\x1b[42;30m 全部通过 \x1b[0m 731 passed\r\n",
-        "\x1b[1;32m➜\x1b[0m  \x1b[36mwinc\x1b[0m echo 中文和 emoji 😀 ",
+        "\x1b[1;32m➜\x1b[0m  \x1b[36mwinct\x1b[0m echo 中文和 emoji 😀 ",
         // emoji 序列各占两格：变体选择符、肤色、连接符连起来的组合、国旗。
         "❤\u{fe0f} 👍\u{1f3fd} 👨\u{200d}👩\u{200d}👧 🇨🇳|",
     );
@@ -722,7 +722,7 @@ fn terminal_runs_a_command_in_the_login_shell() {
         }
     };
     wait(&mut app, &|app| app.terminal.tab().is_some());
-    app.terminal_input(b"echo winc-$((6*7))\r".to_vec());
+    app.terminal_input(b"echo winct-$((6*7))\r".to_vec());
     wait(&mut app, &|app| screen(app).contains("winct-42"));
     // shell 集成（登录 shell 是 zsh、bash、fish 时注入）：这条命令成了一个成功结束的块。
     let shell = std::env::var("SHELL").unwrap_or_default();
@@ -733,7 +733,7 @@ fn terminal_runs_a_command_in_the_login_shell() {
                 .unwrap()
                 .blocks
                 .iter()
-                .any(|b| b.text == "echo winc-$((6*7))" && b.exit == Some(0))
+                .any(|b| b.text == "echo winct-$((6*7))" && b.exit == Some(0))
         });
     }
     // 刷出一屏以上的输出后往上翻：缺的历史行向辅助进程请求，返回后即可见。

@@ -1,13 +1,13 @@
 //! ABI type yang dipakai bersama host Winct dan plugin WebAssembly.
 //!
 //! Plugin tidak pernah diberi pointer ke state aplikasi. Semua interaksi memakai [`HostRequest`]
-//! yang diserialisasi sebagai JSON, dipanggil lewat satu import `winc.host_call`, lalu divalidasi
+//! yang diserialisasi sebagai JSON, dipanggil lewat satu import `winct.host_call`, lalu divalidasi
 //! host terhadap capability yang disetujui user.
 //!
 //! Modul guest juga wajib mengekspor `winct_activate`, `winct_invoke`, `winct_event`, dan
 //! `winct_render`. Lihat README crate ini untuk protokol panjang buffer.
 
-// Guest-helper yang memanggil `winc.host_call` memakai FFI WebAssembly; ini satu-satunya unsafe
+// Guest-helper yang memanggil `winct.host_call` memakai FFI WebAssembly; ini satu-satunya unsafe
 // di crate ini dan dibatasi pada modul `guest` di bawah.
 #![allow(unsafe_code)]
 // Struct ABI adalah wire format JSON; nama field dan `docs/wasm-plugins.md` sudah menjadi
@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 pub const ABI_VERSION: u32 = 1;
 
 /// Modul import yang dipakai guest untuk memanggil host.
-pub const HOST_MODULE: &str = "winc";
+pub const HOST_MODULE: &str = "winct";
 
 /// Nama fungsi host yang dipanggil guest.
 pub const HOST_CALL: &str = "host_call";
@@ -582,7 +582,7 @@ impl HostReply {
     }
 }
 
-/// Helper guest: serialisasi request, panggil `winc.host_call`, lalu decode balasannya.
+/// Helper guest: serialisasi request, panggil `winct.host_call`, lalu decode balasannya.
 pub mod guest {
     use super::*;
 

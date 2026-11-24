@@ -262,7 +262,7 @@ fn snapshot_start_page() {
         let mut app = blank_app(dark);
         shoot(&mut app, &format!("start-empty-{tag}"));
 
-        // 没有打开目录时手动展开侧栏：不绘制项目徽章，避免看起来像已打开了一个名为 `winc` 的项目。
+        // 没有打开目录时手动展开侧栏：不绘制项目徽章，避免看起来像已打开了一个名为 `winct` 的项目。
         app.toggle_sidebar();
         app.panels.sidebar.motion = None;
         shoot(&mut app, &format!("start-sidebar-{tag}"));
@@ -271,7 +271,7 @@ fn snapshot_start_page() {
 
         // 有四个最近目录，鼠标停在第二个上。
         app.state.recent = vec![
-            home.join("project/winc"),
+            home.join("project/winct"),
             home.join("work/backend-service"),
             home.join("Downloads/一个中文名字的项目"),
             PathBuf::from("/Volumes/外接盘/archive/very/deep/path/legacy-monorepo"),

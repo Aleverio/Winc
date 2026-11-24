@@ -129,7 +129,7 @@ fn programs_use_the_path_of_the_login_shell_when_known() {
 #[test]
 fn the_watcher_runs_from_the_windows_installation() {
     let place = locate(Path::new(r"\\wsl.localhost\Ubuntu\home\me\my app")).unwrap();
-    let command = watch_command(&place, Path::new(r"C:\Program Files\winc\winct-watch"));
+    let command = watch_command(&place, Path::new(r"C:\Program Files\winct\winct-watch"));
     let args: Vec<_> = command.get_args().collect();
     assert_eq!(
         args,
@@ -140,7 +140,7 @@ fn the_watcher_runs_from_the_windows_installation() {
             "sh",
             "-c",
             RUN_WINDOWS_FILE,
-            r"C:\Program Files\winc\winct-watch",
+            r"C:\Program Files\winct\winct-watch",
             "/home/me/my app",
         ]
     );
@@ -164,7 +164,7 @@ fn the_run_script_converts_the_path_and_keeps_the_arguments() {
         .args([
             "-c",
             RUN_WINDOWS_FILE,
-            r"C:\winc\winct-watch",
+            r"C:\winct\winct-watch",
             "/home/my app",
         ])
         .env("PATH", path)

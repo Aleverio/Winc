@@ -21,7 +21,7 @@ const MARK: &str = "winct-path:";
 
 /// 让用户的登录 shell 输出它的 `PATH`。由 `sh` 运行；内层的命令交给用户的 shell 解释，写法
 /// 只用各种 shell 共有的部分。不接受 `-l` 与 `-c` 同用的 shell 改为不带 `-l` 再问一次。
-const ASK: &str = r#"s=${SHELL:-sh}; c='printf "\nwinc-path:%s\n" "$PATH"'
+const ASK: &str = r#"s=${SHELL:-sh}; c='printf "\nwinct-path:%s\n" "$PATH"'
 "$s" -l -c "$c" 2>/dev/null || "$s" -c "$c""#;
 
 /// 各台主机登录 shell 的 `PATH`；问不出来的记为 `None`，不反复再问。

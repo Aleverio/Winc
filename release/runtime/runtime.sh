@@ -7,17 +7,17 @@
 set -euo pipefail
 
 RUNTIME_VERSION="0.1.0"
-REPO=${WINCTT_RELEASE_REPO:-Aleverio/Winc}
-REF=${WINCTT_RUNTIME_REF:-dev}
+REPO=${WINCT_RELEASE_REPO:-Aleverio/Winc}
+REF=${WINCT_RUNTIME_REF:-dev}
 RAW_BASE="https://raw.githubusercontent.com/$REPO/$REF/release/runtime"
-HOME_DIR=${WINCTT_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/winct}
-BIN_DIR=${WINCTT_BIN:-${XDG_BIN_HOME:-$HOME/.local/bin}}
+HOME_DIR=${WINCT_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/winct}
+BIN_DIR=${WINCT_BIN:-${XDG_BIN_HOME:-$HOME/.local/bin}}
 LOCK_DIR="$HOME_DIR/.lock"
 DESKTOP_DIR=${XDG_DATA_HOME:-$HOME/.local/share}/applications
 
-CHANNEL=${WINCTT_CHANNEL:-stable}
+CHANNEL=${WINCT_CHANNEL:-stable}
 CHANNEL_SET=0
-KEEP=${WINCTT_KEEP_RELEASES:-3}
+KEEP=${WINCT_KEEP_RELEASES:-3}
 YES=0
 ASSET_KIND=""
 TMP_DIR=""
@@ -161,7 +161,7 @@ extract() {
       [[ -d "${archive%/*}/squashfs-root/usr/bin" ]] || fail "AppImage did not extract a usr/ tree"
       mkdir -p "$stage/app"
       cp -a "${archive%/*}/squashfs-root/usr" "$stage/app/"
-      ln -s usr/bin/winc "$stage/app/winc"
+      ln -s usr/bin/winct "$stage/app/winct"
       ln -s usr/bin/winct-pty "$stage/app/winct-pty"
       ;;
     dmg)
@@ -170,24 +170,24 @@ extract() {
       mkdir -p "$mount"
       hdiutil attach -nobrowse -readonly "$archive" -mountpoint "$mount" >/dev/null
       mkdir -p "$stage/app"
-      if ! cp -a "$mount/winc.app" "$stage/app/"; then
+      if ! cp -a "$mount/winct.app" "$stage/app/"; then
         hdiutil detach "$mount" >/dev/null 2>&1 || true
-        fail "the dmg has no winc.app"
+        fail "the dmg has no winct.app"
       fi
       hdiutil detach "$mount" >/dev/null 2>&1 || true
       xattr -dr com.apple.quarantine "$stage/app" 2>/dev/null || true
-      ln -s winc.app/Contents/MacOS/winc "$stage/app/winc"
-      ln -s winc.app/Contents/MacOS/winct-pty "$stage/app/winct-pty"
+      ln -s winct.app/Contents/MacOS/winct "$stage/app/winct"
+      ln -s winct.app/Contents/MacOS/winct-pty "$stage/app/winct-pty"
       ;;
     *) fail "unknown artifact kind: $ASSET_KIND" ;;
   esac
-  [[ -x "$stage/app/winc" ]] || fail "the extracted release has no winc executable"
+  [[ -x "$stage/app/winct" ]] || fail "the extracted release has no winct executable"
   if [[ $ASSET_KIND == appimage ]]; then
     local lib="$stage/app/usr/lib"
     LD_LIBRARY_PATH="$lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-      "$stage/app/winc" --version >/dev/null 2>&1 || fail "the extracted executable failed its smoke check"
+      "$stage/app/winct" --version >/dev/null 2>&1 || fail "the extracted executable failed its smoke check"
   else
-    "$stage/app/winc" --version >/dev/null 2>&1 || fail "the extracted executable failed its smoke check"
+    "$stage/app/winct" --version >/dev/null 2>&1 || fail "the extracted executable failed its smoke check"
   fi
 }
 
@@ -207,9 +207,9 @@ install_launcher() {
 set -eu
 root=$root
 $LD
-exec "\$root/current/winc" "\$@"
+exec "\$root/current/winct" "\$@"
 EOF
-  cat > "$BIN_DIR/winc" <<EOF
+  cat > "$BIN_DIR/winct" <<EOF
 #!/bin/sh
 set -eu
 self=\$0
@@ -224,7 +224,7 @@ done
 bin=\$(CDPATH= cd -P "\$(dirname "\$self")" && pwd)
 exec "\$bin/winct" "\$@"
 EOF
-  chmod +x "$BIN_DIR/winct" "$BIN_DIR/winc"
+  chmod +x "$BIN_DIR/winct" "$BIN_DIR/winct"
 
   if [[ $ASSET_KIND == appimage ]]; then
     mkdir -p "$DESKTOP_DIR"
@@ -234,12 +234,12 @@ Type=Application
 Name=Winct
 Comment=Winct Editor - a lighter, faster desktop code editor
 Exec=$(shell_quote "$BIN_DIR/winct") %F
-Icon=$HOME_DIR/current/app/usr/share/icons/hicolor/256x256/apps/winc.png
+Icon=$HOME_DIR/current/app/usr/share/icons/hicolor/256x256/apps/winct.png
 Terminal=false
 Categories=Development;TextEditor;
 EOF
   fi
-  info "launchers: $BIN_DIR/winct, $BIN_DIR/winc"
+  info "launchers: $BIN_DIR/winct, $BIN_DIR/winct"
 }
 
 switch_to() {
@@ -289,9 +289,9 @@ prune() {
 do_install() {
   need curl
   need awk
-  [[ $REPO =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "WINCTT_RELEASE_REPO must be owner/repo"
-  [[ $REF =~ ^[A-Za-z0-9._/-]+$ ]] || fail "WINCTT_RUNTIME_REF has an invalid character"
-  [[ $KEEP =~ ^[0-9]+$ ]] || fail "WINCTT_KEEP_RELEASES must be a number"
+  [[ $REPO =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "WINCT_RELEASE_REPO must be owner/repo"
+  [[ $REF =~ ^[A-Za-z0-9._/-]+$ ]] || fail "WINCT_RUNTIME_REF has an invalid character"
+  [[ $KEEP =~ ^[0-9]+$ ]] || fail "WINCT_KEEP_RELEASES must be a number"
   mkdir -p "$HOME_DIR"/{releases,cache}
   acquire_lock
 
@@ -374,7 +374,7 @@ do_rollback() {
 do_self_update() {
   need curl
   need awk
-  [[ $REF =~ ^[A-Za-z0-9._/-]+$ ]] || fail "WINCTT_RUNTIME_REF has an invalid character"
+  [[ $REF =~ ^[A-Za-z0-9._/-]+$ ]] || fail "WINCT_RUNTIME_REF has an invalid character"
   TMP_DIR=$(mktemp -d)
   curl_dl "$RAW_BASE/CHECKSUMS" "$TMP_DIR/CHECKSUMS"
   curl_dl "$RAW_BASE/runtime.sh" "$TMP_DIR/runtime.sh"
@@ -402,10 +402,10 @@ do_self_update() {
 do_uninstall() {
   ((YES == 1)) || fail "pass --yes to confirm uninstall"
   [[ ${HOME_DIR##*/} =~ ^winct(up)?$ ]] ||
-    fail "refusing to remove $HOME_DIR: WINCTT_HOME must end in winct or winctup"
+    fail "refusing to remove $HOME_DIR: WINCT_HOME must end in winct or winctup"
   acquire_lock
   rm -rf -- "$HOME_DIR"
-  rm -f -- "$BIN_DIR/winct" "$BIN_DIR/winc" "$DESKTOP_DIR/winct.desktop"
+  rm -f -- "$BIN_DIR/winct" "$BIN_DIR/winct" "$DESKTOP_DIR/winct.desktop"
   info "winctup and its releases were removed; application settings were kept"
 }
 

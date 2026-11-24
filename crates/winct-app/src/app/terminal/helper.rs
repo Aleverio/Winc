@@ -132,7 +132,7 @@ impl App {
             return;
         }
         let Some(path) = helper_path() else {
-            eprintln!("winc: 未找到 winct-pty（开发环境下请先运行 cargo build -p winct-pty）");
+            eprintln!("winct: 未找到 winct-pty（开发环境下请先运行 cargo build -p winct-pty）");
             self.terminal.error = Some(winct_i18n::t!("terminal-helper-missing").into());
             return;
         };
@@ -1004,7 +1004,7 @@ fn integration_dir(config: &winct_config::Config) -> Option<Vec<u8>> {
     Some(os_bytes(config.parent()?.join("shell").as_os_str()))
 }
 
-/// 返回给终端的环境变量：winc 自己的环境原样传过去，登录 shell 会再读用户的配置补齐 `PATH`，
+/// 返回给终端的环境变量：winct 自己的环境原样传过去，登录 shell 会再读用户的配置补齐 `PATH`，
 /// 不必先向登录 shell 查询一次。
 ///
 /// `terminal.prompt` 关了时加上 `WINCT_PROMPT=0`，集成脚本就不替换默认的提示符。
@@ -1013,7 +1013,7 @@ fn integration_dir(config: &winct_config::Config) -> Option<Vec<u8>> {
 pub(super) enum Integration {
     /// 不注入：设置里关了，或要运行的是一条命令。
     Off,
-    /// 注入；`prompt` 为假时不换上 winc 的提示符（`terminal.prompt`），`python` 为假时不加载
+    /// 注入；`prompt` 为假时不换上 winct 的提示符（`terminal.prompt`），`python` 为假时不加载
     /// 启动目录中的 Python 环境。
     On { prompt: bool, python: bool },
 }

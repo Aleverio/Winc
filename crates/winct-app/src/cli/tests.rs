@@ -135,8 +135,8 @@ fn winct_links_open_files_at_a_line() {
         assert_eq!(link("winct://file/no/drive"), None);
     }
     for bad in [
-        "winc://file".to_owned(),
-        "winc://open/no/such/a.rs".to_owned(),
+        "winct://file".to_owned(),
+        "winct://open/no/such/a.rs".to_owned(),
         format!("{url}/%e4"),
         format!("{url}/%zz"),
         "vscode://file/no/such/a.rs".to_owned(),

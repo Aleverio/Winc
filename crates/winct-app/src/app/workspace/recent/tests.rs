@@ -20,9 +20,9 @@ fn the_kept_tail_is_the_shortest_one_that_differs() {
 #[test]
 fn only_folders_sharing_a_name_keep_a_tail() {
     let folders = [
-        PathBuf::from("/work/a/projects/winc"),
+        PathBuf::from("/work/a/projects/winct"),
         PathBuf::from("/work/api"),
-        PathBuf::from("/work/b/projects/winc"),
+        PathBuf::from("/work/b/projects/winct"),
     ];
     let parents = parents(&folders);
     let kept = |i: usize| parents[i].keep.map(|k| &parents[i].text[k..]);

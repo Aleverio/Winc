@@ -402,7 +402,6 @@ fn snapshot_settings_integration() {
     let dir = sample_folder("settings-integration-shot");
     let mut app = app_with(&dir.join("short.rs"), false);
     app.open_settings();
-    app.settings.integration.menu = true;
     app.settings.scroll = app.settings_layout().max_scroll();
     shoot(&mut app, "settings-integration-light");
     let _ = std::fs::remove_dir_all(&dir);

@@ -19,7 +19,7 @@ use crate::Target;
 /// 引导脚本，交给远端的 `sh -c` 运行。参数依次是上传目录，以及每个服务进程的系统、摘要和字节数。
 ///
 /// 脚本经登录 shell 传给 `sh`，因此写成一行，不含单引号和反斜杠，`!` 之后只能是空格或 `=`；
-/// 输出的每一行以 `winc:` 开头，与登录脚本的输出区分。上传的内容先写入临时文件，字节数相符后
+/// 输出的每一行以 `winct:` 开头，与登录脚本的输出区分。上传的内容先写入临时文件，字节数相符后
 /// 才改名；已有程序的字节数与本机的不符时重新上传。启动前删除上传目录中其他版本：只删名字是
 /// 小写十六进制摘要、其中只有 `winct-server` 的子目录，先删文件再删空目录，不递归。
 const SCRIPT: &str = concat!(
@@ -27,17 +27,17 @@ const SCRIPT: &str = concat!(
     "while [ $# -ge 3 ]; do ",
     "if [ \"$1\" = \"$sys\" ]; then digest=$2; size=$3; fi; shift 3; ",
     "done; ",
-    "if [ -z \"$digest\" ]; then echo \"winc:unsupported $sys\"; exit 0; fi; ",
+    "if [ -z \"$digest\" ]; then echo \"winct:unsupported $sys\"; exit 0; fi; ",
     "case $dir in ",
     "\"\") dir=$HOME/.winct-server ;; ",
     "\"~/\"*) dir=$HOME/${dir#\"~/\"} ;; ",
     "esac; ",
     "bin=$dir/$digest/winct-server; ",
     "if [ ! -x \"$bin\" ] || [ $(wc -c < \"$bin\") -ne \"$size\" ]; then ",
-    "echo \"winc:need $sys\"; umask 077; ",
+    "echo \"winct:need $sys\"; umask 077; ",
     "mkdir -p \"$dir/$digest\" && tmp=$bin.$$ && head -c \"$size\" > \"$tmp\" && ",
     "[ $(wc -c < \"$tmp\") -eq \"$size\" ] && chmod 700 \"$tmp\" && mv -f \"$tmp\" \"$bin\" || ",
-    "{ rm -f \"$tmp\"; echo \"winc:failed\"; exit 1; }; ",
+    "{ rm -f \"$tmp\"; echo \"winct:failed\"; exit 1; }; ",
     "fi; ",
     "for old in \"$dir\"/*; do name=${old##*/}; ",
     "rest=$(printf %s \"$name\" | tr -d 0-9a-f); ",
@@ -45,11 +45,11 @@ const SCRIPT: &str = concat!(
     "[ \"$(ls -A \"$old\")\" = winct-server ]; then ",
     "rm -f \"$old/winct-server\" && rmdir \"$old\"; fi; ",
     "done 2>/dev/null; ",
-    "echo \"winc:ready\"; exec \"$bin\"",
+    "echo \"winct:ready\"; exec \"$bin\"",
 );
 
 /// 脚本输出行的前缀。
-const MARKER: &[u8] = b"winc:";
+const MARKER: &[u8] = b"winct:";
 
 /// 等到脚本的一行输出之前，至多跳过的字节数（64 KiB）。
 ///
@@ -99,7 +99,7 @@ impl Deploy {
         }
         let mut words = vec!["sh".to_owned(), "-c".to_owned(), SCRIPT.to_owned()];
         // `sh -c` 之后的第一个参数是 `$0`。
-        words.extend(["winc".to_owned(), self.dir.clone()]);
+        words.extend(["winct".to_owned(), self.dir.clone()]);
         for program in &self.programs {
             let system = &program.system;
             if system.is_empty() || !system.chars().all(|c| c.is_ascii_graphic() && c != '\\') {
@@ -490,7 +490,7 @@ mod tests {
         assert_eq!(words[..2], ["sh", "-c"]);
         assert_eq!(
             words[3..],
-            ["winc", "~/it's here", "Linux-x86_64", "0af3", "7"]
+            ["winct", "~/it's here", "Linux-x86_64", "0af3", "7"]
         );
 
         let target = Target::new("alice@devbox").unwrap();
@@ -522,12 +522,12 @@ mod tests {
 
     #[test]
     fn output_before_the_script_is_skipped_up_to_a_limit() {
-        let mut input: &[u8] = b"Welcome!\nwinc is here\nwinc:ready\nrest";
+        let mut input: &[u8] = b"Welcome!\nwinct is here\nwinct:ready\nrest";
         assert_eq!(read_line(&mut input).unwrap().as_deref(), Some("ready"));
         assert_eq!(input, b"rest");
 
         let mut noise = vec![b'x'; PREAMBLE_MAX];
-        noise.extend_from_slice(b"\nwinc:ready\n");
+        noise.extend_from_slice(b"\nwinct:ready\n");
         assert_eq!(read_line(&mut noise.as_slice()).unwrap(), None);
         assert_eq!(read_line(&mut b"".as_slice()).unwrap(), None);
     }
@@ -540,20 +540,20 @@ mod tests {
             let step = bootstrap(&mut &*script, &mut sent, &deploy, &|_| {}).unwrap();
             (step, sent)
         };
-        assert!(matches!(run(b"winc:ready\n"), (Step::Ready, sent) if sent.is_empty()));
+        assert!(matches!(run(b"winct:ready\n"), (Step::Ready, sent) if sent.is_empty()));
         assert!(matches!(
-            run(b"winc:need Linux-x86_64\nwinc:ready\n"),
+            run(b"winct:need Linux-x86_64\nwinct:ready\n"),
             (Step::Ready, sent) if sent == [0; 7]
         ));
         assert!(matches!(
-            run(b"winc:need Linux-x86_64\nwinc:failed\n"),
+            run(b"winct:need Linux-x86_64\nwinct:failed\n"),
             (Step::Ended, _)
         ));
         assert!(matches!(
-            run(b"winc:unsupported SunOS-sun4v\n"),
+            run(b"winct:unsupported SunOS-sun4v\n"),
             (Step::Unsupported(system), sent) if system == "SunOS-sun4v" && sent.is_empty()
         ));
-        assert!(matches!(run(b"winc:need Plan9-mips\n"), (Step::Ended, sent) if sent.is_empty()));
+        assert!(matches!(run(b"winct:need Plan9-mips\n"), (Step::Ended, sent) if sent.is_empty()));
         assert!(matches!(run(b"motd only\n"), (Step::Ended, _)));
     }
 
@@ -566,15 +566,15 @@ mod tests {
             bootstrap(&mut &*script, &mut Vec::new(), &deploy, &report).unwrap();
             seen.into_inner()
         };
-        assert_eq!(stages(b"winc:ready\n"), [Stage::Starting]);
+        assert_eq!(stages(b"winct:ready\n"), [Stage::Starting]);
         assert_eq!(
-            stages(b"winc:need Linux-x86_64\nwinc:ready\n"),
+            stages(b"winct:need Linux-x86_64\nwinct:ready\n"),
             [Stage::Uploading, Stage::Starting]
         );
         assert_eq!(
-            stages(b"winc:need Linux-x86_64\nwinc:failed\n"),
+            stages(b"winct:need Linux-x86_64\nwinct:failed\n"),
             [Stage::Uploading]
         );
-        assert!(stages(b"winc:unsupported SunOS-sun4v\n").is_empty());
+        assert!(stages(b"winct:unsupported SunOS-sun4v\n").is_empty());
     }
 }

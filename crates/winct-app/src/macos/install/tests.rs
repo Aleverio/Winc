@@ -6,9 +6,9 @@ use super::*;
 fn applications_folders_include_the_user_one_and_subfolders() {
     let home = Path::new("/Users/me");
     for inside in [
-        "/Applications/winc.app",
-        "/Applications/Utilities/winc.app",
-        "/Users/me/Applications/winc.app",
+        "/Applications/winct.app",
+        "/Applications/Utilities/winct.app",
+        "/Users/me/Applications/winct.app",
     ] {
         assert!(
             inside_applications(Path::new(inside), Some(home)),
@@ -16,10 +16,10 @@ fn applications_folders_include_the_user_one_and_subfolders() {
         );
     }
     for outside in [
-        "/Users/me/Downloads/winc.app",
-        "/Volumes/winc/winc.app",
-        "/ApplicationsOld/winc.app",
-        "/Users/other/Applications/winc.app",
+        "/Users/me/Downloads/winct.app",
+        "/Volumes/winct/winct.app",
+        "/ApplicationsOld/winct.app",
+        "/Users/other/Applications/winct.app",
     ] {
         assert!(
             !inside_applications(Path::new(outside), Some(home)),
@@ -31,8 +31,8 @@ fn applications_folders_include_the_user_one_and_subfolders() {
 #[test]
 fn the_volume_is_the_first_folder_under_volumes() {
     assert_eq!(
-        volume_of(Path::new("/Volumes/winc 1/winc.app")),
-        Some(PathBuf::from("/Volumes/winc 1"))
+        volume_of(Path::new("/Volumes/winct 1/winct.app")),
+        Some(PathBuf::from("/Volumes/winct 1"))
     );
-    assert_eq!(volume_of(Path::new("/Users/me/Downloads/winc.app")), None);
+    assert_eq!(volume_of(Path::new("/Users/me/Downloads/winct.app")), None);
 }

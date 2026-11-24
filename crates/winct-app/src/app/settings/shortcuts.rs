@@ -118,7 +118,7 @@ impl App {
     /// 按配置重新安装键位表。
     fn reinstall_keymap(&mut self) {
         for problem in keymap::install_from(&self.config) {
-            eprintln!("winc: {problem}");
+            eprintln!("winct: {problem}");
         }
         self.keymap_changed();
     }

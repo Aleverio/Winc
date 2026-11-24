@@ -128,7 +128,7 @@ pub fn allow_foreground(pid: u32) {
 /// 从命令行启动时接上该命令行的控制台，之后的 `println!`、`eprintln!` 输出到该控制台；从图形
 /// 界面启动（没有父控制台）时什么也不做。
 ///
-/// winc 是图形界面程序（`windows_subsystem = "windows"`），系统不会为它准备控制台。
+/// winct 是图形界面程序（`windows_subsystem = "windows"`），系统不会为它准备控制台。
 #[allow(unsafe_code)] // AttachConsole
 pub fn attach_console() {
     use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};

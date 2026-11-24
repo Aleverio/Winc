@@ -144,7 +144,7 @@ fn the_remote_detection_script_runs_under_a_plain_sh() {
     let output = std::process::Command::new("sh")
         .arg("-c")
         .arg(REMOTE_DETECT)
-        .arg("winc")
+        .arg("winct")
         .args(remote_candidates())
         .env("SHELL", "/bin/sh")
         .output()

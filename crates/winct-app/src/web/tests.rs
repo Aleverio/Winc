@@ -34,7 +34,7 @@ fn curl_failures_are_sorted_into_reasons() {
         Failure::Network
     );
     assert_eq!(
-        curl(7, "curl: (7) Failed to connect to winc.si port 443"),
+        curl(7, "curl: (7) Failed to connect to winct.si port 443"),
         Failure::Network
     );
     assert_eq!(

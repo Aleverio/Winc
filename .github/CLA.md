@@ -1,8 +1,8 @@
-# winc Contributor License Agreement
+# winct Contributor License Agreement
 
-Thank you for contributing to winc. This Contributor License Agreement ("Agreement") records the
+Thank you for contributing to winct. This Contributor License Agreement ("Agreement") records the
 terms under which you contribute to the project. It protects you as a contributor, the
-maintainers, and the users of winc. Signing it does not transfer ownership of your contributions:
+maintainers, and the users of winct. Signing it does not transfer ownership of your contributions:
 you keep the copyright to everything you contribute.
 
 The project is maintained by Chenyme and DEEIX AI (together, the "Maintainers").
@@ -13,7 +13,7 @@ The project is maintained by Chenyme and DEEIX AI (together, the "Maintainers").
 it, together with any entity that it controls, is controlled by, or is under common control with.
 
 "Contribution" means any original work of authorship, including any changes or additions to
-existing work, that you submit to the Maintainers for inclusion in winc. Submission includes pull
+existing work, that you submit to the Maintainers for inclusion in winct. Submission includes pull
 requests, patches, issue comments containing code, and any other communication sent to the
 project's repositories or channels for that purpose. Work that you clearly mark as "Not a
 Contribution" is excluded.
@@ -72,4 +72,4 @@ the pull request with:
 
 Your GitHub account name and the date are recorded. One signature covers all of your later
 Contributions. If you contribute on behalf of a company, sign with an account that the company
-authorizes; for a separate corporate agreement, contact support@winc.si.
+authorizes; for a separate corporate agreement, contact support@winct.si.

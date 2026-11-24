@@ -274,12 +274,12 @@ cmd-terminal-8 = 终端：聚焦第 8 个标签页
 cmd-terminal-9 = 终端：聚焦第 9 个标签页
 cmd-find-in-terminal = 终端：查找
 cmd-toggle-terminal-position = 终端：切换面板位置
-cmd-install-shell-command = Shell 命令：安装 winc 命令
-cmd-uninstall-shell-command = Shell 命令：卸载 winc 命令
-shell-command-installed = 已安装 winc 命令：{ $path }
-shell-command-installed-hint = 已安装 winc 命令：{ $path }。终端找不到该命令时，请将 { $dir } 加入 PATH。
-shell-command-uninstalled = 已卸载 winc 命令
-shell-command-not-installed = 尚未安装 winc 命令
+cmd-install-shell-command = Shell 命令：安装 winct 命令
+cmd-uninstall-shell-command = Shell 命令：卸载 winct 命令
+shell-command-installed = 已安装 winct 命令：{ $path }
+shell-command-installed-hint = 已安装 winct 命令：{ $path }。终端找不到该命令时，请将 { $dir } 加入 PATH。
+shell-command-uninstalled = 已卸载 winct 命令
+shell-command-not-installed = 尚未安装 winct 命令
 shell-command-occupied = { $path } 已被其他程序占用，未做修改
 shell-command-failed = 无法修改 { $path }：{ $error }
 cmd-maximize-terminal = 终端：最大化面板
@@ -309,20 +309,20 @@ cmd-one-off-no-new-window = 临时窗口无法新建窗口
 ## 命令行：用法说明和错误输出
 
 cmd-cli-usage =
-    用法：winc [选项] [文件或目录 ...]
+    用法：winct [选项] [文件或目录 ...]
 
-      winc                  恢复上次打开的目录
-      winc .                打开当前目录
-      winc 文件:行[:列]     打开文件并转到指定行
-      winc ssh://主机/目录 [ssh://主机/文件:行[:列]]
+      winct                  恢复上次打开的目录
+      winct .                打开当前目录
+      winct 文件:行[:列]     打开文件并转到指定行
+      winct ssh://主机/目录 [ssh://主机/文件:行[:列]]
                             打开远端主机上的目录和其中的文件（需要启用远程模块）
-      winc -                读取标准输入（例如 cargo build 2>&1 | winc -）
-      -w, --wait            文件的标签页全部关闭后再退出（例如 git config core.editor "winc -w"）
+      winct -                读取标准输入（例如 cargo build 2>&1 | winct -）
+      -w, --wait            文件的标签页全部关闭后再退出（例如 git config core.editor "winct -w"）
       -n, --new-instance    不复用正在运行的 Winct，启动新进程（例如在 Winct 的终端中运行开发版本）
       -h, --help            显示帮助
       -v, --version         显示版本号
 cmd-cli-unknown-option = 无法识别的选项「{ $flag }」
-cmd-cli-bad-link = 无法打开链接「{ $link }」：应为 winc://file/ 加绝对路径
+cmd-cli-bad-link = 无法打开链接「{ $link }」：应为 winct://file/ 加绝对路径
 cmd-cli-bad-ssh = 无法打开「{ $link }」：应为 ssh://[用户@]主机[:端口]/绝对路径
 cmd-cli-ssh-mixed = ssh:// 参数必须指向同一台主机，且不能与本机路径一起使用
 cmd-cli-ssh-one-off = --wait 和 - 不能用于 ssh:// 参数

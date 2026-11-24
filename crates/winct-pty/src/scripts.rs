@@ -1,12 +1,12 @@
 //! shell 集成脚本的内容，以及在远端主机上使用它们的约定。
 //!
 //! 本机的 shell 由辅助进程在启动前写好脚本并注入。远端主机上的 shell 经 `ssh` 启动：脚本由
-//! 本机的 winc 经已有的连接写到那台主机上的 [`REMOTE_DIR`]，终端里的 `ssh` 运行
+//! 本机的 winct 经已有的连接写到那台主机上的 [`REMOTE_DIR`]，终端里的 `ssh` 运行
 //! [`remote_command`] 给出的命令，由其中的启动脚本按用户的登录 shell 注入。
 
 use std::borrow::Cow;
 
-/// zsh 的启动脚本：`.zshenv` 把 `ZDOTDIR` 恢复成用户原来的值，`winc.zsh` 安装钩子。
+/// zsh 的启动脚本：`.zshenv` 把 `ZDOTDIR` 恢复成用户原来的值，`winct.zsh` 安装钩子。
 pub const ZSH: &[(&str, &str)] = &[
     ("zsh/.zshenv", include_str!("../shell/zshenv.zsh")),
     ("zsh/winct.zsh", include_str!("../shell/winct.zsh")),
@@ -15,7 +15,7 @@ pub const ZSH: &[(&str, &str)] = &[
 pub const BASH: &[(&str, &str)] = &[("bash/winct.bash", include_str!("../shell/winct.bash"))];
 /// fish 的启动脚本，放在 `vendor_conf.d` 里由 fish 自动读入。
 pub const FISH: &[(&str, &str)] = &[(
-    "fish/fish/vendor_conf.d/winc.fish",
+    "fish/fish/vendor_conf.d/winct.fish",
     include_str!("../shell/winct.fish"),
 )];
 /// Python 环境的加载脚本：在用户配置读完后调整环境，并提供 `deactivate`。
@@ -35,7 +35,7 @@ pub const REMOTE_DIR: &str = ".winct-server/shell";
 pub const REMOTE_NONCE: &str = "@WINCT_NONCE@";
 
 /// 在远端启动带集成的登录 shell 的脚本，由 `sh -c` 运行：第一个参数是随机数，第二个是是否
-/// 换上 winc 的提示符，第三个是是否加载 Python 环境（`0` 为否，与本机一样只在这时设置
+/// 换上 winct 的提示符，第三个是是否加载 Python 环境（`0` 为否，与本机一样只在这时设置
 /// `WINCT_PROMPT`、`WINCT_PYTHON`），第四个是要启动的 shell（空的是用户的登录 shell）。脚本不在
 /// （尚未写好、主目录不可写）时启动不带集成的 shell。
 /// 不含单引号，可以整个包在单引号里交给各种登录 shell。
@@ -74,7 +74,7 @@ pub fn remote() -> impl Iterator<Item = (&'static str, Cow<'static, str>)> {
 pub fn remote_command(prompt: bool, python: bool, shell: Option<&str>) -> String {
     let (prompt, python) = (u8::from(prompt), u8::from(python));
     let shell = single_quoted(shell.unwrap_or_default());
-    format!("exec sh -c '{REMOTE_START}' winc {REMOTE_NONCE} {prompt} {python} {shell}")
+    format!("exec sh -c '{REMOTE_START}' winct {REMOTE_NONCE} {prompt} {python} {shell}")
 }
 
 /// 把 `text` 包在单引号里，其中的单引号写成 `'\''`：各种登录 shell 都按字面处理。
@@ -103,12 +103,12 @@ mod tests {
         assert!(!REMOTE_START.contains(['\'', '!', '\n']));
         let command = remote_command(false, true, None);
         assert!(command.starts_with("exec sh -c '[ -n \"$4\" ] && export SHELL=$4; d=$HOME/"));
-        assert!(command.ends_with("' winc @WINCT_NONCE@ 0 1 ''"));
-        assert!(remote_command(true, false, None).ends_with("' winc @WINCT_NONCE@ 1 0 ''"));
+        assert!(command.ends_with("' winct @WINCT_NONCE@ 0 1 ''"));
+        assert!(remote_command(true, false, None).ends_with("' winct @WINCT_NONCE@ 1 0 ''"));
         // 选定的 shell 作为第四个参数，路径中的单引号不结束引号。
         let chosen = remote_command(true, true, Some("/opt/it's/fish"));
         assert!(
-            chosen.ends_with(r"' winc @WINCT_NONCE@ 1 1 '/opt/it'\''s/fish'"),
+            chosen.ends_with(r"' winct @WINCT_NONCE@ 1 1 '/opt/it'\''s/fish'"),
             "{chosen}"
         );
         assert!(REMOTE_START.contains(REMOTE_DIR));

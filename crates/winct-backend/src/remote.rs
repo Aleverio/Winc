@@ -1269,7 +1269,7 @@ pub fn identity(target: &Target) -> Option<String> {
 /// 104 字节，Linux 为 108）。
 const SOCKET_PATH_MAX: usize = 104;
 
-/// 控制套接字文件名的长度（字节）：前缀 `winc-`、`%C` 展开成的 40 个十六进制字符，以及
+/// 控制套接字文件名的长度（字节）：前缀 `winct-`、`%C` 展开成的 40 个十六进制字符，以及
 /// `ssh` 创建套接字时临时加上的 17 个字符的后缀。
 const CONTROL_NAME: usize = 5 + 40 + 17;
 
@@ -1289,7 +1289,7 @@ fn control_path() -> Option<String> {
     let text = dir.to_str()?;
     let fits = text.len() + 1 + CONTROL_NAME < SOCKET_PATH_MAX;
     // `%` 在 `ControlPath` 中引出替换，目录本身的 `%` 写成 `%%`。
-    (fits && dir.is_dir()).then(|| format!("{}/winc-%C", text.replace('%', "%%")))
+    (fits && dir.is_dir()).then(|| format!("{}/winct-%C", text.replace('%', "%%")))
 }
 
 /// 登录 `target` 的另一条 `ssh`（终端）复用已建立的连接所需的选项；该目标没有以可复用的

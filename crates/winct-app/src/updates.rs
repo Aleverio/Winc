@@ -93,7 +93,7 @@ struct Updater {
     feeds: Vec<String>,
     /// 核对签名用的公钥。
     key: VerifyingKey,
-    /// 由应用自己更新的安装路径：AppImage 文件，或安装包安装的 `winc.exe`；其他安装方式为
+    /// 由应用自己更新的安装路径：AppImage 文件，或安装包安装的 `winct.exe`；其他安装方式为
     /// `None`，只提醒。
     target: Option<PathBuf>,
     /// 找到新版本以后怎样取得它。
@@ -198,18 +198,18 @@ pub(crate) fn arch_update_command() -> String {
     )
 }
 
-/// 是否由 Arch 的 pacman 安装：程序是 `/usr/bin/winc`，pacman 的本地数据库里有 winc 包。
+/// 是否由 Arch 的 pacman 安装：程序是 `/usr/bin/winct`，pacman 的本地数据库里有 winct 包。
 #[allow(
     clippy::disallowed_methods,
     reason = "只访问本机：程序自身和 pacman 的数据库在本机"
 )]
 fn from_pacman() -> bool {
     cfg!(unix)
-        && std::env::current_exe().is_ok_and(|exe| exe == Path::new("/usr/bin/winc"))
+        && std::env::current_exe().is_ok_and(|exe| exe == Path::new("/usr/bin/winct"))
         && std::fs::read_dir("/var/lib/pacman/local").is_ok_and(|entries| {
             entries
                 .flatten()
-                .any(|entry| entry.file_name().to_string_lossy().starts_with("winc-"))
+                .any(|entry| entry.file_name().to_string_lossy().starts_with("winct-"))
         })
 }
 
@@ -297,7 +297,7 @@ pub fn install() {
         match result {
             Ok(_) => report(UpdateState::Ready(item.version)),
             Err(e) => {
-                eprintln!("winc: 无法安装更新 {}：{e}", item.version);
+                eprintln!("winct: 无法安装更新 {}：{e}", item.version);
                 report(UpdateState::InstallFailed(e));
             }
         }

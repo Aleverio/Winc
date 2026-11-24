@@ -4,7 +4,7 @@ use super::*;
 
 const TEXT: &str = r#"
 # 注释
-WINCT_UPDATE_CHANNELS="global=https://dl.example.com/winc/ cn=https://dl.example.cn/winc"
+WINCT_UPDATE_CHANNELS="global=https://dl.example.com/winct/ cn=https://dl.example.cn/winct"
 WINCT_UPDATE_PUBLIC_KEY="abc+/="
 "#;
 
@@ -17,9 +17,9 @@ fn channels_and_key_come_from_the_file_unless_the_environment_sets_them() {
         [
             (
                 "global".to_owned(),
-                "https://dl.example.com/winc".to_owned()
+                "https://dl.example.com/winct".to_owned()
             ),
-            ("cn".to_owned(), "https://dl.example.cn/winc".to_owned()),
+            ("cn".to_owned(), "https://dl.example.cn/winct".to_owned()),
         ]
     );
     assert_eq!(config.public_key, "abc+/=");
@@ -48,8 +48,8 @@ fn info_plist_gets_update_keys_only_when_configured() {
     let entries = UpdateConfig::parse(TEXT, |_| None).plist_entries("arm64");
     // 每个通道写一条 `WinctUpdateFeeds`，地址带本机架构后缀。
     for want in [
-        "<string>https://dl.example.com/winc/appcast-macos-arm64.xml</string>",
-        "<string>https://dl.example.cn/winc/appcast-macos-arm64.xml</string>",
+        "<string>https://dl.example.com/winct/appcast-macos-arm64.xml</string>",
+        "<string>https://dl.example.cn/winct/appcast-macos-arm64.xml</string>",
         "<key>SUPublicEDKey</key>\n\t<string>abc+/=</string>",
         "<key>SURequireSignedFeed</key>\n\t<true/>",
         "<key>SUEnableAutomaticChecks</key>\n\t<false/>",

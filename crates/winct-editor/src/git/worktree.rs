@@ -48,7 +48,7 @@ pub struct WorktreeCheck {
     pub unreachable: usize,
 }
 
-/// 返回仓库的名字：主工作树的目录名，裸仓库去掉 `.git` 后缀（`winc.git` → `winc`）。
+/// 返回仓库的名字：主工作树的目录名，裸仓库去掉 `.git` 后缀（`winct.git` → `winct`）。
 pub fn repo_name(main: &Path) -> String {
     let name = crate::display_name(main);
     name.strip_suffix(".git").unwrap_or(&name).to_owned()

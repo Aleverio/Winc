@@ -827,9 +827,9 @@ fn unsaved_changes_survive_a_crash() {
 }
 
 #[test]
-fn a_second_winc_on_the_same_folder_leaves_the_first_ones_backups_alone() {
-    let dir = search_folder("two-wincs");
-    let root = backup_root("two-wincs");
+fn a_second_winct_on_the_same_folder_leaves_the_first_ones_backups_alone() {
+    let dir = search_folder("two-wincts");
+    let root = backup_root("two-wincts");
     let mut first = app_with(&dir.join("src/main.rs"), false);
     first.backup.root = Some(root.clone());
     first.run(Command::Insert("第一个 ".into()));
@@ -1063,22 +1063,22 @@ fn waiting_quits_once_the_files_are_closed_and_leaves_no_trace() {
     assert!(editor.workspace.is_none());
     let mut app = App::new(editor, None, Bench::from_env(), Config::default());
     app.start_one_off(&args);
-    let mut winc = crate::winct::Winct::new(None, None);
-    let key = winc.add_detached(app);
+    let mut winct = crate::winct::Winct::new(None, None);
+    let key = winct.add_detached(app);
 
     // 写入内容并保存，再关闭标签：退出。
-    winc.app(key).run(Command::Insert("修好了".into()));
-    winc.app(key).save_active();
-    assert!(!winc.settle_for_test().1);
-    winc.app(key).close_tab(0);
-    assert!(winc.settle_for_test().1);
+    winct.app(key).run(Command::Insert("修好了".into()));
+    winct.app(key).save_active();
+    assert!(!winct.settle_for_test().1);
+    winct.app(key).close_tab(0);
+    assert!(winct.settle_for_test().1);
     assert!(
         std::fs::read_to_string(&message)
             .unwrap()
             .starts_with("修好了")
     );
     // 没有改动最近列表和现场。
-    let app = winc.app(key);
+    let app = winct.app(key);
     assert!(app.state.recent.is_empty() && app.state.sessions.is_empty());
 
     let _ = std::fs::remove_dir_all(&dir);
@@ -1095,26 +1095,26 @@ fn waiting_asks_about_other_unsaved_files_before_quitting() {
     assert!(crate::open_targets(&mut editor, &args).problems.is_empty());
     let mut app = App::new(editor, None, Bench::from_env(), Config::default());
     app.start_one_off(&args);
-    let mut winc = crate::winct::Winct::new(None, None);
-    let key = winc.add_detached(app);
+    let mut winct = crate::winct::Winct::new(None, None);
+    let key = winct.add_detached(app);
 
     // 等待期间又新建了一个文件并写入内容，没有保存（临时打开时不写备份）。
-    winc.app(key).new_file();
-    winc.app(key).run(Command::Insert("草稿".into()));
-    let message = winc.app(key).editor.documents[0].id;
+    winct.app(key).new_file();
+    winct.app(key).run(Command::Insert("草稿".into()));
+    let message = winct.app(key).editor.documents[0].id;
     // 关闭等待的标签：先询问另一个文档是否保存，不直接退出而丢弃其内容。
-    winc.app(key).close_tabs(vec![message]);
-    let (_, exit) = winc.settle_for_test();
-    assert!(!exit && winc.app(key).closing.prompt.is_some());
+    winct.app(key).close_tabs(vec![message]);
+    let (_, exit) = winct.settle_for_test();
+    assert!(!exit && winct.app(key).closing.prompt.is_some());
 
     // 取消后窗口保持打开；之后按正常流程退出，选择不保存同样可以退出。
-    winc.app(key).answer_save_prompt(SaveChoice::Cancel);
-    let (_, exit) = winc.settle_for_test();
-    assert!(!exit && winc.app(key).closing.prompt.is_none());
-    assert_eq!(winc.app(key).editor.documents.len(), 1);
-    winc.app(key).request_quit();
-    winc.app(key).answer_save_prompt(SaveChoice::Discard);
-    assert!(winc.settle_for_test().1);
+    winct.app(key).answer_save_prompt(SaveChoice::Cancel);
+    let (_, exit) = winct.settle_for_test();
+    assert!(!exit && winct.app(key).closing.prompt.is_none());
+    assert_eq!(winct.app(key).editor.documents.len(), 1);
+    winct.app(key).request_quit();
+    winct.app(key).answer_save_prompt(SaveChoice::Discard);
+    assert!(winct.settle_for_test().1);
 
     let _ = std::fs::remove_dir_all(&dir);
 }

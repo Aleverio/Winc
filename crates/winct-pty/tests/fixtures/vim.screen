@@ -1,6 +1,6 @@
  0|//! 示例文件：用来录 vim 的输出。
  1|fn main() {
- 2|    hello greeting = "你好，winc";
+ 2|    hello greeting = "你好，winct"
  3|    for i in 0..3 {
  4|        println!("{greeting} {i}");
  5|    }
@@ -20,8 +20,8 @@
 19|~
 20|~
 21|~
-22|~
-23|:set nonumber
+22|:set nonumber
+23|
 cursor 6,0
 alternate true
 row 0 runs:
@@ -31,4 +31,3 @@ row 2 runs:
    19 fg=Indexed(130) bg=Default attrs=0x0
    20 fg=Default bg=Default attrs=0x0
    21 fg=Indexed(1) bg=Default attrs=0x0
-   33 fg=Default bg=Default attrs=0x0

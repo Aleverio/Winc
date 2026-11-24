@@ -647,7 +647,7 @@ fn a_new_terminal_after_the_helper_exits_is_not_shown_as_exited() {
 fn confirming_an_unchanged_rename_keeps_the_automatic_name() {
     let mut app = blank_app(false);
     show_terminal(&mut app, "$ ");
-    app.terminal.tabs[0].title = "~/winc".into();
+    app.terminal.tabs[0].title = "~/winct".into();
     app.open_terminal_rename(0);
     app.finish_terminal_rename(true);
     assert!(app.terminal.tabs[0].name.is_empty());

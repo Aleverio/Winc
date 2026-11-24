@@ -1,4 +1,4 @@
-//! 配置、状态和文档共用的文件操作：winc 的配置目录、原子写入用的临时文件和落盘。
+//! 配置、状态和文档共用的文件操作：winct 的配置目录、原子写入用的临时文件和落盘。
 
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
@@ -6,10 +6,10 @@ use std::sync::OnceLock;
 
 pub use winct_backend::local::{create_temporary, replace_file, sync_dir, sync_file};
 
-/// 便携数据目录的名称，位于 `winc.exe` 所在的目录中（见 [`portable_dir`]）。
+/// 便携数据目录的名称，位于 `winct.exe` 所在的目录中（见 [`portable_dir`]）。
 const PORTABLE_DIR: &str = "data";
 
-/// 返回便携版的数据目录：Windows 上 `winc.exe` 所在的目录中有 `data` 目录时为该目录，否则为
+/// 返回便携版的数据目录：Windows 上 `winct.exe` 所在的目录中有 `data` 目录时为该目录，否则为
 /// `None`。结果在首次调用时确定。
 ///
 /// 存在时配置、状态、未保存内容的备份、崩溃日志和单实例锁都放在其中，不写入用户目录。只在
@@ -63,13 +63,13 @@ pub(crate) fn import_missing(into: &Path, sources: [(Option<PathBuf>, &str); 2])
     copied
 }
 
-/// 返回 winc 的配置目录：便携版为便携数据目录（见 [`portable_dir`]），否则为用户目录中的配置
+/// 返回 winct 的配置目录：便携版为便携数据目录（见 [`portable_dir`]），否则为用户目录中的配置
 /// 目录，规则与 [`config_path`](crate::config_path) 相同；无法确定用户目录时返回 `None`。
 pub(crate) fn config_dir() -> Option<PathBuf> {
     portable_dir().or_else(user_config_dir)
 }
 
-/// 返回用户目录中 winc 的配置目录，不考虑便携版；无法确定用户目录时返回 `None`。
+/// 返回用户目录中 winct 的配置目录，不考虑便携版；无法确定用户目录时返回 `None`。
 pub(crate) fn user_config_dir() -> Option<PathBuf> {
     let home = || std::env::var_os("HOME").map(PathBuf::from);
 
@@ -92,7 +92,7 @@ pub(crate) fn user_config_dir() -> Option<PathBuf> {
     }
 }
 
-/// 返回用户目录中各程序存放配置的目录，即 winc 的配置目录的上一级（如 macOS 上的
+/// 返回用户目录中各程序存放配置的目录，即 winct 的配置目录的上一级（如 macOS 上的
 /// `~/Library/Application Support`）；无法确定用户目录时返回 `None`。
 pub fn user_config_root() -> Option<PathBuf> {
     user_config_dir().and_then(|dir| dir.parent().map(Path::to_path_buf))

@@ -58,7 +58,7 @@ pub(super) struct Blocks {
     pub at_prompt: bool,
     /// shell 是否在终端改宽度时自行重画整个提示符。
     ///
-    /// 由 `A` 的 `redraw=1` 参数置位，winc 的 zsh、fish 集成会发送该参数；为真时改宽度先擦掉
+    /// 由 `A` 的 `redraw=1` 参数置位，winct 的 zsh、fish 集成会发送该参数；为真时改宽度先擦掉
     /// 提示符、不重排提示符所在的行（见 `Emulator::clear_prompt`）。
     pub redraws_prompt: bool,
 }

@@ -49,16 +49,16 @@ fn a_local_repository_without_local_git_reports_not_installed() {
 fn the_credential_helper_value_quotes_the_program_for_the_shell() {
     use crate::git::locate::credential_helper_value;
     assert_eq!(
-        credential_helper_value("/Applications/Winct.app/Contents/MacOS/winc"),
-        "!'/Applications/Winct.app/Contents/MacOS/winc' git-credential"
+        credential_helper_value("/Applications/Winct.app/Contents/MacOS/winct"),
+        "!'/Applications/Winct.app/Contents/MacOS/winct' git-credential"
     );
     assert_eq!(
-        credential_helper_value(r"C:\Program Files\Winct\winc.exe"),
-        "!'C:/Program Files/Winct/winc.exe' git-credential"
+        credential_helper_value(r"C:\Program Files\Winct\winct.exe"),
+        "!'C:/Program Files/Winct/winct.exe' git-credential"
     );
     assert_eq!(
-        credential_helper_value("/home/o'neil/winc"),
-        r"!'/home/o'\''neil/winc' git-credential"
+        credential_helper_value("/home/o'neil/winct"),
+        r"!'/home/o'\''neil/winct' git-credential"
     );
 }
 
@@ -67,7 +67,7 @@ fn the_credential_helper_value_quotes_the_program_for_the_shell() {
 fn the_credential_helper_is_appended_to_the_command_environment() {
     use crate::git::locate::add_credential_helper;
     let mut command = std::process::Command::new("git");
-    add_credential_helper(&mut command, Path::new("/opt/winc"));
+    add_credential_helper(&mut command, Path::new("/opt/winct"));
     let envs: Vec<(String, String)> = command
         .get_envs()
         .filter_map(|(key, value)| Some((key.to_str()?.to_owned(), value?.to_str()?.to_owned())))
@@ -79,5 +79,5 @@ fn the_credential_helper_is_appended_to_the_command_environment() {
     let key = format!("GIT_CONFIG_KEY_{}", count - 1);
     let value = format!("GIT_CONFIG_VALUE_{}", count - 1);
     assert!(envs.contains(&(key, "credential.helper".to_owned())));
-    assert!(envs.contains(&(value, "!'/opt/winc' git-credential".to_owned())));
+    assert!(envs.contains(&(value, "!'/opt/winct' git-credential".to_owned())));
 }

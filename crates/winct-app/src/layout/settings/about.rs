@@ -6,6 +6,9 @@ use super::Setting;
 use crate::layout::{SETTINGS_GLYPH_PAD, SETTINGS_LOGO};
 use winct_render::Rect;
 
+/// 产品网站的地址；清单里不再声明 `homepage`，避免与 `repository` 重复触发 cargo 警告。
+const WEBSITE_URL: &str = "https://github.com/Aleverio/Winc";
+
 /// 社区群组（Telegram）的地址。
 const COMMUNITY_URL: &str = "https://github.com/Aleverio/Winc/discussions";
 
@@ -13,7 +16,7 @@ const COMMUNITY_URL: &str = "https://github.com/Aleverio/Winc/discussions";
 pub const LINK_ICON_W: f32 = 6.0 + 9.0;
 
 /// 产品名称，与 README 的标题和 macOS 应用包的显示名一致：显示在「关于」页顶部、开始页，
-/// 以及没有打开目录时的窗口标题中。命令行命令仍是小写的 `winc`。
+/// 以及没有打开目录时的窗口标题中。命令行命令仍是小写的 `winct`。
 pub const PRODUCT_NAME: &str = "Winct";
 
 /// 「关于」页顶部产品信息的各部分：图标、名称所在的行、版本号所在的行，水平居中。
@@ -55,14 +58,14 @@ pub fn version_line() -> String {
     t!("settings-version-line", version = version_label())
 }
 
-/// 返回「关于」页中链接的显示名（如「winc.si」）；不是链接时返回 `None`。
+/// 返回「关于」页中链接的显示名（如「winct.si」）；不是链接时返回 `None`。
 ///
-/// 官网、仓库和许可证取自 `Cargo.toml` 的 `homepage`、`repository` 和 `license`；更新日志在
-/// 应用内打开，显示「查看」。
+/// 官网和社区地址是本 fork 的固定地址；仓库和许可证取自 `Cargo.toml` 的 `repository` 和
+/// `license`；更新日志在应用内打开，显示「查看」。
 pub fn about_value(setting: Setting) -> Option<String> {
     let text = match setting {
         Setting::ReleaseNotes => return Some(t!("settings-release-notes-view").to_owned()),
-        Setting::Website => env!("CARGO_PKG_HOMEPAGE"),
+        Setting::Website => WEBSITE_URL,
         Setting::Repository => env!("CARGO_PKG_REPOSITORY"),
         Setting::Community => COMMUNITY_URL,
         Setting::License => env!("CARGO_PKG_LICENSE"),
@@ -76,7 +79,7 @@ pub fn about_value(setting: Setting) -> Option<String> {
 pub fn about_link(setting: Setting) -> Option<String> {
     let repository = env!("CARGO_PKG_REPOSITORY");
     Some(match setting {
-        Setting::Website => env!("CARGO_PKG_HOMEPAGE").to_owned(),
+        Setting::Website => WEBSITE_URL.to_owned(),
         Setting::Repository => repository.to_owned(),
         Setting::Community => COMMUNITY_URL.to_owned(),
         Setting::License => format!("{repository}/blob/HEAD/LICENSE"),

@@ -2,7 +2,7 @@
 //! 其他工作树签出时切过去，新建、移除、清理失效的，以及附属工作树的窗口标识。
 //!
 //! 工作树是同一个仓库的另一个目录，一个目录一个窗口（见 `instance.rs`），所以「在新窗口打开」就是
-//! 启动 `winc <目录>`，已开着时切到那个窗口。新建、移除都会改动仓库（[`App::git_operate_then`]），
+//! 启动 `winct <目录>`，已开着时切到那个窗口。新建、移除都会改动仓库（[`App::git_operate_then`]），
 //! 同一时刻只做一件。
 
 use std::path::{Path, PathBuf};
@@ -93,7 +93,7 @@ impl GitState {
     }
 }
 
-/// 工作树的名字：目录名；裸仓库的目录去掉 `.git`（`winc.git` → `winc`）。
+/// 工作树的名字：目录名；裸仓库的目录去掉 `.git`（`winct.git` → `winct`）。
 pub(crate) fn worktree_name(worktree: &Worktree) -> String {
     winct_editor::git::repo_name(&worktree.path)
 }
@@ -188,13 +188,13 @@ impl App {
         }
     }
 
-    /// 在新窗口里打开目录 `path`：已经在某个 winc 窗口里开着就切过去。
+    /// 在新窗口里打开目录 `path`：已经在某个 winct 窗口里开着就切过去。
     pub(in crate::app) fn open_in_new_window(&mut self, path: &Path) {
         self.new_window(Some(path.to_path_buf()));
     }
 
     /// 按打开的目录设置窗口标题（程序坞、「窗口」菜单里的名字）：目录名；打开的是附属工作树时
-    /// 后面接主工作树的名字（「feat-x — winc」），便于区分同一仓库的各个窗口。
+    /// 后面接主工作树的名字（「feat-x — winct」），便于区分同一仓库的各个窗口。
     pub(in crate::app) fn update_window_title(&self) {
         let Some(name) = self.editor.workspace.as_ref().map(|ws| ws.name.as_str()) else {
             return;
@@ -221,7 +221,7 @@ impl App {
     }
 
     /// 分支操作菜单、日志菜单的悬停提示里写的新工作树的位置：默认位置写相对于仓库（子模块是最外层的
-    /// 仓库）所在目录的（`winc.worktrees/feat-x`），配置了 `git.worktreeRoot`
+    /// 仓库）所在目录的（`winct.worktrees/feat-x`），配置了 `git.worktreeRoot`
     /// 时写完整的（主目录写成 `~`）。
     ///
     /// 还没输入名字时最后一级写「…」。

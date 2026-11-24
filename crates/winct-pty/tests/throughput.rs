@@ -18,7 +18,7 @@ fn sample() -> Vec<u8> {
     for i in 0..2000 {
         match i % 4 {
             0 => out.extend_from_slice(
-                format!("\x1b[1;32m   Compiling\x1b[0m winct-core v0.1.{i} (/Users/me/winc/crates/winct-core)\r\n")
+                format!("\x1b[1;32m   Compiling\x1b[0m winct-core v0.1.{i} (/Users/me/winct/crates/winct-core)\r\n")
                     .as_bytes(),
             ),
             1 => out.extend_from_slice(

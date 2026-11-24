@@ -271,7 +271,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           ./release/windows/conpty.ps1 -Destination target/debug
-          cargo test -p winc-pty --test windows --locked --no-fail-fast
+          cargo test -p winct-pty --test windows --locked --no-fail-fast
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Remove-Item target/debug/conpty.dll, target/debug/OpenConsole.exe
 

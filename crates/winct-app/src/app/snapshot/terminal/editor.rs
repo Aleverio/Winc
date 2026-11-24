@@ -304,16 +304,16 @@ fn snapshot_terminal_prompt() {
         )
     };
     let screen = [
-        prompt("~/project/winc", true),
+        prompt("~/project/winct", true),
         "cargo build\r\n".into(),
-        "\x1b[1m\x1b[32m   Compiling\x1b[0m winc v0.1.0\r\n".into(),
+        "\x1b[1m\x1b[32m   Compiling\x1b[0m winct v0.1.0\r\n".into(),
         "\x1b[1m\x1b[32m    Finished\x1b[0m `dev` profile in 3.2s\r\n".into(),
-        prompt("~/project/winc", true),
+        prompt("~/project/winct", true),
         "lsof -i :30030\r\n".into(),
-        prompt("~/project/winc", false),
+        prompt("~/project/winct", false),
         "ls\r\n".into(),
         "Cargo.toml  \x1b[1;34mcrates\x1b[0m  \x1b[1;34mdocs\x1b[0m  README.md\r\n".into(),
-        prompt("~/project/winc", true),
+        prompt("~/project/winct", true),
     ]
     .concat();
     for dark in [false, true] {
@@ -347,7 +347,7 @@ fn terminal_tabs_are_renamed_in_place() {
     let dir = sample_folder("terminal-rename");
     let mut app = app_with(&dir.join("short.rs"), false);
     show_terminal(&mut app, "$ ");
-    app.terminal.tabs[0].title = "~/winc".into();
+    app.terminal.tabs[0].title = "~/winct".into();
     add_tab(&mut app, "zsh", "$ ");
     paint(&mut app);
     let id = app.terminal.tabs[0].id;
@@ -366,7 +366,7 @@ fn terminal_tabs_are_renamed_in_place() {
     // 标签上换成输入框：填好现在的名字、全选，输入框跟着标签走。
     assert_eq!(app.focus, Focus::TerminalRename);
     let (_, field) = app.terminal.rename.as_ref().unwrap();
-    assert_eq!(field.selected_text(), "~/winc");
+    assert_eq!(field.selected_text(), "~/winct");
     paint(&mut app);
     let field = app.terminal.rename.as_ref().unwrap().1.view.area;
     assert!(tab.contains(field.x, field.y));
@@ -393,7 +393,7 @@ fn terminal_tabs_are_renamed_in_place() {
     let (x, y) = cell_center(&app, 1, 1);
     click(&mut app, (x, y));
     assert!(app.terminal.rename.is_none());
-    assert_eq!(app.terminal.tabs[0].label(), "~/winc");
+    assert_eq!(app.terminal.tabs[0].label(), "~/winct");
 
     // 面板保存时从命令面板改名：先把面板打开。
     app.toggle_terminal();
@@ -1006,7 +1006,7 @@ fn notices_and_cards_stay_in_the_maximized_terminal() {
     });
     app.run_action(crate::keymap::Action::MaximizeTerminal);
     assert_eq!(app.layout.editor.w, 0.0);
-    let message = "已复制路径：/tmp/winc/terminal-max-notice/short.rs";
+    let message = "已复制路径：/tmp/winct/terminal-max-notice/short.rs";
     app.notify(crate::app::NoticeKind::Done, message);
     paint(&mut app);
 
@@ -1185,7 +1185,7 @@ fn snapshot_terminal_right() {
         app.config.terminal_right = Some(true);
         show_terminal(
             &mut app,
-            "\x1b[34m\x1b[1m~/project/winc\x1b[0m \x1b[35mmain\x1b[0m \x1b[32m❯\x1b[0m ls\r\nCargo.toml  crates  docs\r\n\x1b[34m\x1b[1m~/project/winc\x1b[0m \x1b[32m❯\x1b[0m ",
+            "\x1b[34m\x1b[1m~/project/winct\x1b[0m \x1b[35mmain\x1b[0m \x1b[32m❯\x1b[0m ls\r\nCargo.toml  crates  docs\r\n\x1b[34m\x1b[1m~/project/winct\x1b[0m \x1b[32m❯\x1b[0m ",
         );
         add_tab(&mut app, "cargo", "$ ");
         app.terminal.active = 0;

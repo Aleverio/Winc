@@ -27,7 +27,7 @@ location=${location%/}
 tag=${location##*/}
 [[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Cannot resolve the latest stable release: $tag"
 version=${tag#v}
-asset="winc-$version-1-x86_64.pkg.tar.zst"
+asset="winct-$version-1-x86_64.pkg.tar.zst"
 base="https://github.com/$repo/releases/download/$tag"
 
 workdir=$(mktemp -d)

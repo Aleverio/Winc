@@ -1,6 +1,6 @@
-//! 单实例转交：新启动的进程把要打开的目录和文件交给已在运行的 winc，随即退出。
+//! 单实例转交：新启动的进程把要打开的目录和文件交给已在运行的 winct，随即退出。
 //!
-//! 已在运行的 winc 持有 [`AppLock`]（每个用户只有一个），等待连接的位置由 `app_socket_path`
+//! 已在运行的 winct 持有 [`AppLock`]（每个用户只有一个），等待连接的位置由 `app_socket_path`
 //! 或 `app_pipe_name` 决定，后者只在 Windows 上使用。Unix 套接字放在只有当前用户能创建的目录中，
 //! 命名管道拒绝来自其他主机的连接。消息格式为一行版本号，第 2 版在其后另有一行激活令牌（见
 //! [`LaunchTokens`]），之后每三个（路径、行、列）一组：路径、行号、列号各占一个以 NUL 结尾的
@@ -22,7 +22,7 @@ const HELLO: &str = "winct-open 1\n";
 /// 带激活令牌的消息（第 2 版）的第一行，下一行是令牌。
 const HELLO_TOKEN: &str = "winct-open 2\n";
 
-/// 新启动的 winc 交来的内容。
+/// 新启动的 winct 交来的内容。
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Launch {
     /// 要打开的目录和文件；为空时把当前窗口切到前台。
@@ -73,7 +73,7 @@ impl LaunchTokens {
         LaunchTokens::default()
     }
 
-    /// 交给正在运行的 winc 的令牌，优先取 Wayland 的。
+    /// 交给正在运行的 winct 的令牌，优先取 Wayland 的。
     pub fn forwarded(&self) -> Option<&str> {
         self.wayland.as_deref().or(self.x11.as_deref())
     }
@@ -97,13 +97,13 @@ fn valid_token(token: &str) -> bool {
     !token.is_empty() && !token.contains(['\n', '\0'])
 }
 
-/// 返回整个应用的套接字路径（正在运行的 winc 监听的位置）；无法构造合法路径时返回 `None`。
+/// 返回整个应用的套接字路径（正在运行的 winct 监听的位置）；无法构造合法路径时返回 `None`。
 #[cfg(unix)]
 pub fn app_socket_path() -> Option<PathBuf> {
     private_file("app", "sock")
 }
 
-/// 返回当前用户私有目录中名为 `winc-{name}.{extension}` 的文件路径。
+/// 返回当前用户私有目录中名为 `winct-{name}.{extension}` 的文件路径。
 ///
 /// 套接字（`extension` 为 `sock`）的路径长度超出系统的限制时返回 `None`。
 pub(crate) fn private_file(name: &str, extension: &str) -> Option<PathBuf> {
@@ -125,8 +125,8 @@ pub(crate) fn private_file(name: &str, extension: &str) -> Option<PathBuf> {
         create_private_dir(&dir);
         Some(dir)
     })?;
-    // 测试使用另一套名字，避免把目标交给本机正在运行的 winc 并使其切换到前台。
-    let prefix = if cfg!(test) { "winct-test" } else { "winc" };
+    // 测试使用另一套名字，避免把目标交给本机正在运行的 winct 并使其切换到前台。
+    let prefix = if cfg!(test) { "winct-test" } else { "winct" };
     let path = dir.join(format!("{prefix}-{name}.{extension}"));
     // 只有套接字的路径受这个限制；锁文件等其他文件不受限，Windows 上的数据目录常常更长。
     let fits = extension != "sock" || path.as_os_str().len() <= LIMIT;
@@ -293,7 +293,7 @@ mod imp {
     /// 取值由系统对命令行参数总长的限制决定：macOS 为 1 MiB，Linux 默认为 2 MiB；参数中的相对
     /// 路径改写为绝对路径后长度会增加，因此留出余量。
     pub(super) const MESSAGE_LIMIT: u64 = 16 << 20;
-    /// 把 `targets` 和激活令牌 `token` 交给正在运行的 winc，返回对方是否已收下。
+    /// 把 `targets` 和激活令牌 `token` 交给正在运行的 winct，返回对方是否已收下。
     ///
     /// 目标投递到 [`app_socket_path`] 对应的套接字，由对方决定切换到已打开该目录的窗口还是
     /// 新建窗口；`targets` 为空时对方把当前窗口切换到前台。
@@ -301,7 +301,7 @@ mod imp {
         app_socket_path().is_some_and(|path| forward_to(&path, targets, token))
     }
 
-    /// 把 `targets` 和激活令牌 `token` 交给 `path` 上的 winc，返回对方是否已收下。
+    /// 把 `targets` 和激活令牌 `token` 交给 `path` 上的 winct，返回对方是否已收下。
     ///
     /// 连接失败、写入失败或对方没有回复 `ok` 时按未收下处理。
     pub(super) fn forward_to(path: &Path, targets: &[Target], token: Option<&str>) -> bool {
@@ -317,21 +317,21 @@ mod imp {
         })
     }
 
-    /// 在整个应用的套接字上等待其他 winc 交来的目标，丢弃时停止监听并删除套接字文件。
+    /// 在整个应用的套接字上等待其他 winct 交来的目标，丢弃时停止监听并删除套接字文件。
     pub struct Listener {
         path: PathBuf,
         stop: Arc<AtomicBool>,
     }
 
     impl Listener {
-        /// 开始在整个应用的套接字上等待其他 winc 交来的目标，无法创建套接字时返回 `None`。
+        /// 开始在整个应用的套接字上等待其他 winct 交来的目标，无法创建套接字时返回 `None`。
         ///
         /// 每收到一次，就在后台线程中以交来的内容和答复通道调用 `open`：界面线程收下时向通道
         /// 发送 `true`，发送成功才打开目标，发送失败说明新进程已不再等待并自行打开；不收时发送
         /// `false` 或关闭通道。
         ///
         /// 调用方必须已持有 [`AppLock`](super::AppLock)：此时同名的套接字文件只可能由异常退出的
-        /// 进程留下，先移除再创建。无法创建时返回 `None`，其他 winc 仍然自行打开目标。
+        /// 进程留下，先移除再创建。无法创建时返回 `None`，其他 winct 仍然自行打开目标。
         pub fn bind_app(open: impl Fn(Launch, Sender<bool>) + Send + 'static) -> Option<Listener> {
             Self::bind_at(app_socket_path()?, open)
         }
@@ -367,7 +367,7 @@ mod imp {
                         if read.is_err() || bytes.len() as u64 > MESSAGE_LIMIT {
                             continue;
                         }
-                        // 内容不是 winc 发出的或格式不正确时不答复。
+                        // 内容不是 winct 发出的或格式不正确时不答复。
                         let Some(launch) = decode(&bytes) else {
                             continue;
                         };
@@ -396,15 +396,15 @@ mod imp {
     }
 }
 
-/// 返回整个应用的命名管道名，格式为 `\\.\pipe\winc-<用户名>-app`。
+/// 返回整个应用的命名管道名，格式为 `\\.\pipe\winct-<用户名>-app`。
 ///
 /// 便携版的管道名中另有便携数据目录的散列（见 [`path_tag`]）：便携版与安装版、不同位置的便携版
 /// 各自是独立的应用，不互相转交目标。
 #[cfg(windows)]
 pub fn app_pipe_name() -> PathBuf {
     let user = std::env::var("USERNAME").unwrap_or_default();
-    // 测试使用另一套名字，避免把目标交给本机正在运行的 winc 并使其切换到前台。
-    let prefix = if cfg!(test) { "winct-test" } else { "winc" };
+    // 测试使用另一套名字，避免把目标交给本机正在运行的 winct 并使其切换到前台。
+    let prefix = if cfg!(test) { "winct-test" } else { "winct" };
     let tag = (winct_config::files::portable_dir())
         .map(|dir| format!("-{:016x}", path_tag(&dir)))
         .unwrap_or_default();
@@ -560,14 +560,14 @@ mod imp {
         (ok != 0).then_some(pid)
     }
 
-    /// 把 `targets` 和激活令牌 `token` 交给正在运行的 winc，返回对方是否已收下。
+    /// 把 `targets` 和激活令牌 `token` 交给正在运行的 winct，返回对方是否已收下。
     ///
     /// 目标投递到 [`app_pipe_name`] 对应的命名管道。
     pub fn forward_to_app(targets: &[Target], token: Option<&str>) -> bool {
         forward_to(&app_pipe_name(), targets, token)
     }
 
-    /// 把 `targets` 和激活令牌 `token` 交给 `pipe` 上的 winc，返回对方是否已收下。
+    /// 把 `targets` 和激活令牌 `token` 交给 `pipe` 上的 winct，返回对方是否已收下。
     ///
     /// 连接失败、对方不是本用户的进程、写入失败、超过 [`REPLY_TIMEOUT`] 或对方没有回复 `ok`
     /// 时按未收下处理。
@@ -633,17 +633,17 @@ mod imp {
         ok != 0 || unsafe { GetLastError() } == ERROR_PIPE_CONNECTED
     }
 
-    /// 在整个应用的命名管道上等待其他 winc 交来的目标，丢弃时停止监听。
+    /// 在整个应用的命名管道上等待其他 winct 交来的目标，丢弃时停止监听。
     pub struct Listener {
         pipe: PathBuf,
         stop: Arc<AtomicBool>,
     }
 
     impl Listener {
-        /// 开始在整个应用的命名管道上等待其他 winc 交来的目标，无法创建管道时返回 `None`。
+        /// 开始在整个应用的命名管道上等待其他 winct 交来的目标，无法创建管道时返回 `None`。
         ///
         /// 每收到一次，就在后台线程中以交来的内容和答复通道调用 `open`：界面线程收下时向通道
-        /// 发送 `true`，不收时发送 `false` 或直接丢弃通道。无法创建管道时返回 `None`，其他 winc
+        /// 发送 `true`，不收时发送 `false` 或直接丢弃通道。无法创建管道时返回 `None`，其他 winct
         /// 仍然自行打开目标。
         pub fn bind_app(open: impl Fn(Launch, Sender<bool>) + Send + 'static) -> Option<Listener> {
             Self::bind_at(app_pipe_name(), open)
@@ -730,7 +730,7 @@ mod imp {
     use super::Launch;
     use crate::cli::Target;
 
-    /// 把 `targets` 和激活令牌交给正在运行的 winc，返回是否已收下。
+    /// 把 `targets` 和激活令牌交给正在运行的 winct，返回是否已收下。
     ///
     /// 不支持的平台上始终返回 `false`，由新进程自行打开目标。
     pub fn forward_to_app(_targets: &[Target], _token: Option<&str>) -> bool {
@@ -757,8 +757,8 @@ pub(crate) use imp::{connect as connect_pipe, create as create_pipe};
 /// 「整个应用」这一角色的持有凭据。
 ///
 /// 每个用户同时只有一个进程能获取（文件锁，进程退出时由系统释放）；持有该凭据的进程在本地
-/// 套接字（Windows 上为命名管道）上等待，其他 winc 把要打开的目录和文件交给该进程。
-/// 两个 winc 几乎同时启动时，未获取到凭据的进程仍然自行打开窗口。
+/// 套接字（Windows 上为命名管道）上等待，其他 winct 把要打开的目录和文件交给该进程。
+/// 两个 winct 几乎同时启动时，未获取到凭据的进程仍然自行打开窗口。
 pub struct AppLock {
     _file: std::fs::File,
 }
@@ -766,7 +766,7 @@ pub struct AppLock {
 impl AppLock {
     /// 获取锁，失败时返回 `None`。
     ///
-    /// 锁已被另一个 winc 持有时，或无法创建锁文件时返回 `None`。
+    /// 锁已被另一个 winct 持有时，或无法创建锁文件时返回 `None`。
     pub fn acquire() -> Option<AppLock> {
         let path = private_file("app", "lock")?;
         let file = std::fs::OpenOptions::new()
@@ -783,7 +783,7 @@ impl AppLock {
 /// 返回 `path` 的规范绝对路径。
 ///
 /// 交给另一个进程前需要先解析相对路径、`.` 与符号链接，才能与对方已打开目录的规范路径对应。
-/// 路径不存在时（例如 `winc 新目录/新文件.txt`）解析最近一个存在的上级目录，再拼上其余部分；
+/// 路径不存在时（例如 `winct 新目录/新文件.txt`）解析最近一个存在的上级目录，再拼上其余部分；
 /// 只解析文件所在的那一层不够：该层也可能不存在，而当前目录本身可能经由符号链接进入。
 pub fn absolute(path: &Path) -> PathBuf {
     // 远端的路径（虚拟路径）本身就是绝对路径，不在本机上解析。

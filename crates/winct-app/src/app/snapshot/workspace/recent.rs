@@ -101,9 +101,9 @@ fn recent_folders_can_be_removed_and_opened_in_a_new_window() {
     let bravo = sample_folder("recent-window-bravo");
     let charlie = sample_folder("recent-window-charlie");
     let missing = std::env::temp_dir().join("winct-recent-picker-missing-zzz");
-    let mut winc = Winct::new(None, None);
-    let key = winc.add_detached(blank_app(false));
-    let app = winc.app(key);
+    let mut winct = Winct::new(None, None);
+    let key = winct.add_detached(blank_app(false));
+    let app = winct.app(key);
     app.state.recent = vec![canonical(&bravo), missing.clone(), canonical(&charlie)];
 
     // 没有打开目录时同样可用，列出全部。
@@ -151,11 +151,11 @@ fn recent_folders_can_be_removed_and_opened_in_a_new_window() {
     app.picker_accept();
     app.pointer.modifiers = winit::keyboard::ModifiersState::empty();
     assert!(app.editor.root().is_none());
-    let (requests, _) = winc.settle_for_test();
+    let (requests, _) = winct.settle_for_test();
     assert_eq!(requests, [Request::NewWindow(Some(canonical(&charlie)))]);
 
     // 列表空了：面板仍然打开，留一行显示提示。
-    let app = winc.app(key);
+    let app = winct.app(key);
     app.state.recent.clear();
     app.run_action(Action::OpenRecent);
     assert!(app.overlays.picker.open && app.overlays.picker.hits.is_empty());
@@ -170,7 +170,7 @@ fn recent_folders_can_be_removed_and_opened_in_a_new_window() {
 #[ignore = "截图，手动运行"]
 fn snapshot_recent_folders() {
     let alpha = search_folder("recent-shot-alpha");
-    let others = ["winct-site", "notes", "nest-recent/winc"].map(sample_folder);
+    let others = ["winct-site", "notes", "nest-recent/winct"].map(sample_folder);
     let mut app = app_with(&alpha, false);
     app.state.recent = std::iter::once(&alpha)
         .chain(&others)
@@ -180,7 +180,7 @@ fn snapshot_recent_folders() {
     app.state.recent_files = files.iter().map(|p| canonical(p)).collect();
     app.run_action(Action::OpenRecent);
     shoot(&mut app, "recent-folders");
-    app.overlays.picker.input.set_text("winc");
+    app.overlays.picker.input.set_text("winct");
     app.picker_refresh();
     shoot(&mut app, "recent-folders-filtered");
 
@@ -196,9 +196,9 @@ fn shoot_same_named_recent_folders() {
     let mut app = blank_app(false);
     let deep = "/Volumes/archive/clients/very/long/path/to/the/workspaces";
     app.state.recent = vec![
-        PathBuf::from(format!("{deep}/companyA/projects/winc")),
+        PathBuf::from(format!("{deep}/companyA/projects/winct")),
         PathBuf::from("/Users/me/work/api"),
-        PathBuf::from(format!("{deep}/companyB/projects/winc")),
+        PathBuf::from(format!("{deep}/companyB/projects/winct")),
     ];
     shoot(&mut app, "recent-same-name-start");
     app.open_recent_folders();

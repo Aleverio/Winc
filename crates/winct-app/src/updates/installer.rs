@@ -164,7 +164,7 @@ pub fn after_exit(setup: &Path, relaunch: bool) {
         Ok(())
     })();
     if let Err(e) = result {
-        eprintln!("winc: 无法运行安装包：{e}");
+        eprintln!("winct: 无法运行安装包：{e}");
     }
 }
 

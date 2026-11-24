@@ -26,7 +26,7 @@ unsafe impl Sync for DockMenu {}
 static DOCK_MENU: OnceLock<DockMenu> = OnceLock::new();
 
 /// 程序坞菜单里「新建窗口」的动作名，添加在 `winit` 的应用委托上。
-const NEW_WINDOW_ACTION: &CStr = c"wincNewWindow:";
+const NEW_WINDOW_ACTION: &CStr = c"winctNewWindow:";
 
 /// 在菜单栏上加「窗口」菜单（最小化 ⌘M、缩放、全部前置，下面是 `AppKit` 列出的各窗口），并在
 /// 程序坞菜单里加「新建窗口」，选中时调用 `new_window`。
@@ -37,7 +37,7 @@ pub fn add_window_menus(open: impl Fn() + Send + Sync + 'static) {
         return;
     }
 
-    /// 实现 `- (void)wincNewWindow:(id)sender`：程序坞菜单中「新建窗口」的动作。
+    /// 实现 `- (void)winctNewWindow:(id)sender`：程序坞菜单中「新建窗口」的动作。
     extern "C-unwind" fn new_window(_this: *mut AnyObject, _cmd: Sel, _sender: *mut AnyObject) {
         if let Some(open) = NEW_WINDOW_HANDLER.get() {
             open();

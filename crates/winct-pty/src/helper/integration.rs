@@ -1,7 +1,7 @@
-//! shell 集成的注入：不改用户的配置文件，只换几个环境变量或参数，让 shell 先读 winc 的脚本，
+//! shell 集成的注入：不改用户的配置文件，只换几个环境变量或参数，让 shell 先读 winct 的脚本，
 //! 脚本里再读取用户自己的配置。
 //!
-//! zsh 换 `ZDOTDIR`，bash 用 `--rcfile`，fish 把 winc 的目录加到 `XDG_DATA_DIRS`。脚本编进辅助
+//! zsh 换 `ZDOTDIR`，bash 用 `--rcfile`，fish 把 winct 的目录加到 `XDG_DATA_DIRS`。脚本编进辅助
 //! 进程，启动前内容不一致时重写；写不进去或不认识的 shell 不注入，只是没有命令块。每个 shell
 //! 另获一个随机数（`WINCT_NONCE`，脚本读取后即删除），报告命令行时附带。Windows 上仅注入 WSL
 //! 发行版的默认 shell（`inject_wsl`），脚本经 `wslpath` 换算路径后读取，不在发行版内写入文件。
@@ -89,7 +89,7 @@ pub fn inject(
                 *login = false;
                 set(env, b"WINCT_BASH_LOGIN", b"1".to_vec());
             }
-            args.extend([b"--rcfile".to_vec(), path("bash/winc.bash")]);
+            args.extend([b"--rcfile".to_vec(), path("bash/winct.bash")]);
         }
         _ => {
             let mut dirs = path("fish");
@@ -99,7 +99,7 @@ pub fn inject(
                     dirs.extend_from_slice(&old);
                     set(env, b"WINCT_XDG_DATA_DIRS", old);
                 }
-                // 没设时用 fish 的默认值；winc 的目录加在前面，默认值仍然保留。
+                // 没设时用 fish 的默认值；winct 的目录加在前面，默认值仍然保留。
                 None => dirs.extend_from_slice(b"/usr/local/share:/usr/share"),
             }
             set(env, b"XDG_DATA_DIRS", dirs);
@@ -111,7 +111,7 @@ pub fn inject(
 /// 为经 `ssh` 在远端主机上启动的 shell 准备注入：`args` 的最后一项（在远端运行的命令）里有
 /// [`winct_pty::scripts::REMOTE_NONCE`] 时，把最后一处换成新生成的随机数并返回它。
 ///
-/// 脚本已由 winc 经它自己的连接写到远端；命令里没有该记号（没有启用集成、脚本没有写好）时
+/// 脚本已由 winct 经它自己的连接写到远端；命令里没有该记号（没有启用集成、脚本没有写好）时
 /// 不注入，返回 `None`。
 pub fn inject_remote(program: &[u8], args: &mut [Vec<u8>]) -> Option<String> {
     let name = program

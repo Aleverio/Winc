@@ -143,7 +143,7 @@ pub(crate) struct Frame {
 ///
 /// 服务进程的位置只有它自己知道（上传目录、版本摘要）；以参数再次运行自身的功能（监视目录）
 /// 用这个名字启动。
-pub(crate) const SELF: &[u8] = b"winc:self";
+pub(crate) const SELF: &[u8] = b"winct:self";
 
 /// 载荷超过 [`MAX_FRAME`] 时返回 [`io::ErrorKind::InvalidInput`]，不写出任何字节；其余与写入相同。
 /// 是否载荷 `payload` 能装进一帧（连同类型和请求号不超过 [`MAX_FRAME`]）；服务进程应答前

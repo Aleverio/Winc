@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./crates/winct-app/assets/icon.svg" alt="winc" width="128" />
+  <img src="./crates/winct-app/assets/icon.svg" alt="winct" width="128" />
 </p>
 
 <h1 align="center">Winct - Alverion's Fork</h1>
@@ -88,7 +88,7 @@ zoomed image to pan, and double-click to fit it again. This also works in the SV
 | Linux | x86_64, X11 or Wayland | AppImage, deb, Arch repository |
 | Windows | Windows 10 1809 or later, x86_64 | NSIS, MSI, portable ZIP |
 
-The portable ZIP keeps settings and state in the `data` folder beside `winc.exe`; delete that
+The portable ZIP keeps settings and state in the `data` folder beside `winct.exe`; delete that
 folder to keep them in the user profile instead.
 
 ## Language Servers
@@ -156,7 +156,7 @@ repeatable release-build measurements before doing either.
 Alverion's builds and releases for this fork are published on
 [this repository's GitHub Releases page](https://github.com/Aleverio/Winc/releases) when available.
 For the original project, visit [DEEIX-AI/Winc](https://github.com/DEEIX-AI/Winc) or
-[winc.si](https://github.com/Aleverio/Winc).
+[winct.si](https://github.com/Aleverio/Winc).
 
 ## Install
 
@@ -180,26 +180,26 @@ Releases page.
 ## Command Line
 
 ```bash
-winc .                  # open the current folder
-winc file.rs:12:5       # open a file at a line and column
-winc --wait file        # wait until the tab closes, for example as the Git editor
-cargo build 2>&1 | winc -   # read standard input
+winct .                  # open the current folder
+winct file.rs:12:5       # open a file at a line and column
+winct --wait file        # wait until the tab closes, for example as the Git editor
+cargo build 2>&1 | winct -   # read standard input
 ```
 
-The Windows installers, the Linux deb and Arch packages, and `winctup` add `winc` to `PATH` (the runtime also installs the `winct` alias); the standalone Windows portable ZIP leaves `PATH` unchanged. On macOS, choose **Winct → Install winc Command…** from the menu bar or run **Shell Command: Install winc Command** from the command palette; with the Linux AppImage, use the command palette.
+The Windows installers, the Linux deb and Arch packages, and `winctup` add `winct` to `PATH` (the runtime also installs the `winct` alias); the standalone Windows portable ZIP leaves `PATH` unchanged. On macOS, choose **Winct → Install winct Command…** from the menu bar or run **Shell Command: Install winct Command** from the command palette; with the Linux AppImage, use the command palette.
 
-On macOS the app is started by the system, so it does not inherit the environment variables of your shell. Use `winc --new-instance` to keep them.
+On macOS the app is started by the system, so it does not inherit the environment variables of your shell. Use `winct --new-instance` to keep them.
 
 ## Building from Source
 
-winc builds with Rust 1.99.1; `rust-toolchain.toml` selects the toolchain automatically.
+winct builds with Rust 1.99.1; `rust-toolchain.toml` selects the toolchain automatically.
 
 ```bash
 cargo run --release                 # build and run
 cargo run --release -- <path>       # open a file or folder
 ```
 
-For versioning, signing configuration and release workflows, see [Releasing winc](release/README.md).
+For versioning, signing configuration and release workflows, see [Releasing winct](release/README.md).
 
 ## Development
 
@@ -211,7 +211,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 cargo xtask bench                   # measure startup, memory, and scrolling against budgets
 ```
 
-The interface is written in Rust. Windows come from winit, and rendering is done by winc's own
+The interface is written in Rust. Windows come from winit, and rendering is done by winct's own
 CPU rasterizer. On macOS, frames are written directly to an IOSurface.
 
 The workspace is split into crates by responsibility:
@@ -233,7 +233,7 @@ The workspace is split into crates by responsibility:
 | `winct-i18n` | Interface strings (Fluent bundles) |
 | `winct-version` | The product version, read from the `VERSION` file |
 | `winct-app` | The application: windows, events, and views |
-| `winc` | The executable's entry point, which only calls into `winct-app` |
+| `winct` | The executable's entry point, which only calls into `winct-app` |
 | `xtask` | Development automation: tests, benchmarks, and packaging |
 
 ## Contributing
@@ -255,4 +255,4 @@ vulnerability, see [SECURITY.md](.github/SECURITY.md).
 
 ## License
 
-winc is licensed under the [Apache License, Version 2.0](LICENSE). See [NOTICE](NOTICE).
+winct is licensed under the [Apache License, Version 2.0](LICENSE). See [NOTICE](NOTICE).

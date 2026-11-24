@@ -144,7 +144,7 @@ type Planned = (Launch, Result<Plan, FormatError>);
 ///
 /// 打开陌生的仓库时，直接运行其中的程序不安全。
 struct Approval {
-    /// 用户的选择按此目录记录：项目自带程序所在的目录，或项目的 `.winc` 目录。
+    /// 用户的选择按此目录记录：项目自带程序所在的目录，或项目的 `.winct` 目录。
     folder: PathBuf,
     /// 询问的是项目设置中的命令时，命令的原文；用户的同意只对这条命令有效。
     command: Option<String>,
@@ -333,7 +333,7 @@ impl App {
     pub(in crate::app) fn project_format(&self) -> Option<Config> {
         let (config, problems) = Config::load_project(self.editor.root()?)?;
         for problem in problems {
-            eprintln!("winc: .winct/config.json：{problem}");
+            eprintln!("winct: .winct/config.json：{problem}");
         }
         Some(config)
     }

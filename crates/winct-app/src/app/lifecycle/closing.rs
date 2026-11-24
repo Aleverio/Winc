@@ -567,7 +567,7 @@ pub struct Closing {
     /// 正在确认关闭（关闭前确认，或结束终端中运行的程序）时，确认后要执行的关闭（退出或
     /// 关闭窗口）。
     ///
-    /// 为 `Some` 期间，退出流程尚未得出结果（见 [`crate::winc`]）。
+    /// 为 `Some` 期间，退出流程尚未得出结果（见 [`crate::winct`]）。
     pub(crate) confirming: Option<CloseRequest>,
     /// 退出前的处理均已完成；当前一轮事件处理结束后退出。
     pub(crate) quit_requested: bool,

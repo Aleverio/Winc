@@ -7,7 +7,7 @@ format-cancelled = 已取消
 ## 设置中的格式化工具行。
 
 format-tool-custom = 自定义
-format-tool-from-project = 由项目设置（.winc/config.json）指定
+format-tool-from-project = 由项目设置（.winct/config.json）指定
 format-tool-auto = 自动
 format-tool-auto-reason = 自动 · 根据 { $reason }
 format-tool-auto-installed = 自动 · 已安装
@@ -32,7 +32,7 @@ format-approval-on-save-what = 项目设置开启的「保存时{ $task ->
         [fix] 修复
        *[other] 格式化
     }」
-format-approval-on-save-detail = 此项目的 .winc/config.json 要求每次保存前先{ $task ->
+format-approval-on-save-detail = 此项目的 .winct/config.json 要求每次保存前先{ $task ->
         [fix] 修复
        *[other] 格式化
     }。{ $task ->
@@ -43,7 +43,7 @@ format-approval-project-command = 项目设置中的{ $task ->
         [fix] 修复
        *[other] 格式化
     }命令
-format-approval-project-command-detail = 命令来自 .winc/config.json：{ $command }
+format-approval-project-command-detail = 命令来自 .winct/config.json：{ $command }
 format-approval-project-tool = 项目中的「{ $tool }」
 format-approval-project-tool-detail = { $path } 由此项目提供。请仅在信任此项目时运行。
 format-approval-allow-question = 允许{ $what }吗？

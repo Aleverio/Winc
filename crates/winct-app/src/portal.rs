@@ -116,7 +116,7 @@ impl Request {
         // 本进程内的请求编号：和进程号一起拼进 `handle_token`，同一进程的每次请求都不重复。
         static NEXT: AtomicU32 = AtomicU32::new(0);
         let token = format!(
-            "winc{}_{}",
+            "winct{}_{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         );

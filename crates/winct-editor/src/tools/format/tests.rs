@@ -23,10 +23,25 @@ fn language(id: &str) -> &'static Language {
     winct_syntax::find(id).unwrap()
 }
 
-/// 创建 `PATH` 依次为 `bin` 和系统目录的 `Formatter`（模拟工具的脚本里要用 `tr`、`cat`）。
+/// 创建 `PATH` 只含 `bin` 和一组最小系统命令的 `Formatter`。
+///
+/// 不能直接把 `/usr/bin`、`/bin` 放进 `PATH`：开发机上可能装着 `black`、`prettier` 等真实工具，
+/// 「没有安装任何格式化工具」的用例会因此失败。模拟脚本用到的外部命令从这里单独链接进来。
 #[cfg_attr(not(unix), allow(dead_code))] // 只有 Unix 上的测试用到
 fn formatter(bin: &Path) -> Formatter {
-    let path = std::env::join_paths([bin, Path::new("/usr/bin"), Path::new("/bin")]).unwrap();
+    let name = bin.file_name().unwrap().to_string_lossy();
+    let sys = bin
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(format!("{name}-sys"));
+    std::fs::create_dir_all(&sys).unwrap();
+    for command in ["tr", "cat", "sleep", "sed", "tee"] {
+        let link = sys.join(command);
+        if !link.exists() {
+            std::os::unix::fs::symlink(Path::new("/usr/bin").join(command), link).unwrap();
+        }
+    }
+    let path = std::env::join_paths([bin, sys.as_path()]).unwrap();
     Formatter::with_vars(vec![
         (OsString::from("PATH"), path),
         (OsString::from("HOME"), OsString::from("/nowhere")),

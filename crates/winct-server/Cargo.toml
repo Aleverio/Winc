@@ -1,6 +1,6 @@
 [package]
 name = "winct-server"
-description = "运行在远端主机上的服务进程：经标准输入输出为本机的 winc 执行文件操作。"
+description = "运行在远端主机上的服务进程：经标准输入输出为本机的 winct 执行文件操作。"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true

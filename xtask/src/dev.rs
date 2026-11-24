@@ -27,7 +27,7 @@ struct Member {
 /// 只依赖两者共用的 `winct-emoji`，彼此不依赖；`winct-editor` 不依赖窗口与渲染，只有 `winct-app`
 /// 同时依赖编辑器与渲染层。新增内部依赖时必须在此登记。
 const LAYERS: &[(&str, &[&str])] = &[
-    ("winc", &["winct-app"]),
+    ("winct", &["winct-app"]),
     (
         "winct-app",
         &[
@@ -202,7 +202,7 @@ fn layer_violations(members: &[Member]) -> Vec<String> {
 
 /// 读出 workspace 的成员：`crates/` 下的每个目录和 `xtask`。
 ///
-/// 依赖取每行第一个以 `winc-` 开头、且不同于包自身的标识符；写成 `名字.workspace = true` 或
+/// 依赖取每行第一个以 `winct-` 开头、且不同于包自身的标识符；写成 `名字.workspace = true` 或
 /// `名字 = …` 都能识别。
 ///
 /// # Errors
@@ -231,7 +231,7 @@ fn members(root: &Path) -> Result<Vec<Member>, String> {
             .lines()
             .filter_map(|l| {
                 let key = l.split(['=', '.', ' ']).next()?.trim();
-                (key.starts_with("winc-") && key != name).then(|| key.to_owned())
+                (key.starts_with("winct-") && key != name).then(|| key.to_owned())
             })
             .collect();
         members.push(Member { name, dir, deps });
@@ -443,7 +443,7 @@ pub fn tidy() -> Result<(), String> {
             .arg(exe)
             .output()
             .map_err(|e| format!("无法运行 nm：{e}"))?;
-        // 调试映射里每个目标文件一行：`… OSO /…/deps/winc-….rcgu.o`。
+        // 调试映射里每个目标文件一行：`… OSO /…/deps/winct-….rcgu.o`。
         for line in String::from_utf8_lossy(&output.stdout).lines() {
             if let Some((_, path)) = line.split_once(" OSO ") {
                 referenced.insert(PathBuf::from(path.trim()));
@@ -469,7 +469,7 @@ pub fn tidy() -> Result<(), String> {
     Ok(())
 }
 
-/// 是否是可执行的普通文件（测试程序、`winc`）。
+/// 是否是可执行的普通文件（测试程序、`winct`）。
 ///
 /// 目录、`.d` 依赖文件、库不算。
 fn is_executable(path: &Path) -> bool {

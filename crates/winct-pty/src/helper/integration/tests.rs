@@ -110,7 +110,7 @@ mod boot {
         let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
         let mut command = Command::new("sh");
         command
-            .args(["-c", WSL_RUN, r"C:\Users\me\winc\shell"])
+            .args(["-c", WSL_RUN, r"C:\Users\me\winct\shell"])
             .env_clear()
             .env("PATH", path)
             .env("SHELL", &fake)
@@ -134,7 +134,7 @@ mod boot {
     fn bash_reads_the_integration_as_its_rcfile() {
         let dir = scratch("boot-bash");
         let (args, vars) = run(&dir, "bash", true, &[]);
-        let rcfile = dir.join("scripts/bash/winc.bash").display().to_string();
+        let rcfile = dir.join("scripts/bash/winct.bash").display().to_string();
         assert_eq!(args, ["--rcfile", rcfile.as_str()]);
         assert_eq!(vars["WINCT_BASH_LOGIN"], "1");
         assert_eq!(vars["WINCT_NONCE"], "secret");
@@ -195,13 +195,13 @@ mod boot {
 fn a_remote_shell_gets_a_fresh_nonce_in_its_command() {
     let command = |text: &str| vec![b"-t".to_vec(), b"host".to_vec(), text.as_bytes().to_vec()];
     // 只换最后一处：目录名里恰好有这个记号时不动它。
-    let mut args = command("cd '/a @WINCT_NONCE@' && exec sh -c 'x' winc @WINCT_NONCE@ 1");
+    let mut args = command("cd '/a @WINCT_NONCE@' && exec sh -c 'x' winct @WINCT_NONCE@ 1");
     let nonce = inject_remote(b"/usr/bin/ssh", &mut args).unwrap();
     assert_eq!(nonce.len(), 32);
-    let expected = format!("cd '/a @WINCT_NONCE@' && exec sh -c 'x' winc {nonce} 1");
+    let expected = format!("cd '/a @WINCT_NONCE@' && exec sh -c 'x' winct {nonce} 1");
     assert_eq!(args[2], expected.as_bytes());
     assert_eq!(args[..2], command("")[..2]);
-    let mut again = command("exec sh -c 'x' winc @WINCT_NONCE@ 1");
+    let mut again = command("exec sh -c 'x' winct @WINCT_NONCE@ 1");
     assert_ne!(inject_remote(b"ssh", &mut again).unwrap(), nonce);
 
     // 没有记号的命令、别的程序、没有参数：不注入，参数不变。

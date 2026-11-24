@@ -34,7 +34,7 @@ export function releaseAssets(platform, version) {
   if (platform === "linux-x64" && /^\d+\.\d+\.\d+$/.test(version)) {
     assets.push({
       directory: "arch", extension: ".pkg.tar.zst", update: false, feed: false,
-      name: `winc-${version}-1-x86_64.pkg.tar.zst`,
+      name: `winct-${version}-1-x86_64.pkg.tar.zst`,
     });
   }
   return assets;

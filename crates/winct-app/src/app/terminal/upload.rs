@@ -20,11 +20,11 @@ use super::*;
 use crate::app::NoticeKind;
 use crate::app::editor::clipboard::ClipImage;
 
-/// 在远端准备存放目录的脚本：`$XDG_CACHE_HOME/winc/paste`（没有设置时为 `~/.cache/winc/paste`），
+/// 在远端准备存放目录的脚本：`$XDG_CACHE_HOME/winct/paste`（没有设置时为 `~/.cache/winct/paste`），
 /// 只有用户本人可以访问（截图里可能有不想给同一台主机上其他用户看的内容）。顺便删掉 7 天前传上来
 /// 的文件，目录不会越积越大。输出目录的绝对路径。
 pub(super) const PREPARE: &str = concat!(
-    r#"d="${XDG_CACHE_HOME:-$HOME/.cache}/winc/paste"; "#,
+    r#"d="${XDG_CACHE_HOME:-$HOME/.cache}/winct/paste"; "#,
     r#"mkdir -p "$d" && chmod 700 "$d" || exit 1; "#,
     r#"find "$d" -type f -mtime +7 -exec rm -f {} + 2>/dev/null; "#,
     r#"printf %s "$d""#,
@@ -247,8 +247,8 @@ mod tests {
         assert_eq!(safe_name("a'b\"c$(d).txt"), "a_b_c__d_.txt");
         assert_eq!(safe_name("截图 1.png"), "截图_1.png");
         assert_eq!(
-            paste_text(&["/home/me/.cache/winc/paste/paste-1.png".into()]),
-            "/home/me/.cache/winc/paste/paste-1.png"
+            paste_text(&["/home/me/.cache/winct/paste/paste-1.png".into()]),
+            "/home/me/.cache/winct/paste/paste-1.png"
         );
         assert_eq!(
             paste_text(&["/home/a b/x.png".into(), "/tmp/y.png".into()]),
@@ -266,7 +266,7 @@ mod tests {
             let cache =
                 std::env::temp_dir().join(format!("winct-paste-dir-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&cache);
-            let dir = cache.join("winc/paste");
+            let dir = cache.join("winct/paste");
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(dir.join("old.png"), "x").unwrap();
             std::fs::write(dir.join("new.png"), "x").unwrap();

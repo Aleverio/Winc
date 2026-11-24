@@ -9,5 +9,5 @@ X-KDE-Priority=TopLevel
 [Desktop Action openInWinct]
 Name=Open in Winct
 Name[zh_CN]=在 Winct 中打开
-Icon=winc
-Exec=winc %F
+Icon=winct
+Exec=winct %F

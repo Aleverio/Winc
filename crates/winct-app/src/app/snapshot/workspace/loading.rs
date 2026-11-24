@@ -78,7 +78,7 @@ fn a_jump_waits_for_its_tab_and_is_dropped_when_the_tab_closes() {
     let other = app.editor.active.unwrap();
 
     // 切换标签后读完：内容换上，当前标签不受影响；跳转留到再次切到该标签时执行
-    // （例如 `winc a.rs:10 b.rs:20` 中 `a.rs` 的跳转）。
+    // （例如 `winct a.rs:10 b.rs:20` 中 `a.rs` 的跳转）。
     let load = open_unloaded(&mut app, &second);
     app.jump_to(30, 0, 0);
     app.activate_tab(other);

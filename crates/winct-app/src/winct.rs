@@ -287,8 +287,8 @@ pub struct Winct {
     template: Option<Template>,
     /// 正在进行的退出：当前在问的窗口和还没问的窗口；没有在退出时为 `None`。
     quitting: Option<Quitting>,
-    /// 在整个应用的套接字上等之后启动的 `winc` 交来的目录和文件（见 `instance`）；另一个
-    /// winc 已经在等、或者不能新建窗口时没有。
+    /// 在整个应用的套接字上等之后启动的 `winct` 交来的目录和文件（见 `instance`）；另一个
+    /// winct 已经在等、或者不能新建窗口时没有。
     launches: Option<(Listener, AppLock)>,
 }
 
@@ -308,9 +308,9 @@ impl Winct {
         }
     }
 
-    /// 开始在整个应用的套接字上等之后启动的 `winc`（见 `instance`）。
+    /// 开始在整个应用的套接字上等之后启动的 `winct`（见 `instance`）。
     ///
-    /// 另一个 winc 已经拿着锁、不能新建窗口（临时打开、测量）或没有事件循环时不等，各自开
+    /// 另一个 winct 已经拿着锁、不能新建窗口（临时打开、测量）或没有事件循环时不等，各自开
     /// 各自的。
     pub fn listen_for_launches(&mut self) {
         let (Some(_), Some(proxy)) = (&self.template, self.proxy.clone()) else {
@@ -644,7 +644,7 @@ impl Winct {
         }
     }
 
-    /// 新启动的 `winc` 把 `targets` 交给了整个应用，按 [`Self::open_targets`] 打开。
+    /// 新启动的 `winct` 把 `targets` 交给了整个应用，按 [`Self::open_targets`] 打开。
     ///
     /// 正在退出时不收，新进程自己打开。
     fn launched(
@@ -669,8 +669,8 @@ impl Winct {
         self.open_targets(event_loop, &launch.targets, launch.token);
     }
 
-    /// 系统交来了要打开的 `targets`（拖到程序坞的图标上、文件管理器里的「打开方式」、`winc://`
-    /// 链接），和之后启动的 `winc` 交来的一样按 [`Self::open_targets`] 打开。
+    /// 系统交来了要打开的 `targets`（拖到程序坞的图标上、文件管理器里的「打开方式」、`winct://`
+    /// 链接），和之后启动的 `winct` 交来的一样按 [`Self::open_targets`] 打开。
     ///
     /// 正在退出时不理会。
     fn opened(&mut self, event_loop: &ActiveEventLoop, targets: &[Target]) {
@@ -686,7 +686,7 @@ impl Winct {
 
     /// 把 `targets` 开在合适的窗口里（窗口见 [`Self::window_for`]），并把它切到前台。
     ///
-    /// `token` 是新启动的 winc 交来的激活令牌（见 [`App::set_activation`]）。
+    /// `token` 是新启动的 winct 交来的激活令牌（见 [`App::set_activation`]）。
     fn open_targets(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -908,7 +908,7 @@ impl Winct {
             .collect();
         let (_, result) = State::update(&path, &State::default(), |state| state.others = others);
         if let Err(e) = result {
-            eprintln!("winc: 无法记下开着的窗口：{e}");
+            eprintln!("winct: 无法记下开着的窗口：{e}");
         }
     }
 

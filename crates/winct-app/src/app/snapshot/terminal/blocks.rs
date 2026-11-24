@@ -558,7 +558,7 @@ fn snapshot_terminal_blocks() {
     let mut screen = cwd(&dir);
     screen.push_str(&command(
         "cargo build",
-        &["   Compiling winc v0.1.0", "    Finished `dev` profile"],
+        &["   Compiling winct v0.1.0", "    Finished `dev` profile"],
         0,
     ));
     screen.push_str(&command(

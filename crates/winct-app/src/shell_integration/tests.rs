@@ -131,7 +131,7 @@ fn the_menu_is_one_entry_for_files_and_one_for_folders() {
 
     set_menu(&mut registry, Some(&menu()), true);
     assert!(menu_on(&registry));
-    let files = r"Software\Classes\*\shell\winc";
+    let files = r"Software\Classes\*\shell\winct";
     assert_eq!(registry.value(files, ""), Some("通过 Winct 打开"));
     assert_eq!(
         registry.value(files, "Icon"),
@@ -214,7 +214,7 @@ fn listing_the_file_types_keeps_other_programs_entries() {
     set_types(&mut registry, false);
     assert!(!types_on(&registry));
     assert_eq!(registry.value(json, "other.json"), Some(""));
-    assert_eq!(registry.value(json, "winc.JSON"), None);
+    assert_eq!(registry.value(json, "winct.JSON"), None);
     assert!(!registry.has_key(false, r"Software\Classes\.MD\OpenWithProgids"));
     assert!(!registry.has_key(false, r"Software\Classes\.MD"));
     // 记为关：安装程序默认会列入，升级时据此保持关着。
@@ -225,15 +225,14 @@ fn listing_the_file_types_keeps_other_programs_entries() {
 fn the_settings_list_the_group_only_on_windows() {
     use crate::layout::{Setting, SettingControl, SettingsPage};
 
-    let page = Setting::ExplorerMenu.page();
-    let sections = page.sections(&Default::default());
+    let sections = SettingsPage::General.sections(&Default::default());
     let listed = sections
         .iter()
         .any(|s| s.items.contains(&Setting::ExplorerMenu));
     assert_eq!(listed, cfg!(windows));
     // 记在注册表里，不是配置文件中的项；同组各项都有说明。
     for setting in [Setting::ExplorerMenu, Setting::FileAssociations] {
-        assert_eq!(setting.page(), page);
+        assert_eq!(setting.page(), SettingsPage::Editor);
         assert_eq!(setting.control(), SettingControl::Switch);
         assert_eq!(setting.key(), None);
         assert!(setting.description().is_some());

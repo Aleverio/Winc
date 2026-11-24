@@ -3,7 +3,7 @@
 One-command Winct bootstrap:
   irm https://raw.githubusercontent.com/Aleverio/Winc/dev/release/runtime/install.ps1 | iex
 
-`iex` cannot pass -Channel; set $env:WINCTT_CHANNEL before bootstrapping instead.
+`iex` cannot pass -Channel; set $env:WINCT_CHANNEL before bootstrapping instead.
 
 The runtime is downloaded and checked against CHECKSUMS before it is allowed to run.
 #>
@@ -20,14 +20,14 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-if (-not $Repo) { $Repo = if ($env:WINCTT_RELEASE_REPO) { $env:WINCTT_RELEASE_REPO } else { 'Aleverio/Winc' } }
-if (-not $Ref) { $Ref = if ($env:WINCTT_RUNTIME_REF) { $env:WINCTT_RUNTIME_REF } else { 'dev' } }
+if (-not $Repo) { $Repo = if ($env:WINCT_RELEASE_REPO) { $env:WINCT_RELEASE_REPO } else { 'Aleverio/Winc' } }
+if (-not $Ref) { $Ref = if ($env:WINCT_RUNTIME_REF) { $env:WINCT_RUNTIME_REF } else { 'dev' } }
 if (-not $HomeDir) {
-    if ($env:WINCTT_HOME) { $HomeDir = $env:WINCTT_HOME }
+    if ($env:WINCT_HOME) { $HomeDir = $env:WINCT_HOME }
     elseif ($env:LOCALAPPDATA) { $HomeDir = Join-Path $env:LOCALAPPDATA 'winct' }
     else { $HomeDir = Join-Path (Join-Path $HOME '.local/share') 'winct' }
 }
-if (-not $BinDir) { $BinDir = if ($env:WINCTT_BIN) { $env:WINCTT_BIN } else { Join-Path $HomeDir 'bin' } }
+if (-not $BinDir) { $BinDir = if ($env:WINCT_BIN) { $env:WINCT_BIN } else { Join-Path $HomeDir 'bin' } }
 
 $RawBase = "https://raw.githubusercontent.com/$Repo/$Ref/release/runtime"
 $Tmp = Join-Path ([IO.Path]::GetTempPath()) ('winctup-bootstrap-' + [guid]::NewGuid().ToString('N'))
@@ -35,8 +35,8 @@ $Tmp = Join-Path ([IO.Path]::GetTempPath()) ('winctup-bootstrap-' + [guid]::NewG
 function Fail([string]$Message) { throw "winctup bootstrap: $Message" }
 
 try {
-    if ($Repo -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { Fail 'WINCTT_RELEASE_REPO must be owner/repo' }
-    if ($Ref -notmatch '^[A-Za-z0-9._/-]+$') { Fail 'WINCTT_RUNTIME_REF has an invalid character' }
+    if ($Repo -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { Fail 'WINCT_RELEASE_REPO must be owner/repo' }
+    if ($Ref -notmatch '^[A-Za-z0-9._/-]+$') { Fail 'WINCT_RUNTIME_REF has an invalid character' }
     New-Item -ItemType Directory -Force -Path $Tmp | Out-Null
     Invoke-WebRequest -Uri "$RawBase/CHECKSUMS" -OutFile (Join-Path $Tmp 'CHECKSUMS') -UseBasicParsing -TimeoutSec 60
     Invoke-WebRequest -Uri "$RawBase/winctup.ps1" -OutFile (Join-Path $Tmp 'winctup.ps1') -UseBasicParsing -TimeoutSec 60

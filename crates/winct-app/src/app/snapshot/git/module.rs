@@ -595,7 +595,7 @@ fn broken_repositories_explain_why_instead_of_loading_forever() {
 #[ignore]
 fn measure_git_costs() {
     use std::time::Instant;
-    // 先克隆再测：本仓库可能正开在另一个 winc 窗口中，直接打开时会被转交给该窗口。
+    // 先克隆再测：本仓库可能正开在另一个 winct 窗口中，直接打开时会被转交给该窗口。
     let source =
         winct_config::files::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
             .unwrap();

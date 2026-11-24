@@ -1,8 +1,8 @@
 [Desktop Entry]
 Name=Winct
 Comment=Winct Editor - a lighter, faster desktop code editor
-Exec=winc %F
-Icon=winc
+Exec=winct %F
+Icon=winct
 Type=Application
 Terminal=false
 Categories=Development;TextEditor;
@@ -13,4 +13,4 @@ Actions=new-window;
 [Desktop Action new-window]
 Name=New Window
 Name[zh_CN]=新建窗口
-Exec=winc
+Exec=winct

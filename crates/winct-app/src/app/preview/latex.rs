@@ -323,7 +323,7 @@ impl App {
         }
     }
 
-    /// 返回编译产物的存放处：系统缓存目录下的 `winc`；没有状态文件时在临时目录。
+    /// 返回编译产物的存放处：系统缓存目录下的 `winct`；没有状态文件时在临时目录。
     fn latex_cache(&self) -> PathBuf {
         if self.store.state_path.is_none() {
             return std::env::temp_dir();
@@ -339,7 +339,7 @@ impl App {
         } else {
             var("XDG_CACHE_HOME").or_else(|| var("HOME").map(|home| home.join(".cache")))
         };
-        base.map_or_else(std::env::temp_dir, |base| base.join("winc"))
+        base.map_or_else(std::env::temp_dir, |base| base.join("winct"))
     }
 
     /// 收下后台完成的编译。

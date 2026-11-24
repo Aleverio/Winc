@@ -579,7 +579,7 @@ mod tests {
         let response_bytes = serde_json::to_vec(response).unwrap();
         let wat = format!(
             r#"(module
-                (import "winc" "host_call" (func $host_call (param i32 i32 i32 i32) (result i32)))
+                (import "winct" "host_call" (func $host_call (param i32 i32 i32 i32) (result i32)))
                 (memory (export "memory") 258)
                 (global $next (mut i32) (i32.const 4096))
                 (func (export "winct_alloc") (param $size i32) (result i32)

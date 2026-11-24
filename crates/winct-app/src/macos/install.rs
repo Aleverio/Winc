@@ -24,7 +24,7 @@ use super::*;
 /// 需要安装到「应用程序」文件夹的应用本次运行的位置。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Location {
-    /// 应用包（`winc.app`）的路径；被系统复制到随机位置运行时是原来的路径。
+    /// 应用包（`winct.app`）的路径；被系统复制到随机位置运行时是原来的路径。
     pub bundle: PathBuf,
     /// 应用包所在的磁盘映像的挂载点；不在磁盘映像中时为 `None`。
     pub image: Option<PathBuf>,

@@ -265,7 +265,7 @@ pub fn reveal_in_file_manager(path: &Path) -> io::Result<()> {
                 if show_items(&path).is_err() {
                     let folder = path.parent().unwrap_or(&path);
                     if let Err(e) = spawn(Command::new("xdg-open").arg(folder)) {
-                        eprintln!("winc: 无法打开文件管理器：{e}");
+                        eprintln!("winct: 无法打开文件管理器：{e}");
                     }
                 }
             });

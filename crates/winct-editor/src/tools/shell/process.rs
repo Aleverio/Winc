@@ -129,7 +129,7 @@ fn spawn(command: &mut Command) -> std::io::Result<Child> {
 
 /// 运行 `command`，最多等待 `timeout`，返回退出状态和捕获的输出。
 ///
-/// 标准输入不继承 winc 自己的；程序自成一个进程组，超时、取消、输出过多时终止整个进程组。
+/// 标准输入不继承 winct 自己的；程序自成一个进程组，超时、取消、输出过多时终止整个进程组。
 /// `command` 的工作目录在远端主机上时，命令在该主机上运行（见 [`run_remote`]）。
 ///
 /// # Errors
@@ -170,7 +170,7 @@ pub(crate) fn run_watched(
     #[cfg(windows)]
     std::os::windows::process::CommandExt::creation_flags(command, 0x0800_0000);
     let stdin = if input.is_empty() {
-        // 不继承 winc 自己的标准输入：从终端启动 winc 时，读标准输入的 hooks、凭据助手会一直
+        // 不继承 winct 自己的标准输入：从终端启动 winct 时，读标准输入的 hooks、凭据助手会一直
         // 等终端输入，直到超时。
         Stdio::null()
     } else {

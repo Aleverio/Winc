@@ -2,7 +2,7 @@
 //!
 //! 每个目录（没有打开目录时为「空窗口」）的备份放在一个子目录里，每个文档一个文件：第一行是
 //! `MAGIC` 前缀加一行 JSON 头（对应的文件、磁盘文件的修改时间、选区、标签序号、保存用的编码和
-//! 行尾），其后是文档的全部内容（UTF-8）。同一目录被两个 winc 实例打开时，只有先启动的实例读取、
+//! 行尾），其后是文档的全部内容（UTF-8）。同一目录被两个 winct 实例打开时，只有先启动的实例读取、
 //! 写入、删除该目录的备份，即同一时刻只允许一个实例处理同一目录（[`Backups::lock`]）。
 
 #![allow(
@@ -24,7 +24,7 @@ use winct_core::text::LineEnding;
 
 use crate::{Document, Editor, Encoding, LoadedFile, Opened};
 
-/// 备份文件第一行的前缀，用于识别文件是否由 winc 写出，以及格式版本（当前为 1）。
+/// 备份文件第一行的前缀，用于识别文件是否由 winct 写出，以及格式版本（当前为 1）。
 const MAGIC: &str = "winct-backup 1 ";
 /// 第一行（[`MAGIC`] 加 JSON 头）最多读多少字节（64 KiB）：头里只有路径和几个数，读到该长度
 /// 还没有换行的不是备份，不必把整个文件读进来。
@@ -121,7 +121,7 @@ impl Backups {
         &self.dir
     }
 
-    /// 独占该目录的备份；另一个 winc 实例已经占用，或无法创建锁文件时返回 `None`。
+    /// 独占该目录的备份；另一个 winct 实例已经占用，或无法创建锁文件时返回 `None`。
     ///
     /// 同一时刻只允许一个实例处理同一目录，否则后启动的实例会把先启动的实例仍在使用的备份当作
     /// 遗留内容恢复并删除。加锁对象是目录旁边的 `<目录>.lock` 文件，使用建议锁且不删除该文件
@@ -155,7 +155,7 @@ impl Backups {
     ///
     /// 本进程启动外部程序时，子进程在 fork 之后、exec 之前继承锁文件的描述符；本进程此时放开
     /// 锁，建议锁仍由子进程占用到 exec 为止。这一占用很快结束，重试到取到锁；占用者是另一个
-    /// winc 实例时不等待，立即返回 `None`。
+    /// winct 实例时不等待，立即返回 `None`。
     pub fn lock_within(&self, wait: std::time::Duration) -> Option<Lock> {
         let deadline = std::time::Instant::now() + wait;
         loop {
@@ -556,7 +556,7 @@ fn number(n: usize) -> Json {
 }
 
 /// 返回目录 `folder` 的短名字（路径的 FNV-1a 哈希，16 位十六进制）：备份子目录以它命名，
-/// 同一目录在各个 winc 进程中算出的名字相同。
+/// 同一目录在各个 winct 进程中算出的名字相同。
 pub fn folder_key(folder: &Path) -> String {
     format!("{:016x}", hash(folder))
 }

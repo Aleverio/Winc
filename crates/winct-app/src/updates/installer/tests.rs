@@ -9,7 +9,7 @@ use super::*;
 fn markers_distinguish_installed_and_portable_copies() {
     let dir = std::env::temp_dir().join(format!("winct-installation-kind-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let exe = dir.join("winc.exe");
+    let exe = dir.join("winct.exe");
     let marker = dir.join("winct-installation");
     let _ = std::fs::remove_file(&marker);
     assert_eq!(kind_at(&exe), None);

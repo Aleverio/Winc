@@ -14,16 +14,16 @@ $bundle = "$release/bundle"
 $stage = "$bundle/stage"
 $stem = "Winct-$version-windows-x64"
 New-Item -ItemType Directory -Force $stage | Out-Null
-foreach ($name in @('winc.exe', 'winct-pty.exe', 'conpty.dll', 'OpenConsole.exe')) {
+foreach ($name in @('winct.exe', 'winct-pty.exe', 'conpty.dll', 'OpenConsole.exe')) {
     if (-not (Test-Path "$release/$name")) { throw "missing $name" }
     Copy-Item "$release/$name" "$stage/$name" -Force
 }
-Copy-Item "$root/LICENSE", "$root/NOTICE", "$bundle/icons/winc.ico" $stage -Force
-# WSL runs bin/winc with sh, which rejects CRLF line endings however the source was checked out.
+Copy-Item "$root/LICENSE", "$root/NOTICE", "$bundle/icons/winct.ico" $stage -Force
+# WSL runs bin/winct with sh, which rejects CRLF line endings however the source was checked out.
 New-Item -ItemType Directory -Force "$stage/bin" | Out-Null
-$launcher = [IO.File]::ReadAllText("$PSScriptRoot/winc").Replace("`r`n", "`n")
-[IO.File]::WriteAllText("$stage/bin/winc", $launcher, (New-Object Text.UTF8Encoding $false))
-Copy-Item "$PSScriptRoot/winc.cmd" "$stage/bin/winc.cmd" -Force
+$launcher = [IO.File]::ReadAllText("$PSScriptRoot/winct").Replace("`r`n", "`n")
+[IO.File]::WriteAllText("$stage/bin/winct", $launcher, (New-Object Text.UTF8Encoding $false))
+Copy-Item "$PSScriptRoot/winct.cmd" "$stage/bin/winct.cmd" -Force
 Copy-Item "$PSScriptRoot/path.ps1" $stage -Force
 # Document icons for the file types, one per group of types (see installer.nsi).
 New-Item -ItemType Directory -Force "$stage/icons" | Out-Null
@@ -38,12 +38,12 @@ foreach ($name in $servers) {
 if ($Phase -eq 'portable') {
     $portable = "$bundle/portable"
     New-Item -ItemType Directory -Force $portable | Out-Null
-    # A data folder beside winc.exe keeps settings and state out of the user profile; the readme
+    # A data folder beside winct.exe keeps settings and state out of the user profile; the readme
     # inside also keeps Compress-Archive from dropping the folder as empty.
     New-Item -ItemType Directory -Force "$stage/data" | Out-Null
     Copy-Item "$PSScriptRoot/portable-data-readme.txt" "$stage/data/README.txt" -Force
     # Enumerate the files: installer markers never enter a portable archive.
-    Compress-Archive -Path "$stage/winc.exe", "$stage/winct-pty.exe", "$stage/conpty.dll", "$stage/OpenConsole.exe", "$stage/winct-watch", "$stage/winct-server-Linux-x86_64", "$stage/winct-server-Linux-aarch64", "$stage/bin", "$stage/data", "$stage/LICENSE", "$stage/NOTICE", "$stage/winc.ico" -DestinationPath "$portable/$stem-portable.zip" -Force
+    Compress-Archive -Path "$stage/winct.exe", "$stage/winct-pty.exe", "$stage/conpty.dll", "$stage/OpenConsole.exe", "$stage/winct-watch", "$stage/winct-server-Linux-x86_64", "$stage/winct-server-Linux-aarch64", "$stage/bin", "$stage/data", "$stage/LICENSE", "$stage/NOTICE", "$stage/winct.ico" -DestinationPath "$portable/$stem-portable.zip" -Force
     return
 }
 

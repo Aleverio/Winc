@@ -1,4 +1,4 @@
-//! 单进程多窗口（`crate::winc`）的测试：关闭单个窗口、⌘Q 退出全部、切换到开着目录的窗口、
+//! 单进程多窗口（`crate::winct`）的测试：关闭单个窗口、⌘Q 退出全部、切换到开着目录的窗口、
 //! 窗口之间同步设置与被剪切的文件。
 //!
 //! 测试没有事件循环，每步之后手动执行一次应用层收尾
@@ -17,99 +17,99 @@ fn two_windows(
     PathBuf,
 ) {
     let dir = search_folder(name);
-    let mut winc = Winct::new(None, None);
-    let a = winc.add_detached(app_with(&dir.join("src/main.rs"), false));
-    let b = winc.add_detached(blank_app(false));
-    (winc, a, b, dir)
+    let mut winct = Winct::new(None, None);
+    let a = winct.add_detached(app_with(&dir.join("src/main.rs"), false));
+    let b = winct.add_detached(blank_app(false));
+    (winct, a, b, dir)
 }
 
 #[test]
 fn closing_one_of_two_windows_drops_it_and_the_last_one_stays_hidden() {
-    let (mut winc, a, b, dir) = two_windows("windows-close");
-    winc.app(b).request_close_window();
-    assert!(winc.app(b).window.hidden);
-    winc.settle_for_test();
-    assert_eq!(winc.keys(), [a], "还有别的窗口时关掉的窗口去掉");
+    let (mut winct, a, b, dir) = two_windows("windows-close");
+    winct.app(b).request_close_window();
+    assert!(winct.app(b).window.hidden);
+    winct.settle_for_test();
+    assert_eq!(winct.keys(), [a], "还有别的窗口时关掉的窗口去掉");
 
     // 最后一个窗口：macOS 上关闭时保留（点击程序坞图标会带着开始页回来），不退出；其他系统上
     // 关闭最后一个窗口就是退出。
-    winc.app(a).request_close_window();
-    let (_, exit) = winc.settle_for_test();
-    assert_eq!(winc.keys(), [a]);
+    winct.app(a).request_close_window();
+    let (_, exit) = winct.settle_for_test();
+    assert_eq!(winct.keys(), [a]);
     if cfg!(target_os = "macos") {
-        assert!(winc.app(a).window.hidden && !exit);
+        assert!(winct.app(a).window.hidden && !exit);
     } else {
-        assert!(winc.app(a).closing.quit_requested);
+        assert!(winct.app(a).closing.quit_requested);
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn closing_a_window_without_a_folder_asks_about_unsaved_files() {
-    let (mut winc, a, b, dir) = two_windows("windows-close-untitled");
+    let (mut winct, a, b, dir) = two_windows("windows-close-untitled");
     let root = super::workspace::session::backup_root("windows-close-untitled");
     for key in [a, b] {
-        winc.app(key).backup.root = Some(root.clone());
+        winct.app(key).backup.root = Some(root.clone());
     }
     // 没开目录的窗口中有未保存的笔记：备份没有之后恢复的时机，关闭前必须询问。
-    winc.app(b).new_file();
-    winc.app(b).run(Command::Insert("笔记".into()));
-    winc.app(b).request_close_window();
-    assert!(winc.app(b).closing.prompt.is_some() && !winc.app(b).window.hidden);
-    winc.app(b).answer_save_prompt(SaveChoice::Cancel);
-    winc.settle_for_test();
-    assert_eq!(winc.keys(), [a, b], "取消了就留着");
+    winct.app(b).new_file();
+    winct.app(b).run(Command::Insert("笔记".into()));
+    winct.app(b).request_close_window();
+    assert!(winct.app(b).closing.prompt.is_some() && !winct.app(b).window.hidden);
+    winct.app(b).answer_save_prompt(SaveChoice::Cancel);
+    winct.settle_for_test();
+    assert_eq!(winct.keys(), [a, b], "取消了就留着");
 
     // 开着目录的窗口仍然不询问：内容写入备份，以后打开该目录时恢复。
-    winc.app(a).run(Command::Insert("// 还没存\n".into()));
-    winc.app(a).request_close_window();
-    assert!(winc.app(a).closing.prompt.is_none() && winc.app(a).window.hidden);
+    winct.app(a).run(Command::Insert("// 还没存\n".into()));
+    winct.app(a).request_close_window();
+    assert!(winct.app(a).closing.prompt.is_none() && winct.app(a).window.hidden);
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&root);
 }
 
 #[test]
 fn quitting_one_window_quits_all_of_them() {
-    let (mut winc, a, b, dir) = two_windows("windows-quit");
-    winc.set_active(a);
-    winc.app(a).request_quit();
-    let (_, exit) = winc.settle_for_test();
-    assert!(winc.app(b).closing.quit_requested, "其他窗口也请它退出");
+    let (mut winct, a, b, dir) = two_windows("windows-quit");
+    winct.set_active(a);
+    winct.app(a).request_quit();
+    let (_, exit) = winct.settle_for_test();
+    assert!(winct.app(b).closing.quit_requested, "其他窗口也请它退出");
     assert!(exit, "都退了才结束事件循环");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn cancelling_in_one_window_calls_the_whole_quit_off() {
-    let (mut winc, a, b, dir) = two_windows("windows-quit-cancel");
+    let (mut winct, a, b, dir) = two_windows("windows-quit-cancel");
     // 第二个窗口有不能热退出的修改：退出时要问。
-    winc.app(b).config.hot_exit = Some(false);
-    winc.app(b).new_file();
-    winc.app(b).run(Command::Insert("x".into()));
-    winc.set_active(b);
+    winct.app(b).config.hot_exit = Some(false);
+    winct.app(b).new_file();
+    winct.app(b).run(Command::Insert("x".into()));
+    winct.set_active(b);
 
-    winc.app(a).request_quit();
-    let (_, exit) = winc.settle_for_test();
+    winct.app(a).request_quit();
+    let (_, exit) = winct.settle_for_test();
     assert!(
-        !exit && winc.app(b).closing.prompt.is_some(),
+        !exit && winct.app(b).closing.prompt.is_some(),
         "第二个窗口在问"
     );
-    assert!(winc.app(a).closing.quit_requested);
+    assert!(winct.app(a).closing.quit_requested);
 
-    winc.app(b).answer_save_prompt(SaveChoice::Cancel);
-    let (_, exit) = winc.settle_for_test();
+    winct.app(b).answer_save_prompt(SaveChoice::Cancel);
+    let (_, exit) = winct.settle_for_test();
     assert!(!exit);
     assert!(
-        !winc.app(a).closing.quit_requested,
+        !winct.app(a).closing.quit_requested,
         "取消了：已经同意退出的窗口照常开着"
     );
-    assert!(!winc.app(b).closing.quit_requested);
+    assert!(!winct.app(b).closing.quit_requested);
 
     // 再退一次，这次不保存：都退了。
-    winc.app(a).request_quit();
-    winc.settle_for_test();
-    winc.app(b).answer_save_prompt(SaveChoice::Discard);
-    let (_, exit) = winc.settle_for_test();
+    winct.app(a).request_quit();
+    winct.settle_for_test();
+    winct.app(b).answer_save_prompt(SaveChoice::Discard);
+    let (_, exit) = winct.settle_for_test();
     assert!(exit);
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -117,92 +117,92 @@ fn cancelling_in_one_window_calls_the_whole_quit_off() {
 /// 一个窗口同意退出以后、另一个窗口还在询问时又做了修改：全部同意后重新询问它，不直接退出。
 #[test]
 fn a_window_edited_after_agreeing_to_quit_is_asked_again() {
-    let (mut winc, a, b, dir) = two_windows("windows-quit-edited");
+    let (mut winct, a, b, dir) = two_windows("windows-quit-edited");
     for key in [a, b] {
-        winc.app(key).config.hot_exit = Some(false);
+        winct.app(key).config.hot_exit = Some(false);
     }
-    winc.app(b).new_file();
-    winc.app(b).run(Command::Insert("x".into()));
-    winc.set_active(b);
+    winct.app(b).new_file();
+    winct.app(b).run(Command::Insert("x".into()));
+    winct.set_active(b);
 
-    winc.app(a).request_quit();
-    let (_, exit) = winc.settle_for_test();
-    assert!(!exit && winc.app(a).closing.quit_requested);
-    assert!(winc.app(b).closing.prompt.is_some());
+    winct.app(a).request_quit();
+    let (_, exit) = winct.settle_for_test();
+    assert!(!exit && winct.app(a).closing.quit_requested);
+    assert!(winct.app(b).closing.prompt.is_some());
 
     // 第二个窗口的询问是窗口内的，第一个窗口仍可编辑。
-    winc.app(a).new_file();
-    winc.app(a).run(Command::Insert("后来写的".into()));
-    winc.app(b).answer_save_prompt(SaveChoice::Discard);
-    let (_, exit) = winc.settle_for_test();
+    winct.app(a).new_file();
+    winct.app(a).run(Command::Insert("后来写的".into()));
+    winct.app(b).answer_save_prompt(SaveChoice::Discard);
+    let (_, exit) = winct.settle_for_test();
     assert!(!exit, "第一个窗口有了新的修改，不能直接退出");
-    assert!(winc.app(a).closing.prompt.is_some());
+    assert!(winct.app(a).closing.prompt.is_some());
 
     // 选了不保存、之后没有再修改：这次退出。
-    winc.app(a).answer_save_prompt(SaveChoice::Discard);
-    let (_, exit) = winc.settle_for_test();
+    winct.app(a).answer_save_prompt(SaveChoice::Discard);
+    let (_, exit) = winct.settle_for_test();
     assert!(exit);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn opening_a_folder_that_another_window_has_open_switches_to_that_window() {
-    let (mut winc, a, b, dir) = two_windows("windows-focus");
+    let (mut winct, a, b, dir) = two_windows("windows-focus");
     // 第一个窗口开着的是 `src`（打开文件时以它所在的目录为项目）。
-    winc.app(b).switch_folder(&dir.join("src"));
-    let (requests, _) = winc.settle_for_test();
+    winct.app(b).switch_folder(&dir.join("src"));
+    let (requests, _) = winct.settle_for_test();
     assert_eq!(requests, [Request::Focus(a)]);
-    assert!(winc.app(b).editor.root().is_none(), "不在这里再开一份");
+    assert!(winct.app(b).editor.root().is_none(), "不在这里再开一份");
 
     // 提示框里选了切过去（移除开在另一个窗口里的工作树时）：同样只切过去；那个窗口已经关了时
     // 什么也不做。
     let src = winct_config::files::canonicalize(dir.join("src")).unwrap();
-    assert!(winc.app(b).focus_window_with(&src));
-    let (requests, _) = winc.settle_for_test();
+    assert!(winct.app(b).focus_window_with(&src));
+    let (requests, _) = winct.settle_for_test();
     assert_eq!(requests, [Request::Focus(a)]);
-    assert!(!winc.app(b).focus_window_with(&dir));
-    let (requests, _) = winc.settle_for_test();
+    assert!(!winct.app(b).focus_window_with(&dir));
+    let (requests, _) = winct.settle_for_test();
     assert!(requests.is_empty());
 
     // 新建窗口的请求交给应用层。
-    winc.app(b).run_action(crate::keymap::Action::NewWindow);
-    let (requests, _) = winc.settle_for_test();
+    winct.app(b).run_action(crate::keymap::Action::NewWindow);
+    let (requests, _) = winct.settle_for_test();
     assert_eq!(requests, [Request::NewWindow(None)]);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn opening_another_folder_follows_the_new_window_setting() {
-    let (mut winc, a, _, dir) = two_windows("windows-open-in");
-    winc.settle_for_test();
+    let (mut winct, a, _, dir) = two_windows("windows-open-in");
+    winct.settle_for_test();
     let root = winct_config::files::canonicalize(&dir).unwrap();
-    let src = winc.app(a).editor.root().unwrap().to_path_buf();
+    let src = winct.app(a).editor.root().unwrap().to_path_buf();
 
     // 设成在新窗口打开：当前窗口的目录不变，请应用层新建窗口。
-    winc.app(a).config.open_folder_in_new_window = Some(true);
-    winc.app(a).open_path(&dir);
-    let (requests, _) = winc.settle_for_test();
+    winct.app(a).config.open_folder_in_new_window = Some(true);
+    winct.app(a).open_path(&dir);
+    let (requests, _) = winct.settle_for_test();
     assert_eq!(requests, [Request::NewWindow(Some(root.clone()))]);
-    assert_eq!(winc.app(a).editor.root(), Some(src.as_path()));
+    assert_eq!(winct.app(a).editor.root(), Some(src.as_path()));
 
     // 提示框上选了「此窗口」并勾选「不再询问」：在此窗口打开，记下这次的选择。
-    winc.app(a).config.open_folder_in_new_window = None;
-    winc.app(a).open_folder_in(&root, false, true);
-    assert_eq!(winc.app(a).config.open_folder_in_new_window, Some(false));
-    assert_eq!(winc.app(a).editor.root(), Some(root.as_path()));
-    let (requests, _) = winc.settle_for_test();
+    winct.app(a).config.open_folder_in_new_window = None;
+    winct.app(a).open_folder_in(&root, false, true);
+    assert_eq!(winct.app(a).config.open_folder_in_new_window, Some(false));
+    assert_eq!(winct.app(a).editor.root(), Some(root.as_path()));
+    let (requests, _) = winct.settle_for_test();
     assert!(requests.is_empty());
 
     // 设成在此窗口打开：直接替换。
-    winc.app(a).open_path(&src);
-    assert_eq!(winc.app(a).editor.root(), Some(src.as_path()));
+    winct.app(a).open_path(&src);
+    assert_eq!(winct.app(a).editor.root(), Some(src.as_path()));
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn dropped_on_the_dock_icon_open_in_the_window_that_has_them_or_the_current_one() {
-    let (mut winc, a, b, dir) = two_windows("windows-dock");
-    winc.settle_for_test();
+    let (mut winct, a, b, dir) = two_windows("windows-dock");
+    winct.settle_for_test();
     let src = winct_config::files::canonicalize(dir.join("src")).unwrap();
     let target = |path: &Path| crate::cli::Target {
         path: path.to_path_buf(),
@@ -211,24 +211,27 @@ fn dropped_on_the_dock_icon_open_in_the_window_that_has_them_or_the_current_one(
     };
 
     // 开着它所在目录的窗口收下。
-    assert_eq!(winc.window_for_test(&[target(&src.join("main.rs"))]), Ok(a));
+    assert_eq!(
+        winct.window_for_test(&[target(&src.join("main.rs"))]),
+        Ok(a)
+    );
 
     // 项目外的文件：交给当前窗口，窗口打开的目录不变，也不打开文件所在的目录。
     let elsewhere = winct_config::files::canonicalize(&dir).unwrap();
     let file = elsewhere.join("a.txt");
     for (key, root) in [(a, Some(src.clone())), (b, None)] {
-        winc.set_active(key);
-        assert_eq!(winc.window_for_test(&[target(&file)]), Ok(key));
-        winc.app(key).open_files(&[target(&file)]);
-        assert_eq!(winc.app(key).editor.root(), root.as_deref());
+        winct.set_active(key);
+        assert_eq!(winct.window_for_test(&[target(&file)]), Ok(key));
+        winct.app(key).open_files(&[target(&file)]);
+        assert_eq!(winct.app(key).editor.root(), root.as_deref());
     }
-    winc.settle_for_test();
+    winct.settle_for_test();
 
     // 目录不交给已有标签的窗口：没有空着的窗口时新建窗口打开。
     let other = search_folder("windows-dock-other");
     let other = winct_config::files::canonicalize(&other).unwrap();
     assert_eq!(
-        winc.window_for_test(&[target(&other)]),
+        winct.window_for_test(&[target(&other)]),
         Err(Some(other.clone()))
     );
     let _ = std::fs::remove_dir_all(&dir);
@@ -237,31 +240,31 @@ fn dropped_on_the_dock_icon_open_in_the_window_that_has_them_or_the_current_one(
 
 #[test]
 fn settings_changed_in_one_window_reach_the_others() {
-    let (mut winc, a, b, dir) = two_windows("windows-config");
-    winc.app(a).step_font_size(Some(true));
-    let size = winc.app(a).config.editor_size;
+    let (mut winct, a, b, dir) = two_windows("windows-config");
+    winct.app(a).step_font_size(Some(true));
+    let size = winct.app(a).config.editor_size;
     assert!(size.is_some());
-    winc.settle_for_test();
-    assert_eq!(winc.app(b).config.editor_size, size);
-    assert_eq!(winc.app(b).fonts.code, size.unwrap(), "字号也用上了");
+    winct.settle_for_test();
+    assert_eq!(winct.app(b).config.editor_size, size);
+    assert_eq!(winct.app(b).fonts.code, size.unwrap(), "字号也用上了");
 
-    winc.app(b).settings_toggle(Setting::WordWrap);
-    winc.settle_for_test();
-    assert_eq!(winc.app(a).config.word_wrap, Some(true));
+    winct.app(b).settings_toggle(Setting::WordWrap);
+    winct.settle_for_test();
+    assert_eq!(winct.app(a).config.word_wrap, Some(true));
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn settings_written_back_keep_what_was_edited_in_the_file_meanwhile() {
-    let (mut winc, a, b, dir) = two_windows("windows-config-edits");
+    let (mut winct, a, b, dir) = two_windows("windows-config-edits");
     let path = dir.join("config.json");
     for key in [a, b] {
-        winc.app(key).store.config_path = Some(path.clone());
+        winct.app(key).store.config_path = Some(path.clone());
     }
-    // 程序运行期间，用户在 winc 之外手动修改了配置文件，之后在设置页中修改了另一项。
+    // 程序运行期间，用户在 winct 之外手动修改了配置文件，之后在设置页中修改了另一项。
     std::fs::write(&path, r#"{"editor": {"size": 16}}"#).unwrap();
-    winc.app(a).settings_toggle(Setting::WordWrap);
-    winc.settle_for_test();
+    winct.app(a).settings_toggle(Setting::WordWrap);
+    winct.settle_for_test();
 
     let (config, _) = Config::load_from(&path);
     assert_eq!(
@@ -270,27 +273,27 @@ fn settings_written_back_keep_what_was_edited_in_the_file_meanwhile() {
     );
     // 手动修改的字号没有被覆盖，两个窗口都已应用。
     for key in [a, b] {
-        assert_eq!(winc.app(key).config, config);
-        assert_eq!(winc.app(key).fonts.code, 16.0);
+        assert_eq!(winct.app(key).config, config);
+        assert_eq!(winct.app(key).fonts.code, 16.0);
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn files_cut_in_one_window_are_moved_when_pasted_in_another() {
-    let (mut winc, a, b, dir) = two_windows("windows-cut");
+    let (mut winct, a, b, dir) = two_windows("windows-cut");
     let file = dir.join("a.txt");
-    winc.app(a).cut_entries(std::slice::from_ref(&file));
-    assert_eq!(*winc.app(b).link.shared.cut_files.borrow(), [file]);
+    winct.app(a).cut_entries(std::slice::from_ref(&file));
+    assert_eq!(*winct.app(b).link.shared.cut_files.borrow(), [file]);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn files_go_to_the_innermost_window_that_contains_them() {
-    let (mut winc, a, b, dir) = two_windows("windows-containing");
-    winc.app(b).open_path(&dir);
-    winc.settle_for_test();
-    let shared = std::rc::Rc::clone(&winc.app(a).link.shared);
+    let (mut winct, a, b, dir) = two_windows("windows-containing");
+    winct.app(b).open_path(&dir);
+    winct.settle_for_test();
+    let shared = std::rc::Rc::clone(&winct.app(a).link.shared);
     let src = winct_config::files::canonicalize(dir.join("src")).unwrap();
     assert_eq!(
         shared.window_containing(&src.join("main.rs")),
@@ -316,31 +319,31 @@ fn other_windows_are_remembered_at_quit_and_reopened_at_launch() {
         state_path: Some(state_path.clone()),
         backup_root: None,
     };
-    let mut winc = Winct::new(None, Some(template.clone()));
-    let a = winc.add_detached(app_with(&first, false));
-    let b = winc.add_detached(app_with(&second, false));
-    winc.set_active(a);
-    winc.remember_windows_for_test();
-    let root = |winc: &mut Winct, key| winc.app(key).editor.root().map(Path::to_path_buf);
+    let mut winct = Winct::new(None, Some(template.clone()));
+    let a = winct.add_detached(app_with(&first, false));
+    let b = winct.add_detached(app_with(&second, false));
+    winct.set_active(a);
+    winct.remember_windows_for_test();
+    let root = |winct: &mut Winct, key| winct.app(key).editor.root().map(Path::to_path_buf);
     let others = State::load_from(&state_path).others;
     assert_eq!(
         others,
-        [root(&mut winc, b).unwrap()],
+        [root(&mut winct, b).unwrap()],
         "当前窗口的由它自己记在 `last`"
     );
 
     // 下次启动：第一个窗口在开始页上时，第一个目录开在它里面，不多留一个空窗口。
-    let mut winc = Winct::new(None, Some(template));
-    let a = winc.add_detached(blank_app(false));
-    winc.restore_windows(&others);
-    assert_eq!(root(&mut winc, a), others.first().cloned());
-    assert!(winc.settle_for_test().0.is_empty());
+    let mut winct = Winct::new(None, Some(template));
+    let a = winct.add_detached(blank_app(false));
+    winct.restore_windows(&others);
+    assert_eq!(root(&mut winct, a), others.first().cloned());
+    assert!(winct.settle_for_test().0.is_empty());
 
     // 第一个窗口开着别的目录：其余的各开一个窗口，最后切回第一个窗口。
-    let mut winc = Winct::new(None, None);
-    let a = winc.add_detached(app_with(&first, false));
-    winc.restore_windows(&others);
-    let (requests, _) = winc.settle_for_test();
+    let mut winct = Winct::new(None, None);
+    let a = winct.add_detached(app_with(&first, false));
+    winct.restore_windows(&others);
+    let (requests, _) = winct.settle_for_test();
     assert_eq!(
         requests,
         [Request::RestoreWindow(others[0].clone()), Request::Focus(a)]
@@ -397,22 +400,22 @@ fn files_cut_in_one_window_move_into_another_windows_folder() {
     let b_dir = search_folder("windows-move-b");
     let notes = a_dir.join("notes.txt");
     std::fs::write(&notes, "笔记\n").unwrap();
-    let mut winc = Winct::new(None, None);
-    let a = winc.add_detached(app_with(&notes, false));
-    let b = winc.add_detached(app_with(&b_dir.join("src/main.rs"), false));
+    let mut winct = Winct::new(None, None);
+    let a = winct.add_detached(app_with(&notes, false));
+    let b = winct.add_detached(app_with(&b_dir.join("src/main.rs"), false));
 
-    winc.app(a).cut_entries(std::slice::from_ref(&notes));
-    winc.app(b).clipboard.copied_files = vec![notes.clone()];
-    let target = winc.app(b).editor.workspace.as_ref().unwrap().target_dir();
-    winc.app(b).paste_into_tree();
-    winc.settle_for_test();
+    winct.app(a).cut_entries(std::slice::from_ref(&notes));
+    winct.app(b).clipboard.copied_files = vec![notes.clone()];
+    let target = winct.app(b).editor.workspace.as_ref().unwrap().target_dir();
+    winct.app(b).paste_into_tree();
+    winct.settle_for_test();
 
     let moved = target.join("notes.txt");
     assert!(moved.exists() && !notes.exists());
-    let doc = winc.app(a).editor.active().unwrap();
+    let doc = winct.app(a).editor.active().unwrap();
     assert_eq!(doc.path.as_deref(), Some(moved.as_path()));
     assert!(
-        winc.app(b).link.shared.cut_files.borrow().is_empty(),
+        winct.app(b).link.shared.cut_files.borrow().is_empty(),
         "只移一次"
     );
     let _ = std::fs::remove_dir_all(&a_dir);
@@ -422,23 +425,26 @@ fn files_cut_in_one_window_move_into_another_windows_folder() {
 /// 回归：退出时另一个窗口正在问「关标签要不要保存」，它答完以后整个退出被当作取消。
 #[test]
 fn a_window_busy_with_another_question_is_asked_again_after_it() {
-    let (mut winc, a, b, dir) = two_windows("windows-quit-busy");
-    winc.app(b).config.hot_exit = Some(false);
-    winc.app(b).new_file();
-    winc.app(b).run(Command::Insert("x".into()));
-    let tab = winc.app(b).editor.active.unwrap();
-    winc.app(b).close_tab(tab);
-    assert!(winc.app(b).closing.prompt.is_some(), "在问关标签要不要保存");
+    let (mut winct, a, b, dir) = two_windows("windows-quit-busy");
+    winct.app(b).config.hot_exit = Some(false);
+    winct.app(b).new_file();
+    winct.app(b).run(Command::Insert("x".into()));
+    let tab = winct.app(b).editor.active.unwrap();
+    winct.app(b).close_tab(tab);
+    assert!(
+        winct.app(b).closing.prompt.is_some(),
+        "在问关标签要不要保存"
+    );
 
-    winc.set_active(a);
-    winc.app(a).request_quit();
-    let (_, exit) = winc.settle_for_test();
-    assert!(!exit && !winc.app(b).closing.quit_requested, "先等它问完");
+    winct.set_active(a);
+    winct.app(a).request_quit();
+    let (_, exit) = winct.settle_for_test();
+    assert!(!exit && !winct.app(b).closing.quit_requested, "先等它问完");
 
     // 关标签那件事答完：再请它退出，标签已关、没有要问的，整个退出完成。
-    winc.app(b).answer_save_prompt(SaveChoice::Discard);
-    let (_, exit) = winc.settle_for_test();
-    assert!(exit && winc.app(b).closing.quit_requested);
+    winct.app(b).answer_save_prompt(SaveChoice::Discard);
+    let (_, exit) = winct.settle_for_test();
+    assert!(exit && winct.app(b).closing.quit_requested);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -483,8 +489,8 @@ fn a_drawn_title_bar_has_window_buttons_and_resize_edges() {
     use crate::app::WindowControl;
     use winit::window::ResizeDirection;
 
-    let (mut winc, a, b, dir) = two_windows("windows-title-bar");
-    let app = winc.app(a);
+    let (mut winct, a, b, dir) = two_windows("windows-title-bar");
+    let app = winct.app(a);
     paint(app);
     assert_eq!(app.layout.controls, Rect::default(), "默认用系统的标题栏");
     app.window.controls = true;
@@ -533,8 +539,8 @@ fn a_drawn_title_bar_has_window_buttons_and_resize_edges() {
 
     // 关闭按钮：和系统标题栏上的一样关掉该窗口。
     click(app, center);
-    winc.settle_for_test();
-    assert_eq!(winc.keys(), [b]);
+    winct.settle_for_test();
+    assert_eq!(winct.keys(), [b]);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -544,8 +550,8 @@ fn a_drawn_title_bar_has_window_buttons_and_resize_edges() {
 fn the_title_bar_setting_applies_at_once() {
     use crate::layout::Setting;
 
-    let (mut winc, a, _, dir) = two_windows("windows-title-bar-setting");
-    let app = winc.app(a);
+    let (mut winct, a, _, dir) = two_windows("windows-title-bar-setting");
+    let app = winct.app(a);
     app.sync_title_bar();
     app.relayout();
     assert!(app.window.controls && app.layout.controls.w > 0.0);
@@ -562,7 +568,7 @@ fn the_title_bar_setting_applies_at_once() {
 /// 各窗口共用同一张背景图层：第二个窗口直接采用已有的，不再生成。
 #[test]
 fn windows_share_one_background_layer() {
-    let (mut winc, a, b, dir) = two_windows("windows-wallpaper");
+    let (mut winct, a, b, dir) = two_windows("windows-wallpaper");
     let image = dir.join("bg.png");
     let red = winct_render::Image {
         pixels: vec![0xffff_0000; 64 * 48],
@@ -571,24 +577,24 @@ fn windows_share_one_background_layer() {
     };
     write_png(&image, &red).unwrap();
     for key in [a, b] {
-        winc.app(key).config.ui_background_image = Some(image.to_string_lossy().into_owned());
+        winct.app(key).config.ui_background_image = Some(image.to_string_lossy().into_owned());
     }
-    paint(winc.app(a));
-    winc.app(a).wait_for_wallpaper();
-    paint(winc.app(a));
+    paint(winct.app(a));
+    winct.app(a).wait_for_wallpaper();
+    paint(winct.app(a));
     let layer = |app: &App| app.frame.renderer.as_ref().unwrap().wallpaper().cloned();
-    let first = layer(winc.app(a)).expect("第一个窗口的图层");
+    let first = layer(winct.app(a)).expect("第一个窗口的图层");
 
-    paint(winc.app(b));
-    assert!(!winc.app(b).wallpaper.is_busy());
-    let second = layer(winc.app(b)).expect("第二个窗口的图层");
+    paint(winct.app(b));
+    assert!(!winct.app(b).wallpaper.is_busy());
+    let second = layer(winct.app(b)).expect("第二个窗口的图层");
     assert!(std::sync::Arc::ptr_eq(&first, &second));
     drop(second);
 
     // 两个窗口都取消后，图层释放。
     for key in [a, b] {
-        winc.app(key).config.ui_background_image = None;
-        paint(winc.app(key));
+        winct.app(key).config.ui_background_image = None;
+        paint(winct.app(key));
     }
     assert_eq!(std::sync::Arc::strong_count(&first), 1);
     let _ = std::fs::remove_dir_all(&dir);

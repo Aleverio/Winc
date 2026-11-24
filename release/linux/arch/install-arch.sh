@@ -4,7 +4,7 @@ set -euo pipefail
 fail() { printf '%s\n' "$*" >&2; exit 1; }
 
 expected_fingerprint='@WINCT_ARCH_SIGNING_FINGERPRINT@'
-repo=deeix-ai-winc
+repo=deeix-ai-winct
 base_url=https://github.com/Aleverio/Winc/releases
 pacman_config=/etc/pacman.conf
 repo_config=/etc/pacman.d/$repo.conf
@@ -92,4 +92,4 @@ fi
 if [[ $include_count == 0 ]]; then
   printf '\n%s\n' "$include_line" >> "$pacman_config"
 fi
-pacman -Syu --needed "$repo/winc"
+pacman -Syu --needed "$repo/winct"

@@ -34,7 +34,7 @@ fn check_tells_a_missing_font_from_one_that_cannot_be_drawn() {
         Err(FontError::NotFound)
     );
     assert_eq!(
-        FontSpec::Name("winc 不存在的字体 42".into()).check(),
+        FontSpec::Name("winct 不存在的字体 42".into()).check(),
         Err(FontError::NotFound)
     );
 
@@ -45,7 +45,7 @@ fn check_tells_a_missing_font_from_one_that_cannot_be_drawn() {
 fn a_missing_font_name_resolves_to_nothing() {
     // 名字中带随机因素，不会被真实字体使用，任何平台上都不应解析出文件。
     assert_eq!(
-        FontSpec::Name("winc 不存在的字体 42".into()).resolve(),
+        FontSpec::Name("winct 不存在的字体 42".into()).resolve(),
         None
     );
 }

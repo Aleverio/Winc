@@ -1,6 +1,6 @@
 //! Wayland 上凭激活令牌把已有窗口切到前台（xdg-activation-v1）。
 //!
-//! 合成器只接受附带激活令牌的切换请求。令牌由新启动的 winc 随目标交来（见
+//! 合成器只接受附带激活令牌的切换请求。令牌由新启动的 winct 随目标交来（见
 //! `crate::instance::LaunchTokens`）；`winit` 只在新建窗口时使用令牌，已有窗口由本模块激活。
 //! 本模块接入 `winit` 的 `wl_display`，在自己的事件队列上绑定 `xdg_activation_v1`。
 

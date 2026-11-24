@@ -43,16 +43,16 @@ jobs:
           sudo apt-get install -y build-essential pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev desktop-file-utils squashfs-tools patchelf
       - name: Configure build
         env:
-          WINC_UPDATE_PRIVATE_KEY: ${{ secrets.WINC_UPDATE_PRIVATE_KEY }}
+          WINCT_UPDATE_PRIVATE_KEY: ${{ secrets.WINCT_UPDATE_PRIVATE_KEY }}
         run: |
           node release/common/config.mjs --output "$RUNNER_TEMP/build-config.json"
       # Compiled against the oldest supported glibc (release/linux/baseline.env), not the runner's.
       - name: Compile
         run: |
-          bash release/linux/baseline.sh cargo build --release --locked --target "$TARGET" -p winc -p winc-pty
+          bash release/linux/baseline.sh cargo build --release --locked --target "$TARGET" -p winct -p winct-pty
           bash release/linux/baseline.sh cargo xtask icons "target/$TARGET/release/bundle/icons"
       - name: Verify glibc baseline
-        run: bash release/linux/verify-baseline.sh "target/$TARGET/release/winc" "target/$TARGET/release/winc-pty"
+        run: bash release/linux/verify-baseline.sh "target/$TARGET/release/winct" "target/$TARGET/release/winct-pty"
       # The remote server runs on Linux hosts whatever system this package is for. It is static and
       # has no C code, so the linker bundled with Rust builds every architecture on any runner.
       - name: Compile remote server
@@ -75,10 +75,10 @@ jobs:
       # downloaded programs and do not need it.
       - name: Sign the update feed
         env:
-          WINC_UPDATE_PRIVATE_KEY: ${{ secrets.WINC_UPDATE_PRIVATE_KEY }}
+          WINCT_UPDATE_PRIVATE_KEY: ${{ secrets.WINCT_UPDATE_PRIVATE_KEY }}
         run: node release/common/sign-updates.mjs --platform "$PLATFORM" --bundle "target/$TARGET/release/bundle"
       - name: Check the update feed against the packages
-        run: bash release/linux/baseline.sh cargo test --locked -p winc-app updates::tests::release_appcast_matches_packages -- --ignored
+        run: bash release/linux/baseline.sh cargo test --locked -p winct-app updates::tests::release_appcast_matches_packages -- --ignored
       - name: Show linuxdeploy log
         if: always()
         run: cat "$RUNNER_TEMP/linuxdeploy.log" 2>/dev/null || echo "(no linuxdeploy log)"
@@ -91,8 +91,8 @@ jobs:
           trap 'rm -rf "$workdir"' EXIT
           (cd "$workdir" && "$GITHUB_WORKSPACE/${images[0]}" --appimage-extract >/dev/null 2>&1)
           test -d "$workdir/squashfs-root/usr/lib"
-          test -f "$workdir/squashfs-root/usr/lib/winc/winc-server-Linux-x86_64"
-          test -f "$workdir/squashfs-root/usr/lib/winc/winc-server-Linux-aarch64"
+          test -f "$workdir/squashfs-root/usr/lib/winct/winct-server-Linux-x86_64"
+          test -f "$workdir/squashfs-root/usr/lib/winct/winct-server-Linux-aarch64"
           if find "$workdir/squashfs-root/usr/lib" -name 'libwayland*' -print -quit | grep -q .; then
             echo "::error::AppImage still bundles Wayland libraries"
             exit 1
@@ -101,10 +101,10 @@ jobs:
         run: |
           dpkg-deb --info target/"$TARGET"/release/bundle/deb/*.deb
           dpkg-deb --contents target/"$TARGET"/release/bundle/deb/*.deb | tee "$RUNNER_TEMP/deb-contents"
-          grep -q ./usr/bin/winc-pty "$RUNNER_TEMP/deb-contents"
-          grep -q ./usr/bin/winc "$RUNNER_TEMP/deb-contents"
-          grep -q ./usr/lib/winc/winc-server-Linux-x86_64 "$RUNNER_TEMP/deb-contents"
-          grep -q ./usr/lib/winc/winc-server-Linux-aarch64 "$RUNNER_TEMP/deb-contents"
+          grep -q ./usr/bin/winct-pty "$RUNNER_TEMP/deb-contents"
+          grep -q ./usr/bin/winct "$RUNNER_TEMP/deb-contents"
+          grep -q ./usr/lib/winct/winct-server-Linux-x86_64 "$RUNNER_TEMP/deb-contents"
+          grep -q ./usr/lib/winct/winct-server-Linux-aarch64 "$RUNNER_TEMP/deb-contents"
       - name: Stage release assets
         run: |
           node release/common/collect-assets.mjs --platform "$PLATFORM" \

@@ -4,15 +4,15 @@
 //! cargo xtask samples          生成测试样本到 target/samples/
 //! cargo xtask bench [次数]      构建 release，测启动、内存、滚动，对照预算（默认启动测 20 次）
 //! cargo xtask app [--target 目标] [--no-build]
-//!                              构建 release，组成临时签名的 macOS 应用 winc.app；目标是
+//!                              构建 release，组成临时签名的 macOS 应用 winct.app；目标是
 //!                              aarch64-apple-darwin 或 x86_64-apple-darwin，默认本机的架构
 //! cargo xtask sparkle          取得固定版本的 Sparkle，输出 Sparkle 的工具目录（发布更新用）
 //! cargo xtask linux-appcast 目录 地址 AppImage…
 //!                              生成签名的 Linux 版 appcast（发布更新用）
 //! cargo xtask windows-appcast 目录 地址 安装包…
 //!                              生成签名的 Windows 版 appcast（发布更新用）
-//! cargo xtask dmg              构建 release，打成 macOS 的 winc.app 和安装用的 dmg
-//! cargo xtask dmg --app 路径    把签好名的 winc.app 原样做成 dmg，不重新构建、不重新签名
+//! cargo xtask dmg              构建 release，打成 macOS 的 winct.app 和安装用的 dmg
+//! cargo xtask dmg --app 路径    把签好名的 winct.app 原样做成 dmg，不重新构建、不重新签名
 //!     [--output 路径]           指定最终 dmg 的路径
 //! cargo xtask icons 目录        从应用的 SVG 生成打包用的 PNG 和 ICO
 //! cargo xtask server           构建各个架构的远端服务进程到 target/remote-server/（打包用）
@@ -171,7 +171,7 @@ fn build_release(targets: &[&str]) -> Result<(), String> {
             "--release",
             "--locked",
             "-p",
-            "winc",
+            "winct",
             "-p",
             "winct-pty",
         ])

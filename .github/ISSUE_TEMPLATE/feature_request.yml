@@ -1,5 +1,5 @@
 name: Feature request
-description: Propose a product or technical improvement for winc.
+description: Propose a product or technical improvement for winct.
 title: "[Feature]: "
 labels:
   - enhancement
@@ -8,7 +8,7 @@ body:
     id: area
     attributes:
       label: Area
-      description: The part of winc this proposal affects.
+      description: The part of winct this proposal affects.
       options:
         - Editor
         - Vim mode

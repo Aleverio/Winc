@@ -1,6 +1,6 @@
-//! 命令行入口：让 `winc .` 在终端里可用。
+//! 命令行入口：让 `winct .` 在终端里可用。
 //!
-//! Windows 安装包和 deb 包已经把 `winc` 加入 `PATH`。macOS 的程序位于 `.app` 内，AppImage 没有固定
+//! Windows 安装包和 deb 包已经把 `winct` 加入 `PATH`。macOS 的程序位于 `.app` 内，AppImage 没有固定
 //! 路径，由用户执行命令后创建符号链接（[`placement`]）。启动时不自动安装：写入系统目录必须由用户
 //! 发起。
 //!
@@ -70,13 +70,13 @@ pub(crate) fn placement() -> Option<Placement> {
     }
 }
 
-/// macOS：程序位于 `.app` 内时链接到 `/usr/local/bin/winc`，该目录在系统默认的 `PATH`
+/// macOS：程序位于 `.app` 内时链接到 `/usr/local/bin/winct`，该目录在系统默认的 `PATH`
 /// （`/etc/paths`）中。
 #[cfg(any(target_os = "macos", all(test, unix)))]
 fn macos_placement(exe: &std::path::Path) -> Option<Placement> {
     bundle_of(exe)?;
     Some(Placement {
-        link: "/usr/local/bin/winc".into(),
+        link: "/usr/local/bin/winct".into(),
         target: exe.to_path_buf(),
     })
 }
@@ -93,7 +93,7 @@ fn bundle_of(exe: &std::path::Path) -> Option<&std::path::Path> {
 /// 返回运行中的 AppImage 文件。
 ///
 /// 只有程序位于 `APPDIR`（AppImage 运行时挂载的目录）内才算：这两个变量会被子进程继承，在 AppImage
-/// 版的内置终端里运行其他安装方式的 `winc` 时同样存在。
+/// 版的内置终端里运行其他安装方式的 `winct` 时同样存在。
 #[cfg(any(all(unix, not(target_os = "macos")), all(test, unix)))]
 fn appimage_of(
     exe: &std::path::Path,
@@ -111,27 +111,27 @@ pub(crate) fn current_appimage() -> Option<std::path::PathBuf> {
     appimage_of(&exe, appdir.as_deref(), appimage.as_deref())
 }
 
-/// AppImage：链接到用户目录的 `~/.local/bin/winc`（XDG 约定的用户可执行文件目录），不需要授权。
+/// AppImage：链接到用户目录的 `~/.local/bin/winct`（XDG 约定的用户可执行文件目录），不需要授权。
 #[cfg(any(target_os = "linux", all(test, unix)))]
 fn appimage_placement(appimage: &std::path::Path, home: &std::path::Path) -> Option<Placement> {
     (appimage.is_absolute() && home.is_absolute()).then(|| Placement {
-        link: home.join(".local/bin/winc"),
+        link: home.join(".local/bin/winct"),
         target: appimage.to_path_buf(),
     })
 }
 
-/// 链接指向的 `found` 是否由 winc 创建；只有这种链接可以替换或移除。
+/// 链接指向的 `found` 是否由 winct 创建；只有这种链接可以替换或移除。
 ///
-/// winc 创建的链接都指向绝对路径，相对路径的链接一定属于其他程序。目标已不存在的绝对路径链接同样
+/// winct 创建的链接都指向绝对路径，相对路径的链接一定属于其他程序。目标已不存在的绝对路径链接同样
 /// 视为可替换，这类链接是应用移动后的遗留。
 #[cfg(unix)]
 fn is_ours(placement: &Placement, found: &std::path::Path) -> bool {
-    let bundled = found.ends_with("Contents/MacOS/winc");
+    let bundled = found.ends_with("Contents/MacOS/winct");
     let appimage = found.extension().is_some_and(|e| e == "AppImage");
     found.is_absolute() && (found == placement.target || bundled || appimage || !found.exists())
 }
 
-/// 创建链接；已有 winc 创建的链接时替换。先创建临时链接再改名，失败时原链接不受影响。
+/// 创建链接；已有 winct 创建的链接时替换。先创建临时链接再改名，失败时原链接不受影响。
 #[cfg(unix)]
 pub(crate) fn install(placement: &Placement) -> Outcome {
     let link = &placement.link;
@@ -143,7 +143,7 @@ pub(crate) fn install(placement: &Placement) -> Outcome {
         Ok(_) => return Outcome::Occupied,
         Err(_) => {}
     }
-    let temporary = link.with_file_name(".winc.tmp");
+    let temporary = link.with_file_name(".winct.tmp");
     let create = || {
         if let Some(dir) = link.parent() {
             std::fs::create_dir_all(dir)?;
@@ -161,7 +161,7 @@ pub(crate) fn install(placement: &Placement) -> Outcome {
     }
 }
 
-/// 移除链接；只移除 winc 创建的链接。
+/// 移除链接；只移除 winct 创建的链接。
 #[cfg(unix)]
 pub(crate) fn uninstall(placement: &Placement) -> Outcome {
     let link = &placement.link;
@@ -288,7 +288,7 @@ pub(crate) fn report_unreadable(args: &mut Args) -> bool {
             Some(error) => {
                 let path = target.path.display().to_string();
                 let message = winct_i18n::t!("cmd-cli-open-failed", path = path, error = error);
-                eprintln!("winc: {message}");
+                eprintln!("winct: {message}");
                 false
             }
             None => true,

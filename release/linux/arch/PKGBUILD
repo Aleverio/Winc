@@ -1,4 +1,4 @@
-pkgname=winc
+pkgname=winct
 pkgver=${WINCT_ARCH_VERSION:?WINCT_ARCH_VERSION is required}
 pkgrel=1
 pkgdesc='A lighter, faster desktop code editor'
@@ -10,21 +10,21 @@ depends=('glibc>=2.28' 'libgcc' 'fontconfig' 'ttf-dejavu' 'libxkbcommon'
 options=('!strip' '!debug')
 
 package() {
-  install -Dm755 "$startdir/winc" "$pkgdir/usr/bin/winc"
+  install -Dm755 "$startdir/winct" "$pkgdir/usr/bin/winct"
   install -Dm755 "$startdir/winct-pty" "$pkgdir/usr/bin/winct-pty"
   # Uploaded to remote Linux hosts, never run from here: kept off the PATH.
-  install -Dm755 "$startdir"/winct-server-Linux-* -t "$pkgdir/usr/lib/winc"
-  install -Dm644 "$startdir/winc.desktop" "$pkgdir/usr/share/applications/winc.desktop"
-  # Opens winc:// links; hidden from application menus.
+  install -Dm755 "$startdir"/winct-server-Linux-* -t "$pkgdir/usr/lib/winct"
+  install -Dm644 "$startdir/winct.desktop" "$pkgdir/usr/share/applications/winct.desktop"
+  # Opens winct:// links; hidden from application menus.
   install -Dm644 "$startdir/winct-url-handler.desktop" "$pkgdir/usr/share/applications/winct-url-handler.desktop"
-  install -Dm644 "$startdir/winc.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/winc.png"
+  install -Dm644 "$startdir/winct.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/winct.png"
   # The .winct-project type; the shared-mime-info hook updates the database.
-  install -Dm644 "$startdir/winc.xml" "$pkgdir/usr/share/mime/packages/winc.xml"
+  install -Dm644 "$startdir/winct.xml" "$pkgdir/usr/share/mime/packages/winct.xml"
   install -Dm644 "$startdir/project.svg" \
     "$pkgdir/usr/share/icons/hicolor/scalable/mimetypes/application-x-winct-project.svg"
   # Context menus of the Dolphin and Nemo file managers.
   install -Dm644 "$startdir/winct-open-file.desktop" "$startdir/winct-open-folder.desktop" \
     -t "$pkgdir/usr/share/kio/servicemenus"
   install -Dm644 "$startdir"/winct-open-*.nemo_action -t "$pkgdir/usr/share/nemo/actions"
-  install -Dm644 "$startdir/LICENSE" "$startdir/NOTICE" -t "$pkgdir/usr/share/licenses/winc"
+  install -Dm644 "$startdir/LICENSE" "$startdir/NOTICE" -t "$pkgdir/usr/share/licenses/winct"
 }

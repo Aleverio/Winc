@@ -1,4 +1,4 @@
-//! 运行在 WSL 发行版内的文件监视程序：`winct-watch <目录>`。标准输入结束（winc 退出）时随之退出。
+//! 运行在 WSL 发行版内的文件监视程序：`winct-watch <目录>`。标准输入结束（winct 退出）时随之退出。
 
 use std::path::PathBuf;
 use std::process::ExitCode;

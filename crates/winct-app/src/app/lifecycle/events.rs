@@ -80,13 +80,13 @@ impl ApplicationHandler<UserEvent> for App {
                     .with_taskbar_icon(Some(icon));
             }
         }
-        // Wayland 的 app_id 和 X11 的 WM_CLASS 取自窗口名称，需与桌面项 `winc.desktop` 一致：
+        // Wayland 的 app_id 和 X11 的 WM_CLASS 取自窗口名称，需与桌面项 `winct.desktop` 一致：
         // 任务栏、停靠栏据此找到图标并归组，窗口规则据此匹配。未设置时 Wayland 不上报 app_id。
         #[cfg(all(unix, not(target_os = "macos")))]
         {
             use winit::platform::startup_notify::WindowAttributesExtStartupNotify;
             use winit::platform::wayland::WindowAttributesExtWayland;
-            attributes = attributes.with_name("winc", "winc");
+            attributes = attributes.with_name("winct", "winct");
             // 激活令牌：Wayland 上新窗口凭该令牌切换到前台，X11 上凭该令牌结束启动通知。
             if let Some(token) = self.opening.activation.take() {
                 attributes = attributes.with_activation_token(token);
@@ -104,7 +104,7 @@ impl ApplicationHandler<UserEvent> for App {
         let window = match event_loop.create_window(attributes) {
             Ok(window) => Arc::new(window),
             Err(e) => {
-                eprintln!("winc: 无法创建窗口：{e}");
+                eprintln!("winct: 无法创建窗口：{e}");
                 self.give_up_window(event_loop);
                 return;
             }
@@ -180,7 +180,7 @@ impl ApplicationHandler<UserEvent> for App {
         let renderer = match renderer {
             Ok(renderer) => renderer,
             Err(e) => {
-                eprintln!("winc: 无法初始化渲染：{e}");
+                eprintln!("winct: 无法初始化渲染：{e}");
                 self.give_up_window(event_loop);
                 return;
             }
@@ -247,7 +247,7 @@ impl ApplicationHandler<UserEvent> for App {
                 Some(key) => winct_i18n::t!("workspace-font-missing-key", fonts = fonts, key = key),
                 None => winct_i18n::t!("workspace-font-missing", fonts = fonts),
             };
-            eprintln!("winc: {message}");
+            eprintln!("winct: {message}");
             self.notify(NoticeKind::Warning, message);
         }
 
@@ -340,7 +340,7 @@ impl ApplicationHandler<UserEvent> for App {
                     self.check_disk();
                     self.reset_blink();
                     self.terminal_window_focused();
-                    // 其他 winc 窗口可能修改了最近列表，重新读取后开始页和项目菜单显示最新内容。
+                    // 其他 winct 窗口可能修改了最近列表，重新读取后开始页和项目菜单显示最新内容。
                     self.reload_state();
                 } else {
                     self.cancel_chord();
@@ -739,7 +739,7 @@ impl App {
     /// 在事件循环空闲之前处理到期的提示、光标闪烁、动画和后台轮询。
     ///
     /// 返回本窗口下一次唤醒的时刻；无需唤醒时返回 `None`。应用层取各窗口中最早的时刻（见
-    /// [`crate::winc`]）。窗口何时退出由应用层决定，本窗口只设置 `Closing::quit_requested`。
+    /// [`crate::winct`]）。窗口何时退出由应用层决定，本窗口只设置 `Closing::quit_requested`。
     pub(crate) fn tick(&mut self) -> Option<Instant> {
         let now = Instant::now();
         self.track_navigation();

@@ -966,12 +966,12 @@ impl PendingInput {
     }
 }
 
-/// 返回终端里的环境变量：主程序给的用户环境去掉 winc 自己用的变量，再设上终端相关的变量。
+/// 返回终端里的环境变量：主程序给的用户环境去掉 winct 自己用的变量，再设上终端相关的变量。
 ///
 /// 设上 `TERM`、`COLORTERM`、`TERM_PROGRAM`、`TERM_PROGRAM_VERSION`；没有任何 `LANG`、
 /// `LC_ALL`、`LC_CTYPE` 时补一个只声明 UTF-8 编码的 `LC_CTYPE`。
 ///
-/// winc 从其他终端或复用器中启动时，标识那个会话的变量不传给 shell。
+/// winct 从其他终端或复用器中启动时，标识那个会话的变量不传给 shell。
 fn environment(env: Vec<(Vec<u8>, Vec<u8>)>) -> Vec<(Vec<u8>, Vec<u8>)> {
     // 其他终端和复用器标识自身会话的变量：留下它们，shell 中的程序会去操作外层的会话，或按外层
     // 终端的尺寸和能力工作。
@@ -1010,7 +1010,7 @@ fn environment(env: Vec<(Vec<u8>, Vec<u8>)>) -> Vec<(Vec<u8>, Vec<u8>)> {
     ];
     let mut env: Vec<_> = env
         .into_iter()
-        // winc 自己用的变量不给 shell；WINCT_PROMPT、WINCT_PYTHON 留给集成脚本，脚本读完即删除。
+        // winct 自己用的变量不给 shell；WINCT_PROMPT、WINCT_PYTHON 留给集成脚本，脚本读完即删除。
         .filter(|(key, _)| {
             !REPLACED.contains(&&key[..])
                 && !SESSION.contains(&&key[..])
@@ -1033,7 +1033,7 @@ fn environment(env: Vec<(Vec<u8>, Vec<u8>)>) -> Vec<(Vec<u8>, Vec<u8>)> {
     env.extend([
         (b"TERM".to_vec(), b"xterm-256color".to_vec()),
         (b"COLORTERM".to_vec(), b"truecolor".to_vec()),
-        (b"TERM_PROGRAM".to_vec(), b"winc".to_vec()),
+        (b"TERM_PROGRAM".to_vec(), b"winct".to_vec()),
         (
             b"TERM_PROGRAM_VERSION".to_vec(),
             winct_version::VERSION.as_bytes().to_vec(),

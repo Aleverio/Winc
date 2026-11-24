@@ -562,11 +562,11 @@ fn deep_containers_are_flattened() {
 
 #[test]
 fn toc_marker_becomes_a_nested_list_of_heading_links() {
-    let md = parse("# 概述\n\n[TOC]\n\n## 安装 winc\n\n### 下载\n\n## 使用\n\n正文\n");
+    let md = parse("# 概述\n\n[TOC]\n\n## 安装 winct\n\n### 下载\n\n## 使用\n\n正文\n");
     let Block::List(None, items) = &md.blocks[1] else {
         panic!("[TOC] 没有换成目录：{:?}", md.blocks[1]);
     };
-    // 「概述」一项，其下是「安装 winc」（含「下载」）和「使用」。
+    // 「概述」一项，其下是「安装 winct」（含「下载」）和「使用」。
     assert_eq!(items.len(), 1);
     let link = |item: &Item| paragraph(&item.blocks[0]).links.clone();
     assert_eq!(link(&items[0]), ["#概述"]);
@@ -574,7 +574,7 @@ fn toc_marker_becomes_a_nested_list_of_heading_links() {
         panic!("没有子项");
     };
     assert_eq!(children.len(), 2);
-    assert_eq!(link(&children[0]), ["#安装-winc"]);
+    assert_eq!(link(&children[0]), ["#安装-winct"]);
     assert_eq!(link(&children[1]), ["#使用"]);
     let Block::List(None, grand) = &children[0].blocks[1] else {
         panic!("没有第三级");
@@ -823,9 +823,9 @@ fn image_sizes_written_by_other_editors_are_read() {
 /// 维基链接是地址以 [`syntax::WIKI`] 开头的链接，显示 `|` 之后的文字，没有时显示名字。
 #[test]
 fn wikilinks_are_links_to_a_name() {
-    let parsed = parse("见 [[winc]] 和 [[notes/a.csv#表|数据]]。`[[代码]]`\n");
+    let parsed = parse("见 [[winct]] 和 [[notes/a.csv#表|数据]]。`[[代码]]`\n");
     let inline = paragraph(&parsed.blocks[0]);
-    assert_eq!(inline.text, "见 winc 和 数据。[[代码]]");
+    assert_eq!(inline.text, "见 winct 和 数据。[[代码]]");
     let wiki = |name: &str| format!("{}{name}", syntax::WIKI);
-    assert_eq!(inline.links, [wiki("winc"), wiki("notes/a.csv#表")]);
+    assert_eq!(inline.links, [wiki("winct"), wiki("notes/a.csv#表")]);
 }

@@ -60,7 +60,7 @@ fn project_environment_is_loaded_after_user_config_and_can_be_deactivated() {
             continue;
         };
         let block = sh.run(
-            "printenv VIRTUAL_ENV; command -v python; python; printenv PYTHONHOME || echo unset",
+            "printf '%s\\n' \"$VIRTUAL_ENV\"; command -v python; python; printenv PYTHONHOME || echo unset",
         );
         let expected = format!(
             "{}\n{}\nproject-python\nunset",
@@ -163,11 +163,9 @@ fn only_valid_project_environments_are_selected_in_order() {
             let Some(mut sh) = start(shell, &t, &root, &[]) else {
                 break;
             };
-            let block = sh.run("printenv VIRTUAL_ENV || echo unset");
-            let expected = name.map_or_else(
-                || "unset".to_owned(),
-                |name| root.join(name).display().to_string(),
-            );
+            let block = sh.run("printf '%s\\n' \"$VIRTUAL_ENV\"");
+            let expected =
+                name.map_or_else(String::new, |name| root.join(name).display().to_string());
             assert_eq!(sh.output(&block), expected, "{shell}");
             drop(sh);
             if let Some(name) = name {

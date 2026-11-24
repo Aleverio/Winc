@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Types winc can open, listed under Applications\winc.exe\SupportedTypes: winc appears in
+<!-- Types winct can open, listed under Applications\winct.exe\SupportedTypes: winct appears in
      "Open with" > "Choose another app" for them. Nothing is written under the types themselves
      unless the optional FileTypes feature is installed, so Windows keeps their default program and
      icon and does not ask which program to use. Keep this
@@ -25,23 +25,23 @@
 <?define IconNames = markdown;json;config;markup;style;script;table;text;javascript;typescript;python;rust;go;c;code;project;file?>
 <?define FileTypes = $(var.MarkdownTypes);$(var.JsonTypes);$(var.ConfigTypes);$(var.MarkupTypes);$(var.StyleTypes);$(var.ScriptTypes);$(var.TableTypes);$(var.TextTypes);$(var.JavascriptTypes);$(var.TypescriptTypes);$(var.PythonTypes);$(var.RustTypes);$(var.GoTypes);$(var.CTypes);$(var.CodeTypes);$(var.ProjectTypes)?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <!-- UUIDv5(DNS, com.deeix.winc); keep this product family stable across releases. -->
+  <!-- UUIDv5(DNS, com.deeix.winct); keep this product family stable across releases. -->
   <Product Id="*" Name="Winct" Language="1033" Version="$(var.Version)" Manufacturer="DEEIX"
            UpgradeCode="00FDC6A5-D527-59AE-B4A5-E051B25222F3">
     <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" Platform="x64"/>
     <MajorUpgrade AllowDowngrades="yes" Schedule="afterInstallInitialize"/>
     <Property Id="REINSTALLMODE" Value="amus"/>
     <MediaTemplate EmbedCab="yes"/>
-    <Icon Id="WinctIcon" SourceFile="$(var.Source)\winc.ico"/>
+    <Icon Id="WinctIcon" SourceFile="$(var.Source)\winct.ico"/>
     <Property Id="ARPPRODUCTICON" Value="WinctIcon"/>
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER"/>
     <WixVariable Id="WixUILicenseRtf" Value="$(var.Source)\license.rtf"/>
     <UIRef Id="WixUI_InstallDir"/>
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="winc">
+        <Directory Id="INSTALLFOLDER" Name="winct">
           <Component Id="Application" Guid="*" Win64="yes">
-            <File Id="WinctExe" Source="$(var.Source)\winc.exe" KeyPath="yes"/>
+            <File Id="WinctExe" Source="$(var.Source)\winct.exe" KeyPath="yes"/>
           </Component>
           <Component Id="TerminalHelper" Guid="*" Win64="yes">
             <File Source="$(var.Source)\winct-pty.exe" KeyPath="yes"/>
@@ -65,108 +65,108 @@
             <File Source="$(var.Source)\msi\winct-installation" KeyPath="yes"/>
           </Component>
           <Component Id="FileAssociations" Guid="*" Win64="yes">
-            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\winc.exe" Name="FriendlyAppName" Value="Winct" Type="string" KeyPath="yes"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\winc.exe\DefaultIcon" Value="[#WinctExe],0" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\winc.exe\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\winct.exe" Name="FriendlyAppName" Value="Winct" Type="string" KeyPath="yes"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\winct.exe\DefaultIcon" Value="[#WinctExe],0" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\winct.exe\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <!-- The shell reads only the value names of SupportedTypes. An empty value means Null to
-                 Windows Installer, so these hold a placeholder. The winc.<type> ProgID is not listed
-                 under any type; it stays for users who chose winc as the default program while
+                 Windows Installer, so these hold a placeholder. The winct.<type> ProgID is not listed
+                 under any type; it stays for users who chose winct as the default program while
                  earlier versions listed it, whose choice names this ProgID. -->
             <?foreach Type in $(var.FileTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\winc.exe\SupportedTypes" Name=".$(var.Type)" Value="winc" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\Applications\winct.exe\SupportedTypes" Name=".$(var.Type)" Value="winct" Type="string"/>
             <?endforeach?>
             <!-- Each ProgID carries its type's document icon. Explorer shows it for a type whose
-                 chosen program is this ProgID; a choice made through "Open with" names winc.exe
+                 chosen program is this ProgID; a choice made through "Open with" names winct.exe
                  instead and shows its icon. -->
             <?foreach Type in $(var.MarkdownTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)" Value="$(var.Type) File" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\DefaultIcon" Value="[#Icon_markdown]" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)" Value="$(var.Type) File" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\DefaultIcon" Value="[#Icon_markdown]" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>
             <?foreach Type in $(var.JsonTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)" Value="$(var.Type) File" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\DefaultIcon" Value="[#Icon_json]" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)" Value="$(var.Type) File" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\DefaultIcon" Value="[#Icon_json]" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>
             <?foreach Type in $(var.ConfigTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)" Value="$(var.Type) File" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\DefaultIcon" Value="[#Icon_config]" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)" Value="$(var.Type) File" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\DefaultIcon" Value="[#Icon_config]" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>
             <?foreach Type in $(var.MarkupTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)" Value="$(var.Type) File" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\DefaultIcon" Value="[#Icon_markup]" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)" Value="$(var.Type) File" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\DefaultIcon" Value="[#Icon_markup]" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>
             <?foreach Type in $(var.StyleTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)" Value="$(var.Type) File" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\DefaultIcon" Value="[#Icon_style]" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)" Value="$(var.Type) File" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\DefaultIcon" Value="[#Icon_style]" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>
             <?foreach Type in $(var.ScriptTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)" Value="$(var.Type) File" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\DefaultIcon" Value="[#Icon_script]" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)" Value="$(var.Type) File" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\DefaultIcon" Value="[#Icon_script]" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>
             <?foreach Type in $(var.TableTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)" Value="$(var.Type) File" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\DefaultIcon" Value="[#Icon_table]" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)" Value="$(var.Type) File" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\DefaultIcon" Value="[#Icon_table]" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>
             <?foreach Type in $(var.TextTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)" Value="$(var.Type) File" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\DefaultIcon" Value="[#Icon_text]" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)" Value="$(var.Type) File" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\DefaultIcon" Value="[#Icon_text]" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>
             <?foreach Type in $(var.JavascriptTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)" Value="$(var.Type) File" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\DefaultIcon" Value="[#Icon_javascript]" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)" Value="$(var.Type) File" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\DefaultIcon" Value="[#Icon_javascript]" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>
             <?foreach Type in $(var.TypescriptTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)" Value="$(var.Type) File" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\DefaultIcon" Value="[#Icon_typescript]" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)" Value="$(var.Type) File" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\DefaultIcon" Value="[#Icon_typescript]" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>
             <?foreach Type in $(var.PythonTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)" Value="$(var.Type) File" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\DefaultIcon" Value="[#Icon_python]" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)" Value="$(var.Type) File" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\DefaultIcon" Value="[#Icon_python]" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>
             <?foreach Type in $(var.RustTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)" Value="$(var.Type) File" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\DefaultIcon" Value="[#Icon_rust]" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)" Value="$(var.Type) File" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\DefaultIcon" Value="[#Icon_rust]" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>
             <?foreach Type in $(var.GoTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)" Value="$(var.Type) File" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\DefaultIcon" Value="[#Icon_go]" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)" Value="$(var.Type) File" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\DefaultIcon" Value="[#Icon_go]" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>
             <?foreach Type in $(var.CTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)" Value="$(var.Type) File" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\DefaultIcon" Value="[#Icon_c]" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)" Value="$(var.Type) File" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\DefaultIcon" Value="[#Icon_c]" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>
             <?foreach Type in $(var.CodeTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)" Value="$(var.Type) File" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\DefaultIcon" Value="[#Icon_code]" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)" Value="$(var.Type) File" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\DefaultIcon" Value="[#Icon_code]" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>
             <?foreach Type in $(var.ProjectTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)" Value="$(var.Type) File" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\DefaultIcon" Value="[#Icon_project]" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)" Value="$(var.Type) File" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\DefaultIcon" Value="[#Icon_project]" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct.$(var.Type)\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>
           </Component>
           <!-- Optional, on by default: lists the ProgIDs under the types. A handler listed there
                makes Windows ask once which program to use. Install with ADDLOCAL=Main to leave it
                out; an upgrade keeps the earlier choice. -->
           <Component Id="FileTypeListing" Guid="*" Win64="yes">
-            <RegistryValue Root="HKLM" Key="Software\DEEIX\winc\MSI" Name="File Types" Type="integer" Value="1" KeyPath="yes"/>
+            <RegistryValue Root="HKLM" Key="Software\DEEIX\winct\MSI" Name="File Types" Type="integer" Value="1" KeyPath="yes"/>
             <!-- The shell reads only the value names; the data is a placeholder, as above. -->
             <?foreach Type in $(var.FileTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\.$(var.Type)\OpenWithProgids" Name="winc.$(var.Type)" Value="winc" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\.$(var.Type)\OpenWithProgids" Name="winct.$(var.Type)" Value="winct" Type="string"/>
             <?endforeach?>
           </Component>
           <Directory Id="ICONSFOLDER" Name="icons">
@@ -181,35 +181,35 @@
                a folder and on the empty space inside one (also the desktop), where %V is that folder.
                Windows 11 shows these under "Show more options". -->
           <Component Id="ContextMenu" Guid="*" Win64="yes">
-            <RegistryValue Root="HKLM" Key="Software\Classes\Directory\shell\winc" Value="Open in Winct" Type="string" KeyPath="yes"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\Directory\shell\winc" Name="Icon" Value="[#WinctExe],0" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\Directory\shell\winc\command" Value="&quot;[#WinctExe]&quot; &quot;%V&quot;" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\Directory\Background\shell\winc" Value="Open in Winct" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\Directory\Background\shell\winc" Name="Icon" Value="[#WinctExe],0" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\Directory\Background\shell\winc\command" Value="&quot;[#WinctExe]&quot; &quot;%V&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\Directory\shell\winct" Value="Open in Winct" Type="string" KeyPath="yes"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\Directory\shell\winct" Name="Icon" Value="[#WinctExe],0" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\Directory\shell\winct\command" Value="&quot;[#WinctExe]&quot; &quot;%V&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\Directory\Background\shell\winct" Value="Open in Winct" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\Directory\Background\shell\winct" Name="Icon" Value="[#WinctExe],0" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\Directory\Background\shell\winct\command" Value="&quot;[#WinctExe]&quot; &quot;%V&quot;" Type="string"/>
             <?foreach Type in $(var.FileTypes)?>
-            <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.$(var.Type)\shell\winc" Value="Open with Winct" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.$(var.Type)\shell\winc" Name="Icon" Value="[#WinctExe],0" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.$(var.Type)\shell\winc\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.$(var.Type)\shell\winct" Value="Open with Winct" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.$(var.Type)\shell\winct" Name="Icon" Value="[#WinctExe],0" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.$(var.Type)\shell\winct\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
             <?endforeach?>
           </Component>
-          <!-- The winc: URL scheme: winc://file/<absolute path>[:line[:column]] opens a file or
-               folder in winc, which receives the whole link as its argument. The shell checks only
+          <!-- The winct: URL scheme: winct://file/<absolute path>[:line[:column]] opens a file or
+               folder in winct, which receives the whole link as its argument. The shell checks only
                that "URL Protocol" exists; an empty value means Null to Windows Installer, so it
                holds a placeholder. -->
           <Component Id="UrlScheme" Guid="*" Win64="yes">
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc" Value="URL:Winct" Type="string" KeyPath="yes"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc" Name="URL Protocol" Value="winc" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc\DefaultIcon" Value="[#WinctExe],0" Type="string"/>
-            <RegistryValue Root="HKLM" Key="Software\Classes\winc\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct" Value="URL:Winct" Type="string" KeyPath="yes"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct" Name="URL Protocol" Value="winct" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct\DefaultIcon" Value="[#WinctExe],0" Type="string"/>
+            <RegistryValue Root="HKLM" Key="Software\Classes\winct\shell\open\command" Value="&quot;[#WinctExe]&quot; &quot;%1&quot;" Type="string"/>
           </Component>
           <Directory Id="BINFOLDER" Name="bin">
             <Component Id="CommandLine" Guid="*" Win64="yes">
-              <File Id="WinctLauncher" Source="$(var.Source)\bin\winc" KeyPath="yes"/>
+              <File Id="WinctLauncher" Source="$(var.Source)\bin\winct" KeyPath="yes"/>
               <Environment Id="WinctPath" Name="PATH" Value="[BINFOLDER]" Action="set" Part="last" System="yes" Permanent="no"/>
             </Component>
             <Component Id="CommandLineCmd" Guid="*" Win64="yes">
-              <File Id="WinctLauncherCmd" Source="$(var.Source)\bin\winc.cmd" KeyPath="yes"/>
+              <File Id="WinctLauncherCmd" Source="$(var.Source)\bin\winct.cmd" KeyPath="yes"/>
             </Component>
           </Directory>
           <Component Id="License" Guid="*" Win64="yes"><File Source="$(var.Source)\LICENSE" KeyPath="yes"/></Component>
@@ -221,12 +221,12 @@
           <Component Id="StartMenu" Guid="*" Win64="yes">
             <Shortcut Id="StartMenuShortcut" Name="Winct" Target="[#WinctExe]" WorkingDirectory="INSTALLFOLDER" Icon="WinctIcon"/>
             <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
-            <RegistryValue Root="HKCU" Key="Software\DEEIX\winc\MSI" Name="Start Menu Shortcut" Type="integer" Value="1" KeyPath="yes"/>
+            <RegistryValue Root="HKCU" Key="Software\DEEIX\winct\MSI" Name="Start Menu Shortcut" Type="integer" Value="1" KeyPath="yes"/>
           </Component>
         </Directory>
       </Directory>
     </Directory>
-    <Feature Id="Main" Title="winc" Level="1">
+    <Feature Id="Main" Title="winct" Level="1">
       <ComponentRef Id="Application"/><ComponentRef Id="TerminalHelper"/><ComponentRef Id="InstallationKind"/>
       <ComponentRef Id="ConptyLibrary"/><ComponentRef Id="ConsoleHost"/>
       <ComponentRef Id="FileAssociations"/><ComponentRef Id="UrlScheme"/>

@@ -156,7 +156,7 @@ fn clearing_and_paging_stay_available_without_a_known_prompt() {
 }
 
 #[test]
-fn application_priority_keeps_management_and_does_not_change_winc_fields() {
+fn application_priority_keeps_management_and_does_not_change_winct_fields() {
     let mut app = blank_app(false);
     show_terminal(&mut app, "one");
     add_tab(&mut app, "agent", "two");

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./crates/winct-app/assets/icon.svg" alt="winc" width="128" />
+  <img src="./crates/winct-app/assets/icon.svg" alt="winct" width="128" />
 </p>
 
 <h1 align="center">Winct</h1>
@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Aleverio/Winc"><img alt="Website" src="https://img.shields.io/badge/Website-winc.si-black" /></a>
+  <a href="https://github.com/Aleverio/Winc"><img alt="Website" src="https://img.shields.io/badge/Website-winct.si-black" /></a>
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue" /></a>
   <img alt="Rust" src="https://img.shields.io/badge/Rust-2024-b7410e" />
   <img alt="Platforms" src="https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux%20%7C%20Windows-555" />
@@ -25,7 +25,7 @@
 
 ## 概述
 
-winc 以 Rust 与自研渲染引擎构建：0.1 秒启动，十万行代码仅占 52 MB 内存。多光标、查找替换、并排差异，
+winct 以 Rust 与自研渲染引擎构建：0.1 秒启动，十万行代码仅占 52 MB 内存。多光标、查找替换、并排差异，
 每一次输入与滚动都即时响应。
 
 | 指标 | 结果 |
@@ -70,7 +70,7 @@ Ctrl/⌘ 加 `+`、`-`、`0`，缩放时鼠标所指的位置保持不动。放�
 | Linux | x86_64，X11 或 Wayland | AppImage、deb、Arch 软件源 |
 | Windows | Windows 10 1809 及以上，x86_64 | NSIS、MSI、便携 ZIP |
 
-便携 ZIP 将设置和状态保存在 `winc.exe` 旁边的 `data` 目录中；删除该目录后改为保存在用户目录中。
+便携 ZIP 将设置和状态保存在 `winct.exe` 旁边的 `data` 目录中；删除该目录后改为保存在用户目录中。
 
 ## 语言服务器
 
@@ -92,7 +92,7 @@ JSON）开启自动选择，或为语言输入自定义程序和参数。服务�
 Winct 会把打开和编辑的文件同步给对应服务器，并为诊断范围添加下划线；点击状态栏的诊断数量可查看
 行号、列号和错误信息。使用「显示悬停信息」（Ctrl/Cmd+K，Ctrl/Cmd+I）请求悬停内容。
 
-主要在 macOS 上开发和测试。可从 [winc.si](https://github.com/Aleverio/Winc/#download) 下载，所有版本见
+主要在 macOS 上开发和测试。可从 [winct.si](https://github.com/Aleverio/Winc/#download) 下载，所有版本见
 [GitHub Releases](https://github.com/DEEIX-AI/Winc/releases)。
 
 ## 安装
@@ -115,15 +115,15 @@ irm https://raw.githubusercontent.com/Aleverio/Winc/dev/release/runtime/install.
 ## 命令行
 
 ```bash
-winc .                  # 打开当前目录
-winc file.rs:12:5       # 打开文件并跳到指定的行和列
-winc --wait file        # 等标签关闭后再退出，例如作为 Git 的编辑器
-cargo build 2>&1 | winc -   # 读取标准输入
+winct .                  # 打开当前目录
+winct file.rs:12:5       # 打开文件并跳到指定的行和列
+winct --wait file        # 等标签关闭后再退出，例如作为 Git 的编辑器
+cargo build 2>&1 | winct -   # 读取标准输入
 ```
 
-Windows 安装包、Linux deb 包和 Arch 包会把 `winc` 加入 `PATH`；Windows 便携版不修改 `PATH`。macOS 请在菜单栏选择「Winct → 安装 winc 命令…」，或在命令面板中运行「Shell 命令：安装 winc 命令」；Linux AppImage 请使用命令面板。
+Windows 安装包、Linux deb 包和 Arch 包会把 `winct` 加入 `PATH`；Windows 便携版不修改 `PATH`。macOS 请在菜单栏选择「Winct → 安装 winct 命令…」，或在命令面板中运行「Shell 命令：安装 winct 命令」；Linux AppImage 请使用命令面板。
 
-在 macOS 上应用由系统启动，不继承 shell 的环境变量；需要保留时使用 `winc --new-instance`。
+在 macOS 上应用由系统启动，不继承 shell 的环境变量；需要保留时使用 `winct --new-instance`。
 
 ## 从源代码构建
 
@@ -146,7 +146,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 cargo xtask bench                   # 测启动、内存、滚动，对照性能预算
 ```
 
-界面由 Rust 编写，窗口用 winit，渲染由 winc 自己的 CPU 光栅化完成；在 macOS 上直接写入 IOSurface。
+界面由 Rust 编写，窗口用 winit，渲染由 winct 自己的 CPU 光栅化完成；在 macOS 上直接写入 IOSurface。
 
 代码按 crate 分层：
 
@@ -167,7 +167,7 @@ cargo xtask bench                   # 测启动、内存、滚动，对照性能
 | `winct-i18n` | 界面文案（Fluent 语言包） |
 | `winct-version` | 产品版本号，取自 `VERSION` 文件 |
 | `winct-app` | 应用本体：窗口、事件、各个界面 |
-| `winc` | 可执行文件的入口，只调用 `winct-app` |
+| `winct` | 可执行文件的入口，只调用 `winct-app` |
 | `xtask` | 开发自动化：测试、基准、打包 |
 
 ## 参与贡献
@@ -178,7 +178,7 @@ cargo xtask bench                   # 测启动、内存、滚动，对照性能
 
 ## 联系我们
 
-- 网站：[winc.si](https://github.com/Aleverio/Winc)
+- 网站：[winct.si](https://github.com/Aleverio/Winc)
 - 邮箱：[support@deeix.com](mailto:support@deeix.com)
 - Telegram：[t.me/deeix_chat](https://t.me/deeix_chat)
 - X：[@DEEIX_AI](https://x.com/DEEIX_AI)
@@ -191,4 +191,4 @@ cargo xtask bench                   # 测启动、内存、滚动，对照性能
 
 ## 许可证
 
-winc 以 [Apache License 2.0](LICENSE) 授权，另见 [NOTICE](NOTICE)。
+winct 以 [Apache License 2.0](LICENSE) 授权，另见 [NOTICE](NOTICE)。

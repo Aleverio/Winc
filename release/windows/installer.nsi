@@ -11,10 +11,10 @@ SetCompressor /SOLID lzma
 
 Name "Winct"
 OutFile "${OUT_FILE}"
-InstallDir "$LOCALAPPDATA\Programs\winc"
-InstallDirRegKey HKCU "Software\DEEIX\winc" "InstallDir"
-Icon "${SOURCE}\winc.ico"
-UninstallIcon "${SOURCE}\winc.ico"
+InstallDir "$LOCALAPPDATA\Programs\winct"
+InstallDirRegKey HKCU "Software\DEEIX\winct" "InstallDir"
+Icon "${SOURCE}\winct.ico"
+UninstallIcon "${SOURCE}\winct.ico"
 VIProductVersion "${VIVERSION}"
 VIAddVersionKey /LANG=1033 "ProductName" "Winct"
 VIAddVersionKey /LANG=1033 "FileDescription" "Winct installer"
@@ -29,7 +29,7 @@ VIAddVersionKey /LANG=1033 "LegalCopyright" "DEEIX"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
-!define MUI_FINISHPAGE_RUN "$INSTDIR\winc.exe"
+!define MUI_FINISHPAGE_RUN "$INSTDIR\winct.exe"
 !define MUI_FINISHPAGE_RUN_NOTCHECKED
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -37,13 +37,13 @@ VIAddVersionKey /LANG=1033 "LegalCopyright" "DEEIX"
 !insertmacro MUI_LANGUAGE "English"
 !insertmacro MUI_LANGUAGE "SimpChinese"
 
-; The optional section that lists winc under the supported file types.
+; The optional section that lists winct under the supported file types.
 LangString FileTypesSection ${LANG_ENGLISH} "Associate file types"
 LangString FileTypesSection ${LANG_SIMPCHINESE} "关联文件类型"
 LangString FileTypesText ${LANG_ENGLISH} "Lists Winct among the programs for source and text files. A type opened with Winct by default then shows its own document icon. Windows may ask once which program to use for these files."
 LangString FileTypesText ${LANG_SIMPCHINESE} "把 Winct 列为源代码和文本文件的可选程序。设为默认程序的类型会显示各自的文档图标。Windows 可能会询问一次用哪个程序打开这些文件。"
 
-; The optional section that adds winc to the Explorer context menu.
+; The optional section that adds winct to the Explorer context menu.
 LangString ContextMenuSection ${LANG_ENGLISH} "Explorer context menu"
 LangString ContextMenuSection ${LANG_SIMPCHINESE} "资源管理器右键菜单"
 LangString ContextMenuText ${LANG_ENGLISH} "Adds Open with Winct to the context menu of files and Open in Winct to that of folders. It can be turned off later in Winct's settings."
@@ -55,7 +55,7 @@ LangString OpenFileVerb ${LANG_SIMPCHINESE} "通过 Winct 打开"
 LangString OpenFolderVerb ${LANG_ENGLISH} "Open in Winct"
 LangString OpenFolderVerb ${LANG_SIMPCHINESE} "在 Winct 中打开"
 
-; Types winc can open, listed under Applications\winc.exe\SupportedTypes: winc appears in
+; Types winct can open, listed under Applications\winct.exe\SupportedTypes: winct appears in
 ; "Open with" > "Choose another app" for them. Nothing is written under the types themselves unless
 ; the optional file types section is selected, so Windows keeps their default program and icon and
 ; does not ask which program to use; scripts still run on double-click. Keep this list the same as
@@ -260,24 +260,24 @@ LangString OpenFolderVerb ${LANG_SIMPCHINESE} "在 Winct 中打开"
   !insertmacro ${Action} CMD file
 !macroend
 
-; The winc.<type> ProgID is not listed under any type. Earlier versions listed it in the type's
-; OpenWithProgids, and a user who then chose winc as the default program has a choice that names
+; The winct.<type> ProgID is not listed under any type. Earlier versions listed it in the type's
+; OpenWithProgids, and a user who then chose winct as the default program has a choice that names
 ; this ProgID; keeping it keeps that choice working.
 ; The verb under SystemFileAssociations adds "Open with Winct" to the type's context menu without
 ; changing its default program. Windows 11 shows it under "Show more options".
 ; The ProgID carries the type's own document icon. Explorer shows it for a type whose chosen program
-; is this ProgID; a choice made through "Open with" names winc.exe instead and shows its icon.
+; is this ProgID; a choice made through "Open with" names winct.exe instead and shows its icon.
 !macro RegisterFileType Type Icon
-  WriteRegStr HKCU "Software\Classes\Applications\winc.exe\SupportedTypes" ".${Type}" ""
-  WriteRegStr HKCU "Software\Classes\winc.${Type}" "" "${Type} File"
-  WriteRegStr HKCU "Software\Classes\winc.${Type}\DefaultIcon" "" "$INSTDIR\icons\${Icon}.ico"
-  WriteRegStr HKCU "Software\Classes\winc.${Type}\shell\open\command" "" '"$INSTDIR\winc.exe" "%1"'
+  WriteRegStr HKCU "Software\Classes\Applications\winct.exe\SupportedTypes" ".${Type}" ""
+  WriteRegStr HKCU "Software\Classes\winct.${Type}" "" "${Type} File"
+  WriteRegStr HKCU "Software\Classes\winct.${Type}\DefaultIcon" "" "$INSTDIR\icons\${Icon}.ico"
+  WriteRegStr HKCU "Software\Classes\winct.${Type}\shell\open\command" "" '"$INSTDIR\winct.exe" "%1"'
 !macroend
 
 ; Earlier versions added "Open with Winct" to each type under SystemFileAssociations. The context
 ; menu is now one entry for all files (RegisterContextMenu), so the per-type verbs are removed.
 !macro RemoveFileTypeVerb Type Icon
-  DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.${Type}\shell\winc"
+  DeleteRegKey HKCU "Software\Classes\SystemFileAssociations\.${Type}\shell\winct"
   DeleteRegKey /ifempty HKCU "Software\Classes\SystemFileAssociations\.${Type}\shell"
   DeleteRegKey /ifempty HKCU "Software\Classes\SystemFileAssociations\.${Type}"
 !macroend
@@ -285,46 +285,46 @@ LangString OpenFolderVerb ${LANG_SIMPCHINESE} "在 Winct 中打开"
 ; Removes the entry earlier versions added to the type's OpenWithProgids. A new handler listed there
 ; makes Windows ask which program to use the next time such a file is opened.
 !macro UnlistFileType Type Icon
-  DeleteRegValue HKCU "Software\Classes\.${Type}\OpenWithProgids" "winc.${Type}"
+  DeleteRegValue HKCU "Software\Classes\.${Type}\OpenWithProgids" "winct.${Type}"
   DeleteRegKey /ifempty HKCU "Software\Classes\.${Type}\OpenWithProgids"
   DeleteRegKey /ifempty HKCU "Software\Classes\.${Type}"
 !macroend
 
 ; Lists the ProgID under the type, on the user's request (the optional "file types" section). The
-; type's default program is not changed; choosing winc for it then shows the type's document icon.
+; type's default program is not changed; choosing winct for it then shows the type's document icon.
 !macro ListFileType Type Icon
-  WriteRegStr HKCU "Software\Classes\.${Type}\OpenWithProgids" "winc.${Type}" ""
+  WriteRegStr HKCU "Software\Classes\.${Type}\OpenWithProgids" "winct.${Type}" ""
 !macroend
 
 !macro UnregisterFileType Type Icon
   !insertmacro RemoveFileTypeVerb ${Type} ${Icon}
   !insertmacro UnlistFileType ${Type} ${Icon}
-  DeleteRegKey HKCU "Software\Classes\winc.${Type}"
+  DeleteRegKey HKCU "Software\Classes\winct.${Type}"
 !macroend
 
-; .winct-project is Winct's own project file: the extension opens with winc by default. Nothing else
+; .winct-project is Winct's own project file: the extension opens with winct by default. Nothing else
 ; claims it, so Windows does not ask which program to use.
 !macro RegisterProjectType
-  WriteRegStr HKCU "Software\Classes\.winct-project" "" "winc.WINCT-PROJECT"
+  WriteRegStr HKCU "Software\Classes\.winct-project" "" "winct.WINCT-PROJECT"
 !macroend
 
-; Removes the default program only while it is still winc.
+; Removes the default program only while it is still winct.
 !macro UnregisterProjectType
   ReadRegStr $0 HKCU "Software\Classes\.winct-project" ""
-  StrCmp $0 "winc.WINCT-PROJECT" 0 +2
+  StrCmp $0 "winct.WINCT-PROJECT" 0 +2
     DeleteRegValue HKCU "Software\Classes\.winct-project" ""
   DeleteRegKey /ifempty HKCU "Software\Classes\.winct-project"
 !macroend
 
 ; "Open in Winct" on a folder and on the empty space inside one (also the desktop); %V is that folder.
 !macro RegisterFolderVerb Key
-  WriteRegStr HKCU "Software\Classes\${Key}\shell\winc" "" "$(OpenFolderVerb)"
-  WriteRegStr HKCU "Software\Classes\${Key}\shell\winc" "Icon" "$INSTDIR\winc.exe,0"
-  WriteRegStr HKCU "Software\Classes\${Key}\shell\winc\command" "" '"$INSTDIR\winc.exe" "%V"'
+  WriteRegStr HKCU "Software\Classes\${Key}\shell\winct" "" "$(OpenFolderVerb)"
+  WriteRegStr HKCU "Software\Classes\${Key}\shell\winct" "Icon" "$INSTDIR\winct.exe,0"
+  WriteRegStr HKCU "Software\Classes\${Key}\shell\winct\command" "" '"$INSTDIR\winct.exe" "%V"'
 !macroend
 
 !macro UnregisterFolderVerb Key
-  DeleteRegKey HKCU "Software\Classes\${Key}\shell\winc"
+  DeleteRegKey HKCU "Software\Classes\${Key}\shell\winct"
 !macroend
 
 ; The Explorer context menu: one "Open with Winct" for every file, under the * class, which leaves
@@ -332,26 +332,26 @@ LangString OpenFolderVerb ${LANG_SIMPCHINESE} "在 Winct 中打开"
 ; one (also the desktop), where %V is that folder. Windows 11 shows them under "Show more options".
 ; Winct's settings write the same keys, so the entries can be turned off and on there.
 !macro RegisterContextMenu
-  WriteRegStr HKCU "Software\Classes\*\shell\winc" "" "$(OpenFileVerb)"
-  WriteRegStr HKCU "Software\Classes\*\shell\winc" "Icon" "$INSTDIR\winc.exe,0"
-  WriteRegStr HKCU "Software\Classes\*\shell\winc\command" "" '"$INSTDIR\winc.exe" "%1"'
+  WriteRegStr HKCU "Software\Classes\*\shell\winct" "" "$(OpenFileVerb)"
+  WriteRegStr HKCU "Software\Classes\*\shell\winct" "Icon" "$INSTDIR\winct.exe,0"
+  WriteRegStr HKCU "Software\Classes\*\shell\winct\command" "" '"$INSTDIR\winct.exe" "%1"'
   !insertmacro RegisterFolderVerb "Directory"
   !insertmacro RegisterFolderVerb "Directory\Background"
 !macroend
 
 !macro UnregisterContextMenu
-  DeleteRegKey HKCU "Software\Classes\*\shell\winc"
+  DeleteRegKey HKCU "Software\Classes\*\shell\winct"
   !insertmacro UnregisterFolderVerb "Directory"
   !insertmacro UnregisterFolderVerb "Directory\Background"
 !macroend
 
-; The winc: URL scheme: winc://file/<absolute path>[:line[:column]] opens a file or folder in winc,
+; The winct: URL scheme: winct://file/<absolute path>[:line[:column]] opens a file or folder in winct,
 ; which receives the whole link as its argument.
 !macro RegisterUrlScheme
-  WriteRegStr HKCU "Software\Classes\winc" "" "URL:Winct"
-  WriteRegStr HKCU "Software\Classes\winc" "URL Protocol" ""
-  WriteRegStr HKCU "Software\Classes\winc\DefaultIcon" "" "$INSTDIR\winc.exe,0"
-  WriteRegStr HKCU "Software\Classes\winc\shell\open\command" "" '"$INSTDIR\winc.exe" "%1"'
+  WriteRegStr HKCU "Software\Classes\winct" "" "URL:Winct"
+  WriteRegStr HKCU "Software\Classes\winct" "URL Protocol" ""
+  WriteRegStr HKCU "Software\Classes\winct\DefaultIcon" "" "$INSTDIR\winct.exe,0"
+  WriteRegStr HKCU "Software\Classes\winct\shell\open\command" "" '"$INSTDIR\winct.exe" "%1"'
 !macroend
 
 ; SHCNE_ASSOCCHANGED: the shell refreshes its icons and "Open with" lists.
@@ -359,7 +359,7 @@ LangString OpenFolderVerb ${LANG_SIMPCHINESE} "在 Winct 中打开"
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 !macroend
 
-; Adds the command-line launchers to the user's Path or removes them. A failure leaves winc usable.
+; Adds the command-line launchers to the user's Path or removes them. A failure leaves winct usable.
 !macro UpdateUserPath ACTION
   InitPluginsDir
   File "/oname=$PLUGINSDIR\path.ps1" "${SOURCE}\path.ps1"
@@ -367,7 +367,7 @@ LangString OpenFolderVerb ${LANG_SIMPCHINESE} "在 Winct 中打开"
   Pop $0
 !macroend
 
-; These files belong to processes that exit shortly after winc does, so they can still be open:
+; These files belong to processes that exit shortly after winct does, so they can still be open:
 ; winct-watch inside a WSL distribution, OpenConsole.exe and conpty.dll with a closing terminal.
 ; Waits up to 5 s; a file that stays open keeps the old copy until the next update.
 !macro InstallRetrying NAME
@@ -403,42 +403,42 @@ Section "Winct" SEC_MAIN
   SectionIn RO
   SetShellVarContext current
   SetOutPath "$INSTDIR"
-  File "${SOURCE}\winc.exe"
+  File "${SOURCE}\winct.exe"
   File "${SOURCE}\winct-pty.exe"
   !insertmacro InstallRetrying "OpenConsole.exe"
   !insertmacro InstallRetrying "conpty.dll"
   !insertmacro InstallRetrying "winct-watch"
   File "${SOURCE}\winct-server-Linux-x86_64"
   File "${SOURCE}\winct-server-Linux-aarch64"
-  File "${SOURCE}\winc.ico"
+  File "${SOURCE}\winct.ico"
   File "${SOURCE}\LICENSE"
   File "${SOURCE}\NOTICE"
   File "${SOURCE}\nsis\winct-installation"
   SetOutPath "$INSTDIR\bin"
-  File "${SOURCE}\bin\winc"
-  File "${SOURCE}\bin\winc.cmd"
+  File "${SOURCE}\bin\winct"
+  File "${SOURCE}\bin\winct.cmd"
   SetOutPath "$INSTDIR\icons"
   File "${SOURCE}\icons\*.ico"
   SetOutPath "$INSTDIR"
   !insertmacro UpdateUserPath "Add"
   WriteUninstaller "$INSTDIR\uninstall.exe"
-  WriteRegStr HKCU "Software\DEEIX\winc" "InstallDir" "$INSTDIR"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc" "DisplayName" "Winct"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc" "DisplayVersion" "${VERSION}"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc" "Publisher" "DEEIX"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc" "DisplayIcon" "$INSTDIR\winc.ico"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc" "UninstallString" '$\"$INSTDIR\uninstall.exe$\"'
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc" "QuietUninstallString" '$\"$INSTDIR\uninstall.exe$\" /S'
-  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc" "NoModify" 1
-  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc" "NoRepair" 1
+  WriteRegStr HKCU "Software\DEEIX\winct" "InstallDir" "$INSTDIR"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winct" "DisplayName" "Winct"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winct" "DisplayVersion" "${VERSION}"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winct" "Publisher" "DEEIX"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winct" "DisplayIcon" "$INSTDIR\winct.ico"
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winct" "UninstallString" '$\"$INSTDIR\uninstall.exe$\"'
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winct" "QuietUninstallString" '$\"$INSTDIR\uninstall.exe$\" /S'
+  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winct" "NoModify" 1
+  WriteRegDWORD HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winct" "NoRepair" 1
   ; The Start menu shows a shortcut's file name. Remove the old Winct.lnk as well so upgrades from
   ; the pre-rebrand build do not leave two shortcuts behind.
-  Delete "$SMPROGRAMS\winc.lnk"
+  Delete "$SMPROGRAMS\winct.lnk"
   Delete "$SMPROGRAMS\Winct.lnk"
-  CreateShortcut "$SMPROGRAMS\Winct.lnk" "$INSTDIR\winc.exe" "" "$INSTDIR\winc.ico"
-  WriteRegStr HKCU "Software\Classes\Applications\winc.exe" "FriendlyAppName" "Winct"
-  WriteRegStr HKCU "Software\Classes\Applications\winc.exe\DefaultIcon" "" "$INSTDIR\winc.exe,0"
-  WriteRegStr HKCU "Software\Classes\Applications\winc.exe\shell\open\command" "" '"$INSTDIR\winc.exe" "%1"'
+  CreateShortcut "$SMPROGRAMS\Winct.lnk" "$INSTDIR\winct.exe" "" "$INSTDIR\winct.ico"
+  WriteRegStr HKCU "Software\Classes\Applications\winct.exe" "FriendlyAppName" "Winct"
+  WriteRegStr HKCU "Software\Classes\Applications\winct.exe\DefaultIcon" "" "$INSTDIR\winct.exe,0"
+  WriteRegStr HKCU "Software\Classes\Applications\winct.exe\shell\open\command" "" '"$INSTDIR\winct.exe" "%1"'
   !insertmacro ForEachRetiredFileType UnregisterFileType
   !insertmacro ForEachFileType UnlistFileType
   !insertmacro ForEachFileType RemoveFileTypeVerb
@@ -447,15 +447,15 @@ Section "Winct" SEC_MAIN
   !insertmacro RegisterUrlScheme
   ; The optional sections below record the choices again when they are selected.
   !insertmacro UnregisterContextMenu
-  WriteRegDWORD HKCU "Software\DEEIX\winc" "ContextMenu" 0
-  WriteRegDWORD HKCU "Software\DEEIX\winc" "FileTypes" 0
+  WriteRegDWORD HKCU "Software\DEEIX\winct" "ContextMenu" 0
+  WriteRegDWORD HKCU "Software\DEEIX\winct" "FileTypes" 0
   !insertmacro NotifyAssociationsChanged
 SectionEnd
 
 ; Off by default in a new installation.
 Section /o "$(ContextMenuSection)" SEC_CONTEXT_MENU
   !insertmacro RegisterContextMenu
-  WriteRegDWORD HKCU "Software\DEEIX\winc" "ContextMenu" 1
+  WriteRegDWORD HKCU "Software\DEEIX\winct" "ContextMenu" 1
   !insertmacro NotifyAssociationsChanged
 SectionEnd
 
@@ -463,7 +463,7 @@ SectionEnd
 ; program to use.
 Section "$(FileTypesSection)" SEC_FILE_TYPES
   !insertmacro ForEachFileType ListFileType
-  WriteRegDWORD HKCU "Software\DEEIX\winc" "FileTypes" 1
+  WriteRegDWORD HKCU "Software\DEEIX\winct" "FileTypes" 1
   !insertmacro NotifyAssociationsChanged
 SectionEnd
 
@@ -477,10 +477,10 @@ SectionEnd
 ; installation. An installation from before the choices were recorded keeps what it had: the context
 ; menu, which was always added, and no listing under the file types.
 Function .onInit
-  ReadRegStr $3 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc" "DisplayName"
+  ReadRegStr $3 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winct" "DisplayName"
   ${GetParameters} $1
 
-  ReadRegDWORD $0 HKCU "Software\DEEIX\winc" "ContextMenu"
+  ReadRegDWORD $0 HKCU "Software\DEEIX\winct" "ContextMenu"
   StrCmp $0 "" 0 context_menu_recorded
   StrCmp $3 "" context_menu_recorded
   StrCpy $0 "1"
@@ -494,7 +494,7 @@ Function .onInit
   !insertmacro SelectSection ${SEC_CONTEXT_MENU}
   context_menu_done:
 
-  ReadRegDWORD $0 HKCU "Software\DEEIX\winc" "FileTypes"
+  ReadRegDWORD $0 HKCU "Software\DEEIX\winct" "FileTypes"
   StrCmp $0 "" 0 file_types_recorded
   StrCmp $3 "" file_types_recorded
   StrCpy $0 "0"
@@ -513,32 +513,32 @@ Section "Uninstall"
   SetShellVarContext current
   Delete "$SMPROGRAMS\Winct.lnk"
   Delete "$SMPROGRAMS\Winct.lnk"
-  Delete "$INSTDIR\winc.exe"
+  Delete "$INSTDIR\winct.exe"
   Delete "$INSTDIR\winct-pty.exe"
   !insertmacro DeleteRetrying "OpenConsole.exe"
   !insertmacro DeleteRetrying "conpty.dll"
   !insertmacro DeleteRetrying "winct-watch"
   Delete "$INSTDIR\winct-server-Linux-x86_64"
   Delete "$INSTDIR\winct-server-Linux-aarch64"
-  Delete "$INSTDIR\winc.ico"
+  Delete "$INSTDIR\winct.ico"
   Delete "$INSTDIR\winct-installation"
   Delete "$INSTDIR\LICENSE"
   Delete "$INSTDIR\NOTICE"
   Delete "$INSTDIR\uninstall.exe"
   !insertmacro UpdateUserPath "Remove"
-  Delete "$INSTDIR\bin\winc"
-  Delete "$INSTDIR\bin\winc.cmd"
+  Delete "$INSTDIR\bin\winct"
+  Delete "$INSTDIR\bin\winct.cmd"
   RMDir "$INSTDIR\bin"
   Delete "$INSTDIR\icons\*.ico"
   RMDir "$INSTDIR\icons"
   RMDir "$INSTDIR"
-  DeleteRegKey HKCU "Software\DEEIX\winc"
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winc"
+  DeleteRegKey HKCU "Software\DEEIX\winct"
+  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\winct"
   !insertmacro ForEachFileType UnregisterFileType
   !insertmacro UnregisterProjectType
   !insertmacro ForEachRetiredFileType UnregisterFileType
   !insertmacro UnregisterContextMenu
-  DeleteRegKey HKCU "Software\Classes\Applications\winc.exe"
-  DeleteRegKey HKCU "Software\Classes\winc"
+  DeleteRegKey HKCU "Software\Classes\Applications\winct.exe"
+  DeleteRegKey HKCU "Software\Classes\winct"
   !insertmacro NotifyAssociationsChanged
 SectionEnd

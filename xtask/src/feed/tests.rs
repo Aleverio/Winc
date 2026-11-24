@@ -63,20 +63,20 @@ fn the_feed_lists_packages_newest_first() {
     let package = |version: &str, arch: &str| Package {
         version: version.into(),
         arch: arch.into(),
-        name: format!("winc-{version}-{arch}.AppImage"),
+        name: format!("winct-{version}-{arch}.AppImage"),
         length: 42,
         signature: "c2ln".into(),
     };
     let feed = feed(
         Platform::Linux,
         &[package("0.1.9", "x86_64"), package("0.1.10", "aarch64")],
-        "https://dl.example.com/winc",
+        "https://dl.example.com/winct",
     );
     let newer = feed.find("<title>0.1.10</title>").unwrap();
     let older = feed.find("<title>0.1.9</title>").unwrap();
     assert!(newer < older, "{feed}");
     assert!(feed.contains(
-        "url=\"https://dl.example.com/winc/winct-0.1.10-aarch64.AppImage\" length=\"42\""
+        "url=\"https://dl.example.com/winct/winct-0.1.10-aarch64.AppImage\" length=\"42\""
     ));
     assert!(feed.contains("sparkle:os=\"linux\" arch=\"aarch64\" sparkle:edSignature=\"c2ln\""));
     assert!(feed.ends_with("</rss>\n"));
@@ -93,5 +93,9 @@ fn feed_for_windows() -> String {
         length: 42,
         signature: "c2ln".into(),
     };
-    feed(Platform::Windows, &[package], "https://dl.example.com/winc")
+    feed(
+        Platform::Windows,
+        &[package],
+        "https://dl.example.com/winct",
+    )
 }

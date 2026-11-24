@@ -50,8 +50,8 @@ fn config_keys_are_properties() {
     assert_eq!(keys("a.yaml", "  - name: x"), ["name"]);
     assert_eq!(keys("a.yaml", "  '@base-ui/react':"), ["'@base-ui/react'"]);
     assert_eq!(keys("a.yaml", "  .:"), ["."]);
-    assert_eq!(keys("a.toml", "name = \"winc\""), ["name"]);
-    assert_eq!(keys("a.json", "  \"name\": \"winc\","), ["\"name\""]);
+    assert_eq!(keys("a.toml", "name = \"winct\""), ["name"]);
+    assert_eq!(keys("a.json", "  \"name\": \"winct\","), ["\"name\""]);
     assert_eq!(keys("a.css", "  color: red;"), ["color"]);
     // 冒号后面紧跟其他字符的不是键：选择器、网址、注释。
     assert!(keys("a.css", "a:hover {").is_empty());

@@ -61,7 +61,7 @@ pub(super) fn has_curl() -> bool {
 fn appcast(items: &[String]) -> String {
     format!(
         "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<rss version=\"2.0\" \
-         xmlns:sparkle=\"{SPARKLE}\"><channel><title>winc</title>{}</channel></rss>\n",
+         xmlns:sparkle=\"{SPARKLE}\"><channel><title>winct</title>{}</channel></rss>\n",
         items.concat()
     )
 }
@@ -78,10 +78,10 @@ fn sign_feed(feed: &str, key: &SigningKey) -> String {
 #[test]
 fn channels_become_appcast_addresses() {
     assert_eq!(
-        feeds("global=https://dl.example.com/winc/ cn=https://dl.example.cn/winc broken"),
+        feeds("global=https://dl.example.com/winct/ cn=https://dl.example.cn/winct broken"),
         [
-            format!("https://dl.example.com/winc/{FEED_FILE}"),
-            format!("https://dl.example.cn/winc/{FEED_FILE}"),
+            format!("https://dl.example.com/winct/{FEED_FILE}"),
+            format!("https://dl.example.cn/winct/{FEED_FILE}"),
         ]
     );
     assert!(feeds("").is_empty());
@@ -226,7 +226,7 @@ fn scoop_installs_are_told_apart_by_the_record_scoop_leaves() {
     let dir = std::env::temp_dir().join(format!("winct-scoop-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let exe = dir.join("winc.exe");
+    let exe = dir.join("winct.exe");
     // 解压出来的便携版：没有安装记录。
     assert!(!from_scoop(&exe));
     // 旧版 Scoop 的两个文件都在才算，单独一个 `manifest.json` 可能是别的东西。
@@ -250,7 +250,7 @@ fn a_verified_download_replaces_the_appimage() {
     let dir = std::env::temp_dir().join(format!("winct-update-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let appimage = dir.join("winc.AppImage");
+    let appimage = dir.join("winct.AppImage");
     std::fs::write(&appimage, b"old version").unwrap();
     std::fs::set_permissions(&appimage, std::fs::Permissions::from_mode(0o700)).unwrap();
     let new = dir.join("served.bin");

@@ -1,5 +1,5 @@
 //! shell 集成的端到端测试：启动真实的 zsh、bash、fish，检查注入之后用户自己的配置仍然生效、
-//! 环境里不留 winc 的变量，以及命令块的边界、退出码、命令行、目录和时长。
+//! 环境里不留 winct 的变量，以及命令块的边界、退出码、命令行、目录和时长。
 //!
 //! 机器上没有安装的 shell 跳过对应测试。
 
@@ -191,7 +191,7 @@ impl Shell {
             .join("\n")
     }
 
-    /// 检查退出码、命令行、目录、时长，以及环境中没有残留 winc 的变量。
+    /// 检查退出码、命令行、目录、时长，以及环境中没有残留 winct 的变量。
     ///
     /// `expected_cwd` 是 shell 报告的当前目录；未注入时 shell 恢复的用户目录为 `none`。
     fn check(&mut self, expected_cwd: &str) {
@@ -200,7 +200,18 @@ impl Shell {
         let failed = self.run("false");
         assert_eq!(failed.exit, Some(1), "{failed:?}");
         assert!(failed.prompt > ok.prompt);
-        assert_eq!(ok.end, Some(failed.prompt), "块首尾相接");
+        // fish 4 会在两条命令之间多画一次空提示符，形成一个没有命令和输出的空块。空块不算命令，
+        // 但会占一行；比较相邻两条真正命令时把这几种行去掉。
+        let empty_between = self
+            .blocks
+            .iter()
+            .filter(|b| b.id > ok.id && b.id < failed.id && b.output.is_none() && b.exit.is_none())
+            .count() as u64;
+        assert_eq!(
+            ok.end,
+            Some(failed.prompt.saturating_sub(empty_between)),
+            "块首尾相接"
+        );
 
         let slow = self.run("sleep 0.3");
         assert!(slow.duration.unwrap() >= 250, "{slow:?}");
@@ -404,7 +415,7 @@ fn zsh_redraws_a_full_width_prompt_once_after_a_resize() {
         "setopt prompt_subst\nunsetopt prompt_sp\n\
          _fill() { _line=TOP${(l:$((COLUMNS-6))::.:)}END }\n\
          precmd_functions+=(_fill)\n\
-         TRAPWINCTH() { _fill; zle && zle reset-prompt }\n\
+         TRAPWINCH() { _fill; zle && zle reset-prompt }\n\
          PS1='${_line}\npp> '\n",
     );
     let mut sh = Shell::start(&zsh, false, env(&t.home(), &[]), &t.0.join("shell"));

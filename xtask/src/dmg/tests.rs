@@ -1,4 +1,4 @@
-//! `dmg` 的测试：`Info.plist` 中的文档类型、「在 Winct 中打开」服务和 `winc` 协议的声明，以及
+//! `dmg` 的测试：`Info.plist` 中的文档类型、「在 Winct 中打开」服务和 `winct` 协议的声明，以及
 //! 各语言的服务名。
 
 use super::*;
@@ -40,16 +40,16 @@ fn info_plist_declares_the_open_service_for_text_files_and_folders() {
     }
 }
 
-/// `Info.plist` 声明 `winc` 协议，`winc://` 链接交给 Winct 打开。
+/// `Info.plist` 声明 `winct` 协议，`winct://` 链接交给 Winct 打开。
 #[test]
-fn info_plist_declares_the_winc_url_scheme() {
+fn info_plist_declares_the_winct_url_scheme() {
     let plist = info_plist("1.2.3", &sparkle::UpdateConfig::default(), "arm64");
     let start = plist
         .find("<key>CFBundleURLTypes</key>")
         .expect("声明了协议");
     let types = &plist[start..];
     let types = &types[..types.find("</array>\n\t<key>").unwrap()];
-    assert!(types.contains("<string>winc</string>"), "{types}");
+    assert!(types.contains("<string>winct</string>"), "{types}");
     assert!(
         types.contains(&format!("<string>{BUNDLE_ID}</string>")),
         "{types}"
@@ -58,7 +58,7 @@ fn info_plist_declares_the_winc_url_scheme() {
 
 /// 回归：只声明任意文件（`public.data`）时，访达的「打开方式」不列出 Winct。
 #[test]
-fn info_plist_declares_the_types_winc_opens() {
+fn info_plist_declares_the_types_winct_opens() {
     let plist = info_plist("1.2.3", &sparkle::UpdateConfig::default(), "arm64");
     let start = plist.find("<key>CFBundleDocumentTypes</key>").unwrap();
     let types = &plist[start..];
@@ -86,7 +86,7 @@ fn info_plist_declares_the_types_winc_opens() {
     assert_eq!(types.matches("<string>Default</string>").count(), 1);
     assert_eq!(types.matches("<string>Owner</string>").count(), 1);
     assert_eq!(types.matches("<string>Alternate</string>").count(), 4);
-    assert!(types.contains("<string>com.deeix.winc.project</string>"));
+    assert!(types.contains("<string>com.deeix.winct.project</string>"));
     let exported = &plist[plist.find("<key>UTExportedTypeDeclarations</key>").unwrap()..];
     assert!(exported.contains("<string>winct-project</string>"));
 }

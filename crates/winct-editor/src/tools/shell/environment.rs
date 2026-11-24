@@ -45,7 +45,7 @@ pub(super) fn resolve() -> Vars {
     match login_shell(&shell, SHELL_TIMEOUT) {
         Ok(vars) => vars,
         Err(e) => {
-            eprintln!("winc: 无法取得登录 shell 的环境（{e}），外部程序按默认的 PATH 找");
+            eprintln!("winct: 无法取得登录 shell 的环境（{e}），外部程序按默认的 PATH 找");
             fallback()
         }
     }

@@ -75,7 +75,7 @@ pub(crate) struct Opening {
 
 /// 本窗口与应用层的联系：事件代理、窗口编号和各窗口共用的状态。
 pub(crate) struct AppLink {
-    /// 后台线程和系统回调通过该代理把事件送回事件循环（附带本窗口的编号，见 [`crate::winc`]）；
+    /// 后台线程和系统回调通过该代理把事件送回事件循环（附带本窗口的编号，见 [`crate::winct`]）；
     /// 测试中没有事件循环，为 `None`。
     pub(in crate::app) proxy: Option<crate::winct::WindowProxy>,
     /// 窗口的红绿灯（见 [`crate::macos::TrafficLights`]），窗口创建后才有，随窗口一同释放。

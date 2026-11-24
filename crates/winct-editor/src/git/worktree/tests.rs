@@ -98,23 +98,23 @@ fn lists_the_real_worktrees() {
 #[test]
 fn new_worktrees_go_next_to_the_repository_with_unique_names() {
     let dir = crate::test_util::scratch("worktree-dir");
-    let main = dir.join("winc");
+    let main = dir.join("winct");
     assert_eq!(
         worktree_dir(&main, None, None, "feat/x"),
-        dir.join("winc.worktrees").join("feat-x")
+        dir.join("winct.worktrees").join("feat-x")
     );
     // 裸仓库去掉 `.git`；配置了目录时放在它下面按仓库分开，相对路径相对于主工作树。
     let other = dir.join("elsewhere");
     assert_eq!(
-        worktree_dir(&dir.join("winc.git"), other.to_str(), None, "main"),
-        other.join("winc").join("main")
+        worktree_dir(&dir.join("winct.git"), other.to_str(), None, "main"),
+        other.join("winct").join("main")
     );
     assert_eq!(
         worktree_dir(&main, Some("../trees"), None, "main"),
-        main.join("../trees").join("winc").join("main")
+        main.join("../trees").join("winct").join("main")
     );
     // 已有同名的目录时加 `-2`、`-3`。
-    let taken = dir.join("winc.worktrees").join("fix");
+    let taken = dir.join("winct.worktrees").join("fix");
     std::fs::create_dir_all(&taken).unwrap();
     std::fs::create_dir_all(taken.with_file_name("fix-2")).unwrap();
     assert_eq!(
@@ -153,15 +153,15 @@ fn submodule_worktrees_go_next_to_the_superproject() {
 /// 配置的目录以 `~/` 开头时放在仓库所在系统的主目录下；主目录未知时用默认位置。
 #[test]
 fn configured_roots_starting_with_a_tilde_use_the_given_home() {
-    let main = Path::new("/work/winc");
+    let main = Path::new("/work/winct");
     let home = Path::new("/home/me");
     assert_eq!(
         worktree_parent(main, Some("~/trees"), Some(home)),
-        home.join("trees").join("winc")
+        home.join("trees").join("winct")
     );
     assert_eq!(
         worktree_parent(main, Some("~/trees"), None),
-        Path::new("/work/winc.worktrees")
+        Path::new("/work/winct.worktrees")
     );
 }
 
@@ -169,8 +169,8 @@ fn configured_roots_starting_with_a_tilde_use_the_given_home() {
 #[cfg(windows)]
 #[test]
 fn configured_roots_on_another_system_are_not_used() {
-    let main = Path::new(r"\\wsl.localhost\Ubuntu\home\me\winc");
-    let beside = Path::new(r"\\wsl.localhost\Ubuntu\home\me\winc.worktrees");
+    let main = Path::new(r"\\wsl.localhost\Ubuntu\home\me\winct");
+    let beside = Path::new(r"\\wsl.localhost\Ubuntu\home\me\winct.worktrees");
     assert_eq!(worktree_parent(main, Some(r"D:\trees"), None), beside);
     let windows_home = Path::new(r"C:\Users\me");
     assert_eq!(
@@ -180,17 +180,17 @@ fn configured_roots_on_another_system_are_not_used() {
     let linux_home = Path::new(r"\\wsl.localhost\Ubuntu\home\me");
     assert_eq!(
         worktree_parent(main, Some("~/trees"), Some(linux_home)),
-        linux_home.join("trees").join("winc")
+        linux_home.join("trees").join("winct")
     );
     // 发行版内的绝对路径接在仓库的访问路径上，仍在同一发行版中。
     assert_eq!(
         worktree_parent(main, Some("/srv/trees"), None),
-        Path::new(r"\\wsl.localhost\Ubuntu\srv\trees\winc")
+        Path::new(r"\\wsl.localhost\Ubuntu\srv\trees\winct")
     );
-    let local = Path::new(r"C:\work\winc");
+    let local = Path::new(r"C:\work\winct");
     assert_eq!(
         worktree_parent(local, Some(r"\\wsl.localhost\Ubuntu\trees"), None),
-        Path::new(r"C:\work\winc.worktrees")
+        Path::new(r"C:\work\winct.worktrees")
     );
 }
 

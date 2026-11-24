@@ -2,7 +2,7 @@
 //! `appcast-linux-arm64.xml`、`appcast-windows.xml`。应用内更新读取本平台的那一个，从其中取
 //! 更新包与签名。
 //!
-//! 每个更新包一项，文件名须为 `winc-<版本>-<架构>.AppImage` 或 `winc-<版本>-<架构>-setup.exe`。
+//! 每个更新包一项，文件名须为 `winct-<版本>-<架构>.AppImage` 或 `winct-<版本>-<架构>-setup.exe`。
 //! 更新包和 appcast 都用 `sign_update` 签名（EdDSA），`sign_update` 把 appcast 的签名写在文件末尾的
 //! 注释中。
 
@@ -90,7 +90,7 @@ pub fn write(
             platform.suffix()
         };
         let (version, arch) = parse_name(&name, suffix)
-            .ok_or_else(|| format!("{name} 不是 winc-<版本>-<架构>{suffix}"))?;
+            .ok_or_else(|| format!("{name} 不是 winct-<版本>-<架构>{suffix}"))?;
         let (signature, length) = sign(&sign_update, file)?;
         packages.push(Package {
             version,
@@ -124,7 +124,7 @@ pub fn write(
 /// 由文件名得出（版本，架构）；格式不符时返回 `None`。
 fn parse_name(name: &str, suffix: &str) -> Option<(String, String)> {
     let rest = name
-        .strip_prefix("winc-")
+        .strip_prefix("winct-")
         .or_else(|| name.strip_prefix("Winct-"))?
         .strip_suffix(suffix)?;
     let (version, arch) = if let Some(version) = rest
@@ -236,7 +236,7 @@ fn feed(platform: Platform, packages: &[Package], base: &str) -> String {
     format!(
         "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n\
          <rss version=\"2.0\" xmlns:sparkle=\"http://www.andymatuschak.org/xml-namespaces/sparkle\">\n  \
-         <channel>\n    <title>winc</title>\n{items}  </channel>\n</rss>\n"
+         <channel>\n    <title>Winct</title>\n{items}  </channel>\n</rss>\n"
     )
 }
 

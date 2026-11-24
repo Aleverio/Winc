@@ -46,7 +46,7 @@ jobs:
 
           channel=stable
           if [[ "$RELEASE_TAG" == *-* ]]; then channel=beta; fi
-          feed_tag="winc-update-feed-$channel"
+          feed_tag="winct-update-feed-$channel"
           feed_dir="$(mktemp -d)"
           trap 'rm -rf "$feed_dir"' EXIT
           gh release download "$RELEASE_TAG" --repo "$GH_REPO" --pattern 'appcast-*.xml' --dir "$feed_dir"
@@ -60,7 +60,7 @@ jobs:
           if ! gh release view "$feed_tag" --repo "$GH_REPO" >/dev/null 2>&1; then
             gh release create "$feed_tag" \
               --repo "$GH_REPO" \
-              --title "Winc $channel update feeds" \
+              --title "Winct $channel update feeds" \
               --notes "Automated, signed update feeds. Do not edit this release manually." \
               --prerelease
           fi

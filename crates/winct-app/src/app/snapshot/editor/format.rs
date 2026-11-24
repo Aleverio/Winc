@@ -482,7 +482,7 @@ fn project_settings_win_but_run_only_after_asking() {
         Some("无法格式化：需要先确认是否允许运行项目设置中的格式化命令")
     );
 
-    // 用户已同意：连同命令的原文记入项目的 `.winc`，并继续格式化。
+    // 用户已同意：连同命令的原文记入项目的 `.winct`，并继续格式化。
     let root = app.editor.root().unwrap().to_path_buf();
     let id = app.editor.active().unwrap().id;
     let command = format!("'{}'", tool.display());

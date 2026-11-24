@@ -44,7 +44,7 @@ export function releaseAssetUrl(version, name, repository) {
 export function releaseConfig({ version, thumbprint, key, repository }) {
   if (thumbprint && !/^[0-9A-Fa-f]{40}$/.test(thumbprint)) throw new Error("--thumbprint must be a 40-digit SHA-1 certificate thumbprint");
   return {
-    version, channel: channelOf(version), productName: "winc", identifier: "com.deeix.winc",
+    version, channel: channelOf(version), productName: "winct", identifier: "com.deeix.winct",
     msiVersion: msiVersion(version), certificateThumbprint: thumbprint?.toUpperCase() ?? "",
     updateChannels: `${channelOf(version)}=${channelBase(version, repository)}`, updatePublicKey: publicKey(key),
   };

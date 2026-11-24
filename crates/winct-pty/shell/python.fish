@@ -1,10 +1,10 @@
 # 在首次提示符前加载启动目录中的 Python 环境，只读取文件属性，不执行项目中的激活脚本。
-# 由 fish 的集成脚本读取；本文件由 winc 生成。
+# 由 fish 的集成脚本读取；本文件由 winct 生成。
 
-function __winc_activate_python
+function __winct_activate_python
     test -z "$VIRTUAL_ENV"; and test -z "$CONDA_PREFIX"; or return
     for name in .venv venv
-        set -l root "$__winc_python_root/$name"
+        set -l root "$__winct_python_root/$name"
         test -f "$root/pyvenv.cfg"; and test -f "$root/bin/python"; and test -x "$root/bin/python"; or continue
         set -g _OLD_VIRTUAL_PATH $PATH
         if set -q PYTHONHOME
@@ -41,6 +41,6 @@ function __winc_activate_python
         break
     end
 end
-__winc_activate_python
-functions -e __winc_activate_python
-set -e __winc_python_root
+__winct_activate_python
+functions -e __winct_activate_python
+set -e __winct_python_root

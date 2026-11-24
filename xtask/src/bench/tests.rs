@@ -5,7 +5,7 @@ use super::*;
 #[test]
 fn parses_footprint_units() {
     assert_eq!(
-        parse_footprint("winc [1]: 64-bit    Footprint: 49 MB (16384 bytes per page)"),
+        parse_footprint("winct [1]: 64-bit    Footprint: 49 MB (16384 bytes per page)"),
         Some(49.0)
     );
     assert_eq!(

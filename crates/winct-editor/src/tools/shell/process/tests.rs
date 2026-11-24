@@ -153,7 +153,7 @@ fn cancel_stops_a_running_program() {
 #[test]
 fn runaway_output_is_cut_off() {
     let dir = scratch("runaway");
-    let tool = fake_tool(&dir, "yes", "exec yes winc");
+    let tool = fake_tool(&dir, "yes", "exec yes winct");
     let result = run(
         &mut Command::new(&tool),
         Vec::new(),

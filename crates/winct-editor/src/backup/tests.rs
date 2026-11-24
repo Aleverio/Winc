@@ -152,7 +152,7 @@ fn waiting_for_the_lock_is_only_for_descriptors_inherited_by_child_processes() {
         let lock = backups.lock_within(wait).expect("描述符关闭后取到锁");
         closer.join().unwrap();
 
-        // 锁文件中记着其他进程的编号：占用者是另一个 winc 进程，不等待。
+        // 锁文件中记着其他进程的编号：占用者是另一个 winct 进程，不等待。
         let other = lock._file.try_clone().unwrap();
         drop(lock);
         fs::write(backups.lock_path(), "1").unwrap();
@@ -165,11 +165,11 @@ fn waiting_for_the_lock_is_only_for_descriptors_inherited_by_child_processes() {
 }
 
 #[test]
-fn only_one_winc_owns_a_folders_backups() {
+fn only_one_winct_owns_a_folders_backups() {
     let dir = scratch("lock");
     let backups = Backups::new(&dir.join("backups"), Some(&dir));
     let first = backups.lock().expect("没人占着");
-    assert!(backups.lock().is_none(), "另一个 winc 占着");
+    assert!(backups.lock().is_none(), "另一个 winct 占着");
     let other = Backups::new(&dir.join("backups"), None);
     assert!(other.lock().is_some(), "别的目录不受影响");
     drop(first);
@@ -257,7 +257,7 @@ fn files_changed_or_gone_meanwhile_are_still_restored() {
         backups.snapshot(doc, "", tab).unwrap().write().unwrap();
     }
 
-    // winc 关闭期间，其他程序修改了 a.txt、删除了 gone.txt。
+    // winct 关闭期间，其他程序修改了 a.txt、删除了 gone.txt。
     std::thread::sleep(Duration::from_millis(20));
     fs::write(&file, "theirs\n").unwrap();
     fs::remove_file(&gone).unwrap();

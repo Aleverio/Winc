@@ -22,7 +22,7 @@ mod writing;
 /// 覆盖常用 Markdown 写法的 README 样本。
 const SAMPLE: &str = r#"<p align="center"><img src="logo.svg" width="64" alt="logo"></p>
 
-# winc 编辑器
+# winct 编辑器
 
 一个用 **Rust** 写的轻量编辑器，*启动快*、占内存少。支持 `cargo xtask test`、~~旧的写法~~，
 中文和 English 混排时按字换行，链接比如 [GitHub](https://github.com) 和 [安装](#安装)。
@@ -129,12 +129,12 @@ fn caret_screen_y(app: &App) -> f32 {
 fn clicking_where_markers_appear_does_not_select() {
     let (mut app, dir) = live_doc(
         "md-reveal-click",
-        "# winc 模块设计\n\n正文 **粗** 字\n\n| 名 |\n|---|\n| **甲** |\n\n```rust\nfn main() {}\n```\n",
+        "# winct 模块设计\n\n正文 **粗** 字\n\n| 名 |\n|---|\n| **甲** |\n\n```rust\nfn main() {}\n```\n",
     );
     // 点击标题开头、粗体、表格、代码块：按下时不显示标记（文字不移动），松开后才显示，
     // 因此单击不会选中一段文字。
     for (needle, marker) in [
-        ("winc", "# winc"),
+        ("winct", "# winct"),
         ("粗", "**粗**"),
         ("甲", "**甲**"),
         ("main", "fn main() {}"),

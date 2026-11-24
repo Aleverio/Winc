@@ -102,8 +102,8 @@ pub fn create_temporary(
     use std::hash::{BuildHasher, RandomState};
     use std::io::ErrorKind;
 
-    /// 临时文件名里 `name` 最多占的字节数：255 减去前后加上的 27 字节。
-    const NAME_BYTES: usize = 255 - 27;
+    /// 临时文件名里 `name` 最多占的字节数：255 减去前后加上的 28 字节。
+    const NAME_BYTES: usize = 255 - 28;
 
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
@@ -125,7 +125,7 @@ pub fn create_temporary(
     let mut last = None;
     for attempt in 0..8u32 {
         let suffix = random.hash_one((std::process::id(), attempt));
-        let temp = dir.join(format!(".{name}.winc-{suffix:016x}.tmp"));
+        let temp = dir.join(format!(".{name}.winct-{suffix:016x}.tmp"));
         match options.open(&temp) {
             Ok(file) => return Ok((temp, file)),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => last = Some(e),

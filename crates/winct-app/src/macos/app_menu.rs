@@ -65,7 +65,7 @@ type ReopenHandler = Box<dyn Fn() + Send + Sync>;
 static REOPEN_HANDLER: OnceLock<ReopenHandler> = OnceLock::new();
 
 /// 应用没有可见窗口时（窗口已关闭，应用仍留在程序坞中），点击程序坞中的图标或在系统文件
-/// 管理器中再次打开 winc，调用 `reopen`。
+/// 管理器中再次打开 winct，调用 `reopen`。
 ///
 /// 必须在事件循环开始之后（`winit` 已设置应用委托）调用；只有第一次调用生效。
 pub fn on_reopen(reopen: impl Fn() + Send + Sync + 'static) {
@@ -121,9 +121,9 @@ type OpenHandler = Box<dyn Fn(Vec<Target>) + Send + Sync>;
 
 static OPEN_HANDLER: OnceLock<OpenHandler> = OnceLock::new();
 
-/// 文件或目录拖到程序坞的图标上、在文件管理器里用「打开方式 → winc」或「服务 → 在 Winct 中
-/// 打开」打开，或打开 `winc://file/…` 链接时，以要打开的目标调用 `open`
-/// （`application:openURLs:`、`openInWinct:userData:error:`）；winc 还没运行时，系统先启动它再交来。
+/// 文件或目录拖到程序坞的图标上、在文件管理器里用「打开方式 → winct」或「服务 → 在 Winct 中
+/// 打开」打开，或打开 `winct://file/…` 链接时，以要打开的目标调用 `open`
+/// （`application:openURLs:`、`openInWinct:userData:error:`）；winct 还没运行时，系统先启动它再交来。
 ///
 /// 必须在 `winit` 建好事件循环（已设置应用委托）之后、开始运行之前调用：启动时交来的那一批在
 /// `applicationDidFinishLaunching:` 之前就到了。只有第一次调用生效。
@@ -141,7 +141,7 @@ pub fn on_open_files(open: impl Fn(Vec<Target>) + Send + Sync + 'static) {
 }
 
 /// 实现 `- (void)application:(NSApplication *)app openURLs:(NSArray<NSURL *> *)urls`：系统交来
-/// 要打开的文件和 `winc://` 链接（见 [`crate::cli::link`]），其他网址跳过。
+/// 要打开的文件和 `winct://` 链接（见 [`crate::cli::link`]），其他网址跳过。
 extern "C-unwind" fn open_urls(
     _this: *mut AnyObject,
     _cmd: Sel,
@@ -174,7 +174,7 @@ fn whole(path: PathBuf) -> Target {
     }
 }
 
-/// 取出 NSURL 数组中的文件和 `winc://` 链接，跳过其他网址。
+/// 取出 NSURL 数组中的文件和 `winct://` 链接，跳过其他网址。
 ///
 /// # Safety
 ///
@@ -332,7 +332,7 @@ pub fn add_settings_menu(open: impl Fn() + Send + Sync + 'static) {
         return;
     }
 
-    /// 实现 `- (void)wincOpenSettings:(id)sender`：菜单项「设置…」的动作。
+    /// 实现 `- (void)winctOpenSettings:(id)sender`：菜单项「设置…」的动作。
     extern "C-unwind" fn open_settings(_this: *mut AnyObject, _cmd: Sel, _sender: *mut AnyObject) {
         if let Some(open) = SETTINGS_HANDLER.get() {
             open();
@@ -350,7 +350,7 @@ pub fn add_settings_menu(open: impl Fn() + Send + Sync + 'static) {
     // 由 AppKit 持有，调用内有效。标题由 `ns_string` 创建并持有到块末尾；`c","` 以 NUL 结尾。菜单项
     // `alloc` 后 +1，与 `separatorItem`（自动释放）加入后都由菜单持有，`release` 抵消。
     unsafe {
-        let selector = sel!(wincOpenSettings:);
+        let selector = sel!(winctOpenSettings:);
         let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
         let Some(app) = app.as_ref() else {
             return;
@@ -401,17 +401,17 @@ pub fn add_settings_menu(open: impl Fn() + Send + Sync + 'static) {
 }
 
 /// 菜单项「设置…」的动作名，添加在 `winit` 的应用委托上。
-const SETTINGS_ACTION: &CStr = c"wincOpenSettings:";
+const SETTINGS_ACTION: &CStr = c"winctOpenSettings:";
 
-/// 菜单栏「安装 winc 命令…」被选中时调用的回调；只在主线程上设置和调用。
+/// 菜单栏「安装 winct 命令…」被选中时调用的回调；只在主线程上设置和调用。
 type InstallCommandHandler = Box<dyn Fn() + Send + Sync>;
 
 static INSTALL_COMMAND_HANDLER: OnceLock<InstallCommandHandler> = OnceLock::new();
 
-/// 菜单项「安装 winc 命令…」的动作名，添加在 `winit` 的应用委托上。
-const INSTALL_COMMAND_ACTION: &CStr = c"wincInstallCommand:";
+/// 菜单项「安装 winct 命令…」的动作名，添加在 `winit` 的应用委托上。
+const INSTALL_COMMAND_ACTION: &CStr = c"winctInstallCommand:";
 
-/// 在应用菜单的「设置…」下面添加一项「安装 winc 命令…」，选中时调用 `install`。
+/// 在应用菜单的「设置…」下面添加一项「安装 winct 命令…」，选中时调用 `install`。
 ///
 /// 只在用户选择时安装，与命令面板中的同名命令相同；启动时不自动安装。必须在
 /// [`add_settings_menu`] 之后调用：找不到「设置…」时不添加。只有第一次调用生效。
@@ -420,7 +420,7 @@ pub fn add_install_command_menu(install: impl Fn() + Send + Sync + 'static) {
         return;
     }
 
-    /// 实现 `- (void)wincInstallCommand:(id)sender`：菜单项「安装 winc 命令…」的动作。
+    /// 实现 `- (void)winctInstallCommand:(id)sender`：菜单项「安装 winct 命令…」的动作。
     extern "C-unwind" fn install_command(
         _this: *mut AnyObject,
         _cmd: Sel,
@@ -470,7 +470,7 @@ type ReleaseNotesHandler = Box<dyn Fn() + Send + Sync>;
 static RELEASE_NOTES_HANDLER: OnceLock<ReleaseNotesHandler> = OnceLock::new();
 
 /// 菜单项「更新日志」的动作名，添加在 `winit` 的应用委托上。
-const RELEASE_NOTES_ACTION: &CStr = c"wincReleaseNotes:";
+const RELEASE_NOTES_ACTION: &CStr = c"winctReleaseNotes:";
 
 /// 在应用菜单的「关于」下面添加一项「更新日志」，选中时调用 `open`。
 ///
@@ -481,7 +481,7 @@ pub fn add_release_notes_menu(open: impl Fn() + Send + Sync + 'static) {
         return;
     }
 
-    /// 实现 `- (void)wincReleaseNotes:(id)sender`：菜单项「更新日志」的动作。
+    /// 实现 `- (void)winctReleaseNotes:(id)sender`：菜单项「更新日志」的动作。
     extern "C-unwind" fn release_notes(_this: *mut AnyObject, _cmd: Sel, _sender: *mut AnyObject) {
         if let Some(open) = RELEASE_NOTES_HANDLER.get() {
             open();
@@ -523,7 +523,7 @@ pub fn add_release_notes_menu(open: impl Fn() + Send + Sync + 'static) {
     }
 }
 
-/// 在应用菜单 `app_menu` 中，动作对象为 `target` 的「设置…」下面插入「安装 winc 命令…」，返回
+/// 在应用菜单 `app_menu` 中，动作对象为 `target` 的「设置…」下面插入「安装 winct 命令…」，返回
 /// 是否插入；找不到「设置…」时不插入。
 ///
 /// # Safety
@@ -566,8 +566,8 @@ unsafe fn insert_install_item(app_menu: &AnyObject, target: &AnyObject) -> bool 
     }
 }
 
-/// 把应用菜单 `app_menu` 中以进程名结尾的项（`winit` 建菜单时按进程名写的「About winc」
-/// 「Hide winc」「Quit winc」）改用应用的显示名，与菜单栏上的应用名一致。
+/// 把应用菜单 `app_menu` 中以进程名结尾的项（`winit` 建菜单时按进程名写的「About winct」
+/// 「Hide winct」「Quit winct」）改用应用的显示名，与菜单栏上的应用名一致。
 ///
 /// 显示名取自 `Info.plist` 的 `CFBundleDisplayName`；不在应用包中运行（例如 `cargo run`）时
 /// 显示名就是进程名，菜单项不变。
@@ -741,7 +741,7 @@ type MenuHandler = Box<dyn Fn(isize) + Send + Sync>;
 static MENU_HANDLER: OnceLock<MenuHandler> = OnceLock::new();
 
 /// 右键菜单项的动作名，添加在 `winit` 的应用委托上。
-pub(super) const MENU_ACTION: &CStr = c"wincMenuCommand:";
+pub(super) const MENU_ACTION: &CStr = c"winctMenuCommand:";
 
 /// 注册右键菜单的回调：选中一项时以该项的 `tag` 调用 `chosen`。
 ///
@@ -751,7 +751,7 @@ pub fn on_menu_command(chosen: impl Fn(isize) + Send + Sync + 'static) {
         return;
     }
 
-    /// 实现 `- (void)wincMenuCommand:(NSMenuItem *)sender`：菜单项的动作，`tag` 是菜单项编号。
+    /// 实现 `- (void)winctMenuCommand:(NSMenuItem *)sender`：菜单项的动作，`tag` 是菜单项编号。
     extern "C-unwind" fn menu_command(_this: *mut AnyObject, _cmd: Sel, sender: *mut AnyObject) {
         // SAFETY: 发送者是本程序创建的 `NSMenuItem`，由 AppKit 在回调期间持有；`tag` 是其公开
         // 属性，不改变所有权。指针为空时不读取（`as_ref` 返回 `None`）。

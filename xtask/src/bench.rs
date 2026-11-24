@@ -45,7 +45,7 @@ pub fn bench(runs: usize) -> Result<bool, String> {
 
     let exe = root()
         .join("target/release")
-        .join(if cfg!(windows) { "winc.exe" } else { "winc" });
+        .join(if cfg!(windows) { "winct.exe" } else { "winct" });
     let dir = samples_dir();
     let large = dir.join("large.rs");
     let mut ok = true;
@@ -230,7 +230,7 @@ fn epoch_ms() -> f64 {
         .map_or(0.0, |d| d.as_secs_f64() * 1000.0)
 }
 
-/// 返回从 winc 的输出里取到的 `WINCT <key>=<value>` 中的数值。
+/// 返回从 winct 的输出里取到的 `WINCT <key>=<value>` 中的数值。
 fn field(output: &str, key: &str) -> Option<f64> {
     output
         .split_whitespace()
@@ -251,7 +251,7 @@ fn startup_once(exe: &Path, file: &Path) -> Result<f64, String> {
         .output()
         .map_err(|e| e.to_string())?;
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let present = field(&stdout, "first_present_epoch_ms").ok_or("winc 没有输出首帧时间戳")?;
+    let present = field(&stdout, "first_present_epoch_ms").ok_or("winct 没有输出首帧时间戳")?;
     Ok(present - started)
 }
 
@@ -270,12 +270,12 @@ fn scroll_once(exe: &Path, file: &Path, mode: &str) -> Result<(f64, f64), String
         .output()
         .map_err(|e| e.to_string())?;
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let p50 = field(&stdout, "p50_ms").ok_or("winc 没有输出滚动耗时")?;
-    let p95 = field(&stdout, "p95_ms").ok_or("winc 没有输出滚动耗时")?;
+    let p50 = field(&stdout, "p50_ms").ok_or("winct 没有输出滚动耗时")?;
+    let p95 = field(&stdout, "p95_ms").ok_or("winct 没有输出滚动耗时")?;
     Ok((p50, p95))
 }
 
-/// 以滚轮测量模式打开 `file`，返回 winc 的输出（含 `WINCT wheel_frames=…` 一行）。
+/// 以滚轮测量模式打开 `file`，返回 winct 的输出（含 `WINCT wheel_frames=…` 一行）。
 ///
 /// # Errors
 ///
@@ -288,7 +288,7 @@ fn wheel_once(exe: &Path, file: &Path) -> Result<String, String> {
         .output()
         .map_err(|e| e.to_string())?;
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-    field(&stdout, "wheel_frames").ok_or("winc 没有输出滚轮测量结果")?;
+    field(&stdout, "wheel_frames").ok_or("winct 没有输出滚轮测量结果")?;
     Ok(stdout)
 }
 
@@ -305,8 +305,8 @@ fn progress_once(exe: &Path, file: &Path, mode: &str) -> Result<(f64, f64), Stri
         .output()
         .map_err(|e| e.to_string())?;
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let ms = field(&stdout, "progress_ms").ok_or("winc 没有输出耗时")?;
-    let frames = field(&stdout, "progress_frames").ok_or("winc 没有输出帧数")?;
+    let ms = field(&stdout, "progress_ms").ok_or("winct 没有输出耗时")?;
+    let frames = field(&stdout, "progress_frames").ok_or("winct 没有输出帧数")?;
     Ok((ms, frames))
 }
 
@@ -354,7 +354,7 @@ fn memory_once(exe: &Path, path: &Path, mode: &str) -> Result<Option<(f64, f64)>
 
 /// 解析 `footprint` 的一行输出，把内存量换算为 MB。
 ///
-/// 输入形如 `winc [123]: 64-bit    Footprint: 49 MB (16384 bytes per page)`。
+/// 输入形如 `winct [123]: 64-bit    Footprint: 49 MB (16384 bytes per page)`。
 fn parse_footprint(output: &str) -> Option<f64> {
     let rest = output.split("Footprint:").nth(1)?.trim_start();
     let mut parts = rest.split_whitespace();

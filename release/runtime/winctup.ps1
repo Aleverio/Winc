@@ -29,28 +29,28 @@ $ProgressPreference = 'SilentlyContinue'
 $RUNTIME_VERSION = '0.1.0'
 $KEEP = 3
 
-if (-not $Repo) { $Repo = if ($env:WINCTT_RELEASE_REPO) { $env:WINCTT_RELEASE_REPO } else { 'Aleverio/Winc' } }
-if (-not $Ref) { $Ref = if ($env:WINCTT_RUNTIME_REF) { $env:WINCTT_RUNTIME_REF } else { 'dev' } }
-if (-not $Channel) { $Channel = if ($env:WINCTT_CHANNEL) { $env:WINCTT_CHANNEL } else { 'stable' } }
+if (-not $Repo) { $Repo = if ($env:WINCT_RELEASE_REPO) { $env:WINCT_RELEASE_REPO } else { 'Aleverio/Winc' } }
+if (-not $Ref) { $Ref = if ($env:WINCT_RUNTIME_REF) { $env:WINCT_RUNTIME_REF } else { 'dev' } }
+if (-not $Channel) { $Channel = if ($env:WINCT_CHANNEL) { $env:WINCT_CHANNEL } else { 'stable' } }
 if (-not $HomeDir) {
-    if ($env:WINCTT_HOME) { $HomeDir = $env:WINCTT_HOME }
+    if ($env:WINCT_HOME) { $HomeDir = $env:WINCT_HOME }
     elseif ($env:LOCALAPPDATA) { $HomeDir = Join-Path $env:LOCALAPPDATA 'winct' }
     else { $HomeDir = Join-Path (Join-Path $HOME '.local/share') 'winct' }
 }
-if (-not $BinDir) { $BinDir = if ($env:WINCTT_BIN) { $env:WINCTT_BIN } else { Join-Path $HomeDir 'bin' } }
+if (-not $BinDir) { $BinDir = if ($env:WINCT_BIN) { $env:WINCT_BIN } else { Join-Path $HomeDir 'bin' } }
 
 $RawBase = "https://raw.githubusercontent.com/$Repo/$Ref/release/runtime"
 
 function Fail([string]$Message) { throw "winctup: $Message" }
 function Info([string]$Message) { Write-Host "winctup: $Message" }
 
-$keepSetting = if ($env:WINCTT_KEEP_RELEASES) { $env:WINCTT_KEEP_RELEASES } else { '3' }
-if ($keepSetting -notmatch '^\d+$') { Fail 'WINCTT_KEEP_RELEASES must be a number' }
+$keepSetting = if ($env:WINCT_KEEP_RELEASES) { $env:WINCT_KEEP_RELEASES } else { '3' }
+if ($keepSetting -notmatch '^\d+$') { Fail 'WINCT_KEEP_RELEASES must be a number' }
 $KEEP = [int]$keepSetting
 
 function Get-GitHubHeaders {
     $headers = @{ 'User-Agent' = 'winctup'; 'Accept' = 'application/vnd.github+json' }
-    if ($env:WINCTT_GITHUB_TOKEN) { $headers['Authorization'] = "Bearer $env:WINCTT_GITHUB_TOKEN" }
+    if ($env:WINCT_GITHUB_TOKEN) { $headers['Authorization'] = "Bearer $env:WINCT_GITHUB_TOKEN" }
     return $headers
 }
 
@@ -153,13 +153,13 @@ function Write-Launchers {
     $template = @'
 @echo off
 setlocal EnableExtensions
-set "WINCTT_HOME=__HOME__"
-for /f "usebackq delims=" %%v in ("%WINCTT_HOME%\current") do set "WINCTT_VERSION=%%v"
-"%WINCTT_HOME%\releases\%WINCTT_VERSION%\winc.exe" %*
+set "WINCT_HOME=__HOME__"
+for /f "usebackq delims=" %%v in ("%WINCT_HOME%\current") do set "WINCT_VERSION=%%v"
+"%WINCT_HOME%\releases\%WINCT_VERSION%\winct.exe" %*
 exit /b %ERRORLEVEL%
 '@
     $content = $template.Replace('__HOME__', $HomeDir)
-    foreach ($name in @('winct.cmd', 'winc.cmd')) {
+    foreach ($name in @('winct.cmd', 'winct.cmd')) {
         [IO.File]::WriteAllText((Join-Path $BinDir $name), $content)
     }
 
@@ -168,20 +168,20 @@ exit /b %ERRORLEVEL%
     $runtimeTemplate = @'
 @echo off
 setlocal EnableExtensions
-set "WINCTT_HOME=__HOME__"
-set "WINCTT_BIN=__BIN__"
+set "WINCT_HOME=__HOME__"
+set "WINCT_BIN=__BIN__"
 if "%~1"=="" goto showhelp
-set "WINCTT_CMD=%~1"
+set "WINCT_CMD=%~1"
 shift
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%WINCTT_HOME%\runtime\winctup.ps1" -HomeDir "%WINCTT_HOME%" -BinDir "%WINCTT_BIN%" -Command "%WINCTT_CMD%" %1 %2 %3 %4 %5 %6 %7 %8 %9
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%WINCT_HOME%\runtime\winctup.ps1" -HomeDir "%WINCT_HOME%" -BinDir "%WINCT_BIN%" -Command "%WINCT_CMD%" %1 %2 %3 %4 %5 %6 %7 %8 %9
 exit /b %ERRORLEVEL%
 :showhelp
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%WINCTT_HOME%\runtime\winctup.ps1" -HomeDir "%WINCTT_HOME%" -BinDir "%WINCTT_BIN%" -Command help
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%WINCT_HOME%\runtime\winctup.ps1" -HomeDir "%WINCT_HOME%" -BinDir "%WINCT_BIN%" -Command help
 exit /b %ERRORLEVEL%
 '@
     $runtimeContent = $runtimeTemplate.Replace('__HOME__', $HomeDir).Replace('__BIN__', $BinDir)
     [IO.File]::WriteAllText((Join-Path $BinDir 'winctup.cmd'), $runtimeContent)
-    Info "launchers: $(Join-Path $BinDir 'winct.cmd'), $(Join-Path $BinDir 'winc.cmd'), $(Join-Path $BinDir 'winctup.cmd')"
+    Info "launchers: $(Join-Path $BinDir 'winct.cmd'), $(Join-Path $BinDir 'winct.cmd'), $(Join-Path $BinDir 'winctup.cmd')"
 }
 
 function Set-Current([string]$Version) {
@@ -215,8 +215,8 @@ function Prune-Releases([string]$Current, [string]$Previous) {
 }
 
 function Do-Install {
-    if ($Repo -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { Fail 'WINCTT_RELEASE_REPO must be owner/repo' }
-    if ($Ref -notmatch '^[A-Za-z0-9._/-]+$') { Fail 'WINCTT_RUNTIME_REF has an invalid character' }
+    if ($Repo -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { Fail 'WINCT_RELEASE_REPO must be owner/repo' }
+    if ($Ref -notmatch '^[A-Za-z0-9._/-]+$') { Fail 'WINCT_RUNTIME_REF has an invalid character' }
 
     $releasesRoot = Join-Path $HomeDir 'releases'
     $cacheRoot = Join-Path $HomeDir 'cache'
@@ -252,11 +252,11 @@ function Do-Install {
             if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
             New-Item -ItemType Directory -Force -Path $stage | Out-Null
             Expand-Archive -LiteralPath (Join-Path $tmp $asset) -DestinationPath $stage -Force
-            if (-not (Test-Path -LiteralPath (Join-Path $stage 'winc.exe'))) {
-                Fail 'the portable archive has no winc.exe'
+            if (-not (Test-Path -LiteralPath (Join-Path $stage 'winct.exe'))) {
+                Fail 'the portable archive has no winct.exe'
             }
-            & (Join-Path $stage 'winc.exe') --version 2>$null | Out-Null
-            if ($LASTEXITCODE -ne 0) { Fail "smoke test failed for winc.exe (exit $LASTEXITCODE)" }
+            & (Join-Path $stage 'winct.exe') --version 2>$null | Out-Null
+            if ($LASTEXITCODE -ne 0) { Fail "smoke test failed for winct.exe (exit $LASTEXITCODE)" }
 
             $target = Join-Path $releasesRoot $version
             if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
@@ -295,7 +295,7 @@ function Do-Rollback {
     try {
         $current = Get-State 'VERSION'
         $previous = Get-State 'PREVIOUS'
-        if (-not $previous -or -not (Test-Path -LiteralPath (Join-Path $HomeDir "releases\$previous\winc.exe"))) {
+        if (-not $previous -or -not (Test-Path -LiteralPath (Join-Path $HomeDir "releases\$previous\winct.exe"))) {
             Fail 'no previous release is available to roll back to'
         }
         Set-Current $previous
@@ -309,7 +309,7 @@ function Do-Rollback {
 }
 
 function Do-SelfUpdate {
-    if ($Ref -notmatch '^[A-Za-z0-9._/-]+$') { Fail 'WINCTT_RUNTIME_REF has an invalid character' }
+    if ($Ref -notmatch '^[A-Za-z0-9._/-]+$') { Fail 'WINCT_RUNTIME_REF has an invalid character' }
     $tmp = Join-Path ([IO.Path]::GetTempPath()) ('winctup-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Force -Path $tmp | Out-Null
     try {
@@ -338,7 +338,7 @@ function Do-SelfUpdate {
 function Do-Uninstall {
     if (-not $Yes) { Fail 'pass -Yes to confirm uninstall' }
     if ((Split-Path -Leaf $HomeDir) -notmatch '^winct(up)?$') {
-        Fail "refusing to remove ${HomeDir}: WINCTT_HOME must end in winct or winctup"
+        Fail "refusing to remove ${HomeDir}: WINCT_HOME must end in winct or winctup"
     }
     $lock = Enter-Lock
     try {
@@ -346,7 +346,7 @@ function Do-Uninstall {
     } finally {
         Exit-Lock $lock
     }
-    foreach ($name in @('winct.cmd', 'winc.cmd', 'winctup.cmd')) {
+    foreach ($name in @('winct.cmd', 'winct.cmd', 'winctup.cmd')) {
         Remove-Item -LiteralPath (Join-Path $BinDir $name) -Force -ErrorAction SilentlyContinue
     }
     Info 'winctup and its releases were removed; application settings were kept'
@@ -379,7 +379,7 @@ Commands:
   doctor                          check the local environment
 
 Environment:
-  WINCTT_RELEASE_REPO, WINCTT_RUNTIME_REF, WINCTT_CHANNEL, WINCTT_HOME, WINCTT_BIN, WINCTT_KEEP_RELEASES
+  WINCT_RELEASE_REPO, WINCT_RUNTIME_REF, WINCT_CHANNEL, WINCT_HOME, WINCT_BIN, WINCT_KEEP_RELEASES
 '@ | Write-Host
 }
 

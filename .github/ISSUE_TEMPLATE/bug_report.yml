@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible defect in winc.
+description: Report a reproducible defect in winct.
 title: "[Bug]: "
 labels:
   - bug
@@ -7,12 +7,12 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a bug. For security vulnerabilities, do not open a public issue. Email support@winc.si instead.
+        Thanks for reporting a bug. For security vulnerabilities, do not open a public issue. Email support@winct.si instead.
   - type: dropdown
     id: area
     attributes:
       label: Area
-      description: The part of winc where the problem appears.
+      description: The part of winct where the problem appears.
       options:
         - Editor
         - Vim mode
@@ -57,7 +57,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: Shown in Settings → About, or by running `winc --version`.
+      description: Shown in Settings → About, or by running `winct --version`.
       placeholder: "0.1.688"
     validations:
       required: true
@@ -65,7 +65,7 @@ body:
     id: package
     attributes:
       label: Package
-      description: How winc was installed. Needed for install and update problems.
+      description: How winct was installed. Needed for install and update problems.
       options:
         - macOS disk image
         - Linux AppImage
@@ -97,9 +97,9 @@ body:
       label: Screenshots or logs
       description: >-
         Optional. Drag and drop files here. Remove private data. After a crash, please attach
-        crash.log from ~/Library/Application Support/winc on macOS, %LOCALAPPDATA%\winc on Windows
-        (the data folder beside winc.exe for the portable ZIP), or ~/.local/state/winc on Linux
-        ($XDG_STATE_HOME/winc when that variable is set).
+        crash.log from ~/Library/Application Support/winct on macOS, %LOCALAPPDATA%\winct on Windows
+        (the data folder beside winct.exe for the portable ZIP), or ~/.local/state/winct on Linux
+        ($XDG_STATE_HOME/winct when that variable is set).
     validations:
       required: false
   - type: checkboxes

@@ -13,15 +13,15 @@ fi
 release_dir="target/$target/release"
 workdir=$(mktemp -d)
 trap 'rm -rf -- "$workdir"' EXIT
-install -m755 "$release_dir/winc" "$release_dir/winct-pty" \
+install -m755 "$release_dir/winct" "$release_dir/winct-pty" \
   target/remote-server/winct-server-Linux-x86_64 target/remote-server/winct-server-Linux-aarch64 -t "$workdir"
-install -m644 release/linux/arch/PKGBUILD release/linux/winc.desktop release/linux/winct-url-handler.desktop \
-  release/linux/winc.xml crates/winct-app/assets/file-icons/project.svg \
-  "$release_dir/bundle/icons/winc.png" LICENSE NOTICE -t "$workdir"
+install -m644 release/linux/arch/PKGBUILD release/linux/winct.desktop release/linux/winct-url-handler.desktop \
+  release/linux/winct.xml crates/winct-app/assets/file-icons/project.svg \
+  "$release_dir/bundle/icons/winct.png" LICENSE NOTICE -t "$workdir"
 install -m644 release/linux/file-manager/* -t "$workdir"
 
 image=archlinux:base-devel
-package="winc-$version-1-x86_64.pkg.tar.zst"
+package="winct-$version-1-x86_64.pkg.tar.zst"
 # 宿主机已经编译完毕。打包容器只封装文件，运行依赖由下方的安装验证检查。
 docker run --rm --network none --user "$(id -u):$(id -g)" \
   --env HOME=/work --env "WINCT_ARCH_VERSION=$version" \
@@ -31,14 +31,14 @@ docker run --rm --network none --user "$(id -u):$(id -g)" \
 docker run --rm --volume "$workdir:/work:ro" "$image" bash -euc '
   pacman -Syu --noconfirm
   pacman -U --noconfirm "/work/$1"
-  test "$(pacman -Q winc)" = "winc $2-1"
-  test "$(winc --version)" = "winc $2"
+  test "$(pacman -Q winct)" = "winct $2-1"
+  test "$(winct --version)" = "winct $2"
   test -x /usr/bin/winct-pty
-  test -f /usr/lib/winc/winct-server-Linux-x86_64
-  test -f /usr/lib/winc/winct-server-Linux-aarch64
+  test -f /usr/lib/winct/winct-server-Linux-x86_64
+  test -f /usr/lib/winct/winct-server-Linux-aarch64
   test -f /usr/share/kio/servicemenus/winct-open-folder.desktop
-  grep -qx "MimeType=x-scheme-handler/winc;" /usr/share/applications/winct-url-handler.desktop
-  test -f /usr/share/mime/packages/winc.xml
+  grep -qx "MimeType=x-scheme-handler/winct;" /usr/share/applications/winct-url-handler.desktop
+  test -f /usr/share/mime/packages/winct.xml
   test -f /usr/share/icons/hicolor/scalable/mimetypes/application-x-winct-project.svg
   test -f /usr/share/nemo/actions/winct-open-current-folder.nemo_action
 ' bash "$package" "$version"

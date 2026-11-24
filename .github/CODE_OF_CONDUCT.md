@@ -1,6 +1,6 @@
 # Code of Conduct
 
-winc is built by people with different backgrounds, languages, and levels of experience. This code
+winct is built by people with different backgrounds, languages, and levels of experience. This code
 of conduct describes how we expect everyone to behave in the project's spaces: issues, pull
 requests, discussions, and any other channel run by the project.
 
@@ -26,7 +26,7 @@ requests, discussions, and any other channel run by the project.
 Maintainers may edit or remove comments, close issues and pull requests, and temporarily or
 permanently block anyone from participating when this code of conduct is violated.
 
-Report unacceptable behavior to support@winc.si. Reports are handled confidentially, and the
+Report unacceptable behavior to support@winct.si. Reports are handled confidentially, and the
 maintainers will respond as quickly as they can.
 
 ## Scope

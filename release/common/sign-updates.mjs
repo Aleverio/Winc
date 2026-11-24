@@ -25,7 +25,7 @@ function signUpdates({ platform, version, bundle, key }) {
     const url = releaseAssetUrl(version, spec.name);
     items.push(`    <item>\n      <title>${escape(version)}</title>\n      <sparkle:version>${escape(version)}</sparkle:version>\n      <sparkle:shortVersionString>${escape(version)}</sparkle:shortVersionString>\n${os === "macos" ? "      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>\n" : ""}      <enclosure url="${escape(url)}" length="${statSync(file).size}" type="application/octet-stream" sparkle:os="${os}" arch="${arch}"${installer} sparkle:edSignature="${signature}"/>\n    </item>\n`);
   }
-  const xml = `<?xml version="1.0" encoding="utf-8"?>\n<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">\n  <channel>\n    <title>winc</title>\n${items.join("")}  </channel>\n</rss>\n`;
+  const xml = `<?xml version="1.0" encoding="utf-8"?>\n<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">\n  <channel>\n    <title>winct</title>\n${items.join("")}  </channel>\n</rss>\n`;
   const feed = signFeed(xml, key);
   if (!verifyFeed(feed, verificationKey(publicKey(key)))) throw new Error("Invalid appcast signature");
   const spec = specs.find((spec) => spec.feed);

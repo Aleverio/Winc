@@ -7,7 +7,7 @@ format-cancelled = Cancelled
 ## Formatter rows in Settings.
 
 format-tool-custom = Custom
-format-tool-from-project = Specified by project settings (.winc/config.json)
+format-tool-from-project = Specified by project settings (.winct/config.json)
 format-tool-auto = Auto
 format-tool-auto-reason = Auto · based on { $reason }
 format-tool-auto-installed = Auto · installed
@@ -32,7 +32,7 @@ format-approval-on-save-what = the project’s “{ $task ->
         [fix] Fix
        *[other] Format
     } on Save” setting
-format-approval-on-save-detail = This project’s .winc/config.json asks to { $task ->
+format-approval-on-save-detail = This project’s .winct/config.json asks to { $task ->
         [fix] fix problems
        *[other] format files
     } before every save. The { $task ->
@@ -43,7 +43,7 @@ format-approval-project-command = the { $task ->
         [fix] fix
        *[other] format
     } command in project settings
-format-approval-project-command-detail = Command from .winc/config.json: { $command }
+format-approval-project-command-detail = Command from .winct/config.json: { $command }
 format-approval-project-tool = “{ $tool }” in the project
 format-approval-project-tool-detail = { $path } is provided by this project. Run it only if you trust this project.
 format-approval-allow-question = Allow { $what }?

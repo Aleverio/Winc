@@ -199,17 +199,17 @@ pub(super) const FILE_TYPES: &[&str] = &[
 pub(super) const MENU_CLASSES: [&str; 3] = ["*", "Directory", r"Directory\Background"];
 
 /// 安装程序记下用户选择的注册表项，静默升级时沿用。
-pub(super) const CHOICES: &str = r"Software\DEEIX\winc";
+pub(super) const CHOICES: &str = r"Software\DEEIX\winct";
 
 /// 返回类 `class` 下右键菜单的注册表项。
 pub(super) fn menu_key(class: &str) -> String {
-    format!(r"Software\Classes\{class}\shell\winc")
+    format!(r"Software\Classes\{class}\shell\winct")
 }
 
 /// 返回类型 `kind` 的候选程序列表所在的注册表项，以及 Winct 在其中的名字。
 pub(super) fn listing(kind: &str) -> (String, String) {
     let key = format!(r"Software\Classes\.{kind}\OpenWithProgids");
-    (key, format!("winc.{kind}"))
+    (key, format!("winct.{kind}"))
 }
 
 /// 读写注册表的接口：`machine` 为真时读全机之下的项，其余都在当前用户之下。

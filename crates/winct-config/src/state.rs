@@ -137,7 +137,7 @@ pub struct State {
     tool_choices: Vec<(PathBuf, bool)>,
     /// 用户同意运行的来自项目的命令，最近的在前，最多 [`MAX_TOOL_CHOICES`] 项。
     ///
-    /// 每项为（所在的目录，原文）：项目设置（`.winct/config.json`）中的命令记在项目的 `.winc`
+    /// 每项为（所在的目录，原文）：项目设置（`.winct/config.json`）中的命令记在项目的 `.winct`
     /// 目录下，`latexmkrc` 记在它所在的目录下。同意只对这份原文有效，改写后重新询问。
     approved_commands: Vec<(PathBuf, String)>,
     /// 用户信任了配置的 Git 仓库（根目录）和当时配置的指纹，最近的在前，最多
@@ -971,7 +971,7 @@ impl State {
 
     /// 读出 `path` 中现在的状态，用 `change` 修改后写回，返回修改后的状态和写入的结果。
     ///
-    /// 每次写都重新读一遍再改，避免多个 winc 进程共用状态文件时旧副本覆盖其他进程写入的内容；
+    /// 每次写都重新读一遍再改，避免多个 winct 进程共用状态文件时旧副本覆盖其他进程写入的内容；
     /// 读改写期间锁住旁边的 `<文件>.lock`（建议锁），锁文件打不开时仍然读改写。
     ///
     /// `current` 是调用方内存中的状态，文件读不出来时在它之上修改：读取失败时不写回；内容损坏时
@@ -1081,7 +1081,7 @@ impl State {
         self.tool_choices.truncate(MAX_TOOL_CHOICES);
     }
 
-    /// 是否用户同意过运行 `folder`（项目的 `.winc` 目录）的项目设置中的命令 `command`。
+    /// 是否用户同意过运行 `folder`（项目的 `.winct` 目录）的项目设置中的命令 `command`。
     ///
     /// 按命令的原文比较：项目设置改写命令后不再算同意过。
     pub fn command_approved(&self, folder: &Path, command: &str) -> bool {
@@ -1197,9 +1197,9 @@ fn preferred_color(folder: &Path) -> usize {
 ///
 /// 各平台按自己的约定：
 ///
-/// - macOS：`~/Library/Application Support/winc/state.json`
-/// - Linux：`$XDG_STATE_HOME/winc/state.json`，未设置时为 `~/.local/state/winc/state.json`
-/// - Windows：`%LOCALAPPDATA%\winc\state.json`（不随账户漫游：内容都是本机路径）
+/// - macOS：`~/Library/Application Support/winct/state.json`
+/// - Linux：`$XDG_STATE_HOME/winct/state.json`，未设置时为 `~/.local/state/winct/state.json`
+/// - Windows：`%LOCALAPPDATA%\winct\state.json`（不随账户漫游：内容都是本机路径）
 ///
 /// 便携版放在便携数据目录中（见 [`crate::files::portable_dir`]）。
 pub fn state_path() -> Option<PathBuf> {
@@ -1217,12 +1217,12 @@ pub(crate) fn user_state_dir() -> Option<PathBuf> {
         std::env::var_os("LOCALAPPDATA")
             .map(PathBuf::from)
             .or_else(home)
-            .map(|dir| dir.join("winc"))
+            .map(|dir| dir.join("winct"))
     } else {
         std::env::var_os("XDG_STATE_HOME")
             .map(PathBuf::from)
             .or_else(|| home().map(|home| home.join(".local").join("state")))
-            .map(|dir| dir.join("winc"))
+            .map(|dir| dir.join("winct"))
     }
 }
 

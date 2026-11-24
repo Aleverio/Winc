@@ -1,4 +1,4 @@
-//! 命令面板的「安装 winc 命令」「卸载 winc 命令」：执行安装或卸载，提示结果。
+//! 命令面板的「安装 winct 命令」「卸载 winct 命令」：执行安装或卸载，提示结果。
 //!
 //! 没有写入权限时，macOS 在后台线程弹出系统授权对话框，结果由事件送回；其他平台提示失败。
 
@@ -9,7 +9,7 @@ use crate::app::NoticeKind;
 use crate::shell_command::{self, Done, Outcome, Placement};
 
 impl App {
-    /// 安装 `winc` 命令。
+    /// 安装 `winct` 命令。
     pub(in crate::app) fn install_shell_command(&mut self) {
         if let Some(placement) = shell_command::placement() {
             let outcome = shell_command::install(&placement);
@@ -17,7 +17,7 @@ impl App {
         }
     }
 
-    /// 卸载 `winc` 命令。
+    /// 卸载 `winct` 命令。
     pub(in crate::app) fn uninstall_shell_command(&mut self) {
         if let Some(placement) = shell_command::placement() {
             let outcome = shell_command::uninstall(&placement);

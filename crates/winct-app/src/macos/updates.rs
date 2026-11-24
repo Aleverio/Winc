@@ -101,7 +101,7 @@ pub fn start(
         let nil: *mut AnyObject = std::ptr::null_mut();
         let () = msg_send![
             &*delegate,
-            performSelector: sel!(wincTick:),
+            performSelector: sel!(winctTick:),
             withObject: nil,
             afterDelay: FIRST_CHECK
         ];
@@ -109,7 +109,7 @@ pub fn start(
             class!(NSTimer),
             scheduledTimerWithTimeInterval: CHECK_INTERVAL,
             target: &*delegate,
-            selector: sel!(wincTick:),
+            selector: sel!(winctTick:),
             userInfo: nil,
             repeats: Bool::YES
         ];
@@ -159,7 +159,7 @@ pub fn check(user: bool) {
     }
 }
 
-/// 并发请求 `feeds`，第一个成功返回 appcast 的通道送回主线程（`wincRaced:`）；都失败时送回
+/// 并发请求 `feeds`，第一个成功返回 appcast 的通道送回主线程（`winctRaced:`）；都失败时送回
 /// `nil`。
 ///
 /// `delegate` 是委托对象的地址：委托活到进程结束，后台线程上的回调只拿它发消息回主线程。
@@ -242,7 +242,7 @@ fn race(feeds: Vec<String>, delegate: usize) {
             let delegate = delegate as *mut AnyObject;
             let () = msg_send![
                 delegate,
-                performSelectorOnMainThread: sel!(wincRaced:),
+                performSelectorOnMainThread: sel!(winctRaced:),
                 withObject: feed,
                 waitUntilDone: Bool::NO
             ];
@@ -340,7 +340,7 @@ fn load_framework() -> bool {
 }
 
 /// 委托类 `WinctUpdateDelegate`：给 Sparkle 选通道、接管后台检查找到新版本时的提示，以及
-/// 本模块自己的定时检查（`wincTick:`）和比通道的结果（`wincRaced:`）。
+/// 本模块自己的定时检查（`winctTick:`）和比通道的结果（`winctRaced:`）。
 ///
 /// Sparkle 的协议在框架加载以后才有，因此加载以后再注册；注册失败时返回 `None`。
 fn delegate_class() -> Option<&'static AnyClass> {
@@ -388,9 +388,9 @@ fn delegate_class() -> Option<&'static AnyClass> {
         builder.add_method(sel!(updater:didFindValidUpdate:), found_update as Two);
         builder.add_method(sel!(updaterDidNotFindUpdate:), no_update as One);
         builder.add_method(sel!(updater:didAbortWithError:), aborted as Two);
-        builder.add_method(sel!(wincTick:), tick as One);
-        builder.add_method(sel!(wincCheck:), check_from_menu as One);
-        builder.add_method(sel!(wincRaced:), raced as One);
+        builder.add_method(sel!(winctTick:), tick as One);
+        builder.add_method(sel!(winctCheck:), check_from_menu as One);
+        builder.add_method(sel!(winctRaced:), raced as One);
     }
     Some(builder.register())
 }
@@ -500,7 +500,7 @@ extern "C-unwind" fn check_from_menu(_this: *mut AnyObject, _cmd: Sel, _sender: 
     check(true);
 }
 
-/// 在应用菜单「关于」下面加「检查更新」，动作交给委托（`wincCheck:`）。
+/// 在应用菜单「关于」下面加「检查更新」，动作交给委托（`winctCheck:`）。
 fn add_menu_item(delegate: &AnyObject) {
     let Some(title) = ns_string(winct_i18n::t!("menu-check-updates")) else {
         return;
@@ -531,7 +531,7 @@ fn add_menu_item(delegate: &AnyObject) {
         let item: *mut AnyObject = msg_send![
             item,
             initWithTitle: &*title,
-            action: sel!(wincCheck:),
+            action: sel!(winctCheck:),
             keyEquivalent: &*key
         ];
         let Some(item) = item.as_ref() else {

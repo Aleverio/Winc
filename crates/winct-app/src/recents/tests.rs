@@ -5,14 +5,14 @@ use super::*;
 #[test]
 fn labels_are_folder_names_with_the_parent_added_only_for_duplicates() {
     let folders = [
-        PathBuf::from("/work/winc"),
+        PathBuf::from("/work/winct"),
         PathBuf::from("/work/api"),
-        PathBuf::from("/backup/winc"),
+        PathBuf::from("/backup/winct"),
         PathBuf::from("/"),
     ];
     assert_eq!(
         labels(&folders),
-        ["winc — /work", "api", "winc — /backup", "/"]
+        ["winct — /work", "api", "winct — /backup", "/"]
     );
     assert!(labels(&[]).is_empty());
 }

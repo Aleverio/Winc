@@ -26,7 +26,7 @@ fn messages_round_trip() {
         Some(launch(&targets, None))
     );
     assert_eq!(decode(&encode(&[], None)), Some(Launch::default()));
-    let token = "winc-1234_TIME5678";
+    let token = "winct-1234_TIME5678";
     assert_eq!(
         decode(&encode(&targets, Some(token))),
         Some(launch(&targets, Some(token)))
@@ -35,7 +35,7 @@ fn messages_round_trip() {
         decode(&encode(&[], Some(token))),
         Some(launch(&[], Some(token)))
     );
-    // 没有令牌时发第 1 版消息，较早版本的 winc 也能收下。
+    // 没有令牌时发第 1 版消息，较早版本的 winct 也能收下。
     assert!(encode(&targets, None).starts_with(HELLO.as_bytes()));
     // 不合法的令牌不写入消息。
     for bad in ["", "a\nb", "a\0b"] {
@@ -52,10 +52,10 @@ fn messages_round_trip() {
 }
 
 #[test]
-fn tokens_fall_back_to_the_first_version_for_older_wincs() {
+fn tokens_fall_back_to_the_first_version_for_older_wincts() {
     let sent = std::cell::RefCell::new(Vec::new());
     let targets = [target("/p", None, None)];
-    // 较早版本的 winc 不认识第 2 版消息，不答复就断开；改发第 1 版消息后收下。
+    // 较早版本的 winct 不认识第 2 版消息，不答复就断开；改发第 1 版消息后收下。
     let older = |message: &[u8]| {
         sent.borrow_mut().push(message.to_vec());
         let ok = message.starts_with(HELLO.as_bytes());
@@ -123,9 +123,9 @@ fn paths_are_resolved_before_handing_over() {
 
 #[cfg(any(unix, windows))]
 #[test]
-fn only_one_winc_waits_for_launches_and_gets_them() {
+fn only_one_winct_waits_for_launches_and_gets_them() {
     let lock = AppLock::acquire().expect("拿到整个应用的锁");
-    assert!(AppLock::acquire().is_none(), "同时只有一个 winc 拿得到");
+    assert!(AppLock::acquire().is_none(), "同时只有一个 winct 拿得到");
 
     let (tx, rx) = std::sync::mpsc::channel();
     let listener = Listener::bind_app(move |launch, answer| {
@@ -156,7 +156,7 @@ fn only_one_winc_waits_for_launches_and_gets_them() {
         std::thread::sleep(std::time::Duration::from_millis(5));
         again = AppLock::acquire();
     }
-    assert!(again.is_some(), "放开以后别的 winc 能拿到");
+    assert!(again.is_some(), "放开以后别的 winct 能拿到");
 }
 
 #[cfg(unix)]

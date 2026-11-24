@@ -65,7 +65,7 @@ pub struct BackupState {
     kept: Option<HashSet<DocumentId>>,
     /// 当前占用的备份目录及其锁：（目录，锁）。
     ///
-    /// 锁为 `None` 表示该目录已被另一个 winc 进程打开：本进程不读、不写、不删那里的备份，
+    /// 锁为 `None` 表示该目录已被另一个 winct 进程打开：本进程不读、不写、不删那里的备份，
     /// 退出时仍然询问。
     lock: Option<(PathBuf, Option<backup::Lock>)>,
 }
@@ -167,7 +167,7 @@ pub(crate) fn prepare_restore(
     let lock = backups
         .as_ref()
         .map(|b| (b.dir().to_owned(), b.lock_within(RESTORE_LOCK_WAIT)));
-    // 目录被另一个 winc 进程打开时，那里的备份仍由该进程使用，不恢复。
+    // 目录被另一个 winct 进程打开时，那里的备份仍由该进程使用，不恢复。
     let saved = match (&backups, &lock) {
         (Some(backups), Some((_, Some(_)))) => backups.read_all(),
         _ => Vec::new(),
@@ -335,7 +335,7 @@ const PRELOAD_MAX: u64 = 64 << 20;
 ///
 /// 只在占用者是本进程启动的外部程序时等待（见 `Backups::lock_within`）：子进程在 fork 之后、
 /// exec 之前持有锁文件的描述符，通常不到 1 毫秒，系统负载很高时测得超过 200 毫秒。取 5 秒
-/// 作为上限，远高于测得的最长占用；目录由另一个 winc 进程使用时不等待。
+/// 作为上限，远高于测得的最长占用；目录由另一个 winct 进程使用时不等待。
 const RESTORE_LOCK_WAIT: Duration = Duration::from_secs(5);
 
 /// 移除并返回 `items` 中第一个满足 `wanted` 的元素；没有时返回 `None`。
@@ -347,7 +347,7 @@ fn take<T>(items: &mut Vec<T>, wanted: impl Fn(&T) -> bool) -> Option<T> {
 impl App {
     /// 返回当前目录（没有打开目录时为空窗口）的备份位置。
     ///
-    /// 目录改变时改为占用新目录的备份锁。没有备份目录，或另一个 winc 进程占用该目录时返回
+    /// 目录改变时改为占用新目录的备份锁。没有备份目录，或另一个 winct 进程占用该目录时返回
     /// `None`，该目录暂不备份；之后每次到写备份的时刻再试一次，对方退出后由本进程接手。
     /// 加锁要建目录、打开锁文件，只在真正要写备份时调用。
     fn backups(&mut self) -> Option<Backups> {
@@ -524,7 +524,7 @@ impl App {
     /// 是否有待写或待删的备份。
     ///
     /// 每次事件之后都会调用，只比较版本号、文档路径和备份目录（见 [`Written::current`]），不加锁、
-    /// 不碰磁盘。备份目录被另一个 winc 进程占用时同样按此判断：到了写的时刻 [`App::backup_plan`]
+    /// 不碰磁盘。备份目录被另一个 winct 进程占用时同样按此判断：到了写的时刻 [`App::backup_plan`]
     /// 再试着加锁，取不到就什么也不写。
     pub(super) fn backup_pending(&self) -> bool {
         let Some(root) = self.backup.root.as_deref() else {
@@ -727,7 +727,7 @@ impl App {
     /// 放开目录的备份锁。
     ///
     /// 关闭目录、关闭窗口时调用。如果保留锁，之后在本窗口重新打开该目录时自己的锁就无法取得
-    /// （`flock` 在同一个进程里也互斥），会提示「已在另一个 winc 窗口中打开」，上次的备份也
+    /// （`flock` 在同一个进程里也互斥），会提示「已在另一个 winct 窗口中打开」，上次的备份也
     /// 不恢复。
     pub(in crate::app) fn release_folder_lock(&mut self) {
         self.backup.lock = None;

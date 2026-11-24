@@ -4,7 +4,7 @@
 //! 命令行上的 `文件:行[:列]` 跳到指定位置，行号和列号从 1 起。`ssh://主机/路径` 打开远端主机上
 //! 的目录和文件（见 [`remote_open`]）。`-w`、`--wait` 在给出的文件的标签
 //! 全部关闭后退出，供 `git` 等程序作为编辑器调用；`-` 读取标准输入；`-n`、`--new-instance` 不交给
-//! 正在运行的 winc，由当前进程新建实例。
+//! 正在运行的 winct，由当前进程新建实例。
 
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -35,10 +35,10 @@ pub struct Args {
     pub help: bool,
     /// 是否只显示版本号（`-v`、`--version`）。
     pub version: bool,
-    /// `-n`、`--new-instance`：不交给正在运行的 winc，由当前进程新建实例；也不接收之后启动的
-    /// winc 交来的目录和文件。
+    /// `-n`、`--new-instance`：不交给正在运行的 winct，由当前进程新建实例；也不接收之后启动的
+    /// winct 交来的目录和文件。
     pub new_instance: bool,
-    /// 由命令行启动脚本（`bin/winc`、`bin/winc.cmd`）启动：窗口进程需要转到后台，命令才能立即返回
+    /// 由命令行启动脚本（`bin/winct`、`bin/winct.cmd`）启动：窗口进程需要转到后台，命令才能立即返回
     /// （见 [`crate::shell_command::detach`]）。
     pub launcher: bool,
 }
@@ -113,7 +113,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> {
                 _ => {}
             }
         }
-        // 系统打开 `winc://` 链接时把整个链接作为参数传进来（Windows、Linux）。
+        // 系统打开 `winct://` 链接时把整个链接作为参数传进来（Windows、Linux）。
         let text = arg.to_string_lossy();
         let scheme = text.split_once("://").map(|(scheme, _)| scheme);
         if scheme.is_some_and(|s| s.eq_ignore_ascii_case(LINK_SCHEME)) {
@@ -181,7 +181,7 @@ pub const LINK_SCHEME: &str = "winct";
 pub fn link(url: &str) -> Option<Target> {
     let (scheme, rest) = url.split_once("://")?;
     let rest = rest.strip_prefix("file")?;
-    if !(scheme.eq_ignore_ascii_case(LINK_SCHEME) || scheme.eq_ignore_ascii_case("winc"))
+    if !(scheme.eq_ignore_ascii_case(LINK_SCHEME) || scheme.eq_ignore_ascii_case("winct"))
         || !rest.starts_with('/')
     {
         return None;
@@ -311,7 +311,7 @@ fn check_remote(parsed: &Args) -> Result<(), String> {
     Ok(())
 }
 
-/// 返回把 `target` 交给另一个 winc 进程时的参数：本机的是绝对路径，远端的是 `ssh://` 写法，
+/// 返回把 `target` 交给另一个 winct 进程时的参数：本机的是绝对路径，远端的是 `ssh://` 写法，
 /// 有行号时加上 `:行[:列]`（从 1 起）。
 #[cfg_attr(not(any(target_os = "macos", test)), allow(dead_code))]
 pub fn argument(target: &Target) -> OsString {

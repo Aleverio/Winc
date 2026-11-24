@@ -14,14 +14,14 @@ workdir="$(mktemp -d)"
 trap 'rm -rf -- "$workdir"' EXIT
 files="$workdir/files"
 mkdir -p "$files"
-install -m755 "$release_dir/winc" "$release_dir/winct-pty" -t "$files"
+install -m755 "$release_dir/winct" "$release_dir/winct-pty" -t "$files"
 install -m755 target/remote-server/winct-server-Linux-x86_64 \
   target/remote-server/winct-server-Linux-aarch64 -t "$files"
-install -m644 release/linux/winc.desktop release/linux/winct-url-handler.desktop release/linux/winc.xml \
-  crates/winct-app/assets/file-icons/project.svg "$release_dir/bundle/icons/winc.png" LICENSE NOTICE \
+install -m644 release/linux/winct.desktop release/linux/winct-url-handler.desktop release/linux/winct.xml \
+  crates/winct-app/assets/file-icons/project.svg "$release_dir/bundle/icons/winct.png" LICENSE NOTICE \
   -t "$files"
 install -m644 release/linux/file-manager/* -t "$files"
-install -m644 release/linux/rpm/winc.spec -t "$workdir"
+install -m644 release/linux/rpm/winct.spec -t "$workdir"
 
 # Fedora's base image has no rpmbuild; it is installed in a throwaway container that only packages
 # the files above. The build tree stays in the container; only the RPM is handed back, owned by the
@@ -31,8 +31,8 @@ package="Winct-$version-$platform.rpm"
 docker run --rm --volume "$workdir:/work" "$image" bash -euc '
   dnf -y -q install rpm-build >/dev/null
   rpmbuild -bb --define "_topdir /tmp/rpmbuild" --define "winct_version $1" \
-    --define "winct_files /work/files" /work/winc.spec
-  built=(/tmp/rpmbuild/RPMS/"$4"/winc-*.rpm)
+    --define "winct_files /work/files" /work/winct.spec
+  built=(/tmp/rpmbuild/RPMS/"$4"/winct-*.rpm)
   ((${#built[@]} == 1)) || { echo "expected one RPM, found ${#built[@]}" >&2; exit 1; }
   cp "${built[0]}" "/work/$3"
   chown "$2" "/work/$3"
@@ -41,17 +41,17 @@ docker run --rm --volume "$workdir:/work" "$image" bash -euc '
 for system in "$image" almalinux:8; do
   docker run --rm --volume "$workdir:/work:ro" "$system" bash -euc '
     dnf -y -q install "/work/$1" >/dev/null
-    test "$(rpm -q --qf "%{VERSION}" winc)" = "$2"
-    test "$(winc --version)" = "winc $3"
+    test "$(rpm -q --qf "%{VERSION}" winct)" = "$2"
+    test "$(winct --version)" = "winct $3"
     test -x /usr/bin/winct-pty
-    test -f /usr/lib/winc/winct-server-Linux-x86_64
-    test -f /usr/lib/winc/winct-server-Linux-aarch64
+    test -f /usr/lib/winct/winct-server-Linux-x86_64
+    test -f /usr/lib/winct/winct-server-Linux-aarch64
     test -f /usr/share/kio/servicemenus/winct-open-folder.desktop
-    grep -qx "MimeType=x-scheme-handler/winc;" /usr/share/applications/winct-url-handler.desktop
-    test -f /usr/share/mime/packages/winc.xml
+    grep -qx "MimeType=x-scheme-handler/winct;" /usr/share/applications/winct-url-handler.desktop
+    test -f /usr/share/mime/packages/winct.xml
     test -f /usr/share/icons/hicolor/scalable/mimetypes/application-x-winct-project.svg
     test -f /usr/share/nemo/actions/winct-open-current-folder.nemo_action
-    test -f /usr/share/licenses/winc/LICENSE
+    test -f /usr/share/licenses/winct/LICENSE
   ' bash "$package" "$rpm_version" "$version"
 done
 

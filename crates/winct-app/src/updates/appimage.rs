@@ -87,6 +87,6 @@ pub fn after_exit(appimage: &Path, relaunch: bool) {
         .process_group(0)
         .spawn();
     if let Err(e) = spawned {
-        eprintln!("winc: 无法重新启动：{e}");
+        eprintln!("winct: 无法重新启动：{e}");
     }
 }

@@ -666,7 +666,7 @@ impl App {
             }
             // 模块已经启用时没有要启用的；启用后内置终端的各条命令列出。
             Action::EnableTerminal if self.terminal_enabled() => return false,
-            // Windows 安装包、deb 包已经把 `winc` 放进 `PATH`，没有要安装的。
+            // Windows 安装包、deb 包已经把 `winct` 放进 `PATH`，没有要安装的。
             Action::InstallShellCommand | Action::UninstallShellCommand
                 if crate::shell_command::placement().is_none() =>
             {

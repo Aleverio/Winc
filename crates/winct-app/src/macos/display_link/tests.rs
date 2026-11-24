@@ -26,7 +26,7 @@ fn a_scheduled_display_link_fires() {
         }
         let target: Retained<AnyObject> = msg_send![target_class().unwrap(), new];
         let link: *mut AnyObject =
-            msg_send![screen, displayLinkWithTarget: &*target, selector: sel!(wincFrame:)];
+            msg_send![screen, displayLinkWithTarget: &*target, selector: sel!(winctFrame:)];
         let link = Retained::retain(link).unwrap();
         let run_loop: *mut AnyObject = msg_send![class!(NSRunLoop), currentRunLoop];
         schedule(&link, run_loop);
@@ -73,6 +73,10 @@ fn display_link_messages_match_quartz_core() {
 
     // 接收回调的类：方法存在，未设置回调时调用也不会出错。
     let target = target_class().unwrap();
-    assert!(target.instance_method(sel!(wincFrame:)).is_some());
-    frame(std::ptr::null_mut(), sel!(wincFrame:), std::ptr::null_mut());
+    assert!(target.instance_method(sel!(winctFrame:)).is_some());
+    frame(
+        std::ptr::null_mut(),
+        sel!(winctFrame:),
+        std::ptr::null_mut(),
+    );
 }

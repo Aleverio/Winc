@@ -15,7 +15,7 @@ impl App {
         let new = &self.config;
         if old.keymap != new.keymap || old.shortcuts != new.shortcuts {
             for problem in crate::keymap::install_from(new) {
-                eprintln!("winc: {problem}");
+                eprintln!("winct: {problem}");
             }
             self.keymap_changed();
         }
