@@ -870,19 +870,25 @@ impl App {
         self.track_tree_segment();
     }
 
-    /// `(x, y)` 是否位于编辑区右上角的卡片（冲突卡片、提示条）上。
-    ///
-    /// 卡片浮于文字之上，点击、右键和指针样式都不应作用于下方的文字。
-    pub(in crate::app) fn over_corner_card(&self, x: f32, y: f32) -> bool {
-        self.hits
-            .notice_card
-            .is_some_and(|card| card.contains(x, y))
-            || self.hits.merge_card.is_some_and(|card| card.contains(x, y))
-            || self
-                .hits
-                .conflict_card
-                .as_ref()
-                .is_some_and(|(card, _)| card.contains(x, y))
+    /// `(x, y)` 处最上层的部件是否遮挡下方且自身没有右键菜单：卡片、补全列表、工具栏、标题
+    /// 列表、在文件中查找的对话框和底部面板的「搜索」标签，以及输入条。右键点在这些部件上时
+    /// 不弹出下方部件的菜单。
+    pub(in crate::app) fn blocks_context_menu(&self, x: f32, y: f32) -> bool {
+        matches!(
+            self.target_at(x, y),
+            Target::Blocked
+                | Target::NoticeButton
+                | Target::Change(_)
+                | Target::Merge(_)
+                | Target::Conflict(_)
+                | Target::Suggest(_)
+                | Target::SelectionTool(_)
+                | Target::MarkdownToc(_)
+                | Target::SearchDialog(_)
+                | Target::SearchDock(_)
+                | Target::Prompt
+                | Target::Search
+        )
     }
 
     /// 根据鼠标位置和拖动状态更新鼠标指针的样式；鼠标在其他窗格上时按那个窗格判断。
