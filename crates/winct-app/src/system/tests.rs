@@ -56,6 +56,66 @@ fn a_folder_in_a_wsl_distro_opens_a_terminal_inside_the_distro() {
 }
 
 #[test]
+fn the_configured_terminal_wins_over_detection() {
+    let none = |_: &str| false;
+    assert_eq!(
+        terminal_program(Some("my-terminal"), Some("env-terminal"), none),
+        Some("my-terminal".to_owned())
+    );
+    assert_eq!(
+        terminal_program(None, Some("env-terminal"), none),
+        Some("env-terminal".to_owned())
+    );
+    // 空白的配置值视为未设置，继续自动查找。
+    assert_eq!(terminal_program(Some("  "), Some(""), none), None);
+}
+
+#[test]
+fn the_desktop_terminal_launcher_is_preferred_over_the_fallback_list() {
+    let only_exec = |name: &str| name == TERMINAL_EXEC;
+    assert_eq!(
+        terminal_program(None, None, only_exec),
+        Some(TERMINAL_EXEC.to_owned())
+    );
+    let only_ghostty = |name: &str| name == "ghostty";
+    assert_eq!(
+        terminal_program(None, None, only_ghostty),
+        Some("ghostty".to_owned())
+    );
+}
+
+#[test]
+fn modern_terminals_are_in_the_fallback_list() {
+    for name in [
+        "alacritty",
+        "kitty",
+        "wezterm",
+        "ghostty",
+        "foot",
+        "qterminal",
+        "rio",
+    ] {
+        assert!(TERMINALS.contains(&name), "{name}");
+    }
+}
+
+#[test]
+fn xdg_terminal_exec_gets_the_directory_as_an_argument() {
+    let dir = Path::new("/tmp/project");
+    let command = terminal_command(TERMINAL_EXEC, dir);
+    assert_eq!(command.get_program(), std::ffi::OsStr::new(TERMINAL_EXEC));
+    assert_eq!(
+        command.get_args().collect::<Vec<_>>(),
+        [std::ffi::OsStr::new("--dir=/tmp/project")]
+    );
+    assert_eq!(command.get_current_dir(), Some(dir));
+
+    let command = terminal_command("ghostty", dir);
+    assert_eq!(command.get_args().count(), 0);
+    assert_eq!(command.get_current_dir(), Some(dir));
+}
+
+#[test]
 fn folders_without_a_trash_are_deleted_for_good() {
     // WSL 发行版中的路径在 Windows 上是网络路径，没有回收站；远端主机上的路径同样没有。
     let distro = Path::new(r"\\wsl.localhost\Ubuntu\home\me\a.txt");

@@ -95,6 +95,11 @@ The rpm wraps the same binaries in a Fedora container: rpmbuild derives the glib
 the window system libraries loaded at run time are required by soname, so it installs on Fedora 40
 or newer, RHEL 10 and openSUSE Tumbleweed. Debian and RPM prerelease versions use `~` so the final
 release sorts after its betas.
+
+On Linux, “Open in External Terminal” uses `xdg-terminal-exec` when it is installed, so the terminal
+chosen in the desktop environment is honored; without it Winct falls back to a terminal emulator
+found on `PATH`. The Arch package requires the launcher, and the deb and rpm recommend it.
+
 Stable `X.Y.Z` releases also include `winct-<version>-1-x86_64.pkg.tar.zst` built from the same Linux
 binaries. The Arch package is updated with `pacman -U` through the update script below.
 

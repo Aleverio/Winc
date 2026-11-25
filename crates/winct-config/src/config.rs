@@ -190,7 +190,8 @@ pub struct Config {
     pub compact_folders: Option<bool>,
     /// 在文件树中单击文件时是否在预览标签中打开；未设置时为否。
     pub preview_on_click: Option<bool>,
-    /// 「在外部终端中打开」使用的终端程序；未设置时使用系统默认的终端程序。
+    /// 「在外部终端中打开」使用的终端程序；未设置时使用系统默认的终端程序：Linux 上优先
+    /// `xdg-terminal-exec`，再查找常见的终端程序。
     pub external_terminal: Option<String>,
     /// 是否开启 Vim 模式，默认为否。
     pub vim_enabled: Option<bool>,

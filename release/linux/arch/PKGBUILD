@@ -6,7 +6,8 @@ arch=('x86_64')
 url='https://github.com/Aleverio/Winc'
 license=('Apache-2.0')
 depends=('glibc>=2.28' 'libgcc' 'fontconfig' 'ttf-dejavu' 'libxkbcommon'
-         'libxkbcommon-x11' 'libx11' 'libxcb' 'libxcursor' 'libxi' 'libxrandr' 'wayland')
+         'libxkbcommon-x11' 'libx11' 'libxcb' 'libxcursor' 'libxi' 'libxrandr' 'wayland'
+         'xdg-terminal-exec')
 options=('!strip' '!debug')
 
 package() {

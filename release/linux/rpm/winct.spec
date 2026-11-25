@@ -22,6 +22,9 @@ Requires:       libxkbcommon.so.0()(64bit)
 Requires:       libxkbcommon-x11.so.0()(64bit)
 Requires:       libwayland-client.so.0()(64bit)
 Recommends:     (dejavu-sans-fonts or dejavu-fonts)
+# Optional: "Open in External Terminal" follows the desktop default when this launcher is present,
+# and otherwise falls back to a terminal emulator found on PATH.
+Recommends:     xdg-terminal-exec
 
 # Ship the release binaries as built: no stripping and no debug package. The remote servers are
 # static programs for two architectures, uploaded to other hosts and never run here.

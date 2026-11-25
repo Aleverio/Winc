@@ -528,7 +528,8 @@ impl App {
     ///
     /// 目录打开它自己，文件打开它所在的目录；`path` 为 `None`（没有选中项，也没有打开的文件）
     /// 时打开工作区的目录，没有工作区时打开环境变量 `HOME` 指定的主目录（未设置时为 `/`）。
-    /// 终端程序由配置项 `terminal.external` 指定。基准测量和测试中不启动终端，只记录目录。
+    /// 终端程序由配置项 `terminal.external` 指定；未指定时由系统查找默认终端。基准测量和测试中
+    /// 不启动终端，只记录目录。
     pub(in crate::app) fn open_in_terminal(&mut self, path: Option<&Path>) {
         let dir = match path {
             Some(path) => self.folder_of(path),

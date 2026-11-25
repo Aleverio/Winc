@@ -291,19 +291,86 @@ fn show_items(path: &Path) -> zbus::Result<()> {
     Ok(())
 }
 
+/// 未指定终端程序时优先使用的启动器：按桌面环境记录的默认终端打开。
+///
+/// 它由 `xdg-terminal-exec` 提供，会读取桌面项并选择用户设置的默认终端；未安装时退回到
+/// [`TERMINALS`] 中第一个已安装的程序。
+const TERMINAL_EXEC: &str = "xdg-terminal-exec";
+
 /// 未指定终端程序时依次尝试的终端程序名。
 ///
 /// 顺序即优先级：先是发行版设置的默认终端（Debian 系的替代项），再是各桌面环境自带的，
 /// 最后是 X 自带的。取第一个在环境变量 `PATH` 的目录中存在可执行文件的项；数量由这些候选项
 /// 决定。
-const TERMINALS: [&str; 6] = [
+const TERMINALS: &[&str] = &[
     "x-terminal-emulator",
     "gnome-terminal",
+    "kgx",
     "konsole",
     "xfce4-terminal",
     "mate-terminal",
+    "tilix",
+    "qterminal",
+    "lxterminal",
+    "terminator",
+    "terminology",
+    "sakura",
+    "roxterm",
+    "guake",
+    "yakuake",
+    "deepin-terminal",
+    "pantheon-terminal",
+    "blackbox",
+    "alacritty",
+    "kitty",
+    "wezterm",
+    "ghostty",
+    "foot",
+    "contour",
+    "rio",
+    "st",
+    "urxvt",
     "xterm",
 ];
+
+/// 返回打开外部终端时应启动的程序名。
+///
+/// 优先级：配置项 `terminal.external`、环境变量 `$TERMINAL`、[`TERMINAL_EXEC`]，最后是
+/// [`TERMINALS`] 中第一个已安装的程序。空白的配置值视为未设置。
+fn terminal_program(
+    configured: Option<&str>,
+    environment: Option<&str>,
+    installed: impl Fn(&str) -> bool,
+) -> Option<String> {
+    let configured = configured.filter(|name| !name.trim().is_empty());
+    let environment = environment.filter(|name| !name.trim().is_empty());
+    configured
+        .map(str::to_owned)
+        .or_else(|| environment.map(str::to_owned))
+        .or_else(|| installed(TERMINAL_EXEC).then(|| TERMINAL_EXEC.to_owned()))
+        .or_else(|| {
+            TERMINALS
+                .iter()
+                .copied()
+                .find(|name| installed(name))
+                .map(str::to_owned)
+        })
+}
+
+/// 构造在 `dir` 中打开终端的命令。
+///
+/// `xdg-terminal-exec` 用 `--dir` 指定目录：它按桌面项启动的终端不一定继承当前目录；其他
+/// 终端程序直接把 `dir` 作为子进程的工作目录。
+fn terminal_command(program: &str, dir: &Path) -> Command {
+    let mut command = Command::new(program);
+    if program == TERMINAL_EXEC {
+        let mut arg = std::ffi::OsString::from("--dir=");
+        arg.push(dir);
+        command.arg(arg);
+    }
+    command.current_dir(dir);
+    command
+}
 
 /// `path` 所在的位置是否没有废纸篓，删除后无法恢复：远端主机上的路径，以及 Windows
 /// （`windows`）上 WSL 发行版中的路径。
@@ -313,8 +380,9 @@ pub fn has_no_trash(path: &Path, windows: bool) -> bool {
 
 /// 在外部终端中打开 `dir`。
 ///
-/// `app` 是配置中指定的终端程序。未指定时 macOS 用系统自带的终端应用，Windows 用 `cmd.exe`，
-/// 其他平台用环境变量 `$TERMINAL`，未设置时用 [`TERMINALS`] 中第一个已安装的。
+/// `app` 是配置中指定的终端程序。未指定时 macOS 用系统自带的终端应用，Windows 用 `cmd.exe`；
+/// 其他平台依次使用环境变量 `$TERMINAL`、[`TERMINAL_EXEC`]（桌面环境记录的默认终端）和
+/// [`TERMINALS`] 中第一个已安装的程序。
 ///
 /// # Errors
 ///
@@ -340,18 +408,15 @@ pub fn open_terminal(dir: &Path, app: Option<&str>) -> io::Result<()> {
         std::os::windows::process::CommandExt::creation_flags(&mut command, 0x0800_0000);
         spawn(&mut command)
     } else {
-        let app = app
-            .map(str::to_owned)
-            .or_else(|| std::env::var("TERMINAL").ok())
-            .or_else(|| {
-                let path = std::env::var_os("PATH")?;
-                TERMINALS
-                    .into_iter()
-                    .find(|name| std::env::split_paths(&path).any(|d| d.join(name).is_file()))
-                    .map(str::to_owned)
+        let environment = std::env::var("TERMINAL").ok();
+        let program = terminal_program(app, environment.as_deref(), |name| {
+            std::env::var_os("PATH").is_some_and(|path| {
+                std::env::split_paths(&path).any(|dir| dir.join(name).is_file())
             })
-            .unwrap_or_else(|| TERMINALS[0].to_owned());
-        spawn(Command::new(app).current_dir(dir))
+        })
+        .unwrap_or_else(|| TERMINALS[0].to_owned());
+        let mut command = terminal_command(&program, dir);
+        spawn(&mut command)
     }
 }
 
