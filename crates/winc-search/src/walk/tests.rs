@@ -53,13 +53,18 @@ fn changed_paths_are_probed_like_the_walk_sees_them() {
     assert_eq!(found[0], Probe::Unlisted);
     assert_eq!(found[1], Probe::File);
     assert_eq!(found[2], Probe::Unlisted);
-    assert_eq!(
-        found[3],
-        Probe::Dir {
-            files: vec!["dir/x.rs".into(), "dir/deep/y.rs".into()],
-            dirs: vec!["dir".into(), "dir/deep".into()],
-        }
-    );
+    // 目录下的顺序随文件系统而定，调用方自己排序。
+    let Probe::Dir {
+        mut files,
+        mut dirs,
+    } = found[3].clone()
+    else {
+        panic!("{found:?}");
+    };
+    files.sort();
+    dirs.sort();
+    assert_eq!(files, ["dir/deep/y.rs", "dir/x.rs"]);
+    assert_eq!(dirs, ["dir", "dir/deep"]);
     assert_eq!(found[4], Probe::Covered);
     assert_eq!(found[5], Probe::Missing);
 
