@@ -105,11 +105,20 @@ impl App {
         if button == MouseButton::Middle
             && let Some(&(_, hit)) =
                 (self.hits.terminal.iter()).find(|(rect, _)| rect.contains(x, y))
-            && let crate::app::terminal::HeaderHit::Tab(index)
-            | crate::app::terminal::HeaderHit::Close(index) = hit
         {
-            self.close_terminal_tab(index);
-            return;
+            use crate::app::terminal::HeaderHit;
+            match hit {
+                HeaderHit::Tab(index) | HeaderHit::Close(index) => {
+                    self.close_terminal_tab(index);
+                    return;
+                }
+                // 列表里拆分出的一个终端：只关掉它。
+                HeaderHit::Pane(index, at) | HeaderHit::ClosePane(index, at) => {
+                    self.close_terminal_pane_at(index, at);
+                    return;
+                }
+                _ => {}
+            }
         }
 
         if button == MouseButton::Middle {
@@ -427,6 +436,13 @@ impl App {
                         self.press_terminal_tab(i, at);
                     }
                     HeaderHit::Close(i) => self.close_terminal_tab(i),
+                    // 双击列表里拆分出的终端：换到前台并重命名它。
+                    HeaderHit::Pane(i, at) if self.click_count(x, y) == 2 => {
+                        self.select_terminal_pane(i, at);
+                        self.open_terminal_rename(i);
+                    }
+                    HeaderHit::Pane(i, at) => self.select_terminal_pane(i, at),
+                    HeaderHit::ClosePane(i, at) => self.close_terminal_pane_at(i, at),
                     HeaderHit::New => self.new_terminal_tab(),
                     HeaderHit::ShellMenu => self.open_terminal_shell_menu(),
                     HeaderHit::Restart => self.request_terminal_restart(),

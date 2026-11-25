@@ -303,8 +303,12 @@ impl App {
 
     /// 右键点在终端的标签上：它成为正在看的标签，返回它的编号。
     fn terminal_tab_context_target(&mut self, x: f32, y: f32) -> Option<u16> {
+        use crate::app::terminal::HeaderHit;
         let index = match crate::layout::hit(&self.hits.terminal, x, y)? {
-            crate::app::terminal::HeaderHit::Tab(i) | crate::app::terminal::HeaderHit::Close(i) => {
+            HeaderHit::Tab(i) | HeaderHit::Close(i) => i,
+            // 拆分出的终端：先换到前台，菜单作用于它。
+            HeaderHit::Pane(i, at) | HeaderHit::ClosePane(i, at) => {
+                self.select_terminal_pane(i, at);
                 i
             }
             _ => return None,
