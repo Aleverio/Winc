@@ -19,6 +19,7 @@ pub use choices::*;
 pub use controls::*;
 pub use keys::*;
 pub use page::*;
+pub use sections::*;
 
 /// 设置页中随状态列出的行：格式化页的各语言，Vim 分组下与快捷键冲突的键。
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -1144,41 +1145,6 @@ pub fn settings_card(window: Rect, (dx, dy): (f32, f32)) -> Rect {
         w,
         h,
     )
-}
-
-/// 返回搜索 `query` 时正文列出的各组：每页中名称或说明含有 `query` 的设置项
-/// （[`Setting::matches`]）合为一组，以页名为标题；页名或组标题含有 `query` 时是该页或该组的
-/// 全部设置项。
-///
-/// 各组按页的顺序排列，组内按页内的顺序；组下方的文字按钮不参与搜索。「快捷键」页列出键位方案
-/// （[`Setting::Keymap`]），以及有命令的名称或按键与 `query` 相符时的 [`Setting::KeyMatches`]。
-/// `modules` 为各模块是否开启（见 [`SettingsPage::listed`]）。
-pub fn search_sections(query: &str, listed: &Listed, modules: Modules) -> Vec<Section> {
-    let query = query.trim().to_lowercase();
-    let query = query.as_str();
-    let named = move |title: &str| title.to_lowercase().contains(query);
-    let found = SettingsPage::listed(modules).map(|page| {
-        let whole = named(page.title());
-        let items: Vec<Setting> = if page == SettingsPage::Keys {
-            let keymap = (whole || Setting::Keymap.matches(query)).then_some(Setting::Keymap);
-            let commands = (crate::keymap::count_matches(query) > 0).then_some(Setting::KeyMatches);
-            keymap.into_iter().chain(commands).collect()
-        } else {
-            let items = page.sections(listed).into_iter().flat_map(|section| {
-                let whole = whole || section.title.is_some_and(named);
-                (section.items.into_iter())
-                    .filter(|s| s.control() != SettingControl::Action)
-                    .filter(move |s| whole || s.matches(query))
-            });
-            items.collect()
-        };
-        Section {
-            title: Some(page.title()),
-            items,
-        }
-    });
-    let found: Vec<Section> = found.filter(|s| !s.items.is_empty()).collect();
-    found
 }
 
 /// 设置浮层的整套几何。

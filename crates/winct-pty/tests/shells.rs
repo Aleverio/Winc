@@ -416,7 +416,7 @@ fn zsh_redraws_a_full_width_prompt_once_after_a_resize() {
         "setopt prompt_subst\nunsetopt prompt_sp\n\
          _fill() { _line=TOP${(l:$((COLUMNS-6))::.:)}END }\n\
          precmd_functions+=(_fill)\n\
-         TRAPWINCTH() { _fill; zle && zle reset-prompt }\n\
+         TRAPWINCH() { _fill; zle && zle reset-prompt }\n\
          PS1='${_line}\npp> '\n",
     );
     let mut sh = Shell::start(&zsh, false, env(&t.home(), &[]), &t.0.join("shell"));
