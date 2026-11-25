@@ -82,12 +82,6 @@ fn legacy_encodings_are_guessed_and_written_back() {
             bytes.as_ref()
         );
     }
-    assert_eq!(Encoding::Legacy(encoding_rs::GBK).label(), "GBK");
-    assert_eq!(Encoding::Legacy(encoding_rs::BIG5).label(), "Big5");
-    assert_eq!(
-        Encoding::Legacy(encoding_rs::WINDOWS_1252).label(),
-        "Windows 1252"
-    );
 }
 
 #[test]
@@ -186,5 +180,15 @@ fn escape_origin_follows_the_file_layout() {
     assert_eq!(
         encode_with(&shown, utf8, Some(&origin)).unwrap(),
         b"a=\\u00E9\\u4F60\n"
+    );
+}
+
+#[test]
+fn legacy_encodings_show_the_short_name() {
+    assert_eq!(Encoding::Legacy(encoding_rs::GBK).label(), "GBK");
+    assert_eq!(Encoding::Legacy(encoding_rs::BIG5).label(), "Big5");
+    assert_eq!(
+        Encoding::Legacy(encoding_rs::WINDOWS_1252).label(),
+        "Windows 1252"
     );
 }

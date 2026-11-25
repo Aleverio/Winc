@@ -1467,6 +1467,7 @@ fn align(align: Alignment) -> Align {
 }
 
 mod autolink;
+mod blank;
 pub mod cells;
 mod delims;
 mod emoji;

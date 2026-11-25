@@ -12,11 +12,13 @@ mod plugins;
 pub(super) mod shortcuts;
 mod state;
 mod switches;
+mod transfer;
 mod values;
 
 pub use state::{DialogCache, SettingsState};
 
 use std::ops::RangeInclusive;
+pub(in crate::app) use transfer::{EXPORTED_SETTINGS, SETTINGS_EXTENSIONS};
 
 use winct_editor::format::{
     Auto, FormatError, PRESETS, Plan, Program, Task, knows_how_to_install, presets,
@@ -28,7 +30,7 @@ use super::editor::format::{task_commands, task_commands_mut};
 use super::input::context_menu::{MenuTarget, menu_below, tool_setting as tool_setting_of};
 use super::*;
 use crate::keymap::{self, Os, Stroke};
-use crate::layout::{KeyRows, KeysLayout, SettingsView, ToolLanguages};
+use crate::layout::{KeyRows, KeysLayout, Listed, SettingsView};
 
 /// 格式化页中一种语言的一行（格式化工具或修复工具）：右侧显示工具，名称下方显示来源和提醒。
 #[derive(Debug, Clone, PartialEq)]
@@ -57,7 +59,7 @@ pub struct FormatRow {
     pub removable: bool,
 }
 
-impl ToolLanguages {
+impl Listed {
     /// 返回 `task`（格式化或修复）那一组列出的语言。
     fn of(&mut self, task: Task) -> &mut Vec<&'static str> {
         match task {
@@ -149,10 +151,12 @@ impl App {
         self.settings.selected = Setting::default();
         self.settings.logo_played = false;
         self.settings.search.set_text("");
+        self.settings.before_search = None;
         self.settings.error = self.broken_font(self.settings.selected.page());
         self.settings.keyboard = false;
         self.settings.hover = None;
-        self.settings.languages = ToolLanguages::default();
+        self.settings.listed = Listed::default();
+        self.refresh_vim_key_rows();
         // 每次打开设置重新查询发行版中的工具：其间新安装的能列出来。
         self.format.formatter.forget_wsl();
         self.refresh_format_rows(true);
@@ -355,7 +359,7 @@ impl App {
         let view = SettingsView {
             page: self.settings.selected.page(),
             query: self.settings.search.text(),
-            languages: &self.settings.languages,
+            listed: &self.settings.listed,
             terminal: self
                 .motion
                 .module_fx
@@ -384,11 +388,11 @@ impl App {
 
     /// 返回键盘上下移动经过的设置项：搜索时为搜索结果，否则为各页的全部设置项。
     fn settings_items(&self) -> Vec<Setting> {
-        let (languages, modules) = (&self.settings.languages, self.settings_modules());
+        let (listed, modules) = (&self.settings.listed, self.settings_modules());
         if self.settings_searching() {
-            Setting::found(self.settings.search.text(), languages, modules)
+            Setting::found(self.settings.search.text(), listed, modules)
         } else {
-            Setting::all(languages, modules)
+            Setting::all(listed, modules)
         }
     }
 
@@ -402,23 +406,36 @@ impl App {
         self.request_redraw();
     }
 
-    /// 搜索框的内容变化后：结果从顶部显示，选中第一条结果；清空后回到选中项所在的页。
+    /// 搜索框的内容变化后：结果从顶部显示，选中第一条结果；清空后回到搜索之前选中的项。
     pub(in crate::app) fn settings_search_changed(&mut self) {
         self.settings.scroll = 0.0;
         self.settings.keyboard = false;
-        if let Some(&first) = self.settings_items().first()
-            && self.settings_searching()
+        if self.settings_searching() {
+            if let Some(&first) = self.settings_items().first() {
+                let before = (self.settings.before_search).map_or(self.settings.selected, |b| b.0);
+                self.settings.selected = first;
+                self.settings.before_search = Some((before, first));
+            }
+        } else if let Some((before, first)) = self.settings.before_search.take()
+            && self.settings.selected == first
         {
-            self.settings.selected = first;
+            self.settings.selected = before;
         }
         self.request_redraw();
     }
 
-    /// 从搜索框进入结果列表：键盘焦点回到浮层，选中第一条结果；没有结果时不处理。
+    /// 从搜索框进入结果列表：键盘焦点回到浮层，选中第一条结果；没有结果时不处理。搜索框为空时
+    /// 回到当前页。
     pub(super) fn settings_enter_results(&mut self) {
+        if !self.settings_searching() {
+            self.settings_show_page(self.settings.selected.page());
+            self.settings.keyboard = true;
+            return;
+        }
         let Some(&first) = self.settings_items().first() else {
             return;
         };
+        self.settings.before_search = None;
         self.settings.selected = first;
         self.settings.keyboard = true;
         self.focus = Focus::Settings;
@@ -436,6 +453,7 @@ impl App {
             return;
         }
         self.settings_leave_field();
+        self.settings.before_search = None;
         // 换页即离开搜索结果；选中的结果在该页时仍选中它。
         if self.settings_searching() {
             self.settings.search.set_text("");
@@ -444,7 +462,7 @@ impl App {
         if self.settings.selected.page() != page {
             self.settings.selected = if page == SettingsPage::Lsp {
                 self.settings
-                    .languages
+                    .listed
                     .lsp
                     .first()
                     .copied()
@@ -572,6 +590,16 @@ impl App {
         } else {
             Focus::Settings
         };
+        self.settings_scroll_into_view();
+        self.request_redraw();
+    }
+
+    /// 打开设置，切到 `setting` 所在的页，选中并滚动到这一项；选中的一行铺上底色，便于找到。
+    pub(in crate::app) fn show_setting(&mut self, setting: Setting) {
+        self.open_settings();
+        self.settings_show_page(setting.page());
+        self.settings.selected = setting;
+        self.settings.keyboard = true;
         self.settings_scroll_into_view();
         self.request_redraw();
     }

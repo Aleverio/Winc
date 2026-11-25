@@ -110,6 +110,7 @@ impl App {
             ime: Default::default(),
             layout: Layout::default(),
             tabs: TabBar::default(),
+            tab_switch: Default::default(),
             panes: Default::default(),
             diff: Default::default(),
             status: Default::default(),
@@ -228,6 +229,7 @@ impl App {
             setup: Default::default(),
             settings: SettingsState::default(),
             format: FormatState::new(formatter()),
+            http: Default::default(),
             git: {
                 let mut git = git::GitState::default();
                 git.commit.set_compact(compact);

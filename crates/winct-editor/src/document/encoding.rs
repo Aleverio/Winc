@@ -330,6 +330,7 @@ pub(crate) struct Decoded<'a> {
 
 impl Decoded<'_> {
     /// 是否无法无损解码（非法字节已替换为 U+FFFD）；这样的文件只读。
+    #[cfg(test)]
     pub fn lossy(&self) -> bool {
         self.encoding == Encoding::Lossy
     }

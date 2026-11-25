@@ -44,7 +44,9 @@ impl App {
             || old.status_bar != new.status_bar;
         let compact = old.compact_folders != new.compact_folders;
         let diff_layout = old.diff_inline != new.diff_inline;
+        let diff_collapse = old.diff_collapse_unchanged != new.diff_collapse_unchanged;
         let staging_view = old.git_staging_area != new.git_staging_area;
+        let combined_view = old.git_combined_diff != new.git_combined_diff;
         // 窗口字体同步。
         let glyph_language = old.language != new.language
             && crate::set_locale(new.language.unwrap_or_default().resolve());
@@ -94,11 +96,17 @@ impl App {
         if compact {
             self.apply_compact_folders();
         }
+        if diff_collapse {
+            self.apply_diff_collapse();
+        }
         if diff_layout {
             self.apply_diff_layout();
         }
         if staging_view {
             self.apply_staging_view();
+        }
+        if combined_view {
+            self.apply_combined_view();
         }
         winct_editor::proxy::follow_system_proxy(self.config.system_proxy != Some(false));
         if images {

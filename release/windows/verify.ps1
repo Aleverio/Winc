@@ -126,15 +126,31 @@ foreach ($kind in @('nsis', 'msi')) {
         # inlined, and its parameters in `WINCT_UPDATE_*` environment variables. Passing them as
         # `-File` arguments would reach a script that no longer declares `param`, leaving every
         # parameter empty.
+        # The application passes the digest it verified the package against when it downloaded it.
         $env:WINCT_UPDATE_PARENT = "$($parent.Id)"
         $env:WINCT_UPDATE_SETUP = $setup
+        $env:WINCT_UPDATE_SHA256 = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash
         $env:WINCT_UPDATE_EXE = "$directory/winct.exe"
         $env:WINCT_UPDATE_KIND = $kind
         $env:WINCT_UPDATE_RELAUNCH = '0'
+        # The updater counts an NSIS installation that leaves winct.exe unchanged as failed, since
+        # that is how a file still in use shows. Reinstalling the same build must therefore replace
+        # something, so the installed executables first differ from the package. Running the same
+        # MSI again is a maintenance installation that replaces no files, so it stays as installed.
+        if ($kind -eq 'nsis') {
+            foreach ($file in @('winct.exe', 'winct-pty.exe')) {
+                [IO.File]::AppendAllText("$directory/$file", "`0")
+            }
+        }
+        $log = Join-Path (Split-Path -Parent $setup) 'install-error.log'
+        Remove-Item -LiteralPath $log -ErrorAction SilentlyContinue
         & powershell.exe -NoProfile -NonInteractive -Command (Get-Content -LiteralPath $update -Raw)
         $status = $LASTEXITCODE
-        Remove-Item Env:WINCT_UPDATE_*
-        if ($status -ne 0) { throw "$kind updater failed" }
+        Remove-Item Env:WINCT_UPDATE_* -ErrorAction SilentlyContinue
+        if ($status -ne 0) {
+            if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log | Write-Host }
+            throw "$kind updater failed"
+        }
         foreach ($file in @('winct.exe', 'winct-pty.exe')) {
             if ((Get-FileHash "$directory/$file").Hash -ne (Get-FileHash "$root/target/$Target/release/$file").Hash) {
                 throw "$kind update changed $file"

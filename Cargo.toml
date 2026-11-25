@@ -9,6 +9,7 @@ rust-version = "1.89"
 publish = false
 license = "Apache-2.0"
 repository = "https://github.com/Aleverio/Winc"
+homepage = "https://winct.si"
 
 [workspace.dependencies]
 winct-config = { path = "crates/winct-config" }
@@ -18,6 +19,7 @@ winct-plugin-api = { path = "crates/winct-plugin-api" }
 winct-emoji = { path = "crates/winct-emoji" }
 winct-syntax = { path = "crates/winct-syntax" }
 winct-render = { path = "crates/winct-render" }
+winct-search = { path = "crates/winct-search" }
 winct-editor = { path = "crates/winct-editor" }
 winct-preview = { path = "crates/winct-preview" }
 winct-pty = { path = "crates/winct-pty" }
@@ -52,9 +54,6 @@ memchr = "2"
 windows-sys = "0.59"
 # 只开 Unicode 大小写和 \w \d \s，不带 \p{..} 的 Unicode 属性表，二进制小约 250 KB。
 regex = { version = "1", default-features = false, features = ["std", "perf", "unicode-case", "unicode-perl"] }
-# 从正则表达式里取出每处匹配都含有的一段文字（远端搜索先用它筛出候选文件）。已随 `regex`
-# 编译，这里不另开 Unicode 表。
-regex-syntax = { version = "0.8", default-features = false, features = ["std"] }
 # 查找里 `regex` 不支持的环视（`(?=…)`、`(?<=…)`）和反向引用（`\1`）由它匹配。
 # 它建立在 `regex` 的底层实现之上，Unicode 表与上面一样不带全。
 fancy-regex = { version = "0.19.2", default-features = false, features = ["std", "perf", "variable-lookbehinds"] }

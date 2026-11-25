@@ -502,6 +502,52 @@ fn snapshot_terminal_tabs() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+#[test]
+fn bottom_terminal_header_tracks_the_panel_during_sidebar_animation() {
+    use crate::app::animation::{Clock, SIDEBAR_ANIMATION};
+    use crate::app::workspace::tree::SidebarMotion;
+
+    let dir = sample_folder("terminal-sidebar-animation");
+    let mut app = app_with(&dir.join("short.rs"), false);
+    app.config.terminal_right = Some(false);
+    app.config.terminal_vertical_tabs = Some(false);
+    app.window.controls = true;
+    app.set_sidebar(true);
+    show_terminal(&mut app, "$ ");
+    paint(&mut app);
+    let open_x = app.layout.terminal.x;
+
+    for visible in [false, true] {
+        app.set_sidebar(visible);
+        for step in 1..=4 {
+            app.panels.sidebar.motion = (step < 4).then(|| SidebarMotion {
+                from: if visible { 0.0 } else { 1.0 },
+                clock: Clock::stopped(SIDEBAR_ANIMATION, SIDEBAR_ANIMATION * step / 4),
+            });
+            paint(&mut app);
+            let panel = app.layout.terminal;
+            if !visible && step == 3 {
+                // 侧栏还在收起，终端面板的左边已移到侧栏开关右缘的左侧。
+                assert!(panel.x < app.layout.sidebar_button.right());
+            }
+            let tab = header_hit(&app, HeaderHit::Tab(0));
+            // 「终端 / 问题」面板标签在终端标签之前，终端标签紧接在面板标签之后。
+            let panel_tabs_end = header_hit(&app, HeaderHit::ProblemsView).right();
+            assert_eq!(
+                tab.x,
+                panel_tabs_end + crate::theme::TAB_GAP,
+                "{visible} {step}"
+            );
+            // 窗口按钮在另一行，隐藏面板按钮仍贴着面板右端。
+            let hide = header_hit(&app, HeaderHit::Hide);
+            assert!(hide.right() > app.layout.controls.x);
+        }
+    }
+    assert_eq!(app.layout.terminal.x, open_x);
+
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 /// 应用绘制标题栏、终端面板在右边时：面板的标签栏在顶栏那一行，右端的两个按钮排在窗口按钮
 /// 左边，不叠在一起。
 #[test]
@@ -696,6 +742,7 @@ fn the_terminal_menu_maximizes_and_the_options_apply() {
             (MenuCommand::TerminalDock, true),
             (MenuCommand::NewTerminal, true),
             (MenuCommand::SplitTerminal, true),
+            (MenuCommand::MoveTerminalRight, false),
             (MenuCommand::CloseTerminal, true),
         ]
     );

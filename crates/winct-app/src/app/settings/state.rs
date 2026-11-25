@@ -2,7 +2,7 @@
 
 use crate::app::*;
 use crate::keymap;
-use crate::layout::ToolLanguages;
+use crate::layout::Listed;
 
 use super::{FormatRow, shortcuts::KeyEdit};
 
@@ -33,10 +33,10 @@ pub struct SettingsState {
     pub hover: Option<SettingsPart>,
     /// 取值与默认不同的设置项：名称后面有「恢复默认」。打开设置和配置变化时重新算。
     pub changed: Vec<Setting>,
-    /// 格式化页列出的语言。
-    ///
-    /// 打开设置时确定，打开期间只会增加，不会减少，已列出的语言也不换位置。
-    pub languages: ToolLanguages,
+    /// 设置页中随状态列出的行：格式化工具的语言、Vim 冲突键、LSP 服务器和插件。
+    pub listed: Listed,
+    /// 搜索开始前选中的设置项，以及搜索时自动选中的第一条结果。
+    pub before_search: Option<(Setting, Setting)>,
     /// 格式化页每一行（格式化工具、修复工具）上显示的内容。
     pub tool_rows: Vec<(Setting, FormatRow)>,
     /// 正在后台查询 WSL 发行版中装了哪些工具，查完后重新计算各行。

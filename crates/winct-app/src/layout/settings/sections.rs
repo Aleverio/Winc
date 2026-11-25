@@ -7,10 +7,20 @@ use super::*;
 impl SettingsPage {
     /// 返回这一页的各组设置项，组内的项从上到下排列。
     ///
-    /// 格式化页中每种语言占一行，`languages` 是要列出的语言。
-    pub fn sections(self, languages: &ToolLanguages) -> Vec<Section> {
+    /// 格式化页中每种语言占一行，`listed` 是要列出的语言。
+    pub fn sections(self, listed: &Listed) -> Vec<Section> {
         let plain = |items: Vec<Setting>| Section { title: None, items };
         match self {
+            SettingsPage::General => vec![
+                Section {
+                    title: Some(t!("settings-group-language")),
+                    items: vec![Setting::Language],
+                },
+                Section {
+                    title: Some(t!("settings-group-settings-file")),
+                    items: vec![Setting::ExportSettings, Setting::ImportSettings],
+                },
+            ],
             SettingsPage::Appearance => {
                 // 系统标题栏只在其他平台列出：macOS 上标题栏总是和内容融为一体。平滑滚动只在
                 // macOS 上列出：其他平台上滚轮本来就一格一格立即滚动。
@@ -23,7 +33,7 @@ impl SettingsPage {
                     window.push(Setting::SystemTitleBar);
                 }
                 vec![
-                    plain(vec![Setting::Theme, Setting::Language]),
+                    plain(vec![Setting::Theme]),
                     plain(vec![Setting::Zoom]),
                     plain(vec![Setting::UiFont, Setting::UiSize, Setting::FontWeight]),
                     plain(window),
@@ -84,13 +94,24 @@ impl SettingsPage {
                     Setting::VimRelativeNumber,
                     Setting::VimYankHighlight,
                 ]),
+                plain(
+                    listed
+                        .vim_keys
+                        .iter()
+                        .copied()
+                        .map(Setting::VimKey)
+                        .collect(),
+                ),
                 plain(vec![
                     Setting::AutoSave,
                     Setting::AutoSaveTyping,
                     Setting::AutoSaveDelay,
                     Setting::HotExit,
                     Setting::ConfirmClose,
+                    Setting::QuitOnLastWindowClose,
                     Setting::RestoreFolder,
+                    Setting::DragAndDrop,
+                    Setting::FullTabNames,
                     Setting::DropFolder,
                     Setting::PreviewOnClick,
                     Setting::FindInFiles,
@@ -123,7 +144,12 @@ impl SettingsPage {
             SettingsPage::Git => vec![
                 plain(vec![Setting::GitPath, Setting::GitOpenWorktree]),
                 plain(vec![Setting::GitStagingArea, Setting::GitTree]),
-                plain(vec![Setting::DiffInline, Setting::GitInlineBlame]),
+                plain(vec![
+                    Setting::GitCombinedDiff,
+                    Setting::DiffInline,
+                    Setting::DiffCollapse,
+                    Setting::GitInlineBlame,
+                ]),
                 plain(vec![
                     Setting::GitPullMode,
                     Setting::GitConfirmPush,
@@ -138,7 +164,7 @@ impl SettingsPage {
                 },
                 Section {
                     title: Some(t!("settings-lsp-servers")),
-                    items: languages
+                    items: listed
                         .lsp
                         .iter()
                         .flat_map(|&id| {
@@ -157,7 +183,7 @@ impl SettingsPage {
             ],
             SettingsPage::Plugins => {
                 let mut sections = vec![plain(vec![Setting::PluginPaths, Setting::ReloadPlugins])];
-                for plugin in &languages.plugins {
+                for plugin in &listed.plugins {
                     let mut items = vec![Setting::PluginEnabled(plugin.name)];
                     for &(command, title) in &plugin.commands {
                         items.push(Setting::PluginCommand(command, title));
@@ -193,7 +219,7 @@ impl SettingsPage {
                     ]),
                     Section {
                         title: Some(t!("settings-section-format-tools")),
-                        items: languages
+                        items: listed
                             .format
                             .iter()
                             .map(|&id| Setting::FormatCommand(id))
@@ -204,7 +230,7 @@ impl SettingsPage {
                 // 没有列出的语言时只有「添加语言…」，直接跟在组标题下面。
                 sections.push(Section {
                     title: Some(t!("settings-section-fix-tools")),
-                    items: languages
+                    items: listed
                         .fix
                         .iter()
                         .map(|&id| Setting::FixCommand(id))

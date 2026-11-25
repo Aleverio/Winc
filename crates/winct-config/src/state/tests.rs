@@ -107,6 +107,16 @@ fn sample() -> State {
                     height: 320.0,
                     width: 0.0,
                     maximized: true,
+                    groups: vec![
+                        TerminalGroup {
+                            tabs: 1,
+                            share: 1.0,
+                        },
+                        TerminalGroup {
+                            tabs: 1,
+                            share: 0.5,
+                        },
+                    ],
                 }),
                 run: Some("后端".into()),
                 folders: vec![PathBuf::from("/tmp/extra"), PathBuf::from("/tmp/另一个")],
@@ -169,6 +179,7 @@ fn sample() -> State {
         log_branches: Some(false),
         log_files_tree: Some(false),
         diff_files_tree: Some(true),
+        search_tree: true,
         log_columns: Some(vec!["date".into(), "hash".into()]),
         commit_messages: vec!["修复登录\n\n说明".into(), "first".into()],
         commit_check_todo: true,
@@ -180,6 +191,7 @@ fn sample() -> State {
         vim_marks: vec![('A', PathBuf::from("/a/项目/x.rs"), 12, 3)],
         vim_commands: vec!["%s/a/b/g".into(), "w".into()],
         vim_searches: vec!["\\<词\\>".into()],
+        vim_keys_noticed: true,
         stay_outside_applications: true,
         panel_width: Some(360.0),
         preview_modes: [

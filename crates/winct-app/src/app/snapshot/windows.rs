@@ -44,6 +44,25 @@ fn closing_one_of_two_windows_drops_it_and_the_last_one_stays_hidden() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// 开了「关闭窗口后退出」：macOS 上关闭最后一个窗口也退出应用，与其他系统相同；还有
+/// 别的窗口时仍只关闭当前窗口。
+#[test]
+fn the_last_window_quits_when_set_to() {
+    let (mut winct, a, b, dir) = two_windows("windows-close-quits");
+    for key in [a, b] {
+        winct.app(key).config.quit_on_last_window_close = Some(true);
+    }
+    winct.app(b).request_close_window();
+    assert!(winct.app(b).window.hidden && !winct.app(b).closing.quit_requested);
+    winct.settle_for_test();
+
+    winct.app(a).request_close_window();
+    assert!(winct.app(a).closing.quit_requested);
+    let (_, exit) = winct.settle_for_test();
+    assert!(exit, "最后一个窗口退出后结束事件循环");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn closing_a_window_without_a_folder_asks_about_unsaved_files() {
     let (mut winct, a, b, dir) = two_windows("windows-close-untitled");
@@ -238,6 +257,45 @@ fn dropped_on_the_dock_icon_open_in_the_window_that_has_them_or_the_current_one(
     let _ = std::fs::remove_dir_all(&other);
 }
 
+/// 本机的文件不交给远端主机的窗口：交给最近成为当前窗口的本机窗口，没有本机窗口时新建窗口。
+#[cfg(unix)]
+#[test]
+fn local_files_skip_windows_on_a_remote_host() {
+    let (mut winct, a, b, dir) = two_windows("windows-local-files");
+    let mut remote = blank_app(false);
+    let _abort = remote.begin_connection_for_test();
+    let c = winct.add_detached(remote);
+    winct.settle_for_test();
+    let target = |path: &Path| crate::cli::Target {
+        path: path.to_path_buf(),
+        line: None,
+        col: None,
+    };
+    let file = winct_config::files::canonicalize(&dir)
+        .unwrap()
+        .join("a.txt");
+
+    for local in [b, a] {
+        winct.set_active(local);
+        winct.set_active(c);
+        assert_eq!(winct.window_for_test(&[target(&file)]), Ok(local));
+    }
+    // 开着文件所在目录的窗口仍然优先。
+    winct.set_active(b);
+    let src = winct_config::files::canonicalize(dir.join("src")).unwrap();
+    assert_eq!(
+        winct.window_for_test(&[target(&src.join("main.rs"))]),
+        Ok(a)
+    );
+
+    let mut only_remote = Winct::new(None, None);
+    let mut remote = blank_app(false);
+    let _abort = remote.begin_connection_for_test();
+    only_remote.add_detached(remote);
+    assert_eq!(only_remote.window_for_test(&[target(&file)]), Err(None));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn settings_changed_in_one_window_reach_the_others() {
     let (mut winct, a, b, dir) = two_windows("windows-config");
@@ -276,6 +334,25 @@ fn settings_written_back_keep_what_was_edited_in_the_file_meanwhile() {
         assert_eq!(winct.app(key).config, config);
         assert_eq!(winct.app(key).fonts.code, 16.0);
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn settings_imported_in_one_window_reach_the_others() {
+    let (mut winct, a, b, dir) = two_windows("windows-config-import");
+    let path = dir.join("config.json");
+    for key in [a, b] {
+        winct.app(key).store.config_path = Some(path.clone());
+    }
+    let from = dir.join("settings.json");
+    std::fs::write(&from, r#"{"editor": {"size": 17}}"#).unwrap();
+    let pick = crate::app::workspace::files::Pick::ImportSettings;
+    winct.app(a).on_picked(pick, Some(from));
+    winct.settle_for_test();
+    assert_eq!(winct.app(b).config.editor_size, Some(17.0));
+    assert_eq!(winct.app(b).fonts.code, 17.0);
+    let config = winct.app(a).config.clone();
+    assert_eq!(winct.app(b).store.saved_config, config);
     let _ = std::fs::remove_dir_all(&dir);
 }
 

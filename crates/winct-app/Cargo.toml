@@ -94,6 +94,7 @@ windows-sys = { workspace = true, features = [
     "Win32_System_Registry",
     "Win32_System_SystemInformation",
     "Win32_System_Threading",
+    "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Input_Pointer",
     "Win32_UI_HiDpi",
     "Win32_UI_Shell",
@@ -111,6 +112,7 @@ roxmltree.workspace = true
 
 [dev-dependencies]
 winct-backend = { workspace = true, features = ["test-support"] }
+winct-search.workspace = true
 
 [lints]
 workspace = true

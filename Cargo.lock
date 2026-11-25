@@ -4146,6 +4146,7 @@ dependencies = [
  "winct-preview",
  "winct-pty",
  "winct-render",
+ "winct-search",
  "winct-syntax",
  "winct-typeset",
  "winct-version",
@@ -4197,13 +4198,13 @@ dependencies = [
  "notify",
  "png",
  "regex",
- "regex-syntax",
  "ropey",
  "winct-backend",
  "winct-config",
  "winct-core",
  "winct-i18n",
  "winct-preview",
+ "winct-search",
  "winct-syntax",
 ]
 
@@ -4293,10 +4294,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "winct-search"
+version = "0.0.0"
+dependencies = [
+ "chardetng",
+ "encoding_rs",
+ "fancy-regex",
+ "ignore",
+ "memchr",
+ "regex",
+ "winct-backend",
+ "winct-core",
+]
+
+[[package]]
 name = "winct-server"
 version = "0.0.0"
 dependencies = [
  "winct-backend",
+ "winct-search",
  "winct-watch",
 ]
 

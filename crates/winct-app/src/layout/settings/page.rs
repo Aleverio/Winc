@@ -2,7 +2,7 @@
 
 use winct_i18n::t;
 
-use super::{Setting, ToolLanguages};
+use super::{Listed, Setting};
 
 /// 设置的一个分类，对应左侧分类栏中的一项和右侧的一页。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -46,7 +46,8 @@ pub struct Modules {
 
 impl SettingsPage {
     /// 全部分类，顺序与分类栏从上到下的顺序一致。
-    pub const ALL: [SettingsPage; 10] = [
+    pub const ALL: [SettingsPage; 11] = [
+        SettingsPage::General,
         SettingsPage::Appearance,
         SettingsPage::Editor,
         SettingsPage::Format,
@@ -81,9 +82,9 @@ impl SettingsPage {
             SettingsPage::Modules => t!("settings-page-modules"),
             SettingsPage::Keys => t!("settings-page-keys"),
             SettingsPage::About => t!("settings-page-about"),
-            SettingsPage::General => t!("settings-page-appearance"),
-            SettingsPage::Files => t!("settings-page-editor"),
-            SettingsPage::Markdown => t!("settings-page-editor"),
+            SettingsPage::General => t!("settings-page-general"),
+            SettingsPage::Files => t!("settings-page-files"),
+            SettingsPage::Markdown => t!("settings-page-markdown"),
         }
     }
 
@@ -91,7 +92,7 @@ impl SettingsPage {
     pub fn first(self) -> Setting {
         match self {
             SettingsPage::Keys => Setting::KeySearch,
-            page => page.sections(&ToolLanguages::default())[0].items[0],
+            page => page.sections(&Listed::default())[0].items[0],
         }
     }
 }

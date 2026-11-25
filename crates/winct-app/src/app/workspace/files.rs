@@ -9,6 +9,7 @@ use winct_config::AutoSave;
 use winct_i18n::t;
 
 use super::*;
+use crate::app::settings::{EXPORTED_SETTINGS, SETTINGS_EXTENSIONS};
 use crate::system;
 
 /// 「停止输入后」自动保存时，最后一次修改之后等待的时间。
@@ -50,6 +51,10 @@ pub enum Pick {
     SaveProject,
     /// 「打开项目…」：只能选项目文件（见 [`winct_config::PROJECT_EXTENSIONS`]）。
     OpenProject,
+    /// 「导出设置…」：选导出文件的保存位置。
+    ExportSettings,
+    /// 「导入设置…」：只能选 JSON 文件。
+    ImportSettings,
 }
 
 /// 无法打开的文件在编辑区中给出的操作。
@@ -438,7 +443,8 @@ impl App {
 
     /// 当前标签的编辑区是否显示文本（不是图片、无法打开的文件或 SVG、Markdown 的预览）。
     pub(in crate::app) fn active_shows_text(&self) -> bool {
-        self.editor.active().is_some_and(|d| d.shows_text())
+        // 「未提交的更改」下面是一个空文档，显示的是各段的差异，不是它的文字。
+        self.editor.active().is_some_and(|d| d.shows_text()) && !self.combined_active()
     }
 
     /// 执行无法打开的文件在编辑区中的按钮操作 `action`。
@@ -598,15 +604,15 @@ impl App {
         self.request_redraw();
     }
 
-    /// 返回选中的标签，按标签顺序排列：多选时是 `TabBar::marked` 中仍然打开的标签，否则只含当前
-    /// 标签；没有标签时为空。
+    /// 返回选中的标签，按标签顺序排列：多选时是 `TabBar::marked` 中仍是前台窗格标签的，否则只含
+    /// 当前标签；没有标签时为空。
     pub(crate) fn tab_selection(&self) -> Vec<DocumentId> {
         let active = self.editor.active().map(|d| d.id);
         let marked = &self.tabs.marked;
         if marked.len() > 1 && active.is_some_and(|a| marked.contains(&a)) {
             return self
                 .editor
-                .documents
+                .tabs()
                 .iter()
                 .map(|d| d.id)
                 .filter(|id| marked.contains(id))
@@ -625,7 +631,7 @@ impl App {
     ///
     /// 只剩一个时不移出。
     pub(in crate::app) fn toggle_tab_selected(&mut self, index: usize) {
-        let Some(id) = self.editor.documents.get(index).map(|d| d.id) else {
+        let Some(id) = self.editor.tabs().get(index).map(|d| d.id) else {
             return;
         };
         let mut marked = self.tab_selection();
@@ -654,7 +660,7 @@ impl App {
     /// 选中从扩展选区的起点（没有时是当前标签）到第 `index` 个之间的标签（`⇧` 单击），切到第
     /// `index` 个。
     pub(in crate::app) fn select_tab_range(&mut self, index: usize) {
-        let docs = &self.editor.documents;
+        let docs = self.editor.tabs();
         if index >= docs.len() {
             return;
         }
@@ -662,6 +668,7 @@ impl App {
             .tabs
             .anchor
             .and_then(|a| self.editor.index_of(a))
+            .filter(|&i| i < docs.len())
             .or(self.editor.active)
             .unwrap_or(index);
         self.tabs.anchor = Some(docs[from].id);
@@ -679,7 +686,7 @@ impl App {
             return "untitled.txt".to_owned();
         };
         let name = doc.name();
-        if doc.path.is_some() || doc.title.is_some() {
+        if doc.path.is_some() {
             return name.into_owned();
         }
         let language = doc.highlighter.language();
@@ -745,16 +752,26 @@ impl App {
         }
     }
 
+    /// 切到当前窗格的第 `index` 个标签页（从 0 起）；没有这个标签页时不做处理。
+    pub(in crate::app) fn focus_tab_number(&mut self, index: usize) {
+        if index < self.editor.tab_count() {
+            self.activate_tab(index);
+        }
+    }
+
     /// 保存当前文档（`⌘S`）。
     ///
-    /// 未命名的文档弹出「另存为」面板；开启了「保存时格式化」时先格式化再保存。
+    /// 未命名的文档和仍在读取的标准输入标签弹出「另存为」面板；开启了「保存时格式化」时先格式化
+    /// 再保存。
     pub(in crate::app) fn save_active(&mut self) {
         let Some(doc) = self.editor.active() else {
             return;
         };
         let id = doc.id;
 
-        if doc.title.is_some() {
+        if self.reading_stdin(id) {
+            self.pick(Pick::SaveAs(id));
+        } else if doc.title.is_some() {
             // 格式化工具的输出标签只用于查看，不可保存。
             if let Some(reason) = doc.unwritable_reason() {
                 self.flash(reason);
@@ -1145,6 +1162,7 @@ impl App {
             }
             Pick::KeyFile => (String::new(), crate::app::remote::key_dir()),
             Pick::SaveProject => self.project_save_place(),
+            Pick::ExportSettings => (EXPORTED_SETTINGS.to_owned(), None),
             Pick::Open
             | Pick::OpenFolder
             | Pick::WslFolder(_)
@@ -1152,6 +1170,7 @@ impl App {
             | Pick::AddFolder
             | Pick::BackgroundImage
             | Pick::OpenProject
+            | Pick::ImportSettings
             | Pick::Download(_) => (String::new(), None),
         };
 
@@ -1173,6 +1192,11 @@ impl App {
                     dir: None,
                     types: winct_config::PROJECT_EXTENSIONS,
                 },
+                Pick::ImportSettings => Panel::Open {
+                    files: true,
+                    dir: None,
+                    types: SETTINGS_EXTENSIONS,
+                },
                 Pick::OpenFolder
                 | Pick::WslFolder(_)
                 | Pick::WorktreeFolder
@@ -1182,7 +1206,7 @@ impl App {
                     dir: None,
                     types: &[],
                 },
-                Pick::SaveAs(_) | Pick::SaveProject => Panel::Save {
+                Pick::SaveAs(_) | Pick::SaveProject | Pick::ExportSettings => Panel::Save {
                     name: &name,
                     dir: dir.as_deref(),
                 },
@@ -1222,6 +1246,14 @@ impl App {
                     };
                     (choose, t!("cmd-open-project"))
                 }
+                Pick::ImportSettings => {
+                    let choose = Choose::Open {
+                        directory: false,
+                        dir: None,
+                        types: Some((t!("settings-files"), SETTINGS_EXTENSIONS)),
+                    };
+                    (choose, t!("cmd-import-settings"))
+                }
                 Pick::KeyFile => {
                     let choose = Choose::Open {
                         directory: false,
@@ -1260,6 +1292,13 @@ impl App {
                     },
                     t!("cmd-save-project-as"),
                 ),
+                Pick::ExportSettings => (
+                    Choose::Save {
+                        name: &name,
+                        dir: dir.as_deref(),
+                    },
+                    t!("cmd-export-settings"),
+                ),
             };
             // 面板的标题不带省略号。
             let title = title.trim_end_matches('…');
@@ -1284,19 +1323,22 @@ impl App {
                 Pick::WslFolder(_) => t!("cmd-open-wsl-folder"),
                 Pick::SaveAs(_) => t!("cmd-save-as"),
                 Pick::SaveProject => t!("cmd-save-project-as"),
+                Pick::ExportSettings => t!("cmd-export-settings"),
+                Pick::ImportSettings => t!("cmd-import-settings"),
                 Pick::Download(_) => t!("menu-download"),
             };
-            // 对话框的标题不带省略号；挂在窗口上，打开期间窗口不响应。
+            // 对话框的标题不带省略号；打开期间窗口不响应（`DialogOwner`）。
             let mut dialog = rfd::FileDialog::new().set_title(title.trim_end_matches('…'));
-            if let Some(window) = &self.window.handle {
-                dialog = dialog.set_parent(&**window);
-            }
+            let main = (self.window.handle.as_deref()).and_then(crate::windows::MainWindow::of);
             if let Some(dir) = &dir {
                 dialog = dialog.set_directory(dir);
             }
             if matches!(kind, Pick::OpenProject) {
                 let name = t!("workspace-project-files");
                 dialog = dialog.add_filter(name, winct_config::PROJECT_EXTENSIONS);
+            }
+            if matches!(kind, Pick::ImportSettings) {
+                dialog = dialog.add_filter(t!("settings-files"), SETTINGS_EXTENSIONS);
             }
             // 对话框有自己的消息循环，在后台线程上等待关闭，事件循环正常运行。
             std::thread::spawn(move || {
@@ -1307,17 +1349,26 @@ impl App {
                     let home = winct_editor::wsl::home_dir(&root);
                     dialog = dialog.set_directory(home.unwrap_or(root));
                 }
+                let owner = main.and_then(crate::windows::DialogOwner::new);
+                if let Some(owner) = &owner {
+                    dialog = dialog.set_parent(owner);
+                }
                 let path = match &kind {
-                    Pick::Open | Pick::BackgroundImage | Pick::KeyFile | Pick::OpenProject => {
-                        dialog.pick_file()
-                    }
+                    Pick::Open
+                    | Pick::BackgroundImage
+                    | Pick::KeyFile
+                    | Pick::OpenProject
+                    | Pick::ImportSettings => dialog.pick_file(),
                     Pick::OpenFolder
                     | Pick::WslFolder(_)
                     | Pick::WorktreeFolder
                     | Pick::AddFolder
                     | Pick::Download(_) => dialog.pick_folder(),
-                    Pick::SaveAs(_) | Pick::SaveProject => dialog.set_file_name(&name).save_file(),
+                    Pick::SaveAs(_) | Pick::SaveProject | Pick::ExportSettings => {
+                        dialog.set_file_name(&name).save_file()
+                    }
                 };
+                drop(owner);
                 let _ = proxy.send_event(UserEvent::Picked(kind, path));
             });
         }
@@ -1357,7 +1408,9 @@ impl App {
             | Pick::KeyFile
             | Pick::Download(_)
             | Pick::SaveProject
-            | Pick::OpenProject => None,
+            | Pick::OpenProject
+            | Pick::ExportSettings
+            | Pick::ImportSettings => None,
         };
 
         let Some(path) = path else { return };
@@ -1372,8 +1425,10 @@ impl App {
             Pick::Download(paths) => self.download(paths, path),
             Pick::SaveProject => self.save_project_as(path),
             Pick::OpenProject => self.open_from_outside(&path),
+            Pick::ExportSettings => self.export_settings(&path),
+            Pick::ImportSettings => self.import_settings(&path),
             Pick::SaveAs(id) => {
-                if self.save_document(id, Some(path))
+                if self.save_picked(id, path)
                     && let Some(prompt) = continuation
                 {
                     self.save_then_close(prompt);

@@ -139,6 +139,11 @@ impl App {
             if self.disk.loads.since.is_some_and(|(s, _)| s == id) {
                 self.disk.loads.since = None;
             }
+            // 已不存在的文件不再留在最近打开的文件中：快速打开里点开的可能是别处删掉的文件。
+            if let Some(path) = loaded.missing() {
+                let path = path.to_path_buf();
+                self.forget_recent(&[path]);
+            }
             let Some(index) = self.editor.finish_load(loaded) else {
                 continue;
             };
@@ -148,6 +153,7 @@ impl App {
             if let Some(path) = self.editor.documents[index].path.clone() {
                 self.sync_documents(|p| p == path);
             }
+            self.diff_source_loaded(index);
             // 不是当前标签时记录的动作保留，再次切到该标签时由 `run_when_loaded` 执行。
             if self.editor.active == Some(index) {
                 self.loaded_active();

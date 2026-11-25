@@ -29,6 +29,8 @@ pub enum Action {
     GoBack,
     GoForward,
     Settings,
+    ExportSettings,
+    ImportSettings,
     ReleaseNotes,
     KeyboardShortcuts,
     RecordKeys,
@@ -54,6 +56,19 @@ pub enum Action {
     ReopenClosed,
     NextTab,
     PreviousTab,
+    FocusTab1,
+    FocusTab2,
+    FocusTab3,
+    FocusTab4,
+    FocusTab5,
+    FocusTab6,
+    FocusTab7,
+    FocusTab8,
+    FocusTab9,
+    /// 按最近使用的顺序切换标签页（见 `App::switch_tab`）。
+    SwitchTab,
+    /// 按最近使用的顺序反向切换标签页。
+    SwitchTabBack,
     SplitRight,
     SplitDown,
     MoveToSplitRight,
@@ -278,6 +293,10 @@ pub enum Action {
     /// 切换差异的单栏显示和并排显示。
     ToggleDiffLayout,
     GitShowChanges,
+    /// 打开「未提交的更改」标签：所有未提交的更改按文件依次排在一个标签里。
+    GitShowAllChanges,
+    /// 点击提交视图中的文件时是否在「未提交的更改」标签中查看（`git.combinedDiff`）。
+    GitToggleCombinedDiff,
     /// 更改列表：显示选中文件的差异，焦点移到差异上。
     ChangesShowDiff,
     /// 更改列表：在编辑区打开选中的文件。
@@ -346,6 +365,8 @@ pub enum Action {
     StopConfiguration,
     /// 打开运行配置文件。
     EditRunConfigurations,
+    /// 发送 `.http` 文件中光标所在的请求（见 `App::send_http_request`）。
+    SendHttpRequest,
     ClearTerminal,
     /// 复制终端的选区。
     TerminalCopy,
@@ -356,6 +377,8 @@ pub enum Action {
     NextTerminal,
     PreviousTerminal,
     SplitTerminal,
+    /// 终端：把正在看的标签移到正在用的一栏后面新加的一栏（见 `App::move_terminal_to_new_group`）。
+    MoveTerminalToGroup,
     NextTerminalPane,
     PreviousTerminalPane,
     FocusTerminal1,
@@ -413,6 +436,24 @@ impl Action {
         Self::FocusTerminal9,
     ];
 
+    /// 按顺序切到编辑区第 1 至第 9 个标签页的命令，供数字键绑定和编号查询共用。
+    pub const TAB_FOCUS: [Self; 9] = [
+        Self::FocusTab1,
+        Self::FocusTab2,
+        Self::FocusTab3,
+        Self::FocusTab4,
+        Self::FocusTab5,
+        Self::FocusTab6,
+        Self::FocusTab7,
+        Self::FocusTab8,
+        Self::FocusTab9,
+    ];
+
+    /// 返回切换标签页命令的标签下标（从 0 起），其他命令返回 `None`。
+    pub fn tab_index(self) -> Option<usize> {
+        Self::TAB_FOCUS.iter().position(|action| *action == self)
+    }
+
     /// 返回终端聚焦命令的标签下标（从 0 起），其他命令返回 `None`。
     pub fn terminal_index(self) -> Option<usize> {
         Self::TERMINAL_FOCUS
@@ -453,6 +494,8 @@ impl Action {
             | GoBack
             | GoForward
             | Settings
+            | ExportSettings
+            | ImportSettings
             | ReleaseNotes
             | KeyboardShortcuts
             | RecordKeys
@@ -461,8 +504,10 @@ impl Action {
             | OpenLink => Group::General,
             NewFile | OpenFile | OpenFolder | OpenProject | AddFolder | SaveProjectAs
             | RemoteConnect | RemoteDisconnect | Save | SaveAs | CloseTab | CloseOtherTabs
-            | CloseAllTabs | ReopenClosed | NextTab | PreviousTab | CloseFolder | CloseWindow
-            | CopyPath | CopyRelativePath | RevealInFinder | CopyActivePath | CopyKeyPath
+            | CloseAllTabs | ReopenClosed | NextTab | PreviousTab | FocusTab1 | FocusTab2
+            | FocusTab3 | FocusTab4 | FocusTab5 | FocusTab6 | FocusTab7 | FocusTab8 | FocusTab9
+            | SwitchTab | SwitchTabBack | CloseFolder | CloseWindow | CopyPath
+            | CopyRelativePath | RevealInFinder | CopyActivePath | CopyKeyPath
             | RevealActiveFile | OpenInTerminal | Quit => Group::File,
             NewWindow | OpenRecent | CopyReference | CopyAbsoluteReference => Group::File,
             Undo
@@ -611,6 +656,8 @@ impl Action {
             | PreviousDiffFile
             | ToggleDiffLayout
             | GitShowChanges
+            | GitShowAllChanges
+            | GitToggleCombinedDiff
             | ChangesShowDiff
             | ChangesOpenSource
             | ChangesRollback
@@ -650,6 +697,7 @@ impl Action {
             | RunConfiguration
             | StopConfiguration
             | EditRunConfigurations
+            | SendHttpRequest
             | ClearTerminal
             | TerminalCopy
             | TerminalPaste
@@ -658,6 +706,7 @@ impl Action {
             | NextTerminal
             | PreviousTerminal
             | SplitTerminal
+            | MoveTerminalToGroup
             | NextTerminalPane
             | PreviousTerminalPane
             | FocusTerminal1
@@ -808,15 +857,19 @@ impl Action {
     /// 焦点在终端里时，带 ⌘ 的全局快捷键是否还作用于这个命令。
     ///
     /// 编辑和查找的命令针对编辑区里的文档，在终端里按下不能改到看不见的文档，交给终端
-    /// （粘贴由终端自己处理；复制、全选在终端里另有绑定）。
+    /// （粘贴由终端自己处理；复制、全选在终端里另有绑定）。按最近使用切换标签页的两个方向都
+    /// 交给终端：其默认键单按 `Ctrl`，正向本来就交给终端程序。
     pub fn reaches_terminal(self) -> bool {
-        self == Action::Paste || !matches!(self.group(), Group::Edit | Group::Find)
+        let switch = matches!(self, Action::SwitchTab | Action::SwitchTabBack);
+        self == Action::Paste || !switch && !matches!(self.group(), Group::Edit | Group::Find)
     }
 
     /// 命令属于哪个可选模块；不属于任何模块的命令总是可用。
     pub fn module(self) -> Option<Module> {
         match self {
             Action::GitShowChanges
+            | Action::GitShowAllChanges
+            | Action::GitToggleCombinedDiff
             | Action::ChangesShowDiff
             | Action::ChangesOpenSource
             | Action::ChangesRollback
@@ -862,6 +915,7 @@ impl Action {
             | Action::NextTerminal
             | Action::PreviousTerminal
             | Action::SplitTerminal
+            | Action::MoveTerminalToGroup
             | Action::NextTerminalPane
             | Action::PreviousTerminalPane
             | Action::FocusTerminal1

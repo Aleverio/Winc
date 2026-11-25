@@ -211,7 +211,7 @@ impl Emulator {
             };
         }
 
-        // 备用屏不重排：程序收到 SIGWINCH 后自行重画。
+        // 备用屏不重排：程序收到 SIGWINCTH 后自行重画。
         let alternate = &mut self.alternate;
         for row in &mut alternate.rows {
             row.resize(cols);
@@ -276,7 +276,7 @@ impl Emulator {
     /// 改宽度前擦掉从提示符第一行往下的内容，光标所在行和总行数不变。
     ///
     /// 仅在 shell 停在会自行重画的提示符上时执行（[`Blocks::redraws_prompt`]）。不擦除时重排会把
-    /// 用点填满的提示符第一行折成两行，shell 收到 SIGWINCH 后无法退回顶部，旧提示符留在屏幕上。
+    /// 用点填满的提示符第一行折成两行，shell 收到 SIGWINCTH 后无法退回顶部，旧提示符留在屏幕上。
     fn clear_prompt(&mut self, cols: usize) {
         if self.alt || !self.blocks.at_prompt || !self.blocks.redraws_prompt {
             return;

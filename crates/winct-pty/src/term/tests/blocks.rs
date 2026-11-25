@@ -431,7 +431,7 @@ fn the_clear_command_leaves_nothing_behind_in_either_order() {
 
 #[test]
 fn repainting_the_prompt_keeps_nothing() {
-    // zsh 收到 SIGWINCH 或 `zle reset-prompt` 时的重画序列。
+    // zsh 收到 SIGWINCTH 或 `zle reset-prompt` 时的重画序列。
     let mut t = at_prompt_on_first_row();
     feed(&mut t, "\r\r\x1b[0m\x1b[27m\x1b[24m\x1b[JP> ");
     feed(&mut t, "\r\r\x1b[0m\x1b[27m\x1b[24m\x1b[JQ> ");
@@ -530,7 +530,7 @@ fn the_local_prompt_repaints_again_after_a_command_finishes() {
     );
     feed(&mut t, "\x1b]133;D;0\x07\x1b]133;A;redraw=1\x07P> ");
     t.resize(size(10, 4));
-    // 提示符被擦除，等待 shell 收到 SIGWINCH 后重画。
+    // 提示符被擦除，等待 shell 收到 SIGWINCTH 后重画。
     assert!(!t.screen_text().contains("P>"), "{}", t.screen_text());
 }
 

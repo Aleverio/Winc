@@ -42,6 +42,7 @@ const LAYERS: &[(&str, &[&str])] = &[
             "winct-preview",
             "winct-pty",
             "winct-render",
+            "winct-search",
             "winct-syntax",
             "winct-typeset",
             "winct-version",
@@ -56,6 +57,7 @@ const LAYERS: &[(&str, &[&str])] = &[
             "winct-core",
             "winct-i18n",
             "winct-preview",
+            "winct-search",
             "winct-syntax",
         ],
     ),
@@ -79,9 +81,13 @@ const LAYERS: &[(&str, &[&str])] = &[
     ("winct-syntax", &["winct-core"]),
     ("winct-vim", &["winct-core"]),
     ("winct-pty", &["winct-emoji", "winct-version"]),
+    ("winct-search", &["winct-backend", "winct-core"]),
     ("winct-core", &["winct-emoji"]),
     ("winct-render", &["winct-emoji"]),
-    ("winct-server", &["winct-backend", "winct-watch"]),
+    (
+        "winct-server",
+        &["winct-backend", "winct-search", "winct-watch"],
+    ),
     // 仅测试依赖。
     ("winct-watch", &["winct-config"]),
     (

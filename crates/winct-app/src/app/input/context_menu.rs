@@ -247,6 +247,8 @@ pub enum MenuCommand {
     /// 设置中「Vim 剪贴板」菜单的一项，参数为
     /// [`VimClipboard::ALL`](winct_config::VimClipboard::ALL) 中的序号（从 0 起）。
     VimClipboard(usize),
+    /// 设置中「快捷键冲突」一行的菜单项：交给 Vim（`true`）或编辑器。
+    VimKeyOwner(bool),
     /// 设置中「打开工作树」菜单的一项，参数为
     /// [`WorktreeOpen::ALL`](winct_config::WorktreeOpen::ALL) 中的序号（从 0 起）。
     OpenWorktree(usize),
@@ -524,6 +526,10 @@ pub enum MenuCommand {
     NewTerminal,
     /// 终端：拆分标签，新终端在当前终端的目录里启动。
     SplitTerminal,
+    /// 终端：向右分栏（面板在下方时）。
+    MoveTerminalRight,
+    /// 终端：向下分栏（面板在右侧时）。
+    MoveTerminalDown,
     /// 终端标签：改名字。
     RenameTerminal,
     CloseTerminal,
@@ -728,6 +734,8 @@ impl MenuCommand {
             MenuCommand::TerminalMaximize => t!("menu-terminal-maximize"),
             MenuCommand::NewTerminal => t!("cmd-new-terminal"),
             MenuCommand::SplitTerminal => t!("cmd-split-terminal"),
+            MenuCommand::MoveTerminalRight => t!("menu-terminal-move-right"),
+            MenuCommand::MoveTerminalDown => t!("menu-terminal-move-down"),
             MenuCommand::RenameTerminal => t!("cmd-rename-file"),
             MenuCommand::CloseTerminal => t!("menu-terminal-close"),
             MenuCommand::CloseOtherTerminals => t!("cmd-close-other-tabs"),
@@ -773,6 +781,7 @@ impl MenuCommand {
             MenuCommand::VimClipboard(i) => winct_config::VimClipboard::ALL
                 .get(i)
                 .map_or("", |&choice| crate::layout::vim_clipboard_label(choice)),
+            MenuCommand::VimKeyOwner(vim) => crate::layout::vim_key_owner_label(vim),
             MenuCommand::OpenWorktree(i) => winct_config::WorktreeOpen::ALL
                 .get(i)
                 .map_or("", |&choice| crate::layout::open_worktree_label(choice)),
@@ -903,6 +912,7 @@ impl MenuCommand {
             MenuCommand::Cut => Action::Cut,
             MenuCommand::Copy => Action::Copy,
             MenuCommand::Paste => Action::Paste,
+            MenuCommand::PastePlain => Action::MarkdownPastePlain,
             MenuCommand::SelectAll => Action::SelectAll,
             MenuCommand::TerminalFind => Action::FindInTerminal,
             MenuCommand::TerminalClear => Action::ClearTerminal,
@@ -910,6 +920,9 @@ impl MenuCommand {
             MenuCommand::TerminalDock => Action::ToggleTerminalPosition,
             MenuCommand::NewTerminal => Action::NewTerminal,
             MenuCommand::SplitTerminal => Action::SplitTerminal,
+            MenuCommand::MoveTerminalRight | MenuCommand::MoveTerminalDown => {
+                Action::MoveTerminalToGroup
+            }
             MenuCommand::RenameTerminal => Action::RenameTerminal,
             MenuCommand::CloseTerminal => Action::CloseTerminal,
             MenuCommand::GitRevertHunk => Action::GitRevertChange,
@@ -988,6 +1001,8 @@ pub enum MenuTarget {
     Whitespace,
     /// 设置的编辑器页中的「Vim 剪贴板」。
     VimClipboard,
+    /// 设置的编辑器页中「快捷键冲突」的一行：`Ctrl` 与这个字符的组合。
+    VimKey(char),
     /// 设置的 Git 页中的「打开工作树」。
     OpenWorktree,
     /// 设置的 Git 页中的「拉取方式」。

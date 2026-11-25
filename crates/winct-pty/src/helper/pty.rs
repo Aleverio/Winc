@@ -261,7 +261,7 @@ impl Pty {
         }
     }
 
-    /// 改尺寸，内核给前台进程组发 SIGWINCH。
+    /// 改尺寸，内核给前台进程组发 SIGWINCTH。
     pub fn resize(&self, size: Size) {
         let size = winsize(size);
         // SAFETY: TIOCSWINSZ 读一个 winsize，指向本地变量。

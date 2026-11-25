@@ -26,7 +26,7 @@ impl App {
     /// 的名称和命令面板的标题共用。
     pub(in crate::app) fn refresh_plugins(&mut self) {
         self.plugins = PluginRegistry::default();
-        self.settings.languages.plugins.clear();
+        self.settings.listed.plugins.clear();
         if self.config.plugin_paths.is_empty() {
             return;
         }
@@ -47,7 +47,7 @@ impl App {
                 .iter()
                 .map(|setting| (intern(&setting.key), intern(&setting.title), setting.kind))
                 .collect();
-            self.settings.languages.plugins.push(PluginRow {
+            self.settings.listed.plugins.push(PluginRow {
                 id: intern(&plugin.id),
                 name: intern(&plugin.name),
                 commands,
@@ -56,7 +56,7 @@ impl App {
             if let Some(wasm) = &plugin.wasm {
                 let row = self
                     .settings
-                    .languages
+                    .listed
                     .plugins
                     .last_mut()
                     .expect("row was pushed");
@@ -104,7 +104,7 @@ impl App {
                 )
             })
             .collect();
-        for row in &mut self.settings.languages.plugins {
+        for row in &mut self.settings.listed.plugins {
             for (plugin, id, title) in &extra_commands {
                 if row.id == plugin {
                     row.commands.push((intern(id), intern(title)));

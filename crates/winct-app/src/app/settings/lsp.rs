@@ -80,11 +80,11 @@ impl App {
                 .borrow_mut()
                 .insert(((*language).to_owned(), root.clone()), found);
         }
-        self.settings.languages.lsp = languages;
+        self.settings.listed.lsp = languages;
     }
 
     pub(crate) fn open_lsp_settings(&mut self) {
-        self.settings.languages.lsp.clear();
+        self.settings.listed.lsp.clear();
         self.refresh_lsp_languages();
         self.open_settings();
         self.settings_show_page(SettingsPage::Lsp);
@@ -93,7 +93,7 @@ impl App {
             .active()
             .map(|doc| doc.highlighter.language().id);
         self.settings.selected = active
-            .filter(|id| self.settings.languages.lsp.contains(id))
+            .filter(|id| self.settings.listed.lsp.contains(id))
             .map(|id| {
                 if self.config.lsp_auto.iter().any(|auto| auto == id) {
                     Setting::LspAuto(id)
@@ -103,7 +103,7 @@ impl App {
             })
             .or_else(|| {
                 self.settings
-                    .languages
+                    .listed
                     .lsp
                     .first()
                     .copied()
@@ -119,8 +119,8 @@ impl App {
             self.flash(t!("settings-lsp-open-file"));
             return;
         };
-        if !self.settings.languages.lsp.contains(&language.id) {
-            self.settings.languages.lsp.push(language.id);
+        if !self.settings.listed.lsp.contains(&language.id) {
+            self.settings.listed.lsp.push(language.id);
         }
         let setting = Setting::LspServer(language.id);
         self.settings.selected = setting;

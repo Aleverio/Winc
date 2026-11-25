@@ -201,6 +201,7 @@ impl App {
                 part @ (SettingsPart::KeyRow(_)
                 | SettingsPart::KeyEdit(_)
                 | SettingsPart::KeyReset(_)
+                | SettingsPart::KeyVim(..)
                 | SettingsPart::KeyRemove(_)
                 | SettingsPart::KeySave
                 | SettingsPart::KeyCancel),
@@ -306,7 +307,7 @@ impl App {
         if let Some(view) = hit(&self.sidebar_tabs(), x, y) {
             match view {
                 SidebarView::Files => self.show_files(),
-                SidebarView::Search => self.open_global_search(false),
+                SidebarView::Search => self.show_global_search(false, None),
                 SidebarView::Commit => self.show_commit(),
             }
 
@@ -562,6 +563,16 @@ impl App {
                     self.pointer.drag = Drag::AddSelect { origin: pos };
                 }
             }
+            return;
+        }
+
+        // 在选中的文字上按下：可能要拖动这段文字，选区保留到开始拖动或松开时再定。
+        if count == 1 && !shift && !l.gutter.contains(x, y) && self.press_on_selection(x, y) {
+            self.pointer.drag = Drag::MoveText {
+                press: (x, y),
+                at: pos,
+                moving: false,
+            };
             return;
         }
 

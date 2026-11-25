@@ -8,6 +8,8 @@ mod lsp;
 mod search;
 mod shortcuts;
 mod terminal;
+mod transfer;
+mod vim;
 
 use super::*;
 use winct_config::SmoothCaret;
@@ -305,7 +307,7 @@ fn settings_keyboard_walks_every_item_and_adjusts() {
     // 到达末尾后不再移动。越过一页的末项时自动换页，右侧显示该页内容。格式化页列出的语言随机器上装
     // 了哪些工具而变，步数按全部设置项计算。
     let mut seen = vec![app.settings.selected];
-    for _ in 0..Setting::all(&app.settings.languages, app.settings_modules()).len() + 2 {
+    for _ in 0..Setting::all(&app.settings.listed, app.settings_modules()).len() + 2 {
         app.settings_move(true);
         if seen.last() != Some(&app.settings.selected) {
             seen.push(app.settings.selected);
@@ -313,7 +315,7 @@ fn settings_keyboard_walks_every_item_and_adjusts() {
     }
     assert_eq!(
         seen,
-        Setting::all(&app.settings.languages, app.settings_modules())
+        Setting::all(&app.settings.listed, app.settings_modules())
     );
     assert_eq!(app.settings.selected, Setting::License);
     assert_eq!(app.settings_layout().page, SettingsPage::About);
@@ -341,7 +343,7 @@ fn settings_keyboard_walks_every_item_and_adjusts() {
     assert_eq!(app.settings.selected, last);
 
     // 回到第一项；步数按全部设置项计算，原因同上。
-    for _ in 0..Setting::all(&app.settings.languages, app.settings_modules()).len() {
+    for _ in 0..Setting::all(&app.settings.listed, app.settings_modules()).len() {
         app.settings_move(false);
     }
     assert_eq!(app.settings.selected, Setting::Theme);
@@ -484,7 +486,8 @@ fn settings_pages_are_listed_on_the_left() {
         .collect();
     assert_eq!(pages, expected);
 
-    // 分类栏列出每一页，每页只放属于该页的设置项；所有页合起来恰好是全部设置，不遗漏也不重复。
+    // 分类栏列出每一页，每页只放属于该页的设置项；除「通用」页（从侧栏直接进入，键盘遍历仍从
+    // 「外观」页开始）外，所有页合起来恰好是全部设置，不遗漏也不重复。
     app.config.terminal_enabled = Some(true);
     app.config.git_enabled = Some(true);
     let layout = app.settings_layout();
@@ -497,7 +500,7 @@ fn settings_pages_are_listed_on_the_left() {
         let view = crate::layout::SettingsView {
             page,
             query: "",
-            languages: &app.settings.languages,
+            listed: &app.settings.listed,
             terminal: 1.0,
             git: 1.0,
             editing: None,
@@ -520,7 +523,10 @@ fn settings_pages_are_listed_on_the_left() {
             assert_eq!(in_group, row.setting.control() != SettingControl::Action);
             assert!(row.row.x >= layout.nav.right(), "设置项不压到分类栏上");
         }
-        listed.extend(layout.rows.iter().map(|r| r.setting));
+        // 「通用」页单独打开，键盘遍历的起点保持在「外观」页。
+        if page != SettingsPage::General {
+            listed.extend(layout.rows.iter().map(|r| r.setting));
+        }
         // 快捷键页没有设置项，只有搜索框。
         if page == SettingsPage::Keys {
             listed.push(Setting::KeySearch);
@@ -528,7 +534,7 @@ fn settings_pages_are_listed_on_the_left() {
     }
     assert_eq!(
         listed,
-        Setting::all(&app.settings.languages, app.settings_modules())
+        Setting::all(&app.settings.listed, app.settings_modules())
     );
 
     // 悬停在分类栏的一项上时记录该项；点击后换页，选中该页的第一项，滚动位置回到顶部。
@@ -1178,7 +1184,7 @@ fn smooth_scrolling_switches_off_on_its_own() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-/// 平滑光标移动是编辑器页的下拉选项：默认关闭，两个模式列出当前的选择并写回配置。
+/// 平滑光标是编辑器页的下拉选项：默认关闭，两个模式列出当前的选择并写回配置。
 #[test]
 fn smooth_caret_movement_lists_its_modes() {
     let dir = sample_folder("settings-smooth-caret");
@@ -1249,7 +1255,9 @@ fn the_git_page_is_listed_only_when_the_module_is_on() {
         Setting::GitOpenWorktree,
         Setting::GitStagingArea,
         Setting::GitTree,
+        Setting::GitCombinedDiff,
         Setting::DiffInline,
+        Setting::DiffCollapse,
         Setting::GitInlineBlame,
         Setting::GitPullMode,
         Setting::GitConfirmPush,

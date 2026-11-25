@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 winct-backend.workspace = true
 winct-core.workspace = true
+winct-search.workspace = true
 winct-syntax.workspace = true
 winct-config.workspace = true
 winct-preview.workspace = true
@@ -17,7 +18,6 @@ winct-i18n.workspace = true
 ropey.workspace = true
 memchr.workspace = true
 regex.workspace = true
-regex-syntax.workspace = true
 fancy-regex.workspace = true
 ignore.workspace = true
 notify.workspace = true
